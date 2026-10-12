@@ -4687,7 +4687,14 @@ void players_update_before_game(
 						game_engine_prespawn_player_update(iterator.datum_index);
 						player_spawn(iterator.datum_index);
 						if (player->unit_index != NONE)
+						{
 							game_engine_postspawn_player_update(iterator.datum_index);
+#ifdef HALO_LINUX
+							/* port: a dedicated server's race: in a vehicle
+							(port/linux/game/race_vehicles.c) */
+							race_vehicles_player_spawned(iterator.datum_index);
+#endif
+						}
 						else
 							player->respawn_timer = 1;
 					}

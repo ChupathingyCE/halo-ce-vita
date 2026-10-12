@@ -117,6 +117,17 @@ player is told why, and the caller goes back to the menu
 (port/linux/game/custom_edition_cache.c) */
 unsigned char custom_edition_cache_load_failure_show(char const *map_name);
 unsigned char custom_edition_vehicle_placement_allowed(struct scenario_object_datum const *placement);
+/* whether a race on a Halo Custom Edition map has the map's own vehicles,
+which its start then leaves (port/linux/game/custom_edition_objects.c) */
+unsigned char custom_edition_race_keeps_map_vehicles(void);
+/* a dedicated server's race: each player spawns in a vehicle, which is
+taken away once abandoned (port/linux/game/race_vehicles.c) */
+void race_vehicles_set_spawn_in_vehicle(unsigned char enabled);
+unsigned char race_vehicles_spawn_in_vehicle(void);
+void race_vehicles_new_game(void);
+unsigned char race_vehicles_spawned(long vehicle_index);
+void race_vehicles_player_spawned(long player_index);
+void race_vehicles_update(void);
 
 /* while TRUE, drawing shifts right to center 640-column layouts */
 void halo_screen_ui_offset(unsigned char centered);

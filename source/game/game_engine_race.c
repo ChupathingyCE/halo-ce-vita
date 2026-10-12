@@ -351,6 +351,15 @@ static void delete_race_vehicles(
 	object_iterator_new(&iterator, _object_mask_vehicle, 0);
 	while (object_iterator_next(&iterator))
 	{
+#ifdef HALO_LINUX
+		/* port: not those the players spawned in, nor one a player has got
+		into (race_vehicles.c: a spawn takes an empty one near) */
+		if (race_vehicles_spawned(iterator.index) ||
+			unit_get(iterator.index)->unit.driver_object_index != NONE)
+		{
+			continue;
+		}
+#endif
 		if (vehicle_count < MAXIMUM_RACE_VEHICLES_TO_DELETE)
 			vehicle_indices[vehicle_count++] = iterator.index;
 	}
@@ -1426,8 +1435,26 @@ static void race_engine_update(
 		announces those the host spawns) */
 		if (!network_game_distributed_client())
 		{
+#ifdef HALO_LINUX
+			/* port: a Custom Edition map's own vehicles stay (placed as its
+			other game types place them, custom_edition_objects.c); where the
+			players spawn in vehicles (a dedicated server's,
+			race_vehicles.c), none is made at the flags beside theirs */
+			if (custom_edition_race_keeps_map_vehicles() || race_vehicles_spawn_in_vehicle())
+			{
+				struct object_iterator iterator;
+
+				if (!custom_edition_race_keeps_map_vehicles())
+					delete_race_vehicles();
+				object_iterator_new(&iterator, _object_mask_vehicle, 0);
+				race_globals.vehicles_have_been_added = object_iterator_next(&iterator) != NULL;
+			}
+			else
+#endif
+			{
 			delete_race_vehicles();
 			spawn_race_vehicles();
+			}
 			vehicles_added = race_globals.vehicles_have_been_added;
 		}
 		else
@@ -1462,6 +1489,12 @@ static void race_engine_update(
 		}
 	}
 
+#ifdef HALO_LINUX
+	/* port: the vehicles players spawned in, nobody riding them: taken away
+	(race_vehicles.c) */
+	race_vehicles_update();
+#endif
+
 	/* (a client ends the game when the host has) */
 	if (game_engine_has_teams() && !network_game_distributed_client())
 	{
@@ -1484,6 +1517,9 @@ static boolean race_engine_initialize_for_new_map(
 	long itr;
 
 	race_flags_make_unique();
+#ifdef HALO_LINUX
+	race_vehicles_new_game();
+#endif
 
 	race_globals.vehicles_have_been_added = FALSE;
 	csmemset(&race_globals, 0, sizeof(race_globals));

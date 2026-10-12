@@ -53,6 +53,9 @@ enum
 	_multiplayer_spawn_oddball_default_bit,
 };
 
+#define ALL_DEFAULT_SPAWN_FLAGS (FLAG(_multiplayer_spawn_slayer_default_bit) | FLAG(_multiplayer_spawn_ctf_default_bit) | \
+	FLAG(_multiplayer_spawn_king_default_bit) | FLAG(_multiplayer_spawn_oddball_default_bit))
+
 /* ---------- structures */
 
 /* A vehicle placement: a scenario object, a unit's fields, and then the
@@ -107,14 +110,27 @@ boolean custom_edition_vehicles_by_placement(
 	return custom_edition_cache_tags_loaded() &&
 		game_engine_running() &&
 		game_engine_get_variant()->universal_variant.vehicle_set != VEHICLE_SET_NONE &&
-		default_spawn_flag_bit() != NONE;
+		(default_spawn_flag_bit() != NONE || game_engine_get_variant()->game_engine_index == _game_engine_race);
+}
+
+boolean custom_edition_race_keeps_map_vehicles(
+	void)
+{
+	return custom_edition_vehicles_by_placement() &&
+		game_engine_get_variant()->game_engine_index == _game_engine_race;
 }
 
 boolean custom_edition_vehicle_placement_allowed(
 	struct scenario_object_datum const *placement)
 {
 	struct custom_edition_vehicle_placement const *vehicle = (struct custom_edition_vehicle_placement const *)placement;
+	short bit;
 
-	return !custom_edition_vehicles_by_placement() ||
-		TEST_FLAG(vehicle->multiplayer_spawn_flags, default_spawn_flag_bit());
+	if (!custom_edition_vehicles_by_placement())
+		return TRUE;
+	/* (race: any game type's default) */
+	bit = default_spawn_flag_bit();
+	if (bit == NONE)
+		return (vehicle->multiplayer_spawn_flags & ALL_DEFAULT_SPAWN_FLAGS) != 0;
+	return TEST_FLAG(vehicle->multiplayer_spawn_flags, bit);
 }
