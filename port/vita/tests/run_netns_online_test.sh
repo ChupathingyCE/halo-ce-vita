@@ -375,7 +375,14 @@
 #            (HALO_MAP_SHARE_ANSWER=yes), check it, load it and play it with
 #            the other. Reported: each
 #            download's time and rate, and the joiners' memory once each
-#            map is loaded (the Custom Edition loader's window and C heap)
+#            map is loaded (the Custom Edition loader's window and C heap).
+#            The vehicles: the server's census (sv_items every 10 s) must
+#            have some in every game, and each joiner see some (its own
+#            census); with sv_race_spawn_vehicle (the server's default;
+#            HALO_TEST_RACE_SPAWN_VEHICLE=0 sets it 0) each joiner's player
+#            must ride from within 3 s of a spawn in 3 of 4 lives and drive
+#            on the server's census. HALO_TEST_RACE_JOINER2: the second
+#            joiner's build (a beta's: its vehicles from the server alone)
 #
 #   HALO_TEST_SERVER the dedicated server (build/linux/halo-server of this tree)
 #   HALO_TEST_SYMMETRIC_NAT=all|joiners  every router's NAT a symmetric one
@@ -2094,6 +2101,7 @@ INIT
 			echo "sv_postgame 5"
 			echo "sv_end_empty 20"
 			echo "sv_map_download 1"
+			[ "${HALO_TEST_RACE_SPAWN_VEHICLE:-1}" = 1 ] || echo "sv_race_spawn_vehicle 0"
 			echo "sv_port 2302"
 		} > "$out/server/data/init.txt"
 	fi
@@ -2945,11 +2953,22 @@ CHECK
 			HALO_MAP_SHARE_ANSWER=yes HALO_NETWORK_TEST_RETRY=10 HALO_TEST_INPUT=bot:2 HALO_EXIT_AFTER=$((seconds - 10))
 		race_pids=$last_pid
 		sleep "${HALO_TEST_RACE_STAGGER:-45}"
-		run_copy racer2 "$r2_machine" "${HALO_TEST_VITA_JOINER:-$vita}" "$cpu_c" HALO_NET_ONLINE=true \
+		run_copy racer2 "$r2_machine" "${HALO_TEST_RACE_JOINER2:-${HALO_TEST_VITA_JOINER:-$vita}}" "$cpu_c" HALO_NET_ONLINE=true \
 			HALO_NETWORK_TEST=join-public "HALO_NETWORK_TEST_PUBLIC_NAME=Netns Race" HALO_NET_PLAYER_NAME=Racer2 \
 			HALO_MAP_SHARE_ANSWER=yes HALO_NETWORK_TEST_RETRY=10 HALO_TEST_INPUT=bot:3 HALO_EXIT_AFTER=$((seconds - 30))
 		race_pids="$race_pids $last_pid"
+		# (the server's census every 10 s while the copies play: its vehicles,
+		# and which a player rides; every 40 s a joiner's player killed, in
+		# turn, to spawn again: in a vehicle again, the last one taken away)
+		(
+			for i in $(seq 1 $(((seconds - 30) / 10))); do
+				sleep 10
+				echo sv_items >&"$console_fd" 2>/dev/null || exit 0
+				[ $((i % 4)) = 0 ] && { echo "sv_kill Racer$((i / 4 % 2 + 1))" >&"$console_fd" 2>/dev/null || exit 0; }
+			done
+		) & census_pid=$!; pids="$pids $census_pid"
 		wait $race_pids 2>/dev/null
+		kill "$census_pid" 2>/dev/null; wait "$census_pid" 2>/dev/null
 		kill -TERM "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
 		echo "--- server"; grep -aE "^server: (hosting|the game|player|cycle|map)" "$sl" | head -30
 		grep -aE "map share: (sending|'.*' sent)" "$sd" | head -12
@@ -2977,6 +2996,93 @@ CHECK
 			done
 		done
 		echo "games of the cycle reached: $reached"
+		# the vehicles: every game of the cycle has some on the server (its
+		# census), and the joiners see them (their own census: the betas'
+		# too); with sv_race_spawn_vehicle (on by default, HALO_TEST_RACE_SPAWN_VEHICLE=0
+		# off) each joiner's player spawns as a vehicle's driver: riding within
+		# its first seconds of a life, on its own screen and on the server
+		python3 - "$sl" "$out" "${HALO_TEST_RACE_SPAWN_VEHICLE:-1}" $race_cycle <<'CHECK' || fail "the race's vehicles (above)"
+import re, sys
+server_log, out, spawn_vehicle = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
+cycle = [entry.split(":")[0].lower() for entry in sys.argv[4:]]
+bad = []
+# the server: its games, each with its census's vehicles and riding players
+games, game = [], None
+for line in open(server_log, errors="replace"):
+    m = re.match(r"server: the game starts: (\S+) on ([^,\s]+)", line)
+    if m:
+        game = {"gametype": m.group(1), "map": m.group(2), "vehicles": [], "kinds": "", "riding": set(), "drivers": set(), "players": set()}
+        games.append(game)
+    if not game:
+        continue
+    m = re.match(r"server: vehicles: (\d+)(.*)", line)
+    if m:
+        game["vehicles"].append(int(m.group(1)))
+        if int(m.group(1)) >= max(game["vehicles"]):
+            game["kinds"] = m.group(2).strip()
+    m = re.match(r"server: player #\d+ (\S+): (shield|dead)", line)
+    if m:
+        game["players"].add(m.group(1))
+        if "; riding " in line:
+            game["riding"].add(m.group(1))
+            if "(driver)" in line:
+                game["drivers"].add(m.group(1))
+for g in games:
+    most = max(g["vehicles"]) if g["vehicles"] else None
+    print("server, %s on %s: census %d times, vehicles %s, at most %s (%s); players riding %s, driving %s" % (
+        g["gametype"], g["map"], len(g["vehicles"]), " ".join(map(str, g["vehicles"])), most, g["kinds"] or "none",
+        ",".join(sorted(g["riding"])) or "none", ",".join(sorted(g["drivers"])) or "none"))
+    # (no pile-up: the vehicles players spawned in and left are taken away)
+    if len(g["vehicles"]) >= 3 and most > g["vehicles"][0] + 2:
+        bad.append("vehicles piled up in %s on %s: %s" % (g["gametype"], g["map"], g["vehicles"]))
+    if len(g["vehicles"]) >= 3 and not most:
+        bad.append("no vehicles on the server in %s on %s" % (g["gametype"], g["map"]))
+    if spawn_vehicle and len(g["vehicles"]) >= 3 and g["players"] and not g["drivers"]:
+        bad.append("no player drove a vehicle in %s on %s (sv_race_spawn_vehicle)" % (g["gametype"], g["map"]))
+# the joiners: their census of vehicles (as they have them), and their own
+# player's lives: riding within the first 3 s of each
+for name in ("racer1", "racer2"):
+    seen, censuses = 0, 0
+    lives = riding_lives = riding_seconds = alive_seconds = 0
+    life = None
+    for line in open("%s/%s/run.log" % (out, name), errors="replace"):
+        m = re.search(r"network test: vehicles at tick \d+: (.*)", line)
+        censuses += m is not None
+        if m and m.group(1).strip() != "none":
+            seen = max(seen, sum(int(n) for n in re.findall(r"\) (\d+)", m.group(1))))
+        if "network test: tick" not in line:
+            continue
+        if "| playing" not in line:
+            life = None
+            continue
+        m = re.search(r"\| local (\d+) ", line)
+        if not m:
+            continue
+        me = m.group(1)
+        m = re.search(r" player %s: (dead|\([^)]*\) \S+( riding)?)" % me, line)
+        if not m or m.group(1) == "dead":
+            life = None
+            continue
+        alive_seconds += 1
+        riding = m.group(2) is not None
+        riding_seconds += riding
+        if life is None:
+            life = {"seconds": 0, "riding": False}
+            lives += 1
+        life["seconds"] += 1
+        if life["seconds"] <= 3 and riding and not life["riding"]:
+            life["riding"] = True
+            riding_lives += 1
+    print("%s: saw at most %s vehicles; %d lives, %d riding within 3 s of the spawn; %d of %d s alive riding" % (
+        name, seen if censuses else "? (no census: a beta's build)", lives, riding_lives, riding_seconds, alive_seconds))
+    if censuses and not seen:
+        bad.append("%s saw no vehicle" % name)
+    if spawn_vehicle and (not lives or riding_lives * 4 < lives * 3):
+        bad.append("%s spawned riding in %d of %d lives (sv_race_spawn_vehicle)" % (name, riding_lives, lives))
+for b in bad:
+    print("FAIL: " + b)
+sys.exit(1 if bad else 0)
+CHECK
 		for name in racer1 racer2; do
 			l=$out/$name/run.log d=$out/$name/data/debug.txt
 			n=$(played "$l")
