@@ -353,6 +353,29 @@
 #            beta.2/beta.1: no change on their side) as the first and third
 #            joiners: they must play every game with the others and see in
 #            their players' lines what the new ones see (they have no census)
+#   dedicatedrace a Race server of Halo PC Custom Edition maps, as the
+#            official one is set up (DEDICATED_SERVER.md): the maps of
+#            HALO_TEST_RACE_MAPS (a folder of them; none is in the
+#            repository: without it the mode says SKIP and passes) beside
+#            the Xbox maps and Halo PC's bitmaps.map, sounds.map and loc.map
+#            (that folder's, else HALO_TEST_CE_RESOURCES, else Steam's MCC
+#            halo1/maps/custom_edition), PC maps on by its config.toml
+#            (game.custom_edition = true, no environment variable),
+#            sv_map_download 1, a cycle of race and team_race on
+#            HALO_TEST_RACE_CYCLE's maps (default the folder's first three,
+#            by name) for HALO_TEST_RACE_MINUTES each (2). Two Vita builds
+#            with the resource maps but none of the race maps join it, the
+#            first by its code (PC maps on), the second from the server
+#            browser HALO_TEST_RACE_STAGGER seconds later (45: into the game
+#            in progress; PC maps off: the question turns them on), each
+#            joining again when a join ends before its game, as a player
+#            would (a download in progress is cut off by the game's end, and
+#            a join in the game's first seconds is refused the map): each
+#            must download every map of the cycle from the server
+#            (HALO_MAP_SHARE_ANSWER=yes), check it, load it and play it with
+#            the other. Reported: each
+#            download's time and rate, and the joiners' memory once each
+#            map is loaded (the Custom Edition loader's window and C heap)
 #
 #   HALO_TEST_SERVER the dedicated server (build/linux/halo-server of this tree)
 #   HALO_TEST_SYMMETRIC_NAT=all|joiners  every router's NAT a symmetric one
@@ -440,6 +463,42 @@ seconds=${HALO_TEST_SECONDS:-180}
 [ "$mode" = mapmidmixed ] && seconds=${HALO_TEST_SECONDS:-300}
 [ "$mode" = swat ] && seconds=${HALO_TEST_SECONDS:-500}
 [ "$mode" = swatmixed ] && seconds=${HALO_TEST_SECONDS:-500}
+# (dedicatedrace: its maps, or SKIP; about two minutes a game of the cycle:
+# the download, the load, the game and its scores)
+if [ "$mode" = dedicatedrace ]; then
+	race_maps=${HALO_TEST_RACE_MAPS:-}
+	if [ -z "$race_maps" ] || [ ! -d "$race_maps" ]; then
+		echo "SKIP (dedicatedrace): no folder of Custom Edition race maps (HALO_TEST_RACE_MAPS)"
+		exit 0
+	fi
+	race_resources=${HALO_TEST_CE_RESOURCES:-}
+	if [ -z "$race_resources" ]; then
+		race_resources=$race_maps
+		[ -e "$race_resources/bitmaps.map" ] ||
+			race_resources="$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/custom_edition"
+	fi
+	for name in bitmaps sounds loc; do
+		[ -e "$race_resources/$name.map" ] ||
+			{ echo "SKIP (dedicatedrace): no Halo PC $name.map (HALO_TEST_CE_RESOURCES)"; exit 0; }
+	done
+	# the cycle: map:gametype, race and team_race in turn by default
+	race_cycle=${HALO_TEST_RACE_CYCLE:-}
+	if [ -z "$race_cycle" ]; then
+		n=0
+		for file in "$race_maps"/*.map; do
+			name=$(basename "$file" .map)
+			case $name in bitmaps|sounds|loc) continue ;; esac
+			[ "$n" -ge 3 ] && break
+			gametype=race; [ $((n % 2)) = 1 ] && gametype=team_race
+			race_cycle="$race_cycle $name:$gametype"
+			n=$((n + 1))
+		done
+	fi
+	set -- $race_cycle
+	[ $# -ge 1 ] || { echo "SKIP (dedicatedrace): no race maps in $race_maps"; exit 0; }
+	seconds=${HALO_TEST_SECONDS:-$((90 + $# * (60 * ${HALO_TEST_RACE_MINUTES:-2} + 60)))}
+	set -- "$mode"
+fi
 rejoin=${HALO_TEST_REJOIN:-0}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_netns_test.$$}
 . "$here/test_out.sh"
@@ -1760,7 +1819,7 @@ solo)
 	echo "seconds of solo game logged: $ticks"
 	[ "$ticks" -ge 30 ] || fail "the solo game ran $ticks s"
 	;;
-dedicated|dedicatedpc|dedicatedban|dedicatedcoop|dedicatedmulti|dedicatedfullcache|dedicatedreload|scoreboard|pings|pingsmixed|mapmid|mapmidmixed|swat|swatmixed)
+dedicated|dedicatedpc|dedicatedban|dedicatedcoop|dedicatedmulti|dedicatedfullcache|dedicatedreload|scoreboard|pings|pingsmixed|mapmid|mapmidmixed|swat|swatmixed|dedicatedrace)
 	server=${HALO_TEST_SERVER:-$root/build/linux/halo-server}
 	if [ "$mode" = swatmixed ]; then
 		vita_old=${HALO_TEST_VITA_OLD:-}
@@ -1787,6 +1846,28 @@ dedicated|dedicatedpc|dedicatedban|dedicatedcoop|dedicatedmulti|dedicatedfullcac
 		}
 		HALO_TEST_DATA_HOST=$(maps_folder server with)
 		export HALO_TEST_SERVER_ENV="${HALO_TEST_SERVER_ENV:-} HALO_CUSTOM_EDITION=1 ${HALO_TEST_MAPMID_RATE_KB:+HALO_MAP_SHARE_INGAME_RATE_KB=$HALO_TEST_MAPMID_RATE_KB}"
+	fi
+	if [ "$mode" = dedicatedrace ]; then
+		# race_maps_folder NAME [with]: NAME's own maps folder ($out/maps-NAME):
+		# the game's maps and Halo PC's resource maps, and the race maps with
+		# "with" (a joiner's downloads go in its own)
+		race_maps_folder() {
+			local d=$out/maps-$1 f entry
+			mkdir -p "$d/maps"
+			for f in "$data"/maps/*.map; do ln -sfn "$(readlink -f "$f")" "$d/maps/$(basename "$f")"; done
+			for f in bitmaps sounds loc; do ln -sfn "$(readlink -f "$race_resources/$f.map")" "$d/maps/$f.map"; done
+			if [ "${2:-}" = with ]; then
+				for entry in $race_cycle; do
+					ln -sfn "$(readlink -f "$race_maps/${entry%%:*}.map")" "$d/maps/${entry%%:*}.map"
+				done
+			fi
+			echo "$d"
+		}
+		HALO_TEST_DATA_HOST=$(race_maps_folder server with)
+		# (PC maps on as the official servers have them: config.toml, which the
+		# server completes with its other settings)
+		mkdir -p "$out/server/data"
+		printf '[game]\ncustom_edition = true\n' > "$out/server/data/config.toml"
 	fi
 	[ -x "$server" ] || { echo "$mode needs the dedicated server (ninja linux-server, HALO_TEST_SERVER)"; exit 2; }
 	if [ "$mode" = pingsmixed ]; then
@@ -1998,6 +2079,23 @@ sv_postgame 5
 sv_end_empty 20
 sv_port 2302
 INIT
+	fi
+	# (dedicatedrace: the Custom Edition race maps' cycle, downloads allowed)
+	if [ "$mode" = dedicatedrace ]; then
+		{
+			echo 'sv_name "Netns Race"'
+			echo "sv_maxplayers 12"
+			echo "sv_public 1"
+			for entry in $race_cycle; do echo "sv_mapcycle_add ${entry%%:*} ${entry#*:}"; done
+			echo "sv_timelimit ${HALO_TEST_RACE_MINUTES:-2}"
+			echo "sv_minplayers 1"
+			echo "sv_starting_weapons map"
+			echo "sv_start_delay 5"
+			echo "sv_postgame 5"
+			echo "sv_end_empty 20"
+			echo "sv_map_download 1"
+			echo "sv_port 2302"
+		} > "$out/server/data/init.txt"
 	fi
 	[ "${HALO_TEST_SERVER_PUBLIC:-0}" = 1 ] && echo "sv_public_address 10.10.1.2:2302" >> "$out/server/data/init.txt"
 	# (HALO_TEST_SERVER_INIT: another init.txt, e.g. one map for measuring)
@@ -2832,6 +2930,72 @@ CHECK
 			done
 		fi
 		;;
+	dedicatedrace)
+		# (the seconds a copy, its log in $1, played with another player in the game)
+		played() { grep -a "network test: tick" "$1" | grep -a "| playing" | grep -aEc "player [0-9]+:.* player [0-9]+:"; }
+		# the joiners: the resource maps, none of the race maps; the first by
+		# the code with PC maps on, the second from the server browser with
+		# them off (the question turns them on)
+		side r1 10.10.71 192.168.71
+		side r2 10.10.72 192.168.72
+		copy_data_racer1=$(race_maps_folder racer1)
+		copy_data_racer2=$(race_maps_folder racer2)
+		run_copy racer1 "$r1_machine" "${HALO_TEST_VITA_JOINER:-$vita}" "$cpu_b" HALO_NET_ONLINE=true \
+			HALO_NETWORK_TEST=join-code:$code HALO_NET_PLAYER_NAME=Racer1 HALO_CUSTOM_EDITION=1 \
+			HALO_MAP_SHARE_ANSWER=yes HALO_NETWORK_TEST_RETRY=10 HALO_TEST_INPUT=bot:2 HALO_EXIT_AFTER=$((seconds - 10))
+		race_pids=$last_pid
+		sleep "${HALO_TEST_RACE_STAGGER:-45}"
+		run_copy racer2 "$r2_machine" "${HALO_TEST_VITA_JOINER:-$vita}" "$cpu_c" HALO_NET_ONLINE=true \
+			HALO_NETWORK_TEST=join-public "HALO_NETWORK_TEST_PUBLIC_NAME=Netns Race" HALO_NET_PLAYER_NAME=Racer2 \
+			HALO_MAP_SHARE_ANSWER=yes HALO_NETWORK_TEST_RETRY=10 HALO_TEST_INPUT=bot:3 HALO_EXIT_AFTER=$((seconds - 30))
+		race_pids="$race_pids $last_pid"
+		wait $race_pids 2>/dev/null
+		kill -TERM "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
+		echo "--- server"; grep -aE "^server: (hosting|the game|player|cycle|map)" "$sl" | head -30
+		grep -aE "map share: (sending|'.*' sent)" "$sd" | head -12
+		# every game of the cycle the run reached: started on the server, and
+		# downloaded, checked, loaded and played by both joiners
+		reached=0 first=1
+		for entry in $race_cycle; do
+			# (the server and the joiners name a map in lowercase, as the game's
+			# file layer finds it)
+			map=$(echo "${entry%%:*}" | tr 'A-Z' 'a-z') gametype=${entry#*:}
+			if ! grep -aq "^server: the game starts: $gametype on $map" "$sl"; then
+				[ "$first" = 1 ] && fail "the server never started $gametype on $map"
+				echo "($gametype on $map: not reached in the run)"
+				continue
+			fi
+			first=0 reached=$((reached + 1))
+			for name in racer1 racer2; do
+				d=$out/$name/data/debug.txt l=$out/$name/run.log
+				received=$(grep -a "map share: '$map' received: " "$d" | head -1 | sed 's/.*received: //')
+				echo "$name, $map: ${received:-not received}"
+				grep -aq "map share: '$map' verified" "$d" || { fail "$name did not download and check $map"; continue; }
+				memory=$(sed -n "/custom edition: loading 'd:.maps.$map.map'/,/custom edition: loaded: /{s/.*custom edition: loaded: //p}" "$d" | head -1)
+				echo "$name, $map loaded: ${memory:-?}"
+				[ -n "$memory" ] || fail "$name did not load $map"
+			done
+		done
+		echo "games of the cycle reached: $reached"
+		for name in racer1 racer2; do
+			l=$out/$name/run.log d=$out/$name/data/debug.txt
+			n=$(played "$l")
+			riding=$(grep -a "network test: tick" "$l" | grep -a "| playing" | grep -ac " riding")
+			echo "$name: $n s playing with another player ($riding s with a player riding a vehicle)"
+			[ "$n" -ge 40 ] || fail "$name played with another player for $n s (40 wanted)"
+			# (a download the game's end cut off, or a join in its first
+			# seconds, is refused and joined again: said; anything else fails)
+			grep -a "Halo: custom map:" "$l" | grep -av "Halo: custom map: \(Downloading\|Checking the part\)" |
+				sort | uniq -c | sed "s/^/$name: /"
+			grep -a "Halo: custom map:" "$l" | grep -av "Halo: custom map: \(Downloading\|Checking the part\)" |
+				grep -avq "the host's game had already started" && fail "$name was told it could not play a map"
+			grep -aq "XLaunchNewImage" "$l" && fail "$name went to the dashboard"
+		done
+		grep -aq "map share: PC maps turned on" "$out/racer2/data/debug.txt" || fail "racer2's PC maps were not turned on with the download"
+		grep -aq 'network test: the public games list "Netns Race" \[dedicated\]' "$out/racer2/run.log" ||
+			fail "the server browser did not list the race server"
+		sed '/exiting after debug.exit_after/q' "$sl" | grep -aq "lost the connection" && fail "the server lost a player's connection"
+		;;
 	dedicatedfullcache)
 		# (both joiners' cache files filled at once, then checked here: the
 		# prefill's own check runs in its subshell)
@@ -3079,7 +3243,7 @@ CHECK
 	fi
 	;;
 *)
-	echo "usage: $0 code|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|browserscroll|menushost|lan|pc|pchost|adhoc|many|solo|coop|coopmenu|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedcoop|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|swat|swatmixed" >&2
+	echo "usage: $0 code|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|browserscroll|menushost|lan|pc|pchost|adhoc|many|solo|coop|coopmenu|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedcoop|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|swat|swatmixed|dedicatedrace" >&2
 	exit 2
 	;;
 esac

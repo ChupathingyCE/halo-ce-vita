@@ -370,6 +370,47 @@ Halo CE (Custom Edition) maps need `game.custom_edition = true` in the
 server's `config.toml` and the Halo PC resource maps (`bitmaps.map`,
 `sounds.map`, `loc.map`) in `maps/`, as on the Vita.
 
+### Custom Edition maps (a Race server)
+
+A cycle of Halo PC Custom Edition maps, such as a Race server's:
+
+- Put the maps in `maps/` under the names the cycle gives them (the server
+  finds a file in any case, and names it in lowercase), with Halo PC's
+  `bitmaps.map`, `sounds.map` and `loc.map` (the Halo Custom Edition
+  installer's, or Steam's MCC `halo1/maps/custom_edition` folder, not
+  `halo1/maps`). Without them `sv_mapcycle_add` says which are missing and
+  leaves the map out; without `game.custom_edition = true` it says so too.
+- A map's name must be at most 25 characters, without spaces at its ends or
+  `/ \ : * ? " < > | % ,`, and not an Xbox level's name.
+- Check each map first: `build/linux/map_validate --maps <resource maps
+  folder> map.map` (it is refused, or passed with the corrections the game
+  makes as it loads it). For Race the map needs race track flags (netgame
+  flags of type race track, numbered from its first checkpoint) and race
+  vehicle flags for the vehicles; a map without them has no race.
+- `sv_map_download 1` gives joiners the cycle's maps: in the lobby at up to
+  2 MB/s for all of them together (the map deflated, 40-55% of it), to a
+  Vita joining a game in progress at 256 KB/s (the players' game first:
+  `HALO_MAP_SHARE_INGAME_RATE_KB`), so a 30 MB stream takes two minutes
+  there, and is cut off if the game ends first (the Vita joins again in the
+  lobby, and the part it has is kept). Map sharing never sends the resource
+  maps: a Vita needs its own, as it does for the online menus (README.md,
+  "Halo PC files"). A Vita with PC maps off is asked to turn them on with
+  the download.
+- A map is read where it lies (not copied into the map cache): the shared
+  map cache does not grow. The server used 110-135 MB with two players on
+  maps of 17 to 80 MB (`run_netns_online_test.sh dedicatedrace`).
+
+```
+sv_name "US Race - Official"
+sv_maxplayers 12
+sv_port 2304
+sv_timelimit 10
+sv_starting_weapons map
+sv_map_download 1
+sv_mapcycle_add rainbow-road race
+sv_mapcycle_add Camtrack-Arena-Race team_race
+```
+
 ## Run it on a PC
 
 1. Make the server's folder and put the game's `maps` folder in it:
@@ -692,6 +733,12 @@ standing in for Vitas in network namespaces, with no internet:
   and from the server browser by its name), a Vita on their LAN joins the
   first one alone, and each map is decompressed once
   (`HALO_TEST_MULTI_SHARED=0`: each server its own cache, to compare).
+- `dedicatedrace`: a Race server of Custom Edition maps
+  (`HALO_TEST_RACE_MAPS`, a folder of them; SKIP without), PC maps on by
+  its `config.toml` and `sv_map_download 1`; two Vitas without the maps
+  (one by its code, one from the server browser into the game in progress,
+  PC maps off) download, load and play each map of the cycle. Reports each
+  download's time and the Vitas' memory once each map is loaded.
 
 `HALO_TEST_SYMMETRIC_NAT=joiners` (or `all`, with
 `HALO_TEST_SERVER_PUBLIC=1`) makes the routers' NAT symmetric.
