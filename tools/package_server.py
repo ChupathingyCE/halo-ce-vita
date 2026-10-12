@@ -388,8 +388,11 @@ def build_server(arch: Arch, work: Path, root: Path, sdl: Path, clang: str, jobs
         # (the game's commands already name i686 and -m32)
         wrapper.write_text(f"""#!/bin/sh
 # the dedicated server's x86 release build (tools/package_server.py): the
-# game's clang command against Debian 12's glibc and a static, headless SDL3
-exec "{clang}" --sysroot="{root}" -I"{sdl}/include" -L"{sdl}/lib" -fuse-ld=lld -ffile-prefix-map="{work}"=/build -Qunused-arguments "$@"
+# game's clang command against Debian 12's glibc and a static, headless SDL3;
+# a Custom Edition map's tags moved wherever its tag cache lands, as the
+# armhf build and the Vita do (HALO_RELOCATABLE_TAG_CACHE: on the official
+# Linode the linked address was taken and every race map failed to load)
+exec "{clang}" --sysroot="{root}" -I"{sdl}/include" -L"{sdl}/lib" -fuse-ld=lld -ffile-prefix-map="{work}"=/build -Qunused-arguments -DHALO_RELOCATABLE_TAG_CACHE=1 "$@"
 """)
     else:
         wrapper.write_text(f"""#!/bin/sh
