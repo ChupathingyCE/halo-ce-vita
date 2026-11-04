@@ -270,7 +270,10 @@ insider.4: the texture pool's, the shader compiler's, the checkpoint
 copy's and the menus' pictures' blocks left none by 400 s, while the C heap
 had 25 MB free), and a structure BSP switch refused for its 1 MB window
 loaded the old BSP again, 2.5 s, every tick its trigger volume asked - the
-game froze on "Loading" with its sounds playing. (HALO_CE_MEMORY_HEAP=1:
+game froze on "Loading" with its sounds playing. Neither: on the Vita the
+checkpoint copy (16 MB, the largest of them) is given back and the system
+asked again. (HALO_CE_MEMORY_HEAP=2, to test that: the checkpoint copy
+given back at the first block after it is made. HALO_CE_MEMORY_HEAP=1:
 every block from the C heap, to test the fallback.) */
 #define CUSTOM_EDITION_MEMORY_BLOCKS 8
 #define CUSTOM_EDITION_HEAP_RESERVE (8ul * 1024 * 1024)
@@ -288,6 +291,9 @@ void *halo_custom_edition_memory_alloc(unsigned long bytes)
 	int index;
 	int uid = -1;
 	unsigned long heap_free_before = (unsigned long)-1;
+	boolean copy_released = FALSE;
+
+	(void)copy_released;
 
 	bytes = (bytes + PAGE_SIZE_BYTES - 1) & ~(PAGE_SIZE_BYTES - 1);
 	if (!bytes)
@@ -300,7 +306,7 @@ void *halo_custom_edition_memory_alloc(unsigned long bytes)
 		static int heap_only = -1;
 
 		if (heap_only < 0)
-			heap_only = getenv("HALO_CE_MEMORY_HEAP") && atoi(getenv("HALO_CE_MEMORY_HEAP"));
+			heap_only = getenv("HALO_CE_MEMORY_HEAP") ? atoi(getenv("HALO_CE_MEMORY_HEAP")) : 0;
 		if (heap_only)
 			;
 		else
@@ -321,13 +327,34 @@ void *halo_custom_edition_memory_alloc(unsigned long bytes)
 			static unsigned long heap_blocks;
 
 			platform_heap_usage(&heap_used, &heap_capacity);
-			if (!heap_capacity || (heap_used < heap_capacity && heap_capacity - heap_used >= bytes + CUSTOM_EDITION_HEAP_RESERVE))
+			if (heap_only == 2)
+				;
+			else if (!heap_capacity || (heap_used < heap_capacity && heap_capacity - heap_used >= bytes + CUSTOM_EDITION_HEAP_RESERVE))
 			{
 				result = calloc(1, bytes);
 				uid = -2;
 			}
 			if (result && heap_blocks++ < 8)
 				heap_free_before = heap_capacity ? (heap_capacity - heap_used) / 1024 : 0;
+#ifdef HALO_VITA
+			/* (and with no room there either, the checkpoint copy's 16 MB
+			given back: game_state_xbox.c) */
+			if (!result)
+			{
+				boolean game_state_checkpoint_copy_release(void);
+
+				pthread_mutex_unlock(&arena_lock);
+				copy_released = game_state_checkpoint_copy_release();
+				pthread_mutex_lock(&arena_lock);
+				if ((copy_released || heap_only == 2) && !custom_edition_memory_blocks[index].address)
+				{
+					uid = -1;
+					result = vita_host_block_alloc("halo_custom_edition_data", bytes, &uid);
+					if (result)
+						memset(result, 0, bytes);
+				}
+			}
+#endif
 		}
 		if (result)
 		{

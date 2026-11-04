@@ -344,6 +344,12 @@ static struct
 	halo_cond_t changed;
 	pthread_t thread;
 	unsigned long writes;
+#ifdef HALO_VITA
+	/* (the copy's memory block; the thread that takes the checkpoints) */
+	int snapshot_block;
+	pthread_t taker;
+	boolean taker_known;
+#endif
 } game_state_writer;
 
 static double game_state_writer_ms(
@@ -435,6 +441,7 @@ static boolean game_state_writer_ready(
 		if (block < 0 || sceKernelGetMemBlockBase(block, &base) < 0)
 			base = NULL;
 		game_state_writer.snapshot = base;
+		game_state_writer.snapshot_block = block;
 	}
 #else
 	game_state_writer.snapshot = malloc(xbox_game_state_globals.buffer_size);
@@ -479,6 +486,37 @@ static void game_state_writer_wait(
 		halo_cond_wait(&game_state_writer.changed, &game_state_writer.lock);
 	pthread_mutex_unlock(&game_state_writer.lock);
 }
+
+#ifdef HALO_VITA
+/* (port/linux/src/xbox_memory.c) the checkpoint copy given back when user
+RAM runs out: it is the game state's size (16 MB), made at the first
+checkpoint and kept - in Ben's 343 Guilty Spark from MCC's files (1.2.0
+insider.4) it left 3 MB of user RAM, and a structure BSP switch found no
+room for its blocks 20 minutes later. Only on the thread that takes the
+checkpoints, with no write of it pending (the file holds the last one, so
+a revert reads that); checkpoints then write the file as they are taken.
+TRUE if it was given back. */
+boolean game_state_checkpoint_copy_release(
+	void)
+{
+	if (!game_state_writer.snapshot || game_state_writer.snapshot_block < 0 || !game_state_writer.taker_known ||
+		!pthread_equal(game_state_writer.taker, pthread_self()))
+	{
+		return FALSE;
+	}
+	game_state_writer_wait();
+	pthread_mutex_lock(&game_state_writer.lock);
+	game_state_writer.snapshot_valid = FALSE;
+	game_state_writer.snapshot = NULL;
+	game_state_writer.unavailable = TRUE;
+	pthread_mutex_unlock(&game_state_writer.lock);
+	sceKernelFreeMemBlock(game_state_writer.snapshot_block);
+	game_state_writer.snapshot_block = -1;
+	platform_log("game state: the checkpoint copy (%ld KB) given back for room in user RAM: checkpoints write the file "
+		"as they are taken from now on", (long)xbox_game_state_globals.buffer_size / 1024);
+	return TRUE;
+}
+#endif
 #endif
 
 /* ---------- public code */
@@ -629,6 +667,10 @@ boolean game_state_write_to_file(
 		LARGE_INTEGER started;
 
 		QueryPerformanceCounter(&started);
+#ifdef HALO_VITA
+		game_state_writer.taker = pthread_self();
+		game_state_writer.taker_known = TRUE;
+#endif
 		game_state_writer_wait();
 		memcpy(game_state_writer.snapshot, xbox_game_state_globals.buffer, xbox_game_state_globals.buffer_size);
 		if (checkpoints_logged++ < 64)
