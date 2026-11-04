@@ -262,8 +262,18 @@ void halo_custom_edition_tag_cache_release(void)
 48 MB on the Vita that the system's libraries share, nor the window, whose
 room below the game's blocks the map's Direct3D buffers need) for a Custom
 Edition map's structure BSP vertices, its relocation bitmap and the working
-memory of its conversion; zeroed. A few at a time. */
+memory of its conversion; zeroed. A few at a time.
+A block the system refuses comes from the C heap while that keeps
+CUSTOM_EDITION_HEAP_RESERVE free: on the Vita user RAM can run out in a
+long campaign mission (Ben's 343 Guilty Spark from MCC's files, 1.2.0
+insider.4: the texture pool's, the shader compiler's, the checkpoint
+copy's and the menus' pictures' blocks left none by 400 s, while the C heap
+had 25 MB free), and a structure BSP switch refused for its 1 MB window
+loaded the old BSP again, 2.5 s, every tick its trigger volume asked - the
+game froze on "Loading" with its sounds playing. (HALO_CE_MEMORY_HEAP=1:
+every block from the C heap, to test the fallback.) */
 #define CUSTOM_EDITION_MEMORY_BLOCKS 8
+#define CUSTOM_EDITION_HEAP_RESERVE (8ul * 1024 * 1024)
 
 static struct
 {
@@ -277,6 +287,7 @@ void *halo_custom_edition_memory_alloc(unsigned long bytes)
 	void *result = NULL;
 	int index;
 	int uid = -1;
+	unsigned long heap_free_before = (unsigned long)-1;
 
 	bytes = (bytes + PAGE_SIZE_BYTES - 1) & ~(PAGE_SIZE_BYTES - 1);
 	if (!bytes)
@@ -286,6 +297,14 @@ void *halo_custom_edition_memory_alloc(unsigned long bytes)
 		;
 	if (index < CUSTOM_EDITION_MEMORY_BLOCKS)
 	{
+		static int heap_only = -1;
+
+		if (heap_only < 0)
+			heap_only = getenv("HALO_CE_MEMORY_HEAP") && atoi(getenv("HALO_CE_MEMORY_HEAP"));
+		if (heap_only)
+			;
+		else
+		{
 #ifdef HALO_VITA
 		result = vita_host_block_alloc("halo_custom_edition_data", bytes, &uid);
 		if (result)
@@ -295,6 +314,21 @@ void *halo_custom_edition_memory_alloc(unsigned long bytes)
 		if (result == MAP_FAILED)
 			result = NULL;
 #endif
+		}
+		if (!result)
+		{
+			unsigned long heap_used, heap_capacity;
+			static unsigned long heap_blocks;
+
+			platform_heap_usage(&heap_used, &heap_capacity);
+			if (!heap_capacity || (heap_used < heap_capacity && heap_capacity - heap_used >= bytes + CUSTOM_EDITION_HEAP_RESERVE))
+			{
+				result = calloc(1, bytes);
+				uid = -2;
+			}
+			if (result && heap_blocks++ < 8)
+				heap_free_before = heap_capacity ? (heap_capacity - heap_used) / 1024 : 0;
+		}
 		if (result)
 		{
 			custom_edition_memory_blocks[index].address = result;
@@ -303,6 +337,9 @@ void *halo_custom_edition_memory_alloc(unsigned long bytes)
 		}
 	}
 	pthread_mutex_unlock(&arena_lock);
+	if (heap_free_before != (unsigned long)-1)
+		platform_log("custom edition: a %lu KB memory block from the C heap (%lu KB of it free before): the system had no "
+			"room for it", bytes / 1024, heap_free_before);
 	if (!result)
 		platform_log("custom edition: no room for a %lu KB memory block", bytes / 1024);
 	return result;
@@ -319,11 +356,16 @@ void halo_custom_edition_memory_free(void *address)
 	{
 		if (custom_edition_memory_blocks[index].address == address)
 		{
+			if (custom_edition_memory_blocks[index].uid == -2)
+				free(address);
+			else
+			{
 #ifdef HALO_VITA
 			vita_host_block_free(custom_edition_memory_blocks[index].uid);
 #else
 			munmap(address, custom_edition_memory_blocks[index].bytes);
 #endif
+			}
 			custom_edition_memory_blocks[index].address = NULL;
 			break;
 		}
