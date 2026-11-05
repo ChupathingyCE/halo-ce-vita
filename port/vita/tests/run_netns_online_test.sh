@@ -288,6 +288,8 @@
 #            readiness, hits and Discord user (which the host takes only
 #            over its connection). Both must drop them (logged), and the
 #            joiner's player go on moving on the host
+#   presence, presence2b  how soon friends' presence shows (online, a lobby, a game, offline);
+#            presence2b with two brokers, each machine on another one first (see the case)
 #   friends  friends (port/linux/src/p2p_friends.c): each copy writes its friend
 #            code to a file (HALO_TEST_FRIENDS code-file=), the host types the
 #            joiner's (add-file=), the joiner accepts; both must be friends,
@@ -5484,6 +5486,80 @@ CHECK
 		fail "the server crashed"
 	fi
 	;;
+presence|presence2b)
+	# (how soon a friend's presence shows: the host (Alpha) and the joiner (Bravo) made friends
+	# first (codes through files, 40 s), then both started again, friends already: the time
+	# from each one's "friends: online" to the other's first "is online" line; then the host's
+	# own changes (HALO_TEST_PAD: MULTIPLAYER, its lobby on ONLINE, live - joinable -, then B,
+	# back in the menus), each to the joiner's line saying it; then the host quits: to the
+	# joiner's "went offline". presence2b: two brokers, the host reaching only
+	# the second and the joiner only the first for PRESENCE_SPLIT seconds (30) after the start
+	# again, as two Vitas whose first brokers came at different times (1.1.2, Nov 4 2026: one
+	# of two friends showed online only after a while))
+	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	hc=$out/host.code jc=$out/joiner.code brokers=198.51.100.1:1883
+	if [ $mode = presence2b ]; then
+		ip addr add 198.51.100.2/32 dev lo
+		python3 "$here/mqtt_test_broker.py" --host 198.51.100.2 --port 1883 > "$out/broker2.log" 2>&1 & pids="$pids $!"
+		brokers=198.51.100.1:1883,198.51.100.2:1883
+	fi
+	for name in host joiner; do
+		mkdir -p "$out/$name/save/u/UDATA/869079979327"
+		[ -r "${HALO_TEST_PROFILE:-}" ] && cp "$HALO_TEST_PROFILE" "$out/$name/save/u/UDATA/869079979327/blam.sav"
+		[ -r "$(dirname "${HALO_TEST_PROFILE:-/}")/SaveMeta.xbx" ] &&
+			cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$out/$name/save/u/UDATA/869079979327/"
+	done
+	all_seconds=$seconds seconds=40
+	HALO_TEST_DATA_HOST=$menus_data run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch \
+		HALO_LOG_TIMES=1 HALO_MENU_STYLE=halo3 HALO_NET_BROKERS=$brokers "HALO_TEST_FRIENDS=code-file=$hc,add-file=$jc"; host_pid=$last_pid
+	HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch \
+		HALO_LOG_TIMES=1 HALO_MENU_STYLE=halo3 HALO_NET_BROKERS=$brokers "HALO_TEST_FRIENDS=code-file=$jc,accept"; join_pid=$last_pid
+	wait $join_pid $host_pid 2>/dev/null
+	for name in host joiner; do mv "$out/$name/run.log" "$out/$name/run-friends.log"; done
+	grep -aq "now friends" "$out/joiner/run-friends.log" || fail "the two did not become friends first"
+	split=${PRESENCE_SPLIT:-30}
+	if [ $mode = presence2b ]; then
+		in_ns "$host_router" iptables -I FORWARD -d 198.51.100.1 -p tcp --dport 1883 -j DROP
+		in_ns "$join_router" iptables -I FORWARD -d 198.51.100.2 -p tcp --dport 1883 -j DROP
+		(sleep "$split"
+			in_ns "$host_router" iptables -D FORWARD -d 198.51.100.1 -p tcp --dport 1883 -j DROP
+			in_ns "$join_router" iptables -D FORWARD -d 198.51.100.2 -p tcp --dport 1883 -j DROP
+			echo "the brokers' split ended at $(python3 -c 'import time; print(time.monotonic())')") &
+	fi
+	seconds=$all_seconds
+	# (the host: at the main menu 50 s; MULTIPLAYER (its lobby opens on ONLINE, online play on):
+	# live, joinable; 30 s; B: the lobby left, back in the menus; quits 25 s before the joiner)
+	pad="wait:150:50000 down:150:700 a wait:150:30000 b wait:150:5000"
+	HALO_TEST_DATA_HOST=$menus_data run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch \
+		HALO_LOG_TIMES=1 HALO_UI_LOG=1 HALO_MENU_STYLE=halo3 HALO_TEST_INPUT=bot:1 HALO_BOTS_ONLINE=full HALO_NET_BROKERS=$brokers \
+		"HALO_TEST_PAD=$pad" HALO_EXIT_AFTER=$((seconds - 25)); host_pid=$last_pid
+	HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch \
+		HALO_LOG_TIMES=1 HALO_MENU_STYLE=halo3 HALO_NET_BROKERS=$brokers; join_pid=$last_pid
+	wait $join_pid $host_pid 2>/dev/null
+	hl=$out/host/run.log jl=$out/joiner/run.log
+	at() { grep -a "$2" "$1" | head -1 | awk '{print $2}'; }
+	after() { grep -a "$2" "$1" | awk -v t="$3" '$2 >= t {print $2; exit}'; }
+	delta() { [ -n "$1" ] && [ -n "$2" ] && awk -v a="$1" -v b="$2" 'BEGIN { printf "%.1f", b - a }' || echo none; }
+	h_on=$(at "$hl" "friends: online (") j_on=$(at "$jl" "friends: online (")
+	j_sees=$(at "$jl" "friends: .* is online: ") h_sees=$(at "$hl" "friends: .* is online: ")
+	later=$h_on; [ -n "$j_on" ] && awk -v a="$j_on" -v b="$h_on" 'BEGIN { exit !(a > b) }' && later=$j_on
+	lobby=$(at "$hl" "menus: h3 live lobby: open on ONLINE") lobby_seen=$(after "$jl" "is online: .*(joinable)" "${lobby:-0}")
+	game=$(at "$hl" "menus: h3 live lobby: closed") game_seen=$(after "$jl" "is online: In the menus$" "${game:-0}")
+	quit=$(at "$hl" "exiting after debug.exit_after") quit_seen=$(after "$jl" "friends: .* went offline" "${quit:-0}")
+	echo "PRESENCE $mode: online both ways after the later one's start: the joiner sees the host $(delta "$later" "$j_sees") s," \
+		"the host sees the joiner $(delta "$later" "$h_sees") s; the lobby $(delta "$lobby" "$lobby_seen") s;" \
+		"back in the menus $(delta "$game" "$game_seen") s; offline $(delta "$quit" "$quit_seen") s"
+	grep -a "friends: \|the brokers' split" "$jl" | grep -av "dropped" | head -20
+	for v in "$j_sees" "$h_sees" "$lobby_seen" "$game_seen" "$quit_seen"; do [ -n "$v" ] || fail "a presence change never showed"; done
+	limit=${PRESENCE_LIMIT:-10}
+	[ $mode = presence2b ] && limit=$((split + 10))
+	for d in "$(delta "$later" "$j_sees")" "$(delta "$later" "$h_sees")"; do
+		[ "$d" = none ] || awk -v d="$d" -v l="$limit" 'BEGIN { exit !(d <= l) }' || fail "a friend showed online only after $d s (at most $limit)"
+	done
+	for d in "$(delta "$lobby" "$lobby_seen")" "$(delta "$game" "$game_seen")" "$(delta "$quit" "$quit_seen")"; do
+		[ "$d" = none ] || awk -v d="$d" 'BEGIN { exit !(d <= 10) }' || fail "a change showed only after $d s (at most 10)"
+	done
+	;;
 friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsprivate|friendsprivatepw)
 	hc=$out/host.code jc=$out/joiner.code
 	host_steps="code-file=$hc,add-file=$jc"
@@ -6362,7 +6438,7 @@ forge|forge3|forgemp|forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeo
 	forge_case
 	;;
 *)
-	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge" >&2
+	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b" >&2
 	exit 2
 	;;
 esac
