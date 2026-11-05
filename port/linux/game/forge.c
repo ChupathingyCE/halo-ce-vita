@@ -1050,6 +1050,7 @@ static short forge_physics_mode(struct forge_placed const *placed);
 static unsigned char forge_physics_flags(short mode);
 static void forge_physics_apply(struct forge_placed *placed);
 static void forge_physics_update(void);
+static void forge_item_unburied(long object_index);
 static void forge_touch_update(boolean menu_open);
 static void forge_touch_hold_aim(boolean on);
 static void forge_touch_reset(void);
@@ -2481,6 +2482,7 @@ static void forge_drop(
 		/* (it falls from where it was let go: its placed spot where it
 		comes to rest) */
 		SET_FLAG(object->object.flags, _object_at_rest_bit, FALSE);
+		forge_item_unburied(forge_globals.held_object_index);
 		forge_settle(forge_globals.held_object_index);
 		forge_object_name(forge_globals.held_object_index, name, sizeof(name));
 		platform_log("forge: dropped %s (%s) at %.2f %.2f %.2f facing %.2f %.2f %.2f", name,
@@ -2528,6 +2530,7 @@ static void forge_set_facing(
 		forge_transform_get(object_index, &from);
 		object_set_position(object_index, &object->object.position, forward, up);
 		SET_FLAG(object->object.flags, _object_at_rest_bit, FALSE);
+		forge_item_unburied(object_index);
 		forge_undo_record(_forge_undo_move, object_index, &from);
 		forge_settle(object_index);
 	}
@@ -3503,6 +3506,7 @@ static void forge_undo_set_transform(
 	object->object.translational_velocity = *global_zero_vector3d;
 	object->object.angular_velocity = *global_zero_vector3d;
 	SET_FLAG(object->object.flags, _object_at_rest_bit, FALSE);
+	forge_item_unburied(object_index);
 	forge_settle(object_index);
 }
 

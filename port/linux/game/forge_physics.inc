@@ -123,3 +123,54 @@ static void forge_physics_update(
 		}
 	}
 }
+
+/* (forge_drop, an object turned or set, an undo's move: wherever the editor
+lets an object go to fall) a weapon or a piece of equipment let go with its
+origin inside a solid object - a building block, a crate - put on that
+object's top. An item falls by a line from where it is to where it moves
+(items.c item_update), and a line inside an object's collision model crosses
+none of its surfaces: one let go even a centimetre into a block fell through
+it (1.1.2: "weapons fall through every block"; one held to look as if it lay
+on a block's top has its origin a little in it). The map's structure needs
+nothing: an item in the ground stays there (its location must stay valid),
+and players and vehicles are pushed out of what they are in. Only items, only
+the objects an item rests on (scenery, machines, controls: items.c's rule),
+and only when some of the item still shows over the top (its origin within
+its bounding radius under it); deeper in, it falls as before */
+static void forge_item_unburied(
+	long object_index)
+{
+	struct object_datum *object = object_try_and_get(object_index);
+	unsigned long solid = FLAG(_collision_test_objects_bit) | FLAG(_collision_test_objects_scenery_bit) |
+		FLAG(_collision_test_objects_machines_bit) | FLAG(_collision_test_objects_controls_bit);
+	struct collision_result entered;
+	struct collision_result left;
+	real_point3d position;
+	real_point3d over;
+	real height;
+	boolean enters;
+
+	if (!object || !(FLAG(object->object.type) & _object_mask_item) || object->object.parent_object_index != NONE)
+		return;
+	position = object->object.position;
+	height = MAX(object->object.bounding_sphere_radius, 0.1f);
+	over = position;
+	over.z += height;
+	/* (inside: going up, a surface left - a back face - before any entered) */
+	if (!collision_test_line(solid | FLAG(_collision_test_back_facing_surfaces_bit), &position, &over, object_index, &left) ||
+		left.type != _collision_result_object || left.plane.n.k < 0.7071f)
+	{
+		return;
+	}
+	enters = collision_test_line(solid | FLAG(_collision_test_front_facing_surfaces_bit), &position, &over, object_index,
+		&entered);
+	if (enters && entered.t <= left.t)
+		return;
+	/* (just over the top: it falls onto it and rests there) */
+	over = left.point;
+	over.z += 0.05f;
+	object_set_position(object_index, &over, NULL, NULL);
+	object->object.translational_velocity = *global_zero_vector3d;
+	platform_log("forge: %s let go %.2f into %s: put on its top at %.2f %.2f %.2f", forge_tag_leaf(object->definition_index),
+		left.point.z - position.z, forge_tag_leaf(object_get(left.object_index)->definition_index), over.x, over.y, over.z);
+}

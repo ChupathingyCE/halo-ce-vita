@@ -351,7 +351,7 @@ out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_forge_test.$$}
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 . "$here/test_out.sh"
 test_out_begin "$out"
-cases=${*:-v1 budget fly b30 off files variants edit fileshare fstouch touch panel packs packnote packcopy smallmap aiteam aioff round aisave airespawn aicap aimarker spawns spawnplay teleport objectives flagground flagswap physics phaseshot phaserider precision allai allaimenu aicopy flood clearai clearaimenu rotate floodcov sentinels marines aivariant pelican aimapfallback blocks lobbycost mpvariant}
+cases=${*:-v1 budget fly b30 off files variants edit fileshare fstouch touch panel packs packnote packcopy smallmap aiteam aioff round aisave airespawn aicap aimarker spawns spawnplay teleport objectives flagground flagswap physics phaseshot phaserider precision allai allaimenu aicopy flood clearai clearaimenu rotate floodcov sentinels marines aivariant pelican aimapfallback blocks blockitems lobbycost mpvariant}
 ce_maps=${HALO_TEST_CE_MAPS:-$root/../custom-maps-dl}
 status=0
 fail() { echo "FAIL: $1"; status=1; }
@@ -731,6 +731,68 @@ blocks_runs() {
 	c="$c a:150:1500 @01-blocks:0:300 down:150:500 down:150:500 down:150:500 down:150:500 a:150:1500 @02-wall-held:0:300"
 	run blocks-browser 30 "" "" "$c" HALO_MENU_STYLE=classic HALO_SAVE_ROOT="$store" HALO_SYSTEM_LINK_TEST=forge:9 \
 		HALO_TEST_FORGE_PACKS=none HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1
+}
+
+# (blockitems: weapons on Forge's building blocks (1.1.2, Nov 4 2026: they fell
+# through every block, players and vehicles stood on them). The shapes float
+# at z 3 (SNAP off), each its own spot; a projectile's line straight down onto
+# two points of each top finds where the top is (blockitems-tops); then in a
+# second run, the same shapes, a weapon is let go 3 above the first point
+# (dropped: it falls onto the top; not on the ramps, where a fall bounces
+# off as on any slope) and one held with its origin 0.08 into the top at
+# the second (placed: held to look as if it lay on the top, a little of it in
+# it - the players' case: Halo's item fall is a line, which crossed none of
+# the block's surfaces from inside it, forge_physics.inc forge_item_unburied);
+# after the fall every weapon's place is logged. NAME:X:Y:FIRST:SECOND, the
+# points' offsets along y; the corner's on its wall's top, the L turned with
+# the block)
+blockitems_shapes="platform_large:86:-140:-0.4:0.4 block_large:92:-140:-0.4:0.4 ramp:98:-140:-0.4:0.4 bridge:104:-140:-0.4:0.4"
+blockitems_shapes="$blockitems_shapes column:86:-132:-0.1:0.1 corner:92:-132:0.32:0.42 platform_small:98:-132:-0.3:0.3 ramp_shallow:104:-132:-0.4:0.4"
+blockitems_place() { # blocks_cmds: the shapes, from tick 240
+	local shape name x y first second
+	blocks_cmds="L240:forge snap off"
+	blocks_tick=250
+	for shape in $blockitems_shapes; do
+		IFS=: read -r name x y first second <<< "$shape"
+		blocks_put "$name" "$x" "$y" 3 0
+	done
+}
+blockitems_runs() {
+	local shape name x y first second c t point top tops height
+	blockitems_place
+	c=$blocks_cmds t=$((blocks_tick + 10))
+	for shape in $blockitems_shapes; do
+		IFS=: read -r name x y first second <<< "$shape"
+		for point in "$first" "$second"; do
+			c="$c;L$t:forge camera $x $(awk -v y="$y" -v d="$point" 'BEGIN { print y + d }') 9 0 -89;L$((t + 25)):forge blocks ray"
+			t=$((t + 30))
+		done
+	done
+	run blockitems-tops 40 "" "$c" "" HALO_MENU_STYLE=classic HALO_SYSTEM_LINK_TEST=forge:9 HALO_TEST_FORGE_PACKS=none
+	# (the tops found, in the order of the rays)
+	tops=$(grep -a "forge: blocks: ray from .* meets" "$out/blockitems-tops/run.log" |
+		sed 's/.* meets the object forge.blocks.\([a-z_]*\) at [-0-9.]* [-0-9.]* \([-0-9.]*\), its plane.*/\1:\2/;s/.* meets the structure .*/structure:0/')
+	echo "$tops" > "$out/blockitems-tops/tops.txt"
+	blockitems_place
+	c=$blocks_cmds t=$((blocks_tick + 10))
+	set -- $tops
+	for shape in $blockitems_shapes; do
+		IFS=: read -r name x y first second <<< "$shape"
+		for point in "$first" "$second"; do
+			top=${1#*:}
+			[ $# -gt 0 ] && shift
+			height=-0.08
+			[ "$point" = "$first" ] && height=3
+			[ "$point" = "$first" ] && [ "${name#ramp}" != "$name" ] && continue
+			# (the camera 3 back along +x, the weapon held 3 ahead of it)
+			c="$c;L$t:forge camera $(awk -v x="$x" 'BEGIN { print x - 3 }') $(awk -v y="$y" -v d="$point" 'BEGIN { print y + d }')"
+			c="$c $(awk -v z="$top" -v h="$height" 'BEGIN { print z + h }') 0 0;L$((t + 25)):forge spawn assault rifle"
+			c="$c;L$((t + 26)):forge distance 3;L$((t + 32)):forge drop"
+			t=$((t + 36))
+		done
+	done
+	c="$c;L$((t + 150)):forge objects"
+	run blockitems 50 "" "$c" "" HALO_MENU_STYLE=classic HALO_SYSTEM_LINK_TEST=forge:9 HALO_TEST_FORGE_PACKS=none
 }
 
 pelican_runs() {
@@ -1642,6 +1704,12 @@ for c in $cases; do
 			continue
 		fi
 		blocks_runs & ;;
+	blockitems)
+		if [ "$menus_files" = 0 ]; then
+			echo "SKIP: blockitems: no Halo PC bitmaps.map and loc.map in $data/maps"
+			continue
+		fi
+		blockitems_runs & ;;
 	pelican)
 		if [ "$menus_files" = 0 ] || { [ ! -r "$data/maps/b30.map" ] && [ ! -r "$data/maps/a50.map" ]; }; then
 			echo "SKIP: pelican: no Halo PC bitmaps.map and loc.map, or no b30.map or a50.map, in $data/maps"
@@ -2487,6 +2555,48 @@ for c in $cases; do
 		if grep -aq "forge: a Forge game of" "$out/panel-damaged/run.log"; then
 			fail "panel-damaged: a Forge game was asked for"
 		fi
+		continue
+	fi
+	if [ "$c" = blockitems ]; then
+		checked blockitems-tops && checked blockitems || continue
+		# (each ray met its own shape's top)
+		set -- $(cat "$out/blockitems-tops/tops.txt")
+		for shape in $blockitems_shapes; do
+			name=${shape%%:*}
+			for point in first second; do
+				if [ "${1%%:*}" = "$name" ]; then
+					echo "  ok: blockitems-tops: the $name's top at ${1#*:}"
+				else
+					fail "blockitems-tops: the ray over the $name met ${1:-nothing}"
+				fi
+				[ $# -gt 0 ] && shift
+			done
+		done
+		# (each weapon on the top under it, in the order they were let go)
+		set -- $(cat "$out/blockitems-tops/tops.txt")
+		n=0
+		lines=$(grep -aiE "forge: object [0-9]+: assault rifle .* at " "$out/blockitems/run.log" |
+			sed 's/.* alive at \([-0-9.]*\) \([-0-9.]*\) \([-0-9.]*\), placed.*/\1:\2:\3/')
+		set -- $lines
+		for shape in $blockitems_shapes; do
+			IFS=: read -r name x y first second <<< "$shape"
+			for point in first second; do
+				[ $point = first ] && [ "${name#ramp}" != "$name" ] && continue
+				n=$((n + 1))
+				z=${1##*:}
+				top=$(sed -n "$(( $(echo $blockitems_shapes | tr ' ' '\n' | grep -n "^$name:" | cut -d: -f1) * 2 - $([ $point = first ] && echo 1 || echo 0) ))p" \
+					"$out/blockitems-tops/tops.txt" | cut -d: -f2)
+				[ $# -gt 0 ] && shift
+				how="dropped from 3 above"
+				[ $point = second ] && how="placed 0.08 into it"
+				if awk -v z="$z" -v t="$top" 'BEGIN { exit !(z != "" && z >= t - 0.05 && z <= t + 0.3) }'; then
+					echo "  ok: blockitems: the weapon $how rests on the $name (z $z, its top $top)"
+				else
+					fail "blockitems: the weapon $how is not on the $name (z ${z:-none}, its top $top)"
+				fi
+			done
+		done
+		[ "$n" = 14 ] || fail "blockitems: $n weapons checked (14 wanted)"
 		continue
 	fi
 	if [ "$c" = blocks ]; then

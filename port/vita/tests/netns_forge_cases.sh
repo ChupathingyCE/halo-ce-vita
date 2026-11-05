@@ -43,6 +43,12 @@
 #              lobby; a third machine browsing the public games never sees or joins it, the
 #              broker never gets a listing; START FORGE takes host and friend into Forge; the
 #              third machine then joins by the host's code, into the game in progress
+#   forgeitems weapons on building blocks (1.1.2, Nov 4 2026: they fell through every block,
+#              players and vehicles stood on them): a large platform and a large block float
+#              in the air; each machine lets a weapon go above one and places one held with its
+#              origin a little into the other's top (as one held to look as if it lay on it:
+#              it fell through, forge_physics.inc forge_item_unburied); every weapon must come
+#              to rest on its block's top on both machines
 #   h3forgeslow  h3forgeonline's host and friend only, the friend's packs built as slowly as a
 #              Vita's (HALO_TEST_SLOW_IO, its source maps' reads too: minutes): the friend
 #              says it still builds the host's packs, START FORGE's countdown holds at 0 for
@@ -688,6 +694,46 @@ forge_case() {
 		grep -aq "forge net: machine 2 plays the Forge game" "$hl" || fail "the machine with the code did not play the Forge game"
 		grep -aqE "forge net: the host's layout read: [1-9][0-9]* objects" "$jl3" ||
 			fail "the machine with the code was not given the layout"
+		;;
+	forgeitems)
+		# (weapons on building blocks in a network Forge game: a large platform (its top at
+		# 3.125) and a large block (4.0) float at z 3 (SNAP off); the host lets a weapon go 1.5
+		# above the platform and places one 0.08 into the block's top; the joiner places one
+		# 0.08 into the platform's top and lets one go 0.3 above the block; a few seconds on,
+		# each machine says where every weapon is)
+		host_cmds="L140:forge snap off;L150:forge camera 55 -100 3 0 0;L165:forge spawn platform_large;L166:forge distance 5"
+		host_cmds="$host_cmds;L175:forge drop;L180:forge camera 55 -106 3 0 0;L195:forge spawn block_large;L196:forge distance 5"
+		host_cmds="$host_cmds;L205:forge drop;L210:forge camera 57 -100.5 4.6 0 0;L225:forge spawn assault rifle"
+		host_cmds="$host_cmds;L226:forge distance 3;L232:forge drop;L240:forge camera 57 -106.5 3.92 0 0;L255:forge spawn plasma pistol"
+		host_cmds="$host_cmds;L256:forge distance 3;L262:forge drop;L700:forge objects"
+		join_cmds="L250:forge camera 57 -99.5 3.045 0 0;L265:forge spawn assault rifle;L266:forge distance 3;L272:forge drop"
+		join_cmds="$join_cmds;L280:forge camera 57 -105.5 4.3 0 0;L295:forge spawn plasma pistol;L296:forge distance 3;L302:forge drop"
+		join_cmds="$join_cmds;L600:forge objects"
+		forge_host "$host_cmds" HALO_TEST_FORGE_PACKS=none
+		sleep 5
+		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join "HALO_TEST_COMMANDS=$join_cmds"
+		join_pid=$last_pid
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		local side log line z top bad
+		for side in host joiner; do
+			log=$hl
+			[ $side = joiner ] && log=$jl
+			echo "--- $side"
+			grep -aE "forge: object [0-9]+: (Assault Rifle|Plasma Pistol|Large Platform|Large Block) " "$log" | tail -6
+			[ "$(grep -acE "forge: object [0-9]+: (Assault Rifle|Plasma Pistol) " "$log")" -ge 4 ] ||
+				fail "the $side did not list the four weapons"
+			# (each weapon on its block's top: the platform's at 3.125, the large block's at 4.0)
+			grep -aE "forge: object [0-9]+: (Assault Rifle|Plasma Pistol) " "$log" | tail -4 | while read -r line; do
+				z=$(echo "$line" | sed 's/.* alive at [-0-9.]* \([-0-9.]*\) \([-0-9.]*\), placed.*/\2/')
+				y=$(echo "$line" | sed 's/.* alive at [-0-9.]* \([-0-9.]*\) .*/\1/')
+				top=3.125
+				awk -v y="$y" 'BEGIN { exit !(y < -103) }' && top=4.0
+				awk -v z="$z" -v t="$top" 'BEGIN { exit !(z >= t - 0.05 && z <= t + 0.35) }' ||
+					echo "FAIL ($mode): the $side: a weapon is not on its block (z $z, the top $top): $line"
+			done | tee -a "$out/forgeitems.fails"
+		done
+		grep -q FAIL "$out/forgeitems.fails" 2>/dev/null && status=1
 		;;
 	h3forgeslow|h3forgeskip)
 		local menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}

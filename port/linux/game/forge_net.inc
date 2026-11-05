@@ -2238,6 +2238,7 @@ static void forge_net_host_request(
 			forge_transform_get(object_index, &from);
 			object_set_position(object_index, &position, &forward, &up);
 			SET_FLAG(object_get(object_index)->object.flags, _object_at_rest_bit, FALSE);
+			forge_item_unburied(object_index);
 			forge_undo_record(_forge_undo_move, object_index, &from);
 			forge_settle(object_index);
 		}
