@@ -373,6 +373,15 @@ void system_link_shortcut_update(
 					joined ? "joined" : "listed but not joined (as a pick would be told)");
 			}
 		}
+		/* (its game listed full: told so, as a pick of its row would be, and
+		the host forgotten - it never opens to this join; a friend's join
+		or a code into a full game waited silently before, Nov 2026) */
+		else if (p2p_joined_host(host, FALSE) && (game = network_game_client_listed_full_game_of(host)) != NULL)
+		{
+			p2p_joined_host(host, TRUE);
+			network_game_client_advertised_game_full((struct network_advertised_game const *)game, TRUE);
+			platform_log("system link: the joined host's game is full: said, not joined");
+		}
 	}
 	/* (OpenCE's multiplayer screens: what they open from outside the
 	widgets' own events, menu_functions.c) */
