@@ -107,6 +107,14 @@ nothing is left to aim at and delete). A Flood combat form feigning death
 is not dead (it gets back up as the same unit), and what the game spawns
 (a carrier's infection forms) is never the layout's nor counted.
 
+The Forge menu's DELETE ALL (1.1.3, a tester's ask; asked first, as CLEAR
+ALL AI) takes every object of the layout in one of the browser's categories
+out of it and the world (forge_group_delete: the vehicles, weapons, blocks,
+spawn points...; AI's is CLEAR ALL AI), all but what is in use (a weapon in a
+hand, a vehicle with someone in it); a network game's client asks the host
+(_forge_net_command_delete_group, a host of version 8). The settings panel's
+Forge page has it too (Delete all).
+
 A placed character has an AI team and its AI on or off (the properties
 window; forge_ai_apply: the engine's unit and actor teams, actor_braindead),
 and the Forge menu's ALL AI sets every one (its row ON, OFF or MIXED: off
@@ -180,6 +188,12 @@ HALO_TEST_COMMANDS):
   forge clearai dead|all   the layout's dead characters, or all of them,
                            cleared (the Forge menu's CLEAR DEAD AI, CLEAR
                            ALL AI)
+  forge deleteall <cat>    every object of the layout in a browser category
+                           (vehicles weapons equipment scenery characters
+                           blocks teleporters objectives spawning) deleted,
+                           as the Forge menu's DELETE ALL after its question
+                           (asked of the host by a client)
+  forge groups             how many of the layout's each category has
   forge ai                 each placed character in the log: where, its
                            team, its brain, alive or dead, its aim and
                            facing, its actor's mode, its weapon, body and
@@ -924,6 +938,10 @@ static struct
 	panel's) the layout's dead characters, or all of them, taken out:
 	_forge_clear_ai_* */
 	volatile short clear_ai_requested;
+	/* (1.1.3, the Forge menu's DELETE ALL, the settings panel's) the layout's
+	objects of one of the browser's categories taken out: the category + 1
+	(0: none asked) */
+	volatile short delete_group_requested;
 	/* the ALL AI setting (the last one chosen, or read with a map
 	variant): a character placed gets its AI off while it is set; the
 	characters the game spawns in a Forge game follow it */
@@ -2020,6 +2038,37 @@ static void forge_ai_all_set(
 	forge_menu_notice("%s", on ? T("AI: On") : T("AI: Off"));
 }
 
+/* (CLEAR ALL AI, DELETE ALL) the history's steps that name the objects taken
+out of the layout (their ids): gone, the cursor kept on the same step -
+nothing brings those back */
+static void forge_undo_forget(
+	long const *ids,
+	short count)
+{
+	short index;
+	short kept = 0;
+	short cursor = forge_globals.undo_cursor;
+
+	if (count <= 0)
+		return;
+	for (index = 0; index < forge_globals.undo_count; index++)
+	{
+		short id;
+
+		for (id = 0; id < count && forge_globals.undo[index].id != ids[id]; id++)
+			;
+		if (forge_globals.undo[index].id != NONE && id < count)
+		{
+			if (index < forge_globals.undo_cursor)
+				cursor--;
+			continue;
+		}
+		forge_globals.undo[kept++] = forge_globals.undo[index];
+	}
+	forge_globals.undo_count = kept;
+	forge_globals.undo_cursor = (short)PIN(cursor, 0, kept);
+}
+
 /* (CLEAR DEAD AI, CLEAR ALL AI) the layout's dead characters, or every
 one of them alive or dead, taken out of the layout and the world: they do
 not come back with the next round, a map variant saved after has them not,
@@ -2051,30 +2100,7 @@ static short forge_ai_clear(
 		cleared_ids[cleared++] = placed->id;
 		forge_placed_remove(index);
 	}
-	/* (the history's steps of the cleared: gone, the cursor kept on the
-	same step) */
-	if (cleared > 0)
-	{
-		short kept = 0;
-		short cursor = forge_globals.undo_cursor;
-
-		for (index = 0; index < forge_globals.undo_count; index++)
-		{
-			short id;
-
-			for (id = 0; id < cleared && forge_globals.undo[index].id != cleared_ids[id]; id++)
-				;
-			if (forge_globals.undo[index].id != NONE && id < cleared)
-			{
-				if (index < forge_globals.undo_cursor)
-					cursor--;
-				continue;
-			}
-			forge_globals.undo[kept++] = forge_globals.undo[index];
-		}
-		forge_globals.undo_count = kept;
-		forge_globals.undo_cursor = (short)PIN(cursor, 0, kept);
-	}
+	forge_undo_forget(cleared_ids, cleared);
 	forge_placed_update();
 	platform_log("forge: cleared %d %s AI; budget %d/%d objects, %d/%d AI (%d dead)", cleared, all ? "placed" : "dead",
 		forge_globals.placed_count, FORGE_MAXIMUM_OBJECTS, forge_globals.ai_count, forge_ai_maximum(),
@@ -2086,6 +2112,133 @@ static short forge_ai_clear(
 	else
 		forge_menu_notice(T("Cleared %d dead AI"), cleared);
 	return cleared;
+}
+
+/* (DELETE ALL: the Forge menu's, the settings panel's; a tester's, 1.1.3)
+whether an object of the layout is in use: carried or seated (a weapon in a
+hand, a rider), or carrying a unit (a vehicle with someone in it). One in use
+is left where it is, and in the layout: it is deleted as the menu's single
+delete would be once let go */
+static boolean forge_object_in_use(
+	long object_index)
+{
+	struct object_datum *object = object_try_and_get(object_index);
+	long child_index;
+
+	if (!object)
+		return FALSE;
+	if (object->object.parent_object_index != NONE)
+		return TRUE;
+	for (child_index = object->object.first_child_object_index; child_index != NONE;
+		child_index = object_get(child_index)->object.next_object_index)
+	{
+		if (FLAG(object_get(child_index)->object.type) & _object_mask_unit)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+/* how many of the layout's are in one of the browser's categories: its
+objects placed (a category of markers: its spawn points, teleporters or
+game type objects; AI: the characters, alive or dead) */
+short forge_group_placed_count(
+	short category)
+{
+	short index;
+	short count = 0;
+	short first = forge_marker_category_first(category);
+
+	if (category < 0 || category >= NUMBER_OF_FORGE_CATEGORIES)
+		return 0;
+	if (first != NONE)
+	{
+		for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+		{
+			short kind = forge_globals.spawns[index].kind;
+
+			count += kind >= first && kind < first + forge_marker_category_count(category) ? 1 : 0;
+		}
+		return count;
+	}
+	for (index = 0; index < forge_globals.placed_count && index < FORGE_MAXIMUM_OBJECTS; index++)
+	{
+		struct forge_placed const *placed = &forge_globals.placed[index];
+
+		if (category == _forge_category_characters ? placed->ai : !placed->ai && forge_tag_category(placed->tag_index) == category)
+			count++;
+	}
+	return count;
+}
+
+/* (DELETE ALL, after its question) every object of the layout in one of
+the browser's categories taken out of the layout and the world, as CLEAR
+ALL AI takes the characters (AI: that same clearing): they do not come back
+with the next round, a map variant saved after has them not, the history's
+steps that name them go. A category of markers: its spawn points,
+teleporters or game type objects. What is in use (forge_object_in_use) is
+left. The ones deleted, counted */
+static short forge_group_delete(
+	short category)
+{
+	short index;
+	short deleted = 0;
+	short kept = 0;
+	short first = forge_marker_category_first(category);
+	long deleted_ids[FORGE_MAXIMUM_OBJECTS];
+
+	if (category < 0 || category >= NUMBER_OF_FORGE_CATEGORIES)
+		return 0;
+	if (category == _forge_category_characters)
+		return forge_ai_clear(TRUE);
+	if (first != NONE)
+	{
+		for (index = (short)(forge_globals.spawn_count - 1); index >= 0; index--)
+		{
+			struct forge_spawn *spawn = &forge_globals.spawns[index];
+
+			if (spawn->kind < first || spawn->kind >= first + forge_marker_category_count(category))
+				continue;
+			forge_spawn_remove(spawn);
+			deleted++;
+		}
+	}
+	else
+	{
+		forge_placed_update();
+		for (index = (short)(forge_globals.placed_count - 1); index >= 0; index--)
+		{
+			struct forge_placed *placed = &forge_globals.placed[index];
+
+			if (placed->ai || forge_tag_category(placed->tag_index) != category)
+				continue;
+			if (forge_object_alive(placed->object_index) && forge_object_in_use(placed->object_index))
+			{
+				kept++;
+				continue;
+			}
+			if (placed->object_index != NONE && placed->object_index == forge_globals.held_object_index)
+			{
+				forge_globals.held_object_index = NONE;
+				forge_globals.held_spawned = FALSE;
+			}
+			if (forge_object_alive(placed->object_index))
+				object_delete(placed->object_index);
+			deleted_ids[deleted++] = placed->id;
+			forge_placed_remove(index);
+		}
+		forge_undo_forget(deleted_ids, deleted);
+		forge_placed_update();
+	}
+	forge_globals.deleted_count += deleted;
+	platform_log("forge: deleted all %s: %d (%d in use kept); budget %d/%d objects", forge_category_log_names[category],
+		deleted, kept, forge_objects_counted(), FORGE_MAXIMUM_OBJECTS);
+	if (!deleted && !kept)
+		forge_menu_notice(T("No %s to delete"), forge_category_name(category));
+	else if (kept)
+		forge_menu_notice(T("Deleted all %s: %d (%d in use kept)"), forge_category_name(category), deleted, kept);
+	else
+		forge_menu_notice(T("Deleted all %s: %d"), forge_category_name(category), deleted);
+	return deleted;
 }
 
 #ifndef HALO_RELEASE
@@ -5407,6 +5560,37 @@ void forge_panel_clear_ai(
 	forge_clear_ai_request(all != 0);
 }
 
+void forge_delete_group_request(
+	short category)
+{
+	if (category >= 0 && category < NUMBER_OF_FORGE_CATEGORIES)
+		forge_globals.delete_group_requested = (short)(category + 1);
+}
+
+int forge_panel_group_count(
+	void)
+{
+	return NUMBER_OF_FORGE_CATEGORIES;
+}
+
+const char *forge_panel_group_name(
+	int category)
+{
+	return forge_category_name((short)category);
+}
+
+int forge_panel_group_placed(
+	int category)
+{
+	return forge_group_placed_count((short)category);
+}
+
+void forge_panel_delete_group(
+	int category)
+{
+	forge_delete_group_request((short)category);
+}
+
 void forge_map_resetting(
 	void)
 {
@@ -5467,6 +5651,7 @@ void forge_map_reset(
 	forge_globals.close_requested = FALSE;
 	forge_globals.ai_all_requested = FALSE;
 	forge_globals.clear_ai_requested = _forge_clear_ai_none;
+	forge_globals.delete_group_requested = 0;
 	forge_globals.round_requested = FALSE;
 	forge_globals.round_resetting = FALSE;
 	/* (the spawn points kept; a new round's first spawns at its initial
@@ -5519,6 +5704,7 @@ void forge_map_loaded(
 	forge_globals.round_pending = FALSE;
 	forge_globals.ai_all_requested = FALSE;
 	forge_globals.clear_ai_requested = _forge_clear_ai_none;
+	forge_globals.delete_group_requested = 0;
 	forge_globals.ai_all_off = FALSE;
 	if (forge_globals.active)
 	{
@@ -5934,6 +6120,7 @@ void forge_update(
 		forge_globals.property_requested = FALSE;
 		forge_globals.ai_all_requested = FALSE;
 		forge_globals.clear_ai_requested = _forge_clear_ai_none;
+		forge_globals.delete_group_requested = 0;
 		forge_globals.round_requested = FALSE;
 		forge_globals.toggle_requested = FALSE;
 		forge_globals.browser_chosen = FALSE;
@@ -5988,7 +6175,8 @@ void forge_update(
 	client asks it, the host checks and makes it and says what came of it -
 	a host of insider.21 or before takes none: only the host can then) */
 	if (forge_net_client() &&
-		(forge_globals.ai_all_requested || forge_globals.clear_ai_requested || forge_globals.round_requested))
+		(forge_globals.ai_all_requested || forge_globals.clear_ai_requested || forge_globals.round_requested ||
+			forge_globals.delete_group_requested))
 	{
 		boolean asked = TRUE;
 
@@ -6001,8 +6189,20 @@ void forge_update(
 		}
 		if (forge_globals.round_requested)
 			asked = forge_net_client_command(_forge_net_command_new_round, 0) && asked;
+		/* (DELETE ALL's characters: CLEAR ALL AI, which every host takes; the
+		other categories: a host of FORGE_NET_HOST_VERSION_DELETE_GROUP) */
+		if (forge_globals.delete_group_requested == _forge_category_characters + 1)
+		{
+			asked = forge_net_client_command(_forge_net_command_clear_all_ai, 0) && asked;
+		}
+		else if (forge_globals.delete_group_requested)
+		{
+			asked = forge_net_client_command(_forge_net_command_delete_group,
+				(uint16_t)(forge_globals.delete_group_requested - 1)) && asked;
+		}
 		forge_globals.ai_all_requested = FALSE;
 		forge_globals.clear_ai_requested = _forge_clear_ai_none;
+		forge_globals.delete_group_requested = 0;
 		forge_globals.round_requested = FALSE;
 		if (!asked)
 			forge_menu_notice("%s", T("Only the host can do that"));
@@ -6019,6 +6219,14 @@ void forge_update(
 		forge_globals.clear_ai_requested = _forge_clear_ai_none;
 		if (forge_globals.game_active && !forge_globals.game_requested)
 			forge_ai_clear(clear == _forge_clear_ai_all);
+	}
+	if (forge_globals.delete_group_requested)
+	{
+		short category = (short)(forge_globals.delete_group_requested - 1);
+
+		forge_globals.delete_group_requested = 0;
+		if (forge_globals.game_active && !forge_globals.game_requested)
+			forge_group_delete(category);
 	}
 	/* (NEW ROUND: once the Forge menu has gone and the game runs again -
 	the engine resets a map only then) */
@@ -6621,6 +6829,25 @@ boolean forge_command(
 			forge_clear_ai_request(!strcmp(rest, "all"));
 		else
 			forge_ai_clear(!strcmp(rest, "all"));
+		return TRUE;
+	}
+	if (!strcmp(word, "deleteall") || !strcmp(word, "groups"))
+	{
+		short category;
+
+		for (category = 0; category < NUMBER_OF_FORGE_CATEGORIES; category++)
+		{
+			if (!strcmp(word, "groups"))
+				platform_log("forge: group %s: %d", forge_category_log_names[category], forge_group_placed_count(category));
+			else if (!strcmp(rest, forge_category_log_names[category]))
+				break;
+		}
+		if (!strcmp(word, "groups"))
+			return TRUE;
+		if (category >= NUMBER_OF_FORGE_CATEGORIES)
+			return FALSE;
+		/* (as the menu asks: the next update makes it, a client asks the host) */
+		forge_delete_group_request(category);
 		return TRUE;
 	}
 	if (!strcmp(word, "press") || !strcmp(word, "stick"))

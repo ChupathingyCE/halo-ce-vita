@@ -228,7 +228,9 @@ under File Share the map variants of every map (the first
 FORGE_PANEL_MAXIMUM), square deleting one after a confirmation. While a
 Forge game is played, Clear dead AI and Clear all AI (asked first) do what
 the Forge menu's CLEAR DEAD AI and CLEAR ALL AI do, each with how many it
-takes (forge.c forge_panel_ai_counts, forge_panel_clear_ai); Magnets and Nudge
+takes (forge.c forge_panel_ai_counts, forge_panel_clear_ai); Delete all (1.1.3, asked
+first) does the Forge menu's DELETE ALL for the object browser's category left and
+right choose (forge_panel_group_*, forge_panel_delete_group); Magnets and Nudge
 step set the Forge game's blocks' magnets and its nudge (forge.c
 forge_precision.inc: 1.1.2). Touch in Forge (HALO_FORGE_TOUCH, on by
 default) is the monitor's front screen (forge_touch.inc); the page is there in
@@ -1245,6 +1247,9 @@ enum
 	SCREEN_FORGE_DELETE,
 	/* the Forge game's characters all cleared: asked first */
 	SCREEN_FORGE_CLEAR,
+	/* (1.1.3) the Forge game's objects of one category all deleted: asked
+	first */
+	SCREEN_FORGE_DELETE_GROUP,
 	/* the Mod manager page's chosen entry: its facts; its delete's
 	question */
 	SCREEN_MOD_DETAILS,
@@ -1527,6 +1532,10 @@ int forge_panel_map_available(int map_index);
 is played), and its dead or all of them cleared, at its next update */
 int forge_panel_ai_counts(int *alive, int *dead);
 void forge_panel_clear_ai(int all);
+int forge_panel_group_count(void);
+const char *forge_panel_group_name(int category);
+int forge_panel_group_placed(int category);
+void forge_panel_delete_group(int category);
 /* the blocks' magnets on (1) or off, set; the nudge's step (centimetres),
 stepped (forge.c forge_precision.inc) */
 int forge_panel_magnets(void);
@@ -1543,8 +1552,9 @@ extern volatile int halo_forge_request_network;
 
 /* the map variants listed (File Share's), the ones shown at once */
 #define FORGE_PANEL_MAXIMUM 32
-/* (a Forge game's rows leave room for two) */
-#define FORGE_PANEL_LINES (forge_panel_ai_counts(NULL, NULL) ? 2 : 6)
+/* (a Forge game's rows leave room for one: 1.1.3's Delete all took the
+other's) */
+#define FORGE_PANEL_LINES (forge_panel_ai_counts(NULL, NULL) ? 1 : 6)
 
 enum
 {
@@ -1556,6 +1566,10 @@ enum
 	/* (while a Forge game is played) */
 	FORGE_LINE_CLEAR_DEAD,
 	FORGE_LINE_CLEAR_ALL,
+	/* (1.1.3, while a Forge game is played: the Forge menu's DELETE ALL)
+	every object placed of one of the object browser's categories, left and
+	right choosing it */
+	FORGE_LINE_DELETE_GROUP,
 	/* (1.1.2, while a Forge game is played: forge.c forge_precision.inc) the
 	blocks' magnets, the nudge's step */
 	FORGE_LINE_MAGNETS,
@@ -1569,6 +1583,8 @@ static int forge_entry_count, forge_scroll;
 variant (0 none, else the nth of the map's that is not damaged), and the
 variant asked about (SCREEN_FORGE_DELETE) */
 static int forge_map = -1, forge_variant, forge_delete_index = -1;
+/* (Delete all) the object browser's category chosen (forge.h's order) */
+static int forge_delete_group = 1;
 /* (Network) Start Forge's game a network Forge game (1) or a local one (0) */
 static int forge_network;
 
@@ -4500,7 +4516,7 @@ static int page_lines(struct line *lines)
 		for (index = 0; index < FORGE_LINE_COUNT; index++)
 		{
 			if (!playing && (index == FORGE_LINE_CLEAR_DEAD || index == FORGE_LINE_CLEAR_ALL || index == FORGE_LINE_MAGNETS ||
-				index == FORGE_LINE_NUDGE))
+				index == FORGE_LINE_NUDGE || index == FORGE_LINE_DELETE_GROUP))
 			{
 				continue;
 			}
@@ -4944,6 +4960,7 @@ static void help_line(char *text, int size, const struct line *line)
 			line->index == FORGE_LINE_NETWORK ? T("Local: alone. Network: friends forge with you (8, never listed online)") :
 			line->index == FORGE_LINE_CLEAR_DEAD ? T("Dead AI you placed, out of the layout: room for more") :
 			line->index == FORGE_LINE_CLEAR_ALL ? T("Every AI you placed, alive or dead, out of the layout") :
+			line->index == FORGE_LINE_DELETE_GROUP ? T("Everything you placed of one kind, out of the layout") :
 			line->index == FORGE_LINE_MAGNETS ? T("A block held near another snaps flush to its edges") :
 			line->index == FORGE_LINE_NUDGE ? T("Each nudge's move: hold L, click the right stick, flick") :
 			T("A local game: you fly as the monitor and place objects"));
@@ -5082,7 +5099,8 @@ static void footer_line(char *text, int size, const struct line *line)
 		middle = T("Square: delete   ");
 	else if (line && line->type == LINE_FORGE)
 		middle = line->index == FORGE_LINE_START || line->index == FORGE_LINE_CLEAR_DEAD ||
-			line->index == FORGE_LINE_CLEAR_ALL ? T("Cross: select   ") : T("Left/right: change   ");
+			line->index == FORGE_LINE_CLEAR_ALL ? T("Cross: select   ") :
+			line->index == FORGE_LINE_DELETE_GROUP ? T("Left/right: kind   Cross: delete   ") : T("Left/right: change   ");
 	else if (line && line->type == LINE_MOD)
 		middle = T("Cross: details   Square: delete   ");
 	else if (line && line->type == LINE_PARTY_MEMBER)
@@ -5363,6 +5381,13 @@ static int list_text(char *text, int size, const struct line *lines, int count, 
 			else if (line->index == FORGE_LINE_NUDGE)
 				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02< %d cm >", T("Nudge step"),
 					forge_panel_nudge_centimetres());
+			else if (line->index == FORGE_LINE_DELETE_GROUP)
+			{
+				forge_delete_group = forge_delete_group < 0 || forge_delete_group >= forge_panel_group_count() ? 0 :
+					forge_delete_group;
+				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02< %s (%d) >", T("Delete all"),
+					forge_panel_group_name(forge_delete_group), forge_panel_group_placed(forge_delete_group));
+			}
 			else if (line->index == FORGE_LINE_CLEAR_DEAD || line->index == FORGE_LINE_CLEAR_ALL)
 			{
 				int alive = 0, dead = 0;
@@ -5948,6 +5973,37 @@ static void forge_clear_input(unsigned long pressed)
 	}
 }
 
+/* (the Forge page, in a Forge game) every object placed of the category
+chosen deleted, asked first (forge.c forge_group_delete) */
+static void show_forge_delete_group(void)
+{
+	char text[512];
+	int count;
+
+	if (!forge_panel_ai_counts(NULL, NULL) || forge_delete_group < 0 || forge_delete_group >= forge_panel_group_count())
+	{
+		screen = SCREEN_LIST;
+		show_list();
+		return;
+	}
+	count = forge_panel_group_placed(forge_delete_group);
+	snprintf(text, sizeof(text), T("DELETE ALL %s\n\nAll %d you placed, out of the layout: they don't come back\n"
+		"next round.\n\nCross: delete   O: keep"), forge_panel_group_name(forge_delete_group), count);
+	vgxm_menu_set(text, -1);
+}
+
+static void forge_delete_group_input(unsigned long pressed)
+{
+	if (pressed & VITA_BUTTON_CIRCLE)
+		screen = SCREEN_LIST;
+	else if (pressed & VITA_BUTTON_CROSS)
+	{
+		forge_panel_delete_group(forge_delete_group);
+		set_notice(T("Deleted all %s"), forge_panel_group_name(forge_delete_group));
+		screen = SCREEN_LIST;
+	}
+}
+
 static void forge_delete_input(unsigned long pressed)
 {
 	if (pressed & VITA_BUTTON_CIRCLE)
@@ -6200,6 +6256,8 @@ static void show(void)
 		show_fs_download();
 	else if (screen == SCREEN_FORGE_CLEAR)
 		show_forge_clear();
+	else if (screen == SCREEN_FORGE_DELETE_GROUP)
+		show_forge_delete_group();
 	else if (screen == SCREEN_MOD_DETAILS)
 		show_mod_details();
 	else if (screen == SCREEN_MOD_DELETE)
@@ -8083,6 +8141,13 @@ int vita_settings_input(const struct vita_host_pad *pad)
 			show();
 		return 1;
 	}
+	if (screen == SCREEN_FORGE_DELETE_GROUP)
+	{
+		forge_delete_group_input(pressed);
+		if (pressed)
+			show();
+		return 1;
+	}
 	if (screen == SCREEN_LARGE)
 	{
 		large_input(pressed);
@@ -8224,6 +8289,17 @@ int vita_settings_input(const struct vita_host_pad *pad)
 				}
 				else if (line->index == FORGE_LINE_CLEAR_ALL && (pressed & (VITA_BUTTON_CROSS | VITA_BUTTON_RIGHT)))
 					screen = SCREEN_FORGE_CLEAR;
+				/* (Delete all: left and right the category, Cross asks - one with
+				none says so) */
+				else if (line->index == FORGE_LINE_DELETE_GROUP && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
+					forge_delete_group = (forge_delete_group + step + forge_panel_group_count()) % forge_panel_group_count();
+				else if (line->index == FORGE_LINE_DELETE_GROUP && (pressed & VITA_BUTTON_CROSS))
+				{
+					if (forge_panel_group_placed(forge_delete_group))
+						screen = SCREEN_FORGE_DELETE_GROUP;
+					else
+						set_notice(T("No %s to delete"), forge_panel_group_name(forge_delete_group));
+				}
 				else if (line->index == FORGE_LINE_MAGNETS && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT | VITA_BUTTON_CROSS)))
 					forge_panel_magnets_set(!forge_panel_magnets());
 				else if (line->index == FORGE_LINE_NUDGE && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))

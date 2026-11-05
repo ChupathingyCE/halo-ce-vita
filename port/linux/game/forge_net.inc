@@ -1834,8 +1834,10 @@ static void forge_net_count_violation(
 	network_anticheat_violation(actor->machine_index, _anticheat_forge, TRUE, 1.0f);
 }
 
+typedef char forge_net_delete_groups_assert[FORGE_NET_DELETE_GROUPS == NUMBER_OF_FORGE_CATEGORIES ? 1 : -1];
+
 /* a machine's Forge menu command (CLEAR DEAD AI, CLEAR ALL AI, ALL AI, NEW
-ROUND), checked and made as the host's own menu makes it: in a Forge game
+ROUND, 1.1.3's DELETE ALL), checked and made as the host's own menu makes it: in a Forge game
 being played (not while one starts or a round resets), a few a second at
 most; what came of it said back to that machine alone */
 static void forge_net_host_command(
@@ -1845,7 +1847,7 @@ static void forge_net_host_command(
 {
 	static char const *const names[NUMBER_OF_FORGE_NET_COMMANDS] =
 	{
-		"clear dead AI", "clear all AI", "all AI", "new round",
+		"clear dead AI", "clear all AI", "all AI", "new round", "delete all",
 	};
 	short result = _forge_net_refuse_none;
 	uint16_t value = 0;
@@ -1891,6 +1893,14 @@ static void forge_net_host_command(
 		forge_globals.round_requested = TRUE;
 		result = _forge_net_refuse_round;
 		break;
+	case _forge_net_command_delete_group:
+		/* (the category checked below FORGE_NET_DELETE_GROUPS: forge_net_
+		protocol.c; as that machine, its notices its own) */
+		forge_net_act_begin(actor);
+		value = (uint16_t)forge_group_delete((short)request->value);
+		forge_net_act_end(actor);
+		result = _forge_net_refuse_deleted_group;
+		break;
 	}
 	if (result != _forge_net_refuse_none)
 	{
@@ -1902,6 +1912,8 @@ static void forge_net_host_command(
 		record.sequence = request->sequence;
 		record.aux = (uint8_t)result;
 		record.value = value;
+		if (result == _forge_net_refuse_deleted_group)
+			record.value2 = request->value;
 		record.tag = FORGE_NET_NO_TAG;
 		record.player = FORGE_NET_NO_PLAYER;
 		record.object = FORGE_NET_NO_OBJECT;
@@ -3384,6 +3396,9 @@ static boolean forge_net_client_command(
 
 	if (!forge_net_client() || forge_net.host_version < FORGE_NET_HOST_VERSION_COMMANDS)
 		return FALSE;
+	/* (DELETE ALL: a 1.1.3 host's) */
+	if (command == _forge_net_command_delete_group && forge_net.host_version < FORGE_NET_HOST_VERSION_DELETE_GROUP)
+		return FALSE;
 	forge_net_request_init(&record, _forge_net_request_command);
 	record.aux = (uint8_t)command;
 	record.value = value;
@@ -3391,7 +3406,8 @@ static boolean forge_net_client_command(
 	platform_log("forge net: asked the host: %s", forge_net_refusal_name(
 		command == _forge_net_command_clear_dead_ai ? _forge_net_refuse_cleared_dead :
 		command == _forge_net_command_clear_all_ai ? _forge_net_refuse_cleared_all :
-		command == _forge_net_command_all_ai ? _forge_net_refuse_ai_set : _forge_net_refuse_round));
+		command == _forge_net_command_all_ai ? _forge_net_refuse_ai_set :
+		command == _forge_net_command_delete_group ? _forge_net_refuse_deleted_group : _forge_net_refuse_round));
 	return TRUE;
 }
 
@@ -3876,6 +3892,12 @@ static void forge_net_client_update_take(
 		case _forge_net_refuse_ai_set: forge_menu_notice("%s", record->value ? T("AI: On") : T("AI: Off")); break;
 		case _forge_net_refuse_round: forge_menu_notice("%s", T("New round: the host starts it")); break;
 		case _forge_net_refuse_not_now: forge_menu_notice("%s", T("Not now: the host's game is starting a round")); break;
+		case _forge_net_refuse_deleted_group:
+			if (record->value)
+				forge_menu_notice(T("Deleted all %s: %d"), forge_category_name((short)record->value2), (int)record->value);
+			else
+				forge_menu_notice(T("No %s to delete"), forge_category_name((short)record->value2));
+			break;
 		}
 		platform_log("forge net: the host said: %s", forge_net_refusal_name(record->aux));
 		return;

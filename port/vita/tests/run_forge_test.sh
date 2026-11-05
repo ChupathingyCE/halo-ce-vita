@@ -252,6 +252,18 @@
 #               the Warthog (forge_files_test --dump)
 #   clearaimenu the Forge menu's rows by the pad: CLEAR DEAD AI (1), CLEAR ALL
 #               AI asked first (B keeps them, A clears them), screenshots
+#   deleteall   DELETE ALL (1.1.3, a tester's ask; forge.c forge_group_delete, the
+#               console's "forge deleteall", as the Forge menu's question's Delete):
+#               two weapons, a Warthog, two blocks, a boulder, two spawn points and a
+#               teleporter sender placed; all weapons deleted, then all blocks, all
+#               spawning, all equipment (none: said); the others' counts never
+#               change; NEW ROUND brings none of the deleted back; saved: the file
+#               has only the Warthog and the boulder (a lone sender is never saved;
+#               forge_files_test --dump). deleteallmenu the same by the pad (Menu
+#               style Halo 3): Start, DELETE ALL, WEAPONS (2) asked and deleted,
+#               SPAWNING asked and kept (B), BLOCKS deleted; screenshots of each;
+#               deleteall-online the same rows in Menu style Online, deleteall-es
+#               in Spanish
 #   rotate      rotate mode (L held while holding an object), by the console's
 #               pad (forge press, forge stick, forge look as the mouse): a
 #               boulder held facing the camera, the snapping stepped to 45
@@ -327,7 +339,7 @@
 #   run_forge_test.sh [CASE...]      (default: v1 budget fly b30 off files variants
 #                                     edit fileshare fstouch panel packs packnote packcopy smallmap
 #                                     aiteam aioff round aisave allai allaimenu flood
-#                                     clearai clearaimenu rotate floodcov sentinels marines
+#                                     clearai clearaimenu deleteall rotate floodcov sentinels marines
 #                                     aivariant cepelican cepelicanoff pelican blocks)
 #   aipacks     (not by default) the AI packs' tag cache on Blood Gulch, the
 #               tightest map: each AI pack with the packs on by default, and
@@ -474,7 +486,7 @@ touch_check() {
 # the Spartan), forward, Select alone then D-pad up alone (the scoreboard,
 # then zoom: neither flips), Select + D-pad up (the monitor); Start, down
 # ten times (past SAVE MAP VARIANT, UNDO, REDO, SNAP, ALL AI, CLEAR DEAD AI,
-# CLEAR ALL AI, NEW ROUND), A (LEAVE FORGE), A (leave))
+# CLEAR ALL AI, DELETE ALL, NEW ROUND), A (LEAVE FORGE), A (leave))
 v1pad="wait:150:3000 @00-main-menu:0:300 down:150:600 down:150:600 a:150:2500 @01-lobby:0:300"
 v1pad="$v1pad a:150:2000 @02-map-picker:0:300 down:150:700 a:150:1500 @02b-wizard-variants:0:300 a:150:2000"
 v1pad="$v1pad a:150:2000 up:150:700 a:150:1500 a:150:2000"
@@ -488,7 +500,8 @@ v1pad="$v1pad @13-boulder-dropped:0:300 rt:150:1000 lleft:700:600 @14-boulder-ca
 v1pad="$v1pad y:150:1500 @15-deleted:0:300 rs:150:1500 back+rs:150:2500 @16-spartan:0:300 lup:800:1500"
 v1pad="$v1pad back:150:600 rs:150:1200 back+rs:150:2500"
 v1pad="$v1pad @17-monitor-again:0:300 start:150:2000 @18-forge-menu:0:300 down:150:600 down:150:600 down:150:600"
-v1pad="$v1pad down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 a:150:1500"
+# (thirteen down: past 1.1.3's DELETE ALL, to LEAVE FORGE)
+v1pad="$v1pad down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 a:150:1500"
 v1pad="$v1pad @19-leave-forge:0:300 a:150:9000 @20-main-menu-again:0:300"
 
 # (variants: the main menu's FORGE, the lobby; START FORGE (the map, no
@@ -1380,6 +1393,58 @@ clearaimenu_runs() {
 	ai_run clearaimenu 45 "$c" "HALO_TEST_PAD=$pad"
 }
 
+# (DELETE ALL: what each run places, from tick 240, snapping off)
+deleteall_place="L240:forge snap off;L250:forge camera 60 -100 3 0 0;L252:forge spawn assault rifle;L254:forge drop"
+deleteall_place="$deleteall_place;L256:forge camera 60 -102 3 0 0;L258:forge spawn plasma pistol;L260:forge drop"
+deleteall_place="$deleteall_place;L262:forge camera 60 -106 3 0 0;L264:forge spawn warthog;L265:forge distance 8;L268:forge drop"
+deleteall_place="$deleteall_place;L270:forge camera 66 -100 3 0 0;L272:forge spawn platform_large;L273:forge distance 5;L276:forge drop"
+deleteall_place="$deleteall_place;L278:forge camera 66 -108 3 0 0;L280:forge spawn block_large;L281:forge distance 5;L284:forge drop"
+deleteall_place="$deleteall_place;L286:forge camera 56 -112 1.6 0 0;L288:forge spawn boulder;L289:forge distance 6;L292:forge drop"
+deleteall_place="$deleteall_place;L294:forge camera 70 -100 6 0 -89;L296:forge spawnpoint respawn;L298:forge drop"
+deleteall_place="$deleteall_place;L300:forge camera 74 -100 6 0 -89;L302:forge spawnpoint initial;L304:forge drop"
+deleteall_place="$deleteall_place;L306:forge camera 78 -100 6 0 -89;L308:forge spawnpoint sender;L310:forge drop;L320:forge groups"
+deleteall_runs() {
+	local store="$out/deleteall-store" pad i
+	rm -rf "$store"
+	mkdir -p "$store"
+	local c="$deleteall_place;L330:forge deleteall weapons;L334:forge groups;L336:forge deleteall blocks;L338:forge deleteall spawning"
+	c="$c;L340:forge deleteall equipment;L344:forge groups;L346:forge round;L480:forge groups;L482:forge save Delete Test"
+	run deleteall 50 "" "$c" "" HALO_MENU_STYLE=classic HALO_SYSTEM_LINK_TEST=forge:9 HALO_TEST_FORGE_PACKS=none \
+		HALO_SAVE_ROOT="$store"
+	"$out/forge_files_test" --dump "$store/forge/bloodgulch/delete_test.hmv" > "$out/deleteall/dump.txt" 2>&1
+	# (by the pad: Start; down eleven to DELETE ALL, A; down to WEAPONS, A (asked), A
+	# (deleted); down seven to SPAWNING, A (asked), B (kept); down six to BLOCKS, A, A)
+	pad="level:150:12000 start:150:2000"
+	for i in $(seq 11); do pad="$pad down:150:400"; done
+	pad="$pad @00-menu-delete-all:0:300 a:150:1500 @01-groups:0:300 down:150:600 a:150:1500 @02-weapons-asked:0:300"
+	pad="$pad a:150:1500 @03-weapons-deleted:0:300"
+	for i in $(seq 7); do pad="$pad down:150:400"; done
+	pad="$pad a:150:1500 @04-spawning-asked:0:300 b:150:1500 @05-spawning-kept:0:300"
+	for i in $(seq 6); do pad="$pad down:150:400"; done
+	pad="$pad a:150:1500 a:150:1500 @06-blocks-deleted:0:300 b:150:1500 @07-menu-status:0:300 b:150:1000"
+	run deleteallmenu 50 "" "$deleteall_place" "$pad" HALO_MENU_STYLE=halo3 HALO_SYSTEM_LINK_TEST=forge:9 \
+		HALO_TEST_FORGE_PACKS=none HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1
+	# (Spanish, and Menu style Online's Forge menu - DELETE ALL nine down there:
+	# it has no MAGNETS or NUDGE rows -: the weapons' steps)
+	local tail="@00-menu-delete-all:0:300 a:150:1500 @01-groups:0:300 down:150:600 a:150:1500 @02-weapons-asked:0:300"
+	tail="$tail a:150:1500 @03-weapons-deleted:0:300 b:150:1500 @04-menu-status:0:300 b:150:1000"
+	pad="level:150:12000 start:150:2000"
+	for i in $(seq 9); do pad="$pad down:150:400"; done
+	run deleteall-online 40 "" "$deleteall_place" "$pad $tail" HALO_MENU_STYLE=online HALO_SYSTEM_LINK_TEST=forge:9 \
+		HALO_TEST_FORGE_PACKS=none HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1
+	pad="level:150:12000 start:150:2000"
+	for i in $(seq 11); do pad="$pad down:150:400"; done
+	run deleteall-es 40 "" "$deleteall_place" "$pad $tail" HALO_MENU_STYLE=halo3 HALO_SYSTEM_LINK_TEST=forge:9 \
+		HALO_TEST_FORGE_PACKS=none HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1 HALO_LANGUAGE=es \
+		"HALO_TEST_LANG_DIR=$root/port/vita/app0/lang"
+}
+
+# deleteall_groups NAME TICK: the "forge groups" counts logged at that tick, one line
+deleteall_groups() {
+	sed -n "/test command at tick $2: forge groups\$/,+9p" "$out/$1/run.log" | grep -a "forge: group " |
+		sed 's/.*forge: group \([a-z]*\): \([0-9]*\)/\1 \2/' | tr '\n' ' ' | sed 's/ $//'
+}
+
 rotate_runs() {
 	# (looking along +x, level: a boulder held 5 ahead facing the camera;
 	# where it faces after each step - forge where's "held facing ... up ...")
@@ -1658,6 +1723,12 @@ for c in $cases; do
 		clearai_runs & ;;
 	clearaimenu)
 		clearaimenu_runs & ;;
+	deleteall)
+		if [ "$menus_files" = 0 ]; then
+			echo "SKIP: deleteall: no Halo PC bitmaps.map and loc.map in $data/maps"
+			continue
+		fi
+		deleteall_runs & ;;
 	rotate)
 		rotate_runs & ;;
 	touch)
@@ -2555,6 +2626,46 @@ for c in $cases; do
 		if grep -aq "forge: a Forge game of" "$out/panel-damaged/run.log"; then
 			fail "panel-damaged: a Forge game was asked for"
 		fi
+		continue
+	fi
+	if [ "$c" = deleteall ]; then
+		checked deleteall || continue
+		all="vehicles 1 weapons 2 equipment 0 scenery 1 characters 0 blocks 2 teleporters 1 objectives 0 spawning 2"
+		[ "$(deleteall_groups deleteall 320)" = "$all" ] && echo "  ok: deleteall: placed: $all" ||
+			fail "deleteall: placed: $(deleteall_groups deleteall 320)"
+		expect deleteall "all weapons deleted (2)" "forge: deleted all weapons: 2 \(0 in use kept\)"
+		[ "$(deleteall_groups deleteall 334)" = "vehicles 1 weapons 0 equipment 0 scenery 1 characters 0 blocks 2 teleporters 1 objectives 0 spawning 2" ] &&
+			echo "  ok: deleteall: the weapons gone, nothing else" || fail "deleteall: after the weapons: $(deleteall_groups deleteall 334)"
+		expect deleteall "all blocks deleted (2)" "forge: deleted all blocks: 2 "
+		expect deleteall "all spawning deleted (2)" "forge: deleted all spawning: 2 "
+		expect deleteall "no equipment: none deleted" "forge: deleted all equipment: 0 "
+		left="vehicles 1 weapons 0 equipment 0 scenery 1 characters 0 blocks 0 teleporters 1 objectives 0 spawning 0"
+		[ "$(deleteall_groups deleteall 344)" = "$left" ] && echo "  ok: deleteall: left: $left" ||
+			fail "deleteall: left: $(deleteall_groups deleteall 344)"
+		[ "$(deleteall_groups deleteall 480)" = "$left" ] && echo "  ok: deleteall: NEW ROUND brought none of them back" ||
+			fail "deleteall: after the new round: $(deleteall_groups deleteall 480)"
+		# (a lone teleporter sender is never saved: teleport)
+		if [ "$(grep -c "^record " "$out/deleteall/dump.txt")" = 2 ] && grep -q "^record .*warthog" "$out/deleteall/dump.txt" &&
+			grep -q "^record .*boulder" "$out/deleteall/dump.txt"; then
+			echo "  ok: deleteall: the file has only the Warthog and the boulder"
+		else
+			fail "deleteall: the file: $(cat "$out/deleteall/dump.txt")"
+		fi
+		checked deleteallmenu || continue
+		expect deleteallmenu "DELETE ALL's rows with their counts" "menus: forge delete all: VEHICLES \(1\), WEAPONS \(2\), EQUIPMENT, SCENERY \(1\), AI, BLOCKS \(2\), TELEPORTERS \(1\), OBJECTIVES, SPAWNING \(2\)"
+		expect deleteallmenu "WEAPONS asked" "menus: forge delete all: WEAPONS asked"
+		expect deleteallmenu "WEAPONS deleted from the question" "forge: deleted all weapons: 2 "
+		expect deleteallmenu "SPAWNING asked" "menus: forge delete all: SPAWNING asked"
+		grep -aq "forge: deleted all spawning" "$out/deleteallmenu/run.log" && fail "deleteallmenu: SPAWNING deleted after B"
+		expect deleteallmenu "BLOCKS deleted" "forge: deleted all blocks: 2 "
+		# (the rows' counts as the list last showed them: the menu pauses the game's ticks)
+		grep -a "menus: forge delete all: VEHICLES" "$out/deleteallmenu/run.log" | tail -1 |
+			grep -aq "VEHICLES (1), WEAPONS, EQUIPMENT, SCENERY (1), AI, BLOCKS, TELEPORTERS (1), OBJECTIVES, SPAWNING (2)$" &&
+			echo "  ok: deleteallmenu: the weapons and blocks gone, the spawns kept" ||
+			fail "deleteallmenu: at the end: $(grep -a "menus: forge delete all: VEHICLES" "$out/deleteallmenu/run.log" | tail -1)"
+		checked deleteall-online && expect deleteall-online "Menu style Online: WEAPONS deleted" "forge: deleted all weapons: 2 "
+		checked deleteall-es && expect deleteall-es "in Spanish: the rows' words" "menus: forge delete all: VEHÍCULOS \(1\), ARMAS \(2\)" &&
+			expect deleteall-es "in Spanish: WEAPONS deleted" "forge: deleted all weapons: 2 "
 		continue
 	fi
 	if [ "$c" = blockitems ]; then

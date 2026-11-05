@@ -266,7 +266,10 @@ int forge_net_request_valid(
 	case _forge_net_request_command:
 		if (record->flags != 0 || record->aux >= NUMBER_OF_FORGE_NET_COMMANDS)
 			return 0;
-		/* (ALL AI's on or off in value; the others' value none) */
+		/* (ALL AI's on or off in value, DELETE ALL's category; the others'
+		value none) */
+		if (record->aux == _forge_net_command_delete_group)
+			return record->value < FORGE_NET_DELETE_GROUPS;
 		return record->aux == _forge_net_command_all_ai ? record->value <= 1 : record->value == 0;
 	default:
 		return 0;
@@ -698,7 +701,7 @@ char const *forge_net_refusal_name(
 		"none", "budget", "AI budget", "held by another", "not allowed", "outside the map", "cannot be placed",
 		"cannot be copied", "host only", "rate limited", "gone", "the map's scenery", "nothing to undo",
 		"nothing to redo", "not held", "undone", "redone", "undo: gone", "redo: gone", "undo: budget full",
-		"redo: budget full", "cleared dead AI", "cleared all AI", "AI set", "new round", "not now",
+		"redo: budget full", "cleared dead AI", "cleared all AI", "AI set", "new round", "not now", "deleted a group",
 	};
 
 	return refusal >= 0 && refusal < NUMBER_OF_FORGE_NET_REFUSALS ? names[refusal] : "?";

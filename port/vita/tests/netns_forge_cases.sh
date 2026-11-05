@@ -43,6 +43,13 @@
 #              lobby; a third machine browsing the public games never sees or joins it, the
 #              broker never gets a listing; START FORGE takes host and friend into Forge; the
 #              third machine then joins by the host's code, into the game in progress
+#   forgedeleteall  DELETE ALL in a network Forge game (1.1.3, forge.c forge_group_delete,
+#              asked of the host: _forge_net_command_delete_group, a host of version 8): the
+#              host places two weapons, a large platform and a respawn point; the joiner
+#              deletes all weapons and all spawning, the host all blocks: on both machines
+#              every count of the three 0 and the objects gone. forgedeleteallold the joiner
+#              with a 1.1.2 host (HALO_TEST_HOST_VITA, its host version 7): it is not asked,
+#              the joiner says only the host can, and the host keeps its weapons
 #   forgeitems weapons on building blocks (1.1.2, Nov 4 2026: they fell through every block,
 #              players and vehicles stood on them): a large platform and a large block float
 #              in the air; each machine lets a weapon go above one and places one held with its
@@ -523,9 +530,10 @@ forge_case() {
 		# (Start: the Forge menu; down nine to CLEAR DEAD AI, A; B closes it)
 		local menu_pad="start:150:3000 @MENU-open:0:300 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500"
 		menu_pad="$menu_pad down:150:500 down:150:500 down:150:500 down:150:500 a:150:3000 @MENU-cleared:0:300 b:150:2000"
-		# (the first joiner's NEW ROUND, later: down eleven, A, the menu closed by it)
+		# (the first joiner's NEW ROUND, later: down twelve - past 1.1.3's DELETE ALL -, A, the
+		# menu closed by it)
 		local round_pad="start:150:3000" step
-		for step in 1 2 3 4 5 6 7 8 9 10 11; do round_pad="$round_pad down:150:500"; done
+		for step in 1 2 3 4 5 6 7 8 9 10 11 12; do round_pad="$round_pad down:150:500"; done
 		round_pad="$round_pad @forgemp-joiner-round:0:300 a:150:3000"
 		HALO_TEST_DATA_HOST=$menus_data forge_host "$host_cmds" HALO_UI_LOG=1 $(forge_shots mpforge-shots/forgemp-host)
 		sleep 5
@@ -737,6 +745,55 @@ forge_case() {
 		grep -aq "forge net: machine [0-9]* moved the spawn point #$id" "$hl" || fail "the host did not take the joiner's move"
 		[ -n "$at" ] && { grep -a "forge: spawns: the respawn point #$id " "$hl" | tail -1 | grep -aqF " at $at " ||
 			fail "the joiner's spawn point is not where it was let go on the host ($at)"; }
+		;;
+	forgedeleteall|forgedeleteallold)
+		host_cmds="L140:forge snap off;L150:forge camera 55 -100 3 0 0;L162:forge spawn assault rifle;L164:forge drop"
+		host_cmds="$host_cmds;L166:forge camera 55 -102 3 0 0;L172:forge spawn assault rifle;L174:forge drop"
+		host_cmds="$host_cmds;L176:forge camera 55 -106 3 0 0;L182:forge spawn platform_large;L183:forge distance 5;L186:forge drop"
+		host_cmds="$host_cmds;L190:forge camera 62 -100 6 0 -89;L196:forge spawnpoint respawn;L198:forge drop;L300:forge groups"
+		join_cmds="L320:forge groups;L330:forge deleteall weapons;L360:forge deleteall spawning;L600:forge groups;L610:forge objects"
+		[ $mode = forgedeleteall ] && host_cmds="$host_cmds;L400:forge deleteall blocks"
+		host_cmds="$host_cmds;L700:forge groups;L710:forge objects"
+		run_copy host "$host_machine" "${HALO_TEST_HOST_VITA:-$vita}" "$cpu_a" HALO_NET_ONLINE=false \
+			HALO_NETWORK_TEST=host:bloodgulch:forge HALO_NETWORK_TEST_START=20 HALO_TEST_FORGE_PACKS=none \
+			"HALO_TEST_COMMANDS=$host_cmds"
+		host_pid=$last_pid
+		sleep 5
+		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join "HALO_TEST_COMMANDS=$join_cmds"
+		join_pid=$last_pid
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		local groups
+		groups() { # LOG TICK: the "forge groups" counts logged at that tick
+			sed -n "/test command at tick $2: forge groups\$/,+9p" "$1" | grep -a "forge: group " |
+				sed 's/.*forge: group \([a-z]*\): \([0-9]*\)/\1 \2/' | tr '\n' ' ' | sed 's/ $//'
+		}
+		echo "--- host"; grep -aE "forge net: machine 1 asked|forge: deleted all|test command at tick (300|700): forge groups" "$hl" | head
+		echo "    at 300: $(groups "$hl" 300)"; echo "    at 700: $(groups "$hl" 700)"
+		echo "--- joiner"; grep -aE "forge net: (asked the host|the host said)|Only the host|test command at tick 3[36]0" "$jl" | head
+		echo "    at 320: $(groups "$jl" 320)"; echo "    at 600: $(groups "$jl" 600)"
+		groups "$jl" 320 | grep -q "weapons 2 .*blocks 1 .*spawning 1" || fail "the joiner did not count the host's weapons, block and spawn point"
+		if [ $mode = forgedeleteall ]; then
+			grep -aq "forge net: machine 1 asked: delete all" "$hl" || fail "the joiner's DELETE ALL was not asked of the host"
+			grep -aq "forge: deleted all weapons: 2 " "$hl" || fail "the host did not delete the weapons for the joiner"
+			grep -aq "forge: deleted all spawning: 1 " "$hl" || fail "the host did not delete the spawn point for the joiner"
+			grep -aq "forge: deleted all blocks: 1 " "$hl" || fail "the host did not delete its blocks"
+			grep -aq "forge net: the host said: deleted a group" "$jl" || fail "the joiner was not told what came of it"
+			for side in host joiner; do
+				local log=$hl tick=700
+				[ $side = joiner ] && log=$jl tick=600
+				groups "$log" $tick | grep -q "weapons 0 .*blocks 0 .*spawning 0" ||
+					fail "the $side still counts some: $(groups "$log" $tick)"
+				sed -n "/test command at tick $((tick + 10)): forge objects\$/,/objects listed/p" "$log" |
+					grep -aqE "Assault Rifle|Large Platform" && fail "the $side still has a deleted object"
+			done
+		else
+			grep -aq "forge net: machine 1 asked" "$hl" && fail "a 1.1.2 host was asked"
+			grep -aqiE "malformed|anticheat|violation" "$hl" && fail "the 1.1.2 host counted something against the joiner"
+			grep -aq "Only the host can do that" "$jl" || fail "the joiner did not say only the host can"
+			[ "$(sed -n '/test command at tick 710: forge objects$/,/objects listed/p' "$hl" | grep -ac "Assault Rifle")" = 2 ] ||
+				fail "the 1.1.2 host's weapons went"
+		fi
 		;;
 	forgeitems)
 		# (weapons on building blocks in a network Forge game: a large platform (its top at

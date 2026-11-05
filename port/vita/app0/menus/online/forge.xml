@@ -174,8 +174,8 @@
 	<widget name="online/forge/pause/title" type="text" left="36" top="59" width="540" height="26" font="online/font_item" color="#FFF4F4F4">
 		<data input="port forge title" />
 	</widget>
-	<widget name="online/forge/pause/column" left="28" top="122" width="236" height="256" bitmap="online/f_panel" />
-	<widget name="online/forge/pause/status" type="text" left="36" top="382" width="508" height="64" font="online/font_small" color="#FF9FD8FF" />
+	<widget name="online/forge/pause/column" left="28" top="122" width="236" height="278" bitmap="online/f_panel" />
+	<widget name="online/forge/pause/status" type="text" left="36" top="404" width="508" height="34" font="online/font_small" color="#FF9FD8FF" />
 	<widget name="online/forge/pause/controls_panel" left="280" top="150" width="320" height="224" bitmap="online/f_panel" />
 	<widget name="online/forge/pause/controls_caption" type="text" left="292" top="156" width="296" height="16" font="online/font_small" color="#FF9FB6CC" string_list="h3/forge_menu" string_index="6" />
 	<widget name="online/forge/pause/controls_rule" left="292" top="174" width="296" height="2" bitmap="online/f_rule" />
@@ -192,8 +192,9 @@
 		<child widget="online/forge/pause/allai" x="0" y="132" />
 		<child widget="online/forge/pause/cleardead" x="0" y="154" />
 		<child widget="online/forge/pause/clearall" x="0" y="176" />
-		<child widget="online/forge/pause/newround" x="0" y="198" />
-		<child widget="online/forge/pause/leave" x="0" y="220" />
+		<child widget="online/forge/pause/deleteall" x="0" y="198" />
+		<child widget="online/forge/pause/newround" x="0" y="220" />
+		<child widget="online/forge/pause/leave" x="0" y="242" />
 	</widget>
 	<widget name="online/forge/pause/resume" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFE6ECF2" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="4">
 		<on event="a" close="all" />
@@ -221,6 +222,10 @@
 	</widget>
 	<widget name="online/forge/pause/clearall" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" open="h3/forge/clearai/screen" />
+	</widget>
+	<!-- (1.1.3) DELETE ALL: Halo 3's screens (halo3/forge.xml) -->
+	<widget name="online/forge/pause/deleteall" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="18">
+		<on event="a" open="h3/forge/deleteall/screen" />
 	</widget>
 	<widget name="online/forge/pause/newround" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="14">
 		<on event="a" run="port forge new round" close="all" />
