@@ -486,7 +486,14 @@ void system_link_shortcut_update(
 	else if (request == SYSTEM_LINK_REQUEST_CAMPAIGN)
 		answer = system_link_shortcut_open_campaign() ? SYSTEM_LINK_ANSWER_OPENED : SYSTEM_LINK_ANSWER_UNAVAILABLE;
 	else
-		answer = system_link_shortcut_open() ? SYSTEM_LINK_ANSWER_OPENED : SYSTEM_LINK_ANSWER_UNAVAILABLE;
+	{
+		/* (join a game, Menu style Halo 3: the Halo 3 games browser, as any
+		join opens it: menu_functions.c) */
+		extern int menu_functions_panel_join_open(void);
+
+		answer = (request == SYSTEM_LINK_REQUEST_JOIN && menu_functions_panel_join_open()) || system_link_shortcut_open() ?
+			SYSTEM_LINK_ANSWER_OPENED : SYSTEM_LINK_ANSWER_UNAVAILABLE;
+	}
 	platform_log("system link: the settings panel's %s: %s", request == SYSTEM_LINK_REQUEST_HOST ? "host a game" :
 		request == SYSTEM_LINK_REQUEST_CAMPAIGN ? "host co-op campaign" : "join a game",
 		answer == SYSTEM_LINK_ANSWER_OPENED ? request == SYSTEM_LINK_REQUEST_CAMPAIGN ? "the Campaign screen opened" :

@@ -56,6 +56,18 @@
 #              origin a little into the other's top (as one held to look as if it lay on it:
 #              it fell through, forge_physics.inc forge_item_unburied); every weapon must come
 #              to rest on its block's top on both machines
+#   fjoin      the friends' join matrix (FJ_TARGET, FJ_METHOD, HALO_TEST_JOIN_STYLE; see the case)
+#   friendforge  the Forge lobby on ONLINE (Menu style Halo 3) and a friend at its main menu in
+#              Menu style HALO_TEST_JOIN_STYLE (online by default, the live background behind
+#              its menus; halo3; classic: Classic+), who joins from the host's presence as Cross
+#              on its FRIENDS row does (HALO_TEST_FRIENDS_JOIN=menu): the friend must land in
+#              the host's Forge lobby, host nothing of its own, and forge once START FORGE
+#              starts (1.1.2 on the owner's Vita, Nov 4 2026: Menu style Online's join opened
+#              the joiner's own lobby, which hosted a game for its friend online)
+#   partyforge friendforge, the friend in the host's party (invited, accepted): it follows the
+#              host into its Forge lobby by itself and forges the same
+#   friendmp   friendforge with the host's multiplayer lobby (Slayer on Battle Creek): the
+#              friend in its lobby, then in its game (GAME OPTIONS' START GAME)
 #   h3forgeslow  h3forgeonline's host and friend only, the friend's packs built as slowly as a
 #              Vita's (HALO_TEST_SLOW_IO, its source maps' reads too: minutes): the friend
 #              says it still builds the host's packs, START FORGE's countdown holds at 0 for
@@ -834,6 +846,272 @@ forge_case() {
 			done | tee -a "$out/forgeitems.fails"
 		done
 		grep -q FAIL "$out/forgeitems.fails" 2>/dev/null && status=1
+		;;
+	fjoin)
+		# (the friends' join matrix: FJ_TARGET mplobby, mpgame, forgelobby or forgegame - the
+		# host's (Menu style Halo 3) multiplayer or Forge lobby on ONLINE, live, or its game
+		# started -; FJ_METHOD row (Cross on its FRIENDS row), invite (the host's, accepted),
+		# follow (the host's party, joined, followed) or code (typed on JOIN WITH CODE), each at
+		# about FJ_AT seconds (40); the joiner in HALO_TEST_JOIN_STYLE: online, halo3, classic
+		# (Classic+) or original (Classic). Its last line: FJOIN RESULT, for the matrix)
+		local menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+		if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
+			echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; return 0
+		fi
+		local style=${HALO_TEST_JOIN_STYLE:-online} target=${FJ_TARGET:-forgelobby} method=${FJ_METHOD:-row}
+		local at=${FJ_AT:-40} hc=$out/host.code jc=$out/joiner.code name pad wait host_env= join_env= join_pad trigger
+		local fails0=$status
+		for name in host joiner; do
+			mkdir -p "$out/$name/save/u/UDATA/869079979327"
+			cp "$HALO_TEST_PROFILE" "$out/$name/save/u/UDATA/869079979327/blam.sav"
+			[ -r "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" ] &&
+				cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$out/$name/save/u/UDATA/869079979327/"
+		done
+		# (a lobby target starts 30 s after the join; a game target 20 s in, before it)
+		wait=$(( (at + 30 - 12) * 1000 ))
+		case $target in mpgame|forgegame) wait=8000 ;; esac
+		case $target in
+		mp*)
+			pad="wait:150:3000 down:150:700 a wait:150:3000 a wait:150:2500 up:150:600 a wait:150:$wait x wait:150:4000"
+			for name in $(seq 1 8); do pad="$pad down:150:400"; done
+			pad="$pad a wait:150:5000" ;;
+		*)
+			pad="wait:150:3000 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
+			pad="$pad up:150:500 up:150:500 up:150:500 a:150:3000 wait:150:$wait"
+			pad="$pad down:150:500 down:150:500 down:150:500 a:150:3000" ;;
+		esac
+		case $method in
+		row) join_env="HALO_TEST_FRIENDS_JOIN=menu@$at" trigger="menus: test: FRIENDS, Cross on" ;;
+		code) join_env="HALO_TEST_FRIENDS_JOIN=code:$out/code.txt@$at" trigger="menus: test: JOIN WITH CODE [A-Z0-9]" ;;
+		invite) host_env="HALO_TEST_FRIENDS=code-file=$hc,add-file=$jc,invite-after=$at" join_env=HALO_TEST_FRIENDS_ANSWER=accept
+			trigger="friends: .*'s invite accepted" ;;
+		follow) host_env="HALO_TEST_PARTY=invite-at=$at" join_env=HALO_TEST_PARTY_ANSWER=accept
+			trigger="party: following .*: joining" ;;
+		esac
+		[ $method = invite ] || host_env="HALO_TEST_FRIENDS=code-file=$hc,add-file=$jc $host_env"
+		# (a game target needs company to start: the host's bots in a multiplayer game; a third
+		# machine, joined by the host's code with the network test, in a Forge game)
+		[ $target = mpgame ] && host_env="$host_env HALO_BOTS_ONLINE=full"
+		HALO_TEST_DATA_HOST=$menus_data run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false \
+			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_LOG_TIMES=1 HALO_MENU_STYLE=halo3 HALO_TEST_INPUT=bot:1 \
+			HALO_NET_LOBBY_NAME=Alpha $host_env "HALO_TEST_PAD=$pad" "HALO_TEST_COMMANDS=L600:forge net"
+		host_pid=$last_pid
+		if [ $target = forgegame ]; then
+			(code=$(wait_code)
+			[ -n "$code" ] && HALO_TEST_DATA_JOINER2=$menus_data run_copy joiner2 "$join2_machine" "$vita" "$cpu_c" \
+				HALO_NET_ONLINE=true "HALO_NETWORK_TEST=join-code:$code" HALO_NET_LOBBY_NAME=Charlie
+			wait) &
+		fi
+		# (the joiner: Online, the title (A); Halo 3, its profile chosen first (CAMPAIGN, A, B, B);
+		# Classic+ and Classic, the System Link screen pressed through 10 s after the join)
+		case $style in
+		online) join_pad="wait:150:4000 a wait:150:1000" ;;
+		halo3) join_pad="wait:150:4000 a wait:150:3000 a wait:150:3000 b wait:150:3000 b wait:150:1000" ;;
+		*) join_pad="wait:150:$(( (at + 12) * 1000 )) a:150:1500 a:150:1500 a:150:3000" ;;
+		esac
+		[ $method = code ] && (code=$(wait_code); [ -n "$code" ] && echo "$code" > "$out/code.txt") &
+		HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true \
+			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_LOG_TIMES=1 HALO_MENU_STYLE=$style HALO_TEST_INPUT=bot:2 \
+			HALO_NET_LOBBY_NAME=Bravo "HALO_TEST_FRIENDS=code-file=$jc,accept" $join_env "HALO_TEST_PAD=$join_pad" \
+			"HALO_TEST_COMMANDS=L300:forge camera 60 -100 1.6 150 0;L320:forge spawn boulder;L330:forge distance 6;L340:forge drop"
+		join_pid=$last_pid
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		echo "--- joiner ($style, $method into $target)"
+		grep -aE "menus: (test: |h3 join: the games|the System Link)|friends: .*invite|party: (follow|the leader)|system link: |Internet play: (hosting|already)|forge: .*loaded for" \
+			"$jl" | head -20
+		local t0 t1
+		t0=$(grep -a "$trigger" "$jl" | head -1 | awk '{print $2}')
+		t1=$([ -n "$t0" ] && grep -aE "system link: (in another's lobby|in a network game)" "$jl" | awk -v t="$t0" '$2 >= t {print $2; exit}')
+		[ -n "$t0" ] || fail "the join ($method) never came"
+		[ -n "$t1" ] || fail "the joiner never reached the host's game"
+		grep -aq "menus: the System Link screen did not open" "$jl" && fail "the joiner's menus did not open where the join goes on"
+		grep -aqE "menus: h3 live lobby: open on|Internet play: hosting|system link: hosting" "$jl" && fail "the joiner hosted a game of its own"
+		case $target in
+		forge*)
+			grep -aqE "forge net: machine [12] plays the Forge game" "$hl" || fail "the joiner did not answer the Forge hello"
+			grep -aq "forge: levels.test.bloodgulch.bloodgulch loaded for a Forge game" "$jl" || fail "the joiner's Forge game did not start"
+			grep -aqE "forge net: machine [12] spawned boulder" "$hl" || fail "the joiner's edit was not the host's" ;;
+		mp*)
+			grep -aq "system link: in a network game" "$jl" || fail "the joiner did not play the host's game" ;;
+		esac
+		local seconds_taken=
+		[ -n "$t1" ] && seconds_taken=$(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%.1f", b - a }')
+		echo "FJOIN RESULT $target $method $style $([ $status = $fails0 ] && echo PASS || echo FAIL) ${seconds_taken:-none}"
+		;;
+	fedge)
+		# (the friends' edge cases, FJ_EDGE: full - the host's lobby takes 2 players
+		# (HALO_NET_MAX_PLAYERS), a third machine in it first by the host's code, the friend's
+		# join from its row told the game is full; hostleaves - the host quits as the friend's join
+		# comes; mutual - both in their own Halo 3 lobbies on ONLINE (Menu style Online), each
+		# joining the other from its row in the same second; brokerdrop - the joiner's link to the
+		# broker dropped for FJ_DROP seconds (20) once friends: each must see the other online
+		# again after it, how soon said. Each: no crash, no game hosted by the joiner for itself
+		# while a join is under way, the joiner back at its menus, not stuck)
+		local menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+		local edge=${FJ_EDGE:-full} at=${FJ_AT:-40} hc=$out/host.code jc=$out/joiner.code name host_pad join_pad
+		local host_env= join_env="HALO_TEST_FRIENDS_JOIN=menu@$at" fails0=$status
+		for name in host joiner; do
+			mkdir -p "$out/$name/save/u/UDATA/869079979327"
+			cp "$HALO_TEST_PROFILE" "$out/$name/save/u/UDATA/869079979327/blam.sav"
+			[ -r "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" ] &&
+				cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$out/$name/save/u/UDATA/869079979327/"
+		done
+		host_pad="wait:150:3000 down:150:700 a wait:150:3000 a wait:150:2500 up:150:600 a wait:150:200000"
+		join_pad="wait:150:4000 a wait:150:1000"
+		case $edge in
+		full) host_env=HALO_NET_MAX_PLAYERS=2 ;;
+		hostleaves) host_env="HALO_EXIT_AFTER=$((at + 1))" ;;
+		mutual) join_pad="wait:150:4000 a wait:150:2000 down:150:700 a wait:150:3000 a wait:150:2500 up:150:600 a wait:150:200000"
+			host_env="HALO_TEST_FRIENDS_JOIN=menu@$at HALO_MENU_STYLE=online" host_pad=$join_pad ;;
+		brokerdrop) join_env= ;;
+		esac
+		HALO_TEST_DATA_HOST=$menus_data run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false \
+			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_LOG_TIMES=1 HALO_MENU_STYLE=halo3 HALO_TEST_INPUT=bot:1 \
+			HALO_NET_LOBBY_NAME=Alpha "HALO_TEST_FRIENDS=code-file=$hc,add-file=$jc" "HALO_TEST_PAD=$host_pad" $host_env
+		host_pid=$last_pid
+		[ $edge = full ] && (code=$(wait_code)
+			[ -n "$code" ] && run_copy joiner2 "$join2_machine" "$vita" "$cpu_c" HALO_NET_ONLINE=true \
+				"HALO_NETWORK_TEST=join-code:$code" HALO_NET_LOBBY_NAME=Charlie; wait) &
+		HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true \
+			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_LOG_TIMES=1 HALO_MENU_STYLE=online HALO_TEST_INPUT=bot:2 \
+			HALO_NET_LOBBY_NAME=Bravo "HALO_TEST_FRIENDS=code-file=$jc,accept" $join_env "HALO_TEST_PAD=$join_pad"
+		join_pid=$last_pid
+		local dropped= restored=
+		if [ $edge = brokerdrop ]; then
+			for name in $(seq 1 90); do grep -aq "friends: .* is online: " "$jl" 2>/dev/null && break; sleep 1; done
+			sleep 5
+			in_ns "$join_router" iptables -I FORWARD -d 198.51.100.1 -p tcp --dport 1883 -j REJECT --reject-with tcp-reset
+			dropped=$(awk '{print $2; exit}' <(tail -1 "$jl"))
+			sleep "${FJ_DROP:-20}"
+			in_ns "$join_router" iptables -D FORWARD -d 198.51.100.1 -p tcp --dport 1883 -j REJECT --reject-with tcp-reset
+			restored=$(awk '{print $2; exit}' <(tail -1 "$jl"))
+			echo "the joiner's broker link dropped at $dropped, back at $restored"
+		fi
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		echo "--- host ($edge)"; grep -aE "menus: (test: |h3 live lobby: (open|closed|.*players))|system link: |friends: .* is online|Internet play: broker" "$hl" | head -16
+		echo "--- joiner ($edge)"; grep -aE "menus: (test: |h3 join: the games|h3 live lobby: (open|closed|not hosted))|system link: |friends: .* is online|friends: a broker|Internet play: broker|The game is full|full" "$jl" | head -24
+		local t0 seconds_taken=
+		t0=$(grep -a "menus: test: FRIENDS, Cross on" "$jl" | head -1 | awk '{print $2}')
+		case $edge in
+		full)
+			[ -n "$t0" ] || fail "the friend's join never came"
+			grep -aq "The game is full" "$jl" || fail "the friend was not told the game is full"
+			grep -aq "system link: in another's lobby" "$jl" && fail "the friend got into a full game" ;;
+		hostleaves)
+			[ -n "$t0" ] || fail "the friend's join never came"
+			grep -aq "system link: in another's lobby" "$jl" && echo "  (the friend got in before the host quit)" ;;
+		mutual)
+			grep -a "menus: test: FRIENDS, Cross on" "$hl" "$jl" | head -2
+			echo "  who got in: host $(grep -ac "system link: in another's lobby" "$hl"), joiner $(grep -ac "system link: in another's lobby" "$jl")" ;;
+		brokerdrop)
+			local back
+			back=$(grep -aE "friends: .* is online: " "$jl" | awk -v t="$restored" '$2 >= t {print $2; exit}')
+			seconds_taken=$([ -n "$back" ] && awk -v a="$restored" -v b="$back" 'BEGIN { printf "%.1f", b - a }')
+			echo "the joiner saw its friend online again ${seconds_taken:-never} s after its link came back"
+			[ -n "$back" ] || fail "the joiner never heard its friend again"
+			# (the broker's own reconnect backs off - 3, 6, 12 s after a reset, which the joiner
+			# meets only as it next sends -: the presence must follow the reconnect at once, not the
+			# next PRESENCE_INTERVAL, 60 s)
+			local again
+			again=$(grep -a "friends: a broker ready since" "$jl" | awk -v t="$restored" '$2 >= t {print $2; exit}')
+			[ -n "$again" ] && echo "the joiner's broker ready again $(awk -v a="$restored" -v b="$again" 'BEGIN { printf "%.1f", b - a }') s after its link came back"
+			[ -n "$seconds_taken" ] && awk -v d="$seconds_taken" 'BEGIN { exit !(d <= 30) }' ||
+				fail "the friend showed again only after ${seconds_taken:-never} s (30 at most)" ;;
+		esac
+		# (the joiner: no game of its own while its join was under way - the mutual case
+		# hosts its own lobby before, by design - and at its menus at the end)
+		if [ $edge != mutual ]; then
+			grep -aqE "menus: h3 live lobby: open on|Internet play: hosting|system link: hosting" "$jl" &&
+				fail "the joiner hosted a game of its own"
+		fi
+		tail -200 "$jl" | grep -aq "frame-timing\|main-split\|render-profile\|system link" || fail "the joiner looks stuck (nothing in its log at the end)"
+		echo "FEDGE RESULT $edge $([ $status = $fails0 ] && echo PASS || echo FAIL) ${seconds_taken:-}"
+		;;
+	friendforge|partyforge|friendmp)
+		# (the host's lobby on ONLINE, live: its friend joins it through the menus' own way -
+		# friendforge, friendmp: Cross on the host's row of FRIENDS, HALO_TEST_FRIENDS_JOIN=menu;
+		# partyforge: the host's party, joined, followed into the host's game - in the joiner's
+		# Menu style HALO_TEST_JOIN_STYLE (online, the owner's, its live background behind the
+		# menus, by default; halo3; classic: Classic+). 1.1.2, Nov 4 2026: Menu style Online's
+		# join opened the multiplayer lobby alone - the System Link screen's history cut short by
+		# the live background's fade - which hosted a game of the joiner's own for its friend
+		# online, and the join was lost)
+		local menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+		if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
+			echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; return 0
+		fi
+		local style=${HALO_TEST_JOIN_STYLE:-online} hc=$out/host.code jc=$out/joiner.code name pad host_env= join_env
+		for name in host joiner; do
+			mkdir -p "$out/$name/save/u/UDATA/869079979327"
+			cp "$HALO_TEST_PROFILE" "$out/$name/save/u/UDATA/869079979327/blam.sav"
+			[ -r "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" ] &&
+				cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$out/$name/save/u/UDATA/869079979327/"
+		done
+		if [ $mode = friendmp ]; then
+			# (MULTIPLAYER, NETWORK up to ONLINE: the lobby live, Slayer on Battle Creek; a while for
+			# the friend; GAME OPTIONS (Square), down eight to START GAME, A: the game)
+			pad="wait:150:3000 down:150:700 a wait:150:3000 a wait:150:2500 up:150:600 a"
+			pad="$pad wait:150:${HALO_TEST_LIVE_WAIT:-60000} @friend-lobby-joined:0:300 x wait:150:4000"
+			for name in $(seq 1 8); do pad="$pad down:150:400"; done
+			pad="$pad a wait:150:5000"
+		else
+			# (h3forgeonline's: FORGE; NETWORK up three from LOCAL to ONLINE: the Forge lobby live; a
+			# while for the friend; down three to START FORGE, A)
+			pad="wait:150:3000 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
+			pad="$pad up:150:500 up:150:500 up:150:500 a:150:3000 wait:150:${HALO_TEST_LIVE_WAIT:-60000} @friend-forge-joined:0:300"
+			pad="$pad down:150:500 down:150:500 down:150:500 a:150:3000 @friend-forge-countdown:0:300"
+		fi
+		[ $mode = partyforge ] && host_env="HALO_TEST_PARTY=invite-at=${HALO_TEST_PARTY_INVITE_AT:-40}"
+		HALO_TEST_DATA_HOST=$menus_data run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false \
+			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_LOG_TIMES=1 HALO_MENU_STYLE=halo3 HALO_TEST_INPUT=bot:1 \
+			HALO_NET_LOBBY_NAME=Alpha "HALO_TEST_FRIENDS=code-file=$hc,add-file=$jc" $host_env \
+			$(forge_shots mpforge-shots/$mode-host) "HALO_TEST_PAD=$pad" "HALO_TEST_COMMANDS=L600:forge net"
+		host_pid=$last_pid
+		join_env=HALO_TEST_FRIENDS_JOIN=menu
+		[ $mode = partyforge ] && join_env=HALO_TEST_PARTY_ANSWER=accept
+		# (the joiner: the title (A), then at the main menu, where the join or the follow comes;
+		# Classic+ and Halo 3: no title, no profile chosen this run - the join's System Link
+		# screen or SELECT PROFILE pressed through, A joins, A the profile, A - once the join
+		# has opened it)
+		# (the party's follow comes once the party is made, at HALO_TEST_PARTY_INVITE_AT)
+		local join_pad="wait:150:4000 a wait:150:1000" press_at=35000
+		[ $mode = partyforge ] && press_at=55000
+		[ "$style" != online ] && join_pad="wait:150:${HALO_TEST_CLASSIC_PRESS_AT:-$press_at} a:150:1500 a:150:1500 a:150:3000"
+		HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true \
+			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_LOG_TIMES=1 HALO_MENU_STYLE=$style HALO_TEST_INPUT=bot:2 \
+			HALO_NET_LOBBY_NAME=Bravo "HALO_TEST_FRIENDS=code-file=$jc,accept" $join_env \
+			$(forge_shots mpforge-shots/$mode-$style-joiner) "HALO_TEST_PAD=$join_pad" \
+			"HALO_TEST_COMMANDS=L300:forge camera 60 -100 1.6 150 0;L320:forge spawn boulder;L330:forge distance 6;L340:forge drop"
+		join_pid=$last_pid
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		echo "--- host"; grep -aE "menus: (forge lobby: START|h3 live lobby: (open|.*players))|forge net: machine|party: " "$hl" | head -16
+		echo "--- joiner ($style)"
+		grep -aE "menus: (test: FRIENDS|h3 friends: Join|h3 live lobby|the System Link|the Halo 3 LAN|the games browser|h3 join)|party: (follow|the leader)|system link: |Internet play: (hosting|joining|connected|already)|forge: .*loaded for" \
+			"$jl" | head -30
+		if [ $mode = partyforge ]; then
+			grep -aq "party: You joined .*'s party" "$jl" || fail "the joiner did not join the host's party"
+			grep -aq "party: following .*: joining" "$jl" || fail "the joiner did not follow the host into its game"
+		else
+			grep -aq "menus: test: FRIENDS, Cross on " "$jl" || fail "the joiner never saw the host's game joinable"
+		fi
+		grep -aq "menus: the System Link screen did not open" "$jl" && fail "the joiner's menus did not open where the join goes on"
+		grep -aqE "menus: h3 live lobby: open on|Internet play: hosting|system link: hosting" "$jl" &&
+			fail "the joiner hosted a game of its own"
+		grep -aq "system link: in another's lobby" "$jl" || fail "the joiner did not land in the host's lobby"
+		if [ $mode = friendmp ]; then
+			grep -aqE "menus: h3 live lobby: Slayer on Battle Creek; players: [^;]+, [^;]+; 2/" "$hl" ||
+				fail "the friend was not in the host's live lobby"
+			grep -aq "system link: in a network game" "$jl" || fail "the friend did not play the host's game"
+		else
+			grep -aqE "menus: h3 live lobby: Forge on Blood Gulch; players: [^;]+, [^;]+; 2/8" "$hl" ||
+				fail "the Forge lobby did not show the friend among its players"
+			grep -aq "forge net: machine 1 plays the Forge game" "$hl" || fail "the friend did not answer the Forge hello"
+			grep -aq "forge: levels.test.bloodgulch.bloodgulch loaded for a Forge game" "$jl" || fail "the friend's Forge game did not start"
+			grep -aq "forge net: machine 1 spawned boulder" "$hl" || fail "the friend's edit was not the host's"
+		fi
 		;;
 	h3forgeslow|h3forgeskip)
 		local menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}

@@ -34,7 +34,10 @@ loop (system_link_shortcut.c) every frame:
 answers the invite's question at once, for the automated tests (a run
 nobody watches answers every question no); HALO_TEST_FRIENDS_PLAYERS=add@S
 opens the PLAYERS screen S seconds into a network game and adds the first
-other machine's player, as its options' ADD FRIEND does.
+other machine's player, as its options' ADD FRIEND does;
+HALO_TEST_FRIENDS_JOIN=menu joins the first joinable friend's game at the
+menus as Cross on their FRIENDS row does, code:FILE types FILE's code on JOIN
+WITH CODE (the menus' join, not the network test's).
 */
 
 #include "cseries.h"
@@ -219,10 +222,26 @@ static void friends_game_answer(int accept)
 	friends_game.asking[0] = 0;
 }
 
+/* (menu_functions.c's) this machine's own Halo 3 live lobby hosting with no
+one else in it */
+extern int menu_functions_h3_live_alone(void);
+
+/* (menu_functions.c: the Halo 3 live lobby hosts nothing meanwhile) a
+friend's invite or a party's asked about now, its answer to come */
+int friends_game_question_pending(void)
+{
+	return friends_game.asking[0] || friends_game.party_asking[0];
+}
+
 static void friends_game_invites(boolean main_menu_loaded)
 {
 	int state = __atomic_load_n(&halo_multiplayer_status[SYSTEM_LINK_STATUS_STATE], __ATOMIC_ACQUIRE);
 	struct p2p_friend_entry invite;
+	/* (at the menus; or in this machine's own Halo 3 lobby with no one else
+	in it, hosted for its friends online - Accept leaves it, as any join
+	does) */
+	boolean menus = state == SYSTEM_LINK_STATE_MENUS ||
+		(main_menu_loaded && state == SYSTEM_LINK_STATE_HOSTING && menu_functions_h3_live_alone());
 
 	if (friends_game.asking[0])
 	{
@@ -230,7 +249,7 @@ static void friends_game_invites(boolean main_menu_loaded)
 
 		/* (left for a level or a lobby meanwhile: the question withdrawn, the
 		invite kept in the lists) */
-		if (!main_menu_loaded || state != SYSTEM_LINK_STATE_MENUS)
+		if (!main_menu_loaded || !menus)
 		{
 			platform_ask_question(NULL, NULL);
 			friends_game.asking[0] = 0;
@@ -243,7 +262,7 @@ static void friends_game_invites(boolean main_menu_loaded)
 		}
 		return;
 	}
-	if (!main_menu_loaded || state != SYSTEM_LINK_STATE_MENUS || platform_question_asking() || fileshare_friends_asking())
+	if (!main_menu_loaded || !menus || platform_question_asking() || fileshare_friends_asking())
 		return;
 	if (!p2p_friends_take_invite(&invite))
 		return;
@@ -394,12 +413,16 @@ static void friends_game_party_invites(boolean main_menu_loaded)
 {
 	int state = __atomic_load_n(&halo_multiplayer_status[SYSTEM_LINK_STATUS_STATE], __ATOMIC_ACQUIRE);
 	struct p2p_party_invite invite;
+	/* (as a friend's invite: at the menus, or in this machine's own lobby
+	alone) */
+	boolean menus = state == SYSTEM_LINK_STATE_MENUS ||
+		(main_menu_loaded && state == SYSTEM_LINK_STATE_HOSTING && menu_functions_h3_live_alone());
 
 	if (friends_game.party_asking[0])
 	{
 		int answer = platform_question_answer();
 
-		if (!main_menu_loaded || state != SYSTEM_LINK_STATE_MENUS)
+		if (!main_menu_loaded || !menus)
 		{
 			platform_ask_question(NULL, NULL);
 			friends_game.party_asking[0] = 0;
@@ -412,7 +435,7 @@ static void friends_game_party_invites(boolean main_menu_loaded)
 		}
 		return;
 	}
-	if (friends_game.asking[0] || !main_menu_loaded || state != SYSTEM_LINK_STATE_MENUS || platform_question_asking() ||
+	if (friends_game.asking[0] || !main_menu_loaded || !menus || platform_question_asking() ||
 		fileshare_friends_asking())
 	{
 		return;
@@ -436,6 +459,67 @@ static void friends_game_party_invites(boolean main_menu_loaded)
 	}
 }
 
+/* (debug) HALO_TEST_FRIENDS_JOIN=menu[@S] | code:FILE[@S]: once at the menus,
+out of any game (or in this machine's own lobby alone), S seconds or more
+after the menus first came (0 by default): menu - the first friend whose
+game is joinable joined as Cross on their FRIENDS row joins it; code - the
+code in FILE, once it is there, typed on JOIN WITH CODE and A pressed (the
+menus' join, not the network test's) */
+static void friends_game_join_test(boolean main_menu_loaded)
+{
+#ifndef HALO_RELEASE
+	extern int menu_functions_friends_test_join(void);
+	extern int menu_functions_code_test_join(char const *code);
+	static boolean done, said, armed;
+	static unsigned long checked, first;
+	char const *setting = getenv("HALO_TEST_FRIENDS_JOIN");
+	char const *at;
+	int state = __atomic_load_n(&halo_multiplayer_status[SYSTEM_LINK_STATUS_STATE], __ATOMIC_ACQUIRE);
+	unsigned long now = system_milliseconds();
+
+	if (done || !setting || !main_menu_loaded)
+		return;
+	if (!first)
+		first = now ? now : 1;
+	at = strchr(setting, '@');
+	if (!armed)
+	{
+		armed = TRUE;
+		platform_log("menus: test: HALO_TEST_FRIENDS_JOIN=%s", setting);
+	}
+	if ((at && now - first < (unsigned long)atol(at + 1) * 1000UL) || platform_question_asking() ||
+		(state != SYSTEM_LINK_STATE_MENUS && !(state == SYSTEM_LINK_STATE_HOSTING && menu_functions_h3_live_alone())) ||
+		(checked && now - checked < 1000))
+	{
+		return;
+	}
+	checked = now ? now : 1;
+	if (!strncmp(setting, "menu", 4))
+		done = menu_functions_friends_test_join();
+	else if (!strncmp(setting, "code:", 5))
+	{
+		char path[256], code[32];
+		int length = at ? (int)(at - (setting + 5)) : (int)strlen(setting + 5);
+		/* (the host's file, read as it is: not by an Xbox path, the game's
+		fopen's; p2p_friends.c's) */
+		extern int p2p_friends_test_read_file(const char *path, char *text, int size);
+
+		snprintf(path, sizeof(path), "%.*s", length, setting + 5);
+		p2p_friends_test_read_file(path, code, (int)sizeof(code));
+		code[strcspn(code, "\r\n")] = 0;
+		if (code[0])
+			done = menu_functions_code_test_join(code);
+		else if (!said)
+		{
+			said = TRUE;
+			platform_log("menus: test: JOIN WITH CODE: no code in %s yet", path);
+		}
+	}
+#else
+	(void)main_menu_loaded;
+#endif
+}
+
 /* the leader's follow: joined at the menus (out of any game), the map looked
 at first; in a game, it waits */
 static void friends_game_party_follow(boolean main_menu_loaded)
@@ -444,11 +528,16 @@ static void friends_game_party_follow(boolean main_menu_loaded)
 	int state = __atomic_load_n(&halo_multiplayer_status[SYSTEM_LINK_STATUS_STATE], __ATOMIC_ACQUIRE);
 	struct p2p_party_follow follow;
 	int result;
+	boolean own_lobby;
 
 	if (!p2p_party_follow_pending(&follow))
 		return;
-	if (!main_menu_loaded || state != SYSTEM_LINK_STATE_MENUS || (client && !network_game_is_splitscreen_local()) ||
-		friends_game.asking[0] || friends_game.party_asking[0])
+	/* (this machine's own Halo 3 lobby hosting with no one else in it: left
+	for the follow, as the menus leave it for any join) */
+	own_lobby = main_menu_loaded && state == SYSTEM_LINK_STATE_HOSTING && menu_functions_h3_live_alone();
+	if (!main_menu_loaded || (state != SYSTEM_LINK_STATE_MENUS && !own_lobby) ||
+		(client && !network_game_is_splitscreen_local() && !own_lobby) || friends_game.asking[0] ||
+		friends_game.party_asking[0])
 	{
 		/* (in a game, or its lobby: followed once back at the menus) */
 		if (friends_game.follow_serial != follow.serial || friends_game.follow_result != P2P_PARTY_FOLLOW_WAITING)
@@ -516,6 +605,7 @@ void friends_game_update(boolean main_menu_loaded)
 		menu_functions_party_online();
 	}
 	friends_game_party_follow(main_menu_loaded);
+	friends_game_join_test(main_menu_loaded);
 	menu_functions_players_button(main_menu_loaded);
 	friends_game_players_test(main_menu_loaded);
 }

@@ -3363,6 +3363,27 @@ static void handle(int which, const unsigned char *payload, int size)
 /* ---------- the tests' steps (debug) */
 
 #ifndef HALO_RELEASE
+/* (debug: friends_game.c's HALO_TEST_FRIENDS_JOIN=code:FILE) a test's file
+on the host read as it is (the game's own fopen takes Xbox paths): its first
+size - 1 bytes, the count read (0 none) */
+int p2p_friends_test_read_file(const char *path, char *text, int size)
+{
+	FILE *file = fopen(path, "rb");
+	size_t got = 0;
+
+	if (size <= 0)
+		return 0;
+	if (file)
+	{
+		got = fread(text, 1, (size_t)size - 1, file);
+		fclose(file);
+	}
+	text[got] = 0;
+	return (int)got;
+}
+#endif
+
+#ifndef HALO_RELEASE
 /* HALO_TEST_FRIENDS, comma-separated: code-file=PATH (this machine's code
 written there), add-file=PATH (each code in it, once it is there, sent a
 request), accept, decline, block (each request heard), invite-after=S (each
