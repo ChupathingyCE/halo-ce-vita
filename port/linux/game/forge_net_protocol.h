@@ -169,6 +169,9 @@ places the whole layout again */
 #define FORGE_NET_COMMANDS_BURST 3.f
 /* a joiner's sync (palette and layout) at most once in this long */
 #define FORGE_NET_SYNC_MILLISECONDS 5000
+/* (a client) how long the host's entry of the spawn point it asked for is
+waited for, to be held when it comes */
+#define FORGE_NET_SPAWN_HOLD_MILLISECONDS 5000
 
 /* the lobby message's commands */
 enum

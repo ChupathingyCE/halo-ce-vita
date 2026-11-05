@@ -640,7 +640,9 @@ static void forge_spawn_grounded(
 
 /* (the browser's SPAWNING) a spawn point of the kind placed in front of the
 camera, facing the way it looks, and held (a network game's client asks the
-host for it, there to take) */
+host for it, and holds it once the host's entry for it comes - 1.1.2 left it
+there to take, so a joiner's R took it instead of letting it go, and it was
+let go only by leaving the monitor: LDeveloper69) */
 static void forge_spawn_choose(
 	short kind)
 {
@@ -676,7 +678,7 @@ static void forge_spawn_choose(
 	home.up = *global_up3d;
 	if (forge_net_client())
 	{
-		forge_net_client_spawn_point(kind, &home);
+		forge_net_client_spawn_point(kind, &home, distance);
 		return;
 	}
 	spawn = forge_spawn_add(0, kind, NONE, 0, forge_marker_new_index(kind), &home);

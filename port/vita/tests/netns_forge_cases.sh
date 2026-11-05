@@ -695,6 +695,49 @@ forge_case() {
 		grep -aqE "forge net: the host's layout read: [1-9][0-9]* objects" "$jl3" ||
 			fail "the machine with the code was not given the layout"
 		;;
+	forgespawnpad)
+		# (a player spawn point placed by the pad, as a player places one: the object browser
+		# (Square), L back to SPAWNING, A on RESPAWN POINT - held in the monitor's hand -, flown
+		# to the side, R lets it go there; on the host and on the joiner. LDeveloper69, 1.1.2: a
+		# joiner's was left where the browser put it, not held, so its R took it instead, and it
+		# was let go only by the Forge menu's PLAY AS SPARTAN)
+		local menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+		if [ ! -r "$menus_data/maps/bitmaps.map" ]; then
+			echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS)"; return 0
+		fi
+		local pad="level:150:2500 wait:150:3000 x:150:1500 a:150:1500 lt:150:1500 a:150:2500 lright:1200:500 rt:150:2500"
+		pad="$pad lleft:1200:500 wait:150:3000"
+		HALO_TEST_DATA_HOST=$menus_data forge_host "L200:forge camera 60 -100 6 0 -89;L900:forge spawns" HALO_TEST_FORGE_PACKS=none \
+			"HALO_TEST_PAD=$pad"
+		sleep 5
+		HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join \
+			"HALO_TEST_PAD=$pad" "HALO_TEST_COMMANDS=L150:forge camera 70 -100 6 0 -89;L800:forge spawns"
+		join_pid=$last_pid
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		local pattern="test pad: (a|rt)|forge: (placed|moved|grabbed|holding) the respawn|forge net: .*spawn|forge: spawns:"
+		echo "--- host"; grep -aE "$pattern" "$hl" | tail -12
+		echo "--- joiner"; grep -aE "$pattern" "$jl" | tail -12
+		local id at
+		# (the host's own: placed and held, let go by R where it was carried)
+		# (not the one it placed for the joiner: "machine N placed" before it)
+		id=$(grep -aE "forge: placed the respawn point #|forge net: machine [0-9]+ placed the respawn point #" "$hl" |
+			awk '/forge net: machine/ { sub(/.*#/, ""); theirs[$1] = 1; next }
+				{ sub(/.*point #/, ""); sub(/ .*/, ""); if (!($1 in theirs)) { print; exit } }')
+		[ -n "$id" ] || fail "the host's browser placed no spawn point"
+		grep -aq "forge: moved the respawn point #$id " "$hl" || fail "the host's R did not let its spawn point go"
+		# (the joiner's: placed by the host where its browser put it, held there, let go by its
+		# R where it was carried: the host has it there)
+		grep -aq "forge net: asked the host for a spawn point (respawn point)" "$jl" || fail "the joiner's browser asked for none"
+		id=$(grep -a "forge: holding the respawn point #" "$jl" | head -1 | sed 's/.*point #\([0-9]*\) .*/\1/')
+		[ -n "$id" ] || fail "the joiner did not hold the spawn point it placed"
+		grep -aq "forge: grabbed the respawn point" "$jl" && fail "the joiner's R took its spawn point instead of letting it go"
+		at=$(grep -a "forge net: asked the host to move the spawn marker of #$id to " "$jl" | head -1 | sed 's/.* to \([-0-9.]*\) \([-0-9.]*\) .*/\1 \2/')
+		[ -n "$at" ] || fail "the joiner's R did not let its spawn point go"
+		grep -aq "forge net: machine [0-9]* moved the spawn point #$id" "$hl" || fail "the host did not take the joiner's move"
+		[ -n "$at" ] && { grep -a "forge: spawns: the respawn point #$id " "$hl" | tail -1 | grep -aqF " at $at " ||
+			fail "the joiner's spawn point is not where it was let go on the host ($at)"; }
+		;;
 	forgeitems)
 		# (weapons on building blocks in a network Forge game: a large platform (its top at
 		# 3.125) and a large block (4.0) float at z 3 (SNAP off); the host lets a weapon go 1.5

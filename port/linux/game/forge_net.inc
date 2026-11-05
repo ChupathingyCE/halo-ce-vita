@@ -340,6 +340,15 @@ static struct
 	short grant_kind;
 	unsigned long move_sent;
 	struct forge_net_transform move_last;
+	/* (a client) the player spawn point (or other marker) its browser asked
+	for, taken in its monitor's hand once the host's entry for it comes, as
+	the host's own browser holds one it places: its kind, where it was asked
+	for, how far it is held, until when it is waited for */
+	boolean spawn_hold_pending;
+	short spawn_hold_kind;
+	real_point3d spawn_hold_position;
+	real spawn_hold_distance;
+	unsigned long spawn_hold_until;
 	unsigned long monitor_sent;
 	boolean monitor_said;
 	/* every player's monitor (absolute index) */
@@ -3258,12 +3267,15 @@ static boolean forge_net_client_spawn_property(
 }
 
 /* (forge_spawns.inc, a client) a player spawn point placed (where the
-monitor's browser put it: the host places it there, then it is taken as any
-marker is) or deleted: asked of a host of FORGE_NET_HOST_VERSION_PLAYER_
-SPAWNS (an older one has no spawn points: said) */
+monitor's browser put it: the host places it there, and its entry, once it
+comes, is held here DISTANCE along the crosshair, as the host's own browser
+holds one: forge_net_client_spawn_held) or deleted: asked of a host of
+FORGE_NET_HOST_VERSION_PLAYER_SPAWNS (an older one has no spawn points:
+said) */
 static void forge_net_client_spawn_point(
 	short kind,
-	struct forge_transform const *home)
+	struct forge_transform const *home,
+	real distance)
 {
 	struct forge_net_record record;
 
@@ -3289,8 +3301,59 @@ static void forge_net_client_spawn_point(
 	record.aux = (uint8_t)(kind >= 0 && kind < NUMBER_OF_FORGE_MARKER_KINDS ? kind : _forge_spawn_respawn);
 	forge_net_transform_from(&record.transform, &home->position, &home->forward, &home->up);
 	forge_net_request_send(&record);
+	forge_net.spawn_hold_pending = TRUE;
+	forge_net.spawn_hold_kind = record.aux;
+	forge_net.spawn_hold_position = home->position;
+	forge_net.spawn_hold_distance = distance;
+	forge_net.spawn_hold_until = system_milliseconds() + FORGE_NET_SPAWN_HOLD_MILLISECONDS;
 	platform_log("forge net: asked the host for a spawn point (%s) at %.2f %.2f %.2f", forge_spawn_kind_log_names[record.aux],
 		home->position.x, home->position.y, home->position.z);
+}
+
+/* (a client: R, or the console's drop, with nothing held) the spawn point
+asked for let go before the host's entry came: it stays where it was asked
+for, as one the host's own browser placed and R let go at once; TRUE when
+there was one */
+static boolean forge_net_client_spawn_hold_drop(
+	void)
+{
+	if (!forge_net.spawn_hold_pending)
+		return FALSE;
+	forge_net.spawn_hold_pending = FALSE;
+	platform_log("forge net: the spawn point asked for let go before the host placed it");
+	return TRUE;
+}
+
+/* (a client, the host's entry of a spawn point new here) the one this
+machine's browser asked for - its kind, where it was asked for, in time -
+taken in the monitor's hand, if nothing else is held meanwhile */
+static void forge_net_client_spawn_held(
+	struct forge_spawn *spawn)
+{
+	if (!forge_net.spawn_hold_pending)
+		return;
+	if ((long)(forge_net.spawn_hold_until - system_milliseconds()) <= 0)
+	{
+		forge_net.spawn_hold_pending = FALSE;
+		return;
+	}
+	if (spawn->kind != forge_net.spawn_hold_kind ||
+		distance_squared3d(&spawn->home.position, &forge_net.spawn_hold_position) > 0.01f * 0.01f)
+	{
+		return;
+	}
+	forge_net.spawn_hold_pending = FALSE;
+	if (!forge_globals.active || forge_globals.held_marker_id || object_try_and_get(forge_globals.held_object_index) ||
+		forge_net.grant_pending)
+	{
+		return;
+	}
+	forge_globals.held_marker_id = spawn->id;
+	forge_globals.held_marker_position = spawn->home.position;
+	forge_globals.held_forward = spawn->home.forward;
+	forge_globals.held_up = *global_up3d;
+	forge_globals.held_distance = forge_net.spawn_hold_distance;
+	forge_spawn_log("holding", spawn);
 }
 
 static void forge_net_client_spawn_delete(
@@ -3590,6 +3653,7 @@ static void forge_net_client_update_take(
 			/* (a later marker's: its kind and channel, checked in range) */
 			boolean marker = (record->flags & FORGE_NET_FLAG_MARKER) != 0;
 			short channel = marker ? (short)PIN(record->value, 0, FORGE_TELEPORTER_CHANNELS - 1) : 0;
+			boolean added;
 
 			if (marker)
 			{
@@ -3597,6 +3661,7 @@ static void forge_net_client_update_take(
 				channel = (short)PIN(record->value, 0, forge_net_marker_indices(kind) - 1);
 			}
 			forge_net_transform_to(&record->transform, &home.position, &home.forward, &home.up);
+			added = !spawn;
 			if (!spawn)
 				spawn = forge_spawn_add((long)record->id, kind, record->team, marker ? 0 : record->value, channel, &home);
 			if (!spawn)
@@ -3614,6 +3679,9 @@ static void forge_net_client_update_take(
 					spawn->home.forward = *global_forward3d;
 				spawn->home.up = *global_up3d;
 			}
+			/* (the one this machine's browser asked for: in its hand) */
+			if (added)
+				forge_net_client_spawn_held(spawn);
 			return;
 		}
 		if (!forge_net.synced || !forge_net.host_palette_known[record->tag])

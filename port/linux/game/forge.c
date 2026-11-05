@@ -1008,7 +1008,8 @@ static void forge_net_client_undo(boolean redo);
 static boolean forge_net_client_command(short command, uint16_t value);
 static boolean forge_net_client_spawn_move(long id, struct forge_transform const *home);
 static boolean forge_net_client_spawn_property(long id, short property, short step);
-static void forge_net_client_spawn_point(short kind, struct forge_transform const *home);
+static void forge_net_client_spawn_point(short kind, struct forge_transform const *home, real distance);
+static boolean forge_net_client_spawn_hold_drop(void);
 static void forge_net_client_spawn_delete(long id);
 /* ---- the characters' spawn markers (forge_markers.inc) */
 static boolean forge_markers_shown(void);
@@ -6225,6 +6226,11 @@ void forge_update(
 			{
 				forge_drop();
 			}
+			/* (a network game's client: the spawn point its browser just
+			asked for, let go before the host's answer came) */
+			else if (forge_net_client_spawn_hold_drop())
+			{
+			}
 			else
 			{
 				/* (the nearer of an object and a spawn marker: a marker before
@@ -7141,7 +7147,7 @@ boolean forge_command(
 	{
 		if (forge_globals.held_marker_id)
 			forge_marker_drop();
-		else
+		else if (!forge_net_client_spawn_hold_drop())
 			forge_drop();
 		return TRUE;
 	}
