@@ -867,9 +867,11 @@ forge_case() {
 			[ -r "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" ] &&
 				cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$out/$name/save/u/UDATA/869079979327/"
 		done
-		# (a lobby target starts 30 s after the join; a game target 20 s in, before it)
+		# (a lobby target starts 30 s after the join; a game target about 30 s in, its countdown over well
+		# before the join: a join as the countdown ends puts the lobby back on Ready, A to start; a
+		# Forge game waits for the third machine, joined by the code by then, so 8 s there)
 		wait=$(( (at + 30 - 12) * 1000 ))
-		case $target in mpgame|forgegame) wait=8000 ;; esac
+		case $target in mpgame) wait=2000 ;; forgegame) wait=8000 ;; esac
 		case $target in
 		mp*)
 			pad="wait:150:3000 down:150:700 a wait:150:3000 a wait:150:2500 up:150:600 a wait:150:$wait x wait:150:4000"
@@ -910,10 +912,14 @@ forge_case() {
 		*) join_pad="wait:150:$(( (at + 12) * 1000 )) a:150:1500 a:150:1500 a:150:3000" ;;
 		esac
 		[ $method = code ] && (code=$(wait_code); [ -n "$code" ] && echo "$code" > "$out/code.txt") &
+		# (the joiner's edit, at a game tick: one joined in progress has the host's ticks, 700 or
+		# more by then, and is given the host's Forge game a moment after its map loads)
+		local edit=600
+		[ $target = forgegame ] && edit=1800
 		HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true \
 			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_LOG_TIMES=1 HALO_MENU_STYLE=$style HALO_TEST_INPUT=bot:2 \
 			HALO_NET_LOBBY_NAME=Bravo "HALO_TEST_FRIENDS=code-file=$jc,accept" $join_env "HALO_TEST_PAD=$join_pad" \
-			"HALO_TEST_COMMANDS=L300:forge camera 60 -100 1.6 150 0;L320:forge spawn boulder;L330:forge distance 6;L340:forge drop"
+			"HALO_TEST_COMMANDS=L$edit:forge camera 60 -100 1.6 150 0;L$((edit + 20)):forge spawn boulder;L$((edit + 30)):forge distance 6;L$((edit + 40)):forge drop"
 		join_pid=$last_pid
 		wait $join_pid $host_pid 2>/dev/null
 		forge_check_clean "$hl" "$jl"
