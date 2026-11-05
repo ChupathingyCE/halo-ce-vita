@@ -960,10 +960,12 @@ forge_case() {
 		host_pad="wait:150:3000 down:150:700 a wait:150:3000 a wait:150:2500 up:150:600 a wait:150:200000"
 		join_pad="wait:150:4000 a wait:150:1000"
 		case $edge in
-		full) host_env=HALO_NET_MAX_PLAYERS=2 ;;
-		hostleaves) host_env="HALO_EXIT_AFTER=$((at + 1))" ;;
-		mutual) join_pad="wait:150:4000 a wait:150:2000 down:150:700 a wait:150:3000 a wait:150:2500 up:150:600 a wait:150:200000"
-			host_env="HALO_TEST_FRIENDS_JOIN=menu@$at HALO_MENU_STYLE=online" host_pad=$join_pad ;;
+		full) host_env=HALO_NET_MAX_PLAYERS=2 join_env="HALO_TEST_FRIENDS_JOIN=code:$out/code.txt@$at" ;;
+		hostleaves) host_env="HALO_EXIT_AFTER=$((at + 3))" ;;
+		mutual) # (both Menu style Halo 3, online play on: MULTIPLAYER opens each one's lobby on ONLINE, live)
+			join_pad="wait:150:3000 down:150:700 a wait:150:200000" host_pad="wait:150:3000 down:150:700 a wait:150:200000"
+			host_env="HALO_TEST_FRIENDS_JOIN=menu@$at HALO_NET_ONLINE=true"
+			join_env="$join_env HALO_MENU_STYLE=halo3" ;;
 		brokerdrop) join_env= ;;
 		esac
 		HALO_TEST_DATA_HOST=$menus_data run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false \
@@ -971,6 +973,7 @@ forge_case() {
 			HALO_NET_LOBBY_NAME=Alpha "HALO_TEST_FRIENDS=code-file=$hc,add-file=$jc" "HALO_TEST_PAD=$host_pad" $host_env
 		host_pid=$last_pid
 		[ $edge = full ] && (code=$(wait_code)
+			[ -n "$code" ] && echo "$code" > "$out/code.txt"
 			[ -n "$code" ] && run_copy joiner2 "$join2_machine" "$vita" "$cpu_c" HALO_NET_ONLINE=true \
 				"HALO_NETWORK_TEST=join-code:$code" HALO_NET_LOBBY_NAME=Charlie; wait) &
 		HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true \
@@ -996,7 +999,12 @@ forge_case() {
 		t0=$(grep -a "menus: test: FRIENDS, Cross on" "$jl" | head -1 | awk '{print $2}')
 		case $edge in
 		full)
-			[ -n "$t0" ] || fail "the friend's join never came"
+			# (full, the friend's row no longer offers the join - its presence not joinable -; the
+			# code typed then: told the game is full)
+			t0=$(grep -a "menus: test: JOIN WITH CODE [A-Z0-9]" "$jl" | head -1 | awk '{print $2}')
+			[ -n "$t0" ] || fail "the friend's join by the code never came"
+			grep -aq "friends: .* is online: .* (joinable)" "$jl" || fail "the friend never saw the game joinable before it filled"
+			grep -aqE "friends: .* is online: Slayer on Battle Creek$" "$jl" || fail "the full game still showed joinable"
 			grep -aq "The game is full" "$jl" || fail "the friend was not told the game is full"
 			grep -aq "system link: in another's lobby" "$jl" && fail "the friend got into a full game" ;;
 		hostleaves)
