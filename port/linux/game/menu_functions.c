@@ -466,6 +466,10 @@ enum
 	/* (1.1.2, the Forge menu's MAGNETS and NUDGE: forge.c forge_precision.inc) */
 	_function_forge_magnets,
 	_function_forge_nudge_step,
+	/* (1.1.3, the Forge menu's DELETE ALL: a category chosen, its question's
+	Delete) */
+	_function_forge_group_choose,
+	_function_forge_delete_group,
 };
 
 /* in port_game_data_input_names' order */
@@ -546,6 +550,9 @@ enum
 	_input_fileshare_send,
 	_input_fileshare_friend,
 	_input_fileshare_friend_question,
+	/* (1.1.3, the Forge menu's DELETE ALL: its categories, its question) */
+	_input_forge_groups,
+	_input_forge_group_question,
 };
 
 /* what a line of typing is for */
@@ -3564,6 +3571,87 @@ static void h3_forge_browser_back(void)
 		if (categories[index] == h3_forge.category)
 			h3_forge.chosen = index;
 	}
+}
+
+/* ---- (1.1.3, a tester's ask) the Forge menu's DELETE ALL (halo3/forge.xml
+h3/forge/deleteall/screen): the browser's categories in its order, each with
+how many of the layout's it has; A on one asks (h3/forge/deletegroup/screen),
+its Delete takes them all out as CLEAR ALL AI does the characters (forge.c
+forge_group_delete; a network game's client asks the host) */
+static short h3_forge_group_chosen = NONE;
+
+static void h3_forge_groups_update(struct widget_instance *list)
+{
+	struct widget_instance *child;
+	char text[96];
+	char said[512];
+	short row;
+	int length = 0;
+	static char last_said[512];
+
+	said[0] = 0;
+	for (row = 0, child = list->child; child; child = child->next, row++)
+	{
+		boolean shown = row < NUMBER_OF_FORGE_CATEGORIES;
+		short count = shown ? forge_group_placed_count(row) : 0;
+
+		if (shown)
+		{
+			snprintf(text, sizeof(text), count ? "%s (%d)" : "%s", forge_category_name(row), count);
+			if (length < (int)sizeof(said))
+				length += snprintf(said + length, sizeof(said) - (size_t)length, "%s%s", row ? ", " : "", text);
+		}
+		else
+		{
+			text[0] = 0;
+		}
+		widget_instance_set_visibility_recursive(child, shown);
+		child->disabled = !shown;
+		text_show(child, text);
+		child->animation.current_frame_index = child == list->focused_child ? 1 : 0;
+	}
+	if (strcmp(said, last_said))
+	{
+		snprintf(last_said, sizeof(last_said), "%s", said);
+		platform_log("menus: forge delete all: %s", said);
+	}
+}
+
+/* A on a category: its question; one with none to delete asks nothing
+(forge.c says there are none in the menu's status line) */
+static boolean h3_forge_group_choose(struct widget_instance *widget)
+{
+	short category = (short)h3_child_index(widget);
+
+	if (category < 0 || category >= NUMBER_OF_FORGE_CATEGORIES)
+		return FALSE;
+	if (!forge_group_placed_count(category))
+	{
+		forge_delete_group_request(category);
+		return FALSE;
+	}
+	h3_forge_group_chosen = category;
+	platform_log("menus: forge delete all: %s asked", forge_category_name(category));
+	return TRUE;
+}
+
+/* the question's words: DELETE ALL <CATEGORY>? and what it takes */
+static void h3_forge_group_question_update(struct widget_instance *widget)
+{
+	struct widget_instance *screen = screen_of(widget);
+	short category = h3_forge_group_chosen;
+	short count = category != NONE ? forge_group_placed_count(category) : 0;
+	char text[192];
+
+	if (category == NONE)
+		return;
+	snprintf(text, sizeof(text), T("DELETE ALL %s?"), forge_category_name(category));
+	text_show(widget, text);
+	if (count == 1)
+		snprintf(text, sizeof(text), "%s", T("The one you placed is removed.\nIt doesn't come back next round."));
+	else
+		snprintf(text, sizeof(text), T("All %d you placed are removed.\nThey don't come back next round."), count);
+	text_show(named(screen, "text"), text);
 }
 
 /* the Forge menu's title (FORGE · <map>) and its monitor row's words */
@@ -21047,6 +21135,16 @@ boolean pc_menu_event_function_invoke(
 			player_ui_end_editing_profile();
 		h3_mp_pause.profile_index = NONE;
 		return TRUE;
+	case _function_forge_group_choose:
+		return h3_forge_group_choose(widget);
+	case _function_forge_delete_group:
+		/* (DELETE ALL's question: its Delete) */
+		if (h3_forge_group_chosen != NONE)
+		{
+			platform_log("menus: forge: delete all %s", forge_category_name(h3_forge_group_chosen));
+			forge_delete_group_request(h3_forge_group_chosen);
+		}
+		return TRUE;
 	case _function_forge_clear_dead_ai:
 	case _function_forge_clear_all_ai:
 		/* (CLEAR ALL AI from its question) */
@@ -21496,6 +21594,13 @@ void pc_menu_game_data_function_invoke(
 	case _input_forge_properties:
 		if (widget->type == _ui_widget_type_column_list)
 			h3_forge_properties_update(widget);
+		break;
+	case _input_forge_groups:
+		if (widget->type == _ui_widget_type_column_list)
+			h3_forge_groups_update(widget);
+		break;
+	case _input_forge_group_question:
+		h3_forge_group_question_update(widget);
 		break;
 	case _input_fileshare_question:
 	{

@@ -233,6 +233,15 @@ int forge_panel_ai_counts(int *alive, int *dead)
 	return test_forge_playing;
 }
 void forge_panel_clear_ai(int all) { test_forge_cleared = all; }
+/* (1.1.3, Delete all: the object browser's categories, how many of each the
+layout has; the one the panel asked deleted, -1 none) */
+static const char *const test_forge_groups[] =
+	{ "VEHICLES", "WEAPONS", "EQUIPMENT", "SCENERY", "AI", "BLOCKS", "TELEPORTERS", "OBJECTIVES", "SPAWNING" };
+static int test_forge_group_counts[9] = { 1, 4, 0, 2, 0, 6, 0, 0, 3 }, test_forge_group_deleted = -1;
+int forge_panel_group_count(void) { return 9; }
+const char *forge_panel_group_name(int category) { return category >= 0 && category < 9 ? test_forge_groups[category] : ""; }
+int forge_panel_group_placed(int category) { return category >= 0 && category < 9 ? test_forge_group_counts[category] : 0; }
+void forge_panel_delete_group(int category) { test_forge_group_deleted = category; }
 static int test_forge_magnets = 1, test_forge_nudge = 5;
 int forge_panel_magnets(void) { return test_forge_magnets; }
 void forge_panel_magnets_set(int on) { test_forge_magnets = on; }
@@ -3207,6 +3216,34 @@ static void test_forge_page(void)
 	press(VITA_BUTTON_CROSS);
 	press(VITA_BUTTON_CROSS);
 	check(test_forge_cleared == 1 && strstr(menu, "All AI cleared"), "cross, cross: all cleared, said");
+	/* (1.1.3) Delete all: WEAPONS (4) first; left and right the category, cross asks, circle
+	keeps them, cross deletes; one with none says so */
+	check(strstr(menu, "\nClear all AI\x02  5  >\nDelete all\x02< WEAPONS (4) >\n") && menu_fits() && menu_height_fits(),
+		"Delete all under Clear all AI: WEAPONS (4); it fits");
+	to_line("Delete all");
+	/* (the last notice gone: its help) */
+	clock_us += 20000000;
+	frame(0);
+	check(strstr(menu, "Everything you placed of one kind, out of the layout") && strstr(menu, "Left/right: kind"),
+		"Delete all's help");
+	press(VITA_BUTTON_RIGHT);
+	check(strstr(menu, "\nDelete all\x02< EQUIPMENT (0) >\n") != NULL, "right: EQUIPMENT (0)");
+	press(VITA_BUTTON_CROSS);
+	check(test_forge_group_deleted == -1 && strstr(menu, "No EQUIPMENT to delete"), "cross on none: nothing asked, said");
+	press(VITA_BUTTON_LEFT);
+	press(VITA_BUTTON_LEFT);
+	check(strstr(menu, "\nDelete all\x02< VEHICLES (1) >\n") != NULL, "left twice: VEHICLES (1)");
+	press(VITA_BUTTON_LEFT);
+	check(strstr(menu, "\nDelete all\x02< SPAWNING (3) >\n") != NULL, "left again: around to SPAWNING (3)");
+	press(VITA_BUTTON_CROSS);
+	check(!strncmp(menu, "DELETE ALL SPAWNING", 19) && strstr(menu, "All 3 you placed") && test_forge_group_deleted == -1,
+		"cross asks first");
+	press(VITA_BUTTON_CIRCLE);
+	check(test_forge_group_deleted == -1 && strstr(menu, "\nDelete all\x02"), "circle keeps them");
+	press(VITA_BUTTON_CROSS);
+	press(VITA_BUTTON_CROSS);
+	check(test_forge_group_deleted == 8 && strstr(menu, "Deleted all SPAWNING"), "cross, cross: SPAWNING deleted, said");
+	test_forge_group_deleted = -1;
 	test_forge_playing = 0;
 	test_forge_cleared = -1;
 	press(VITA_BUTTON_CIRCLE);

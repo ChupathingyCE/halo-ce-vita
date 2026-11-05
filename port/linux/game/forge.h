@@ -400,6 +400,25 @@ int forge_panel_ai_counts(
 	int *dead);
 void forge_panel_clear_ai(
 	int all);
+/* (1.1.3, the Forge menu's DELETE ALL after its question, a tester's ask)
+every object of the layout in one of the browser's categories (forge.h
+_forge_category_*: its objects, its markers, AI's characters as CLEAR ALL
+AI) taken out of the layout and the world at the next forge_update; how many
+the layout has in one */
+void forge_delete_group_request(
+	short category);
+short forge_group_placed_count(
+	short category);
+/* (the settings panel's, plain types) the categories, one's words, how many
+the layout has in it, its deletion asked */
+int forge_panel_group_count(
+	void);
+const char *forge_panel_group_name(
+	int category);
+int forge_panel_group_placed(
+	int category);
+void forge_panel_delete_group(
+	int category);
 
 /* (main.c, a map reset: main_reset_map) before the game's state goes, the
 layout of a Forge game taken; after it has started again, placed again

@@ -11,7 +11,7 @@ pause screen (ingame.txt; its fonts and pictures are halo3/pause.xml's, the same
   the monitor or the Spartan, save the map variant (its name typed on the system's keyboard: port
   forge save), undo and redo (forge.c's history), snapping on or off, the blocks' magnets on or off and the nudge's step (1.1.2), every placed character's AI
   on or off, the dead characters cleared out of the layout (they hold their places in the AI
-  budget until then), every character cleared (asked first), a new round (Halo 3's Restart Round: the map reset, the layout placed again), leave
+  budget until then), every character cleared (asked first), every object of one of the browser's categories deleted (DELETE ALL, asked first: 1.1.3), a new round (Halo 3's Restart Round: the map reset, the layout placed again), leave
   (asked first), the controls at the right; what the last of them came to said under the menu;
 - the object's properties (Square while holding an object you placed): its team, respawn time and
   whether it is placed at the start, its exact angles (yaw, pitch, roll: left and right step them,
@@ -57,6 +57,9 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 		<string text="CLEAR ALL AI?"/>
 		<string text="Every character you placed is removed, alive or dead.\nThey don't come back next round."/>
 		<string text="Clear"/>
+		<string text="DELETE ALL"/>
+		<string text="Delete"/>
+		<string text="Select"/>
 	</strings>
 
 	<!-- the object browser: its rows (a name, a count), written by port forge browser -->
@@ -217,6 +220,10 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 	<widget name="h3/forge/pause/clearall" type="text" width="220" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" open="h3/forge/clearai/screen"/>
 	</widget>
+	<!-- (1.1.3) every object you placed of one of the browser's categories deleted, asked first -->
+	<widget name="h3/forge/pause/deleteall" type="text" width="220" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="18">
+		<on event="a" open="h3/forge/deleteall/screen"/>
+	</widget>
 	<widget name="h3/forge/pause/newround" type="text" width="220" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="14">
 		<on event="a" run="port forge new round" close="all"/>
 	</widget>
@@ -235,15 +242,16 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 		<child widget="h3/forge/pause/allai" x="0" y="160"/>
 		<child widget="h3/forge/pause/cleardead" x="0" y="180"/>
 		<child widget="h3/forge/pause/clearall" x="0" y="200"/>
-		<child widget="h3/forge/pause/newround" x="0" y="220"/>
-		<child widget="h3/forge/pause/leave" x="0" y="240"/>
+		<child widget="h3/forge/pause/deleteall" x="0" y="220"/>
+		<child widget="h3/forge/pause/newround" x="0" y="240"/>
+		<child widget="h3/forge/pause/leave" x="0" y="260"/>
 	</widget>
 	<widget name="h3/forge/pause/title" type="text" left="56" top="49" width="540" height="26" font="h3/font_title" color="#FFF4F4F4">
 		<data input="port forge title"/>
 	</widget>
-	<widget name="h3/forge/pause/column" left="48" top="112" width="236" height="268" bitmap="h3/column"/>
+	<widget name="h3/forge/pause/column" left="48" top="112" width="236" height="288" bitmap="h3/column"/>
 	<!-- (what the last thing asked came to, and the map variant played: port forge title writes it) -->
-	<widget name="h3/forge/pause/status" type="text" left="56" top="384" width="488" height="52" font="h3/font_small" color="#FF9FD8FF"/>
+	<widget name="h3/forge/pause/status" type="text" left="56" top="404" width="488" height="34" font="h3/font_small" color="#FF9FD8FF"/>
 	<widget name="h3/forge/pause/controls_panel" left="300" top="140" width="320" height="224" bitmap="h3/panel"/>
 	<widget name="h3/forge/pause/controls_caption" type="text" left="312" top="146" width="296" height="16" font="h3/font_small" color="#FF9FB6CC" string_list="h3/forge_menu" string_index="6"/>
 	<widget name="h3/forge/pause/controls_rule" left="312" top="164" width="296" height="2" bitmap="h3/rule"/>
@@ -312,6 +320,91 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 		<child widget="h3/forge/clearai/text"/>
 		<child widget="h3/forge/leave/a_butn"/>
 		<child widget="h3/forge/clearai/clear"/>
+		<child widget="h3/forge/leave/b_butn"/>
+		<child widget="h3/forge/leave/back"/>
+	</widget>
+
+	<!-- (1.1.3, a tester's ask) DELETE ALL: the browser's categories in its order, each with how
+	many you placed (port forge groups); A on one asks first, as CLEAR ALL AI does (AI's is that
+	same clearing); one with none says so in the Forge menu's status line -->
+	<widget name="h3/forge/deleteall/row_0" type="text" width="368" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a" run="port forge group choose" open="h3/forge/deletegroup/screen"/>
+	</widget>
+	<widget name="h3/forge/deleteall/row_1" type="text" width="368" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a" run="port forge group choose" open="h3/forge/deletegroup/screen"/>
+	</widget>
+	<widget name="h3/forge/deleteall/row_2" type="text" width="368" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a" run="port forge group choose" open="h3/forge/deletegroup/screen"/>
+	</widget>
+	<widget name="h3/forge/deleteall/row_3" type="text" width="368" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a" run="port forge group choose" open="h3/forge/deletegroup/screen"/>
+	</widget>
+	<widget name="h3/forge/deleteall/row_4" type="text" width="368" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a" run="port forge group choose" open="h3/forge/deletegroup/screen"/>
+	</widget>
+	<widget name="h3/forge/deleteall/row_5" type="text" width="368" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a" run="port forge group choose" open="h3/forge/deletegroup/screen"/>
+	</widget>
+	<widget name="h3/forge/deleteall/row_6" type="text" width="368" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a" run="port forge group choose" open="h3/forge/deletegroup/screen"/>
+	</widget>
+	<widget name="h3/forge/deleteall/row_7" type="text" width="368" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a" run="port forge group choose" open="h3/forge/deletegroup/screen"/>
+	</widget>
+	<widget name="h3/forge/deleteall/row_8" type="text" width="368" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a" run="port forge group choose" open="h3/forge/deletegroup/screen"/>
+	</widget>
+	<widget name="h3/forge/deleteall/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<data input="port forge groups"/>
+		<child widget="h3/forge/deleteall/row_0" x="0" y="0"/>
+		<child widget="h3/forge/deleteall/row_1" x="0" y="20"/>
+		<child widget="h3/forge/deleteall/row_2" x="0" y="40"/>
+		<child widget="h3/forge/deleteall/row_3" x="0" y="60"/>
+		<child widget="h3/forge/deleteall/row_4" x="0" y="80"/>
+		<child widget="h3/forge/deleteall/row_5" x="0" y="100"/>
+		<child widget="h3/forge/deleteall/row_6" x="0" y="120"/>
+		<child widget="h3/forge/deleteall/row_7" x="0" y="140"/>
+		<child widget="h3/forge/deleteall/row_8" x="0" y="160"/>
+	</widget>
+	<widget name="h3/forge/deleteall/panel" left="120" top="88" width="400" height="300" bitmap="h3/panel"/>
+	<widget name="h3/forge/deleteall/rule" left="120" top="118" width="400" height="2" bitmap="h3/rule"/>
+	<widget name="h3/forge/deleteall/strip" left="120" top="368" width="400" height="20" bitmap="h3/strip"/>
+	<widget name="h3/forge/deleteall/title" type="text" left="132" top="94" width="376" height="22" font="h3/font_title" color="#FFF2F6FA" string_list="h3/forge_menu" string_index="18"/>
+	<widget name="h3/forge/deleteall/a_butn" left="132" top="370" width="16" height="16" bitmap="h3/glyph_cross"/>
+	<widget name="h3/forge/deleteall/select" type="text" left="152" top="369" width="80" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/forge_menu" string_index="20"/>
+	<widget name="h3/forge/deleteall/b_butn" left="236" top="370" width="16" height="16" bitmap="h3/glyph_circle"/>
+	<widget name="h3/forge/deleteall/back" type="text" left="256" top="369" width="80" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/forge_menu" string_index="2"/>
+	<widget name="h3/forge/deleteall/screen" flags="pass_unhandled_to_focused_child pause_game">
+		<on event="b back" back="true"/>
+		<child widget="h3/pause/haze"/>
+		<child widget="h3/forge/deleteall/panel"/>
+		<child widget="h3/forge/deleteall/rule"/>
+		<child widget="h3/forge/deleteall/strip"/>
+		<child widget="h3/forge/deleteall/title"/>
+		<child widget="h3/forge/deleteall/a_butn"/>
+		<child widget="h3/forge/deleteall/select"/>
+		<child widget="h3/forge/deleteall/b_butn"/>
+		<child widget="h3/forge/deleteall/back"/>
+		<child widget="h3/forge/deleteall/list" x="136" y="128"/>
+	</widget>
+
+	<!-- DELETE ALL <CATEGORY>, asked first (CLEAR ALL AI's dialog; its words port forge group question's) -->
+	<widget name="h3/forge/deletegroup/title" type="text" left="132" top="156" width="376" height="22" font="h3/font_title" color="#FFF2F6FA">
+		<data input="port forge group question"/>
+	</widget>
+	<widget name="h3/forge/deletegroup/text" type="text" left="132" top="194" width="376" height="80" font="h3/font_small" color="#FFCFD9E3"/>
+	<widget name="h3/forge/deletegroup/delete" type="text" left="152" top="291" width="80" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/forge_menu" string_index="19"/>
+	<widget name="h3/forge/deletegroup/screen" flags="pass_unhandled_to_focused_child pause_game">
+		<on event="a start" run="port forge delete group" back="true"/>
+		<on event="b back" back="true"/>
+		<child widget="h3/pause/haze"/>
+		<child widget="h3/forge/leave/panel"/>
+		<child widget="h3/forge/leave/rule"/>
+		<child widget="h3/forge/leave/strip"/>
+		<child widget="h3/forge/deletegroup/title"/>
+		<child widget="h3/forge/deletegroup/text"/>
+		<child widget="h3/forge/leave/a_butn"/>
+		<child widget="h3/forge/deletegroup/delete"/>
 		<child widget="h3/forge/leave/b_butn"/>
 		<child widget="h3/forge/leave/back"/>
 	</widget>

@@ -63,7 +63,7 @@ which every host takes: a joiner reads any hello of version 1 or more):
 CLEAR DEAD AI, CLEAR ALL AI, ALL AI, NEW ROUND); a client sends them only
 to a host of 2 or more - one of 1 (insider.21 and before) would count the
 record as malformed - and says "Only the host can do that" to an older one */
-#define FORGE_NET_HOST_VERSION 7
+#define FORGE_NET_HOST_VERSION 8
 #define FORGE_NET_HOST_VERSION_COMMANDS 2
 /* 3: it takes a spawn marker's move and its character's properties
 (_forge_net_request_set and _forge_net_request_property with
@@ -96,6 +96,16 @@ reads no step there and ignores it) and it takes the PHYSICS property
 (_forge_net_request_property, aux FORGE_NET_PROPERTY_PHYSICS); a client asks
 it only of a host of 7 or more */
 #define FORGE_NET_HOST_VERSION_PHYSICS 7
+/* 8 (1.1.3): it takes the Forge menu's DELETE ALL of a browser category
+(_forge_net_request_command, aux _forge_net_command_delete_group, value the
+category, below FORGE_NET_DELETE_GROUPS) and says what came of it
+(_forge_net_refuse_deleted_group); a client asks it only of a host of 8 or
+more - an older one would count the record as malformed - and says the
+host's game can't to an older one. Its characters' are CLEAR ALL AI's,
+which a host of 2 takes */
+#define FORGE_NET_HOST_VERSION_DELETE_GROUP 8
+/* (forge.h NUMBER_OF_FORGE_CATEGORIES: the browser's categories) */
+#define FORGE_NET_DELETE_GROUPS 9
 #define FORGE_NET_PROPERTY_PHYSICS 9
 #define FORGE_NET_PHYSICS_MODES 3
 /* a joiner's capabilities (its answer's bits) */
@@ -169,6 +179,9 @@ places the whole layout again */
 #define FORGE_NET_COMMANDS_BURST 3.f
 /* a joiner's sync (palette and layout) at most once in this long */
 #define FORGE_NET_SYNC_MILLISECONDS 5000
+/* (a client) how long the host's entry of the spawn point it asked for is
+waited for, to be held when it comes */
+#define FORGE_NET_SPAWN_HOLD_MILLISECONDS 5000
 
 /* the lobby message's commands */
 enum
@@ -355,6 +368,7 @@ enum
 	_forge_net_refuse_ai_set,        /* value: 1 AI on, 0 off */
 	_forge_net_refuse_round,         /* a new round asked (the host starts it) */
 	_forge_net_refuse_not_now,       /* not while the host's game cannot (a round starting) */
+	_forge_net_refuse_deleted_group, /* value: the objects deleted, value2: the category (version 8) */
 	NUMBER_OF_FORGE_NET_REFUSALS
 };
 
@@ -366,6 +380,8 @@ enum
 	/* (ALL AI: the record's value 1 on, 0 off) */
 	_forge_net_command_all_ai,
 	_forge_net_command_new_round,
+	/* (DELETE ALL: the record's value the category; a host of version 8) */
+	_forge_net_command_delete_group,
 	NUMBER_OF_FORGE_NET_COMMANDS
 };
 

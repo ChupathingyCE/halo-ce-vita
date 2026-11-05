@@ -43,6 +43,19 @@
 #              lobby; a third machine browsing the public games never sees or joins it, the
 #              broker never gets a listing; START FORGE takes host and friend into Forge; the
 #              third machine then joins by the host's code, into the game in progress
+#   forgedeleteall  DELETE ALL in a network Forge game (1.1.3, forge.c forge_group_delete,
+#              asked of the host: _forge_net_command_delete_group, a host of version 8): the
+#              host places two weapons, a large platform and a respawn point; the joiner
+#              deletes all weapons and all spawning, the host all blocks: on both machines
+#              every count of the three 0 and the objects gone. forgedeleteallold the joiner
+#              with a 1.1.2 host (HALO_TEST_HOST_VITA, its host version 7): it is not asked,
+#              the joiner says only the host can, and the host keeps its weapons
+#   forgeitems weapons on building blocks (1.1.2, Nov 4 2026: they fell through every block,
+#              players and vehicles stood on them): a large platform and a large block float
+#              in the air; each machine lets a weapon go above one and places one held with its
+#              origin a little into the other's top (as one held to look as if it lay on it:
+#              it fell through, forge_physics.inc forge_item_unburied); every weapon must come
+#              to rest on its block's top on both machines
 #   h3forgeslow  h3forgeonline's host and friend only, the friend's packs built as slowly as a
 #              Vita's (HALO_TEST_SLOW_IO, its source maps' reads too: minutes): the friend
 #              says it still builds the host's packs, START FORGE's countdown holds at 0 for
@@ -517,9 +530,10 @@ forge_case() {
 		# (Start: the Forge menu; down nine to CLEAR DEAD AI, A; B closes it)
 		local menu_pad="start:150:3000 @MENU-open:0:300 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500"
 		menu_pad="$menu_pad down:150:500 down:150:500 down:150:500 down:150:500 a:150:3000 @MENU-cleared:0:300 b:150:2000"
-		# (the first joiner's NEW ROUND, later: down eleven, A, the menu closed by it)
+		# (the first joiner's NEW ROUND, later: down twelve - past 1.1.3's DELETE ALL -, A, the
+		# menu closed by it)
 		local round_pad="start:150:3000" step
-		for step in 1 2 3 4 5 6 7 8 9 10 11; do round_pad="$round_pad down:150:500"; done
+		for step in 1 2 3 4 5 6 7 8 9 10 11 12; do round_pad="$round_pad down:150:500"; done
 		round_pad="$round_pad @forgemp-joiner-round:0:300 a:150:3000"
 		HALO_TEST_DATA_HOST=$menus_data forge_host "$host_cmds" HALO_UI_LOG=1 $(forge_shots mpforge-shots/forgemp-host)
 		sleep 5
@@ -688,6 +702,138 @@ forge_case() {
 		grep -aq "forge net: machine 2 plays the Forge game" "$hl" || fail "the machine with the code did not play the Forge game"
 		grep -aqE "forge net: the host's layout read: [1-9][0-9]* objects" "$jl3" ||
 			fail "the machine with the code was not given the layout"
+		;;
+	forgespawnpad)
+		# (a player spawn point placed by the pad, as a player places one: the object browser
+		# (Square), L back to SPAWNING, A on RESPAWN POINT - held in the monitor's hand -, flown
+		# to the side, R lets it go there; on the host and on the joiner. LDeveloper69, 1.1.2: a
+		# joiner's was left where the browser put it, not held, so its R took it instead, and it
+		# was let go only by the Forge menu's PLAY AS SPARTAN)
+		local menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+		if [ ! -r "$menus_data/maps/bitmaps.map" ]; then
+			echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS)"; return 0
+		fi
+		local pad="level:150:2500 wait:150:3000 x:150:1500 a:150:1500 lt:150:1500 a:150:2500 lright:1200:500 rt:150:2500"
+		pad="$pad lleft:1200:500 wait:150:3000"
+		HALO_TEST_DATA_HOST=$menus_data forge_host "L200:forge camera 60 -100 6 0 -89;L900:forge spawns" HALO_TEST_FORGE_PACKS=none \
+			"HALO_TEST_PAD=$pad"
+		sleep 5
+		HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join \
+			"HALO_TEST_PAD=$pad" "HALO_TEST_COMMANDS=L150:forge camera 70 -100 6 0 -89;L800:forge spawns"
+		join_pid=$last_pid
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		local pattern="test pad: (a|rt)|forge: (placed|moved|grabbed|holding) the respawn|forge net: .*spawn|forge: spawns:"
+		echo "--- host"; grep -aE "$pattern" "$hl" | tail -12
+		echo "--- joiner"; grep -aE "$pattern" "$jl" | tail -12
+		local id at
+		# (the host's own: placed and held, let go by R where it was carried)
+		# (not the one it placed for the joiner: "machine N placed" before it)
+		id=$(grep -aE "forge: placed the respawn point #|forge net: machine [0-9]+ placed the respawn point #" "$hl" |
+			awk '/forge net: machine/ { sub(/.*#/, ""); theirs[$1] = 1; next }
+				{ sub(/.*point #/, ""); sub(/ .*/, ""); if (!($1 in theirs)) { print; exit } }')
+		[ -n "$id" ] || fail "the host's browser placed no spawn point"
+		grep -aq "forge: moved the respawn point #$id " "$hl" || fail "the host's R did not let its spawn point go"
+		# (the joiner's: placed by the host where its browser put it, held there, let go by its
+		# R where it was carried: the host has it there)
+		grep -aq "forge net: asked the host for a spawn point (respawn point)" "$jl" || fail "the joiner's browser asked for none"
+		id=$(grep -a "forge: holding the respawn point #" "$jl" | head -1 | sed 's/.*point #\([0-9]*\) .*/\1/')
+		[ -n "$id" ] || fail "the joiner did not hold the spawn point it placed"
+		grep -aq "forge: grabbed the respawn point" "$jl" && fail "the joiner's R took its spawn point instead of letting it go"
+		at=$(grep -a "forge net: asked the host to move the spawn marker of #$id to " "$jl" | head -1 | sed 's/.* to \([-0-9.]*\) \([-0-9.]*\) .*/\1 \2/')
+		[ -n "$at" ] || fail "the joiner's R did not let its spawn point go"
+		grep -aq "forge net: machine [0-9]* moved the spawn point #$id" "$hl" || fail "the host did not take the joiner's move"
+		[ -n "$at" ] && { grep -a "forge: spawns: the respawn point #$id " "$hl" | tail -1 | grep -aqF " at $at " ||
+			fail "the joiner's spawn point is not where it was let go on the host ($at)"; }
+		;;
+	forgedeleteall|forgedeleteallold)
+		host_cmds="L140:forge snap off;L150:forge camera 55 -100 3 0 0;L162:forge spawn assault rifle;L164:forge drop"
+		host_cmds="$host_cmds;L166:forge camera 55 -102 3 0 0;L172:forge spawn assault rifle;L174:forge drop"
+		host_cmds="$host_cmds;L176:forge camera 55 -106 3 0 0;L182:forge spawn platform_large;L183:forge distance 5;L186:forge drop"
+		host_cmds="$host_cmds;L190:forge camera 62 -100 6 0 -89;L196:forge spawnpoint respawn;L198:forge drop;L300:forge groups"
+		join_cmds="L320:forge groups;L330:forge deleteall weapons;L360:forge deleteall spawning;L600:forge groups;L610:forge objects"
+		[ $mode = forgedeleteall ] && host_cmds="$host_cmds;L400:forge deleteall blocks"
+		host_cmds="$host_cmds;L700:forge groups;L710:forge objects"
+		run_copy host "$host_machine" "${HALO_TEST_HOST_VITA:-$vita}" "$cpu_a" HALO_NET_ONLINE=false \
+			HALO_NETWORK_TEST=host:bloodgulch:forge HALO_NETWORK_TEST_START=20 HALO_TEST_FORGE_PACKS=none \
+			"HALO_TEST_COMMANDS=$host_cmds"
+		host_pid=$last_pid
+		sleep 5
+		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join "HALO_TEST_COMMANDS=$join_cmds"
+		join_pid=$last_pid
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		local groups
+		groups() { # LOG TICK: the "forge groups" counts logged at that tick
+			sed -n "/test command at tick $2: forge groups\$/,+9p" "$1" | grep -a "forge: group " |
+				sed 's/.*forge: group \([a-z]*\): \([0-9]*\)/\1 \2/' | tr '\n' ' ' | sed 's/ $//'
+		}
+		echo "--- host"; grep -aE "forge net: machine 1 asked|forge: deleted all|test command at tick (300|700): forge groups" "$hl" | head
+		echo "    at 300: $(groups "$hl" 300)"; echo "    at 700: $(groups "$hl" 700)"
+		echo "--- joiner"; grep -aE "forge net: (asked the host|the host said)|Only the host|test command at tick 3[36]0" "$jl" | head
+		echo "    at 320: $(groups "$jl" 320)"; echo "    at 600: $(groups "$jl" 600)"
+		groups "$jl" 320 | grep -q "weapons 2 .*blocks 1 .*spawning 1" || fail "the joiner did not count the host's weapons, block and spawn point"
+		if [ $mode = forgedeleteall ]; then
+			grep -aq "forge net: machine 1 asked: delete all" "$hl" || fail "the joiner's DELETE ALL was not asked of the host"
+			grep -aq "forge: deleted all weapons: 2 " "$hl" || fail "the host did not delete the weapons for the joiner"
+			grep -aq "forge: deleted all spawning: 1 " "$hl" || fail "the host did not delete the spawn point for the joiner"
+			grep -aq "forge: deleted all blocks: 1 " "$hl" || fail "the host did not delete its blocks"
+			grep -aq "forge net: the host said: deleted a group" "$jl" || fail "the joiner was not told what came of it"
+			for side in host joiner; do
+				local log=$hl tick=700
+				[ $side = joiner ] && log=$jl tick=600
+				groups "$log" $tick | grep -q "weapons 0 .*blocks 0 .*spawning 0" ||
+					fail "the $side still counts some: $(groups "$log" $tick)"
+				sed -n "/test command at tick $((tick + 10)): forge objects\$/,/objects listed/p" "$log" |
+					grep -aqE "Assault Rifle|Large Platform" && fail "the $side still has a deleted object"
+			done
+		else
+			grep -aq "forge net: machine 1 asked" "$hl" && fail "a 1.1.2 host was asked"
+			grep -aqiE "malformed|anticheat|violation" "$hl" && fail "the 1.1.2 host counted something against the joiner"
+			grep -aq "Only the host can do that" "$jl" || fail "the joiner did not say only the host can"
+			[ "$(sed -n '/test command at tick 710: forge objects$/,/objects listed/p' "$hl" | grep -ac "Assault Rifle")" = 2 ] ||
+				fail "the 1.1.2 host's weapons went"
+		fi
+		;;
+	forgeitems)
+		# (weapons on building blocks in a network Forge game: a large platform (its top at
+		# 3.125) and a large block (4.0) float at z 3 (SNAP off); the host lets a weapon go 1.5
+		# above the platform and places one 0.08 into the block's top; the joiner places one
+		# 0.08 into the platform's top and lets one go 0.3 above the block; a few seconds on,
+		# each machine says where every weapon is)
+		host_cmds="L140:forge snap off;L150:forge camera 55 -100 3 0 0;L165:forge spawn platform_large;L166:forge distance 5"
+		host_cmds="$host_cmds;L175:forge drop;L180:forge camera 55 -106 3 0 0;L195:forge spawn block_large;L196:forge distance 5"
+		host_cmds="$host_cmds;L205:forge drop;L210:forge camera 57 -100.5 4.6 0 0;L225:forge spawn assault rifle"
+		host_cmds="$host_cmds;L226:forge distance 3;L232:forge drop;L240:forge camera 57 -106.5 3.92 0 0;L255:forge spawn plasma pistol"
+		host_cmds="$host_cmds;L256:forge distance 3;L262:forge drop;L700:forge objects"
+		join_cmds="L250:forge camera 57 -99.5 3.045 0 0;L265:forge spawn assault rifle;L266:forge distance 3;L272:forge drop"
+		join_cmds="$join_cmds;L280:forge camera 57 -105.5 4.3 0 0;L295:forge spawn plasma pistol;L296:forge distance 3;L302:forge drop"
+		join_cmds="$join_cmds;L600:forge objects"
+		forge_host "$host_cmds" HALO_TEST_FORGE_PACKS=none
+		sleep 5
+		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join "HALO_TEST_COMMANDS=$join_cmds"
+		join_pid=$last_pid
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		local side log line z top bad
+		for side in host joiner; do
+			log=$hl
+			[ $side = joiner ] && log=$jl
+			echo "--- $side"
+			grep -aE "forge: object [0-9]+: (Assault Rifle|Plasma Pistol|Large Platform|Large Block) " "$log" | tail -6
+			[ "$(grep -acE "forge: object [0-9]+: (Assault Rifle|Plasma Pistol) " "$log")" -ge 4 ] ||
+				fail "the $side did not list the four weapons"
+			# (each weapon on its block's top: the platform's at 3.125, the large block's at 4.0)
+			grep -aE "forge: object [0-9]+: (Assault Rifle|Plasma Pistol) " "$log" | tail -4 | while read -r line; do
+				z=$(echo "$line" | sed 's/.* alive at [-0-9.]* \([-0-9.]*\) \([-0-9.]*\), placed.*/\2/')
+				y=$(echo "$line" | sed 's/.* alive at [-0-9.]* \([-0-9.]*\) .*/\1/')
+				top=3.125
+				awk -v y="$y" 'BEGIN { exit !(y < -103) }' && top=4.0
+				awk -v z="$z" -v t="$top" 'BEGIN { exit !(z >= t - 0.05 && z <= t + 0.35) }' ||
+					echo "FAIL ($mode): the $side: a weapon is not on its block (z $z, the top $top): $line"
+			done | tee -a "$out/forgeitems.fails"
+		done
+		grep -q FAIL "$out/forgeitems.fails" 2>/dev/null && status=1
 		;;
 	h3forgeslow|h3forgeskip)
 		local menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
