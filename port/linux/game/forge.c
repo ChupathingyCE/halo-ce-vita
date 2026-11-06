@@ -5038,10 +5038,40 @@ short forge_map_count(
 	return (short)NUMBEROF(forge_maps);
 }
 
+/* (port) the level a lobby map is played as: the Xbox's, or - its file not
+in the maps folder - MCC's own copy of it in the Halo content folder
+(levels\test\mcc_bloodgulch\mcc_bloodgulch, map_checks.h), as an install
+from MCC alone has (the Vita's Setup, automatic mode). Its scenario is the
+stock one (levels\test\bloodgulch\bloodgulch): the Forge game, its map
+variants and Command and FIREFIGHT know the map by that */
 char const *forge_map_path(
 	short map_index)
 {
-	return map_index >= 0 && map_index < forge_map_count() ? forge_maps[map_index].path : NULL;
+	static char mcc_levels[NUMBEROF(forge_maps)][64];
+
+	if (map_index < 0 || map_index >= forge_map_count())
+		return NULL;
+	if (map_check(forge_maps[map_index].path, NULL, 0) == _map_check_missing &&
+		map_check_mcc_level(forge_maps[map_index].path, mcc_levels[map_index], sizeof(mcc_levels[map_index])))
+	{
+		return mcc_levels[map_index];
+	}
+	return forge_maps[map_index].path;
+}
+
+/* (port) the lobby map whose level `level_name` is (the Xbox's, or MCC's
+copy of it: forge_map_path), else NONE */
+static short forge_map_of_level(
+	char const *level_name)
+{
+	short map_index;
+
+	for (map_index = 0; level_name && map_index < forge_map_count(); map_index++)
+	{
+		if (!_stricmp(level_name, forge_maps[map_index].path) || !_stricmp(level_name, forge_map_path(map_index)))
+			return map_index;
+	}
+	return NONE;
 }
 
 char const *forge_map_name(
@@ -5063,7 +5093,18 @@ short forge_map_state(
 	every frame, and each look was an fopen of the map - on Ben's insider.17
 	Vita the lobby ran at 10 frames a second, its game thread waiting on the
 	memory card for it) */
-	return map_check(forge_maps[map_index].path, why, why_size);
+	{
+		short state = map_check(forge_maps[map_index].path, why, why_size);
+
+		/* (port: or MCC's own copy of it, forge_map_path) */
+		if (state == _map_check_missing && map_check_mcc_level(forge_maps[map_index].path, NULL, 0))
+		{
+			if (why && why_size > 0)
+				why[0] = 0;
+			state = _map_check_playable;
+		}
+		return state;
+	}
 }
 
 boolean forge_map_available(
@@ -5153,13 +5194,14 @@ boolean forge_game_start(
 	forge_variant_build(&variant);
 	game_connection_set(_game_connection_local);
 	game_set_game_variant(&variant);
-	main_set_map_name((char *)forge_maps[map_index].path);
+	main_set_map_name((char *)forge_map_path(map_index));
 	/* (no saved game read or written: the campaign's is left alone) */
 	main_disallow_persistent_storage();
 	csstrncpy(forge_globals.game_map, forge_maps[map_index].path, sizeof(forge_globals.game_map) - 1);
 	forge_globals.game_map[sizeof(forge_globals.game_map) - 1] = 0;
 	forge_globals.game_requested = TRUE;
-	platform_log("forge: a Forge game of %s asked for", forge_globals.game_map);
+	platform_log("forge: a Forge game of %s asked for%s", forge_globals.game_map,
+		forge_map_path(map_index) != forge_maps[map_index].path ? " (MCC's own copy of the map)" : "");
 	/* (as "main menu switch to solo game": the map loads after the main
 	menu's fade) */
 	main_menu_switch_to_single_player();
@@ -5189,11 +5231,7 @@ boolean forge_play_local_request(
 		}
 		return TRUE;
 	}
-	for (index = 0; map_path && index < forge_map_count(); index++)
-	{
-		if (!_stricmp(forge_maps[index].path, map_path))
-			map_index = index;
-	}
+	map_index = forge_map_of_level(map_path);
 	if (map_index == NONE)
 	{
 		if (why)
@@ -5741,6 +5779,9 @@ void forge_map_loaded(
 	}
 	forge_globals.game_active = forge_globals.game_requested && scenario_name &&
 		!_stricmp(scenario_name, forge_globals.game_map);
+	if (forge_globals.game_requested && !forge_globals.game_active)
+		platform_log("forge: a Forge game of %s was asked for, but %s loaded", forge_globals.game_map,
+			scenario_name ? scenario_name : "nothing");
 	forge_game_playing = forge_globals.game_active && !forge_globals.playing;
 	/* (the layout's player spawn points: the map variant's, before anyone
 	spawns - forge_spawns.inc; none of another map's, nor in another game) */

@@ -32,6 +32,12 @@ boolean map_check_playable(char const *level_name);
 /* every answer forgotten: the maps folder changed (a map share download,
 the mod manager, the settings panel's delete), or a load failed */
 void map_checks_forget(void);
+/* (port) whether MCC's own copy of the Xbox multiplayer level `level_name`
+(its level path or name: bloodgulch) is in the Halo content folder and can
+be played (mcc_content.h), looked at once a run: TRUE, and its level name
+(levels\test\mcc_bloodgulch\mcc_bloodgulch) in `mcc_level` (may be NULL).
+FALSE for any other name, or no such file. */
+boolean map_check_mcc_level(char const *level_name, char *mcc_level, long mcc_level_size);
 /* (cache_files.c) the Xbox level's file failed to load for its own fault -
 cut short past its header, damaged -: unusable from now on in the lists */
 void map_checks_unusable(char const *level_name);

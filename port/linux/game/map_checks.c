@@ -21,6 +21,7 @@ over FTP while the game runs, which the next run sees.
 #include "custom_edition_cache.h"
 #include "custom_edition_maps.h"
 #include "map_checks.h"
+#include "mcc_content.h"
 #include "../src/lang.h"
 
 #include <stdio.h>
@@ -142,9 +143,49 @@ boolean map_check_playable(char const *level_name)
 	return map_check(level_name, NULL, 0) == _map_check_playable;
 }
 
+/* (port) MCC's own copies of the Xbox's multiplayer levels (the Halo
+content folder's halo1\maps\<name>.map, mcc_content.h), looked at once a
+run as the Xbox's are: an install from MCC alone (the Vita's Setup,
+automatic mode) has no Xbox maps folder, and Forge, Command and FIREFIGHT
+play MCC's copy of the map there. 0 not looked at, 1 playable, -1 not */
+#define MCC_CONTENT_MULTIPLAYER_MAXIMUM 32
+static signed char map_checks_mcc[MCC_CONTENT_MULTIPLAYER_MAXIMUM];
+
+boolean map_check_mcc_level(char const *level_name, char *mcc_level, long mcc_level_size)
+{
+	char const *name = tag_name_strip_path(level_name ? level_name : "");
+	char const *stem;
+	short index;
+
+	if (mcc_level && mcc_level_size > 0)
+		mcc_level[0] = 0;
+	for (index = 0; (stem = mcc_content_multiplayer_stem(index)) != NULL && index < MCC_CONTENT_MULTIPLAYER_MAXIMUM; index++)
+	{
+		char level[96];
+
+		if (csstrcasecmp(stem, name))
+			continue;
+		snprintf(level, sizeof(level), "levels\\test\\%s%s\\%s%s", MCC_CONTENT_NAME_PREFIX, stem, MCC_CONTENT_NAME_PREFIX,
+			stem);
+		if (!map_checks_mcc[index])
+		{
+			map_checks.looks++;
+			map_checks_mcc[index] = (signed char)(custom_edition_maps_loadable(level, NULL, 0) == _custom_edition_maps_loadable ? 1 : -1);
+			platform_log("map checks: MCC's %s.map %s", stem, map_checks_mcc[index] > 0 ? "can be played" : "is not there or can't be played");
+		}
+		if (map_checks_mcc[index] < 0)
+			return FALSE;
+		if (mcc_level && mcc_level_size > 0)
+			snprintf(mcc_level, (size_t)mcc_level_size, "%s", level);
+		return TRUE;
+	}
+	return FALSE;
+}
+
 void map_checks_forget(void)
 {
 	map_checks.count = 0;
+	csmemset(map_checks_mcc, 0, sizeof(map_checks_mcc));
 }
 
 void map_checks_unusable(char const *level_name)

@@ -1593,6 +1593,16 @@ long scenario_tags_load(
 				if (!csstrcasecmp(stripped_scenario_name, "ui") || map_type == 1)
 					menu_tags_loaded(stripped_scenario_name);
 			}
+			/* (port: Forge, forge.c - a Forge, Command or FIREFIGHT game
+			asked for on this map starts; anything of the last map's is
+			gone. An install from MCC alone - the Vita's Setup, automatic
+			mode - plays them on MCC's own copy of the multiplayer map,
+			read here: without this its game never started) */
+			{
+				extern void forge_map_loaded(char const *scenario_name);
+
+				forge_map_loaded(tag_get_name(result));
+			}
 		}
 		else
 		{
