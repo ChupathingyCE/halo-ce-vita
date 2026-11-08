@@ -2795,11 +2795,41 @@ class _GitHubRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def certifi_authorities() -> Optional[str]:
+    """Mozilla's list of certificate authorities (certifi's cacert.pem) when
+    certifi is here (the Windows program brings it), else None."""
+    try:
+        import certifi
+    except ImportError:
+        return None
+    try:
+        path = certifi.where()
+    except Exception:  # (a broken bundle: the system's authorities alone)
+        return None
+    return path if path and os.path.isfile(path) else None
+
+
+def download_context() -> ssl.SSLContext:
+    """TLS for the downloads, fully verified (certificate and host name):
+    the system's authorities and, in addition, Mozilla's list when certifi is
+    here. Python on Windows trusts only the roots Windows has already cached,
+    so on a PC that never met GitHub's root the download failed with
+    CERTIFICATE_VERIFY_FAILED ("unable to get local issuer certificate")."""
+    context = ssl.create_default_context()
+    authorities = certifi_authorities()
+    if authorities:
+        try:
+            context.load_verify_locations(cafile=authorities)
+        except (OSError, ssl.SSLError):
+            pass  # (the system's authorities still verify)
+    return context
+
+
 def open_download(url: str):
     """The answer of GitHub to url, to be read."""
     check_download_url(url)
     opener = urllib.request.build_opener(_GitHubRedirects,
-                                         urllib.request.HTTPSHandler(context=ssl.create_default_context()))
+                                         urllib.request.HTTPSHandler(context=download_context()))
     request = urllib.request.Request(url, headers={"User-Agent": "%s-Setup/%s" % (APP_NAME.replace(" ", ""), VERSION)})
     return opener.open(request, timeout=DOWNLOAD_TIMEOUT)
 
@@ -3608,8 +3638,9 @@ def xbox_files_size(source_path: str) -> int:
 
 def self_test(report: Optional[str] = None) -> int:
     """What this copy of the tool can do: tkinter for the window, the
-    license's text (the Windows program must bring it), ffmpeg for the movies
-    (the Windows program brings its own)."""
+    license's text (the Windows program must bring it), Mozilla's certificate
+    authorities for the downloads (certifi: the Windows program must bring
+    them), ffmpeg for the movies (the Windows program brings its own)."""
     lines = ["halo_ce_vita_installer %s, Python %s on %s" % (VERSION, sys.version.split()[0], sys.platform)]
     good = True
     try:
@@ -3621,6 +3652,10 @@ def self_test(report: Optional[str] = None) -> int:
     whole = "TERMS AND CONDITIONS" in license_text()
     lines.append("license text: %s" % ("ok" if whole else "only the short notice"))
     good = good and (whole or not getattr(sys, "frozen", False))
+    authorities = certifi_authorities()
+    lines.append("certificate authorities: %s" % ("certifi's (%s) and the system's" % authorities if authorities
+                                                  else "the system's only (no certifi)"))
+    good = good and (authorities is not None or not getattr(sys, "frozen", False))
     ffmpeg = find_ffmpeg()
     if ffmpeg:
         try:

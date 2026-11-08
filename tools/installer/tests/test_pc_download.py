@@ -8,6 +8,7 @@ import hashlib
 import io
 import os
 import re
+import ssl
 import subprocess
 import sys
 import urllib.error
@@ -720,5 +721,64 @@ def test_the_real_opener_refuses_a_certificate_it_does_not_trust(https_server, m
     subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=other",
                     "-keyout", str(tmp_path / "other.key"), "-out", str(other)], check=True, capture_output=True)
     monkeypatch.setenv("SSL_CERT_FILE", str(other))
+    with pytest.raises(urllib.error.URLError):
+        hcv.open_download(https_server + "/file")
+
+
+# -- Mozilla's certificate authorities (certifi) besides the system's
+
+def _fake_certifi(monkeypatch, path):
+    import types
+    module = types.ModuleType("certifi")
+    module.where = lambda: str(path)
+    monkeypatch.setitem(sys.modules, "certifi", module)
+
+
+def test_the_download_context_verifies_fully_and_loads_certifi_when_present(monkeypatch, tmp_path):
+    authority = tmp_path / "mozilla.pem"
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj",
+                    "/CN=certifi stand-in", "-keyout", str(tmp_path / "k.pem"), "-out", str(authority)],
+                   check=True, capture_output=True)
+    monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "none.pem"))
+    monkeypatch.setenv("SSL_CERT_DIR", str(tmp_path / "none"))
+    _fake_certifi(monkeypatch, authority)
+    assert hcv.certifi_authorities() == str(authority)
+    context = hcv.download_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+    names = [dict(item[0] for item in ca["subject"]).get("commonName") for ca in context.get_ca_certs()]
+    assert "certifi stand-in" in names
+
+
+def test_the_download_context_is_the_systems_without_certifi(monkeypatch):
+    monkeypatch.setitem(sys.modules, "certifi", None)  # (import certifi: ImportError)
+    assert hcv.certifi_authorities() is None
+    context = hcv.download_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+
+
+def test_a_broken_certifi_leaves_the_systems_authorities(monkeypatch, tmp_path):
+    _fake_certifi(monkeypatch, tmp_path / "missing.pem")
+    assert hcv.certifi_authorities() is None
+    assert hcv.download_context().verify_mode == ssl.CERT_REQUIRED
+
+
+def test_the_real_opener_trusts_certifis_authorities_too(https_server, monkeypatch, tmp_path):
+    """The server's certificate only in certifi's list (the system trusts
+    another): the download goes through, verified."""
+    other = tmp_path / "other.pem"
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=other",
+                    "-keyout", str(tmp_path / "other.key"), "-out", str(other)], check=True, capture_output=True)
+    monkeypatch.setenv("SSL_CERT_FILE", str(other))
+    _fake_certifi(monkeypatch, tmp_path / "cert.pem")  # (the https_server fixture's certificate)
+    with hcv.open_download(https_server + "/file") as answer:
+        assert answer.read() == b"hello"
+
+
+def test_the_real_opener_still_refuses_a_certificate_neither_list_has(https_server, monkeypatch, tmp_path):
+    other = tmp_path / "other.pem"
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=other",
+                    "-keyout", str(tmp_path / "other.key"), "-out", str(other)], check=True, capture_output=True)
+    monkeypatch.setenv("SSL_CERT_FILE", str(other))
+    _fake_certifi(monkeypatch, other)
     with pytest.raises(urllib.error.URLError):
         hcv.open_download(https_server + "/file")
