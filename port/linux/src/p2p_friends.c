@@ -17,6 +17,14 @@ threat model: docs/superpowers/specs/2026-10-18-friends-design.md).
   key for one direction (presence, invites, removals); inside, the sender's
   and recipient's keys, the epoch and counter (replays), the body, and an
   Ed25519 signature by the sender's identity.
+- The identity's console (identity-device.dat): a hash of this console's
+  id (p2p_hardware_id's keyed hash of the Vita's OpenPSID or the PC's
+  machine id, hashed again for this use: never the raw id). An identity
+  whose console is another's came with a copied folder: it is not used (a
+  new identity is made, the other console's friends list and marks kept out
+  as <name>.other-console) and the player told once (p2p_friends_status).
+  An identity with no console file (made before 1.1.3) takes this
+  console's; a console with no id to tell checks nothing.
 - The list (friends.dat) and the identity are written whole and atomically
   (a .tmp written, read back and checked, then put in place as
   forge_store.c does) and checked as they are read.
@@ -227,6 +235,11 @@ enum
 	/* the files */
 	IDENTITY_VERSION = 1,
 	IDENTITY_SIZE = 4 + 1 + P2P_SEED_SIZE + 8 + P2P_SHA256_SIZE,
+	/* identity-device.dat: "HFDV", its version, the console's tag, a SHA-256 */
+	DEVICE_VERSION = 1,
+	DEVICE_SIZE = 4 + 1 + P2P_SHA256_SIZE + P2P_SHA256_SIZE,
+	/* how long p2p_friends_status says a copied identity was replaced */
+	IDENTITY_COPIED_NOTICE_TIME = 60000,
 	LIST_VERSION = 1,
 	LIST_HEADER_SIZE = 4 + 1 + 6,
 	FRIEND_RECORD_SIZE = P2P_KEY_SIZE + 1 + NAME_LENGTH + FRIENDSHIP_LENGTH + 8 + 8 + 4,
@@ -660,6 +673,10 @@ struct friends_state
 	/* the identity: its seed, keys, code, topics; the epoch of this run
 	and the counter of the messages sent in it */
 	int has_identity;
+	/* this run's identity replaced one copied from another console; when
+	p2p_friends_status first said so */
+	int identity_copied;
+	unsigned long identity_copied_shown;
 	unsigned char seed[P2P_SEED_SIZE];
 	unsigned char key[P2P_KEY_SIZE];
 	unsigned char x25519_secret[P2P_KEY_SIZE];
@@ -1228,6 +1245,50 @@ static int identity_decode(const unsigned char *bytes, int size, unsigned char *
 	return p2p_ed25519_to_x25519(public_key, x25519);
 }
 
+/* the identity's console: a hash of this console's id (p2p_hardware_id's,
+itself a keyed hash, never the raw id), or 0 if it has none to tell */
+#ifdef P2P_FRIENDS_TEST
+void p2p_friends_test_device_id(char *text, int size);
+#endif
+static int device_tag(unsigned char *tag)
+{
+	static const char label[] = "halo-ce-vita friend identity's console v1";
+	char id[96];
+
+#ifdef P2P_FRIENDS_TEST
+	p2p_friends_test_device_id(id, (int)sizeof(id));
+#else
+	p2p_hardware_id(id, (int)sizeof(id));
+#endif
+	if (!id[0])
+		return 0;
+	p2p_hmac_sha256((const unsigned char *)label, (int)sizeof(label) - 1, id, (int)strlen(id), tag);
+	return 1;
+}
+
+static int device_encode(const unsigned char *tag, unsigned char *bytes)
+{
+	memcpy(bytes, "HFDV", 4);
+	bytes[4] = DEVICE_VERSION;
+	memcpy(bytes + 5, tag, P2P_SHA256_SIZE);
+	p2p_sha256(bytes, 5 + P2P_SHA256_SIZE, bytes + 5 + P2P_SHA256_SIZE);
+	return DEVICE_SIZE;
+}
+
+/* read: 1 and the tag, or 0 if the bytes are no console file */
+static int device_decode(const unsigned char *bytes, int size, unsigned char *tag)
+{
+	unsigned char digest[P2P_SHA256_SIZE];
+
+	if (size != DEVICE_SIZE || memcmp(bytes, "HFDV", 4) || bytes[4] != DEVICE_VERSION)
+		return 0;
+	p2p_sha256(bytes, 5 + P2P_SHA256_SIZE, digest);
+	if (!p2p_equal(digest, bytes + 5 + P2P_SHA256_SIZE, P2P_SHA256_SIZE))
+		return 0;
+	memcpy(tag, bytes + 5, P2P_SHA256_SIZE);
+	return 1;
+}
+
 /* a key usable as a friend's: an X25519 form, not this machine's */
 static int key_usable(const unsigned char *key)
 {
@@ -1698,6 +1759,32 @@ static void file_set_aside(const char *name)
 		platform_log("friends: %s failed its checks; kept as %s, not used", path, bad);
 }
 
+/* (friends_file_lock held) another console's identity and lists, which came
+with a copied folder, out of the way: <name>.other-console, never read */
+static void files_of_another_console(void)
+{
+	static const char *const names[] = { "identity.dat", "friends.dat", "marks.dat" };
+	static const char *const sources[] = { "", ".prev", ".old" };
+	char path[PATH_SIZE], aside[PATH_SIZE], extension[32];
+	int name, source;
+
+	for (name = 0; name < (int)(sizeof(names) / sizeof(names[0])); name++)
+	{
+		for (source = 0; source < (int)(sizeof(sources) / sizeof(sources[0])); source++)
+		{
+			snprintf(extension, sizeof(extension), "%s.other-console", sources[source]);
+			if (!file_path(names[name], sources[source], path, sizeof(path)) ||
+				!file_path(names[name], extension, aside, sizeof(aside)) || access(path, F_OK) != 0)
+			{
+				continue;
+			}
+			remove(aside);
+			if (rename(path, aside) != 0)
+				remove(path);
+		}
+	}
+}
+
 /* the identity and the list read, once; a new identity made if there is
 none (under friends_lock) */
 /* (friends_lock held) the identity's public key and code in friends/tester-id.txt,
@@ -1725,12 +1812,17 @@ static void tester_id_write(void)
 static void load(void)
 {
 	unsigned char bytes[MAXIMUM_LIST_SIZE + 1];
-	int size, taken = 0, old;
+	unsigned char tag[P2P_SHA256_SIZE], stored_tag[P2P_SHA256_SIZE];
+	int size, taken = 0, old, has_tag, has_stored_tag, copied = 0;
 
 	if (friends->loaded)
 		return;
 	friends->loaded = 1;
 	pthread_mutex_lock(&friends_file_lock);
+	/* (the console the identity was made on: identity-device.dat) */
+	has_tag = device_tag(tag);
+	size = has_tag ? file_take("identity-device.dat", bytes, DEVICE_SIZE + 1, 0) : -1;
+	has_stored_tag = size >= 0 && device_decode(bytes, size, stored_tag);
 	for (old = 0; old < 3 && !taken; old++)
 	{
 		size = file_take("identity.dat", bytes, IDENTITY_SIZE + 1, old);
@@ -1743,12 +1835,25 @@ static void load(void)
 				file_set_aside("identity.dat");
 		}
 	}
+	if (taken && has_tag && has_stored_tag && !p2p_equal(tag, stored_tag, P2P_SHA256_SIZE))
+	{
+		/* (another console's identity, its folder copied here: two consoles
+		with one friend code. Its seed wiped, its files and the lists that
+		were its friends' set aside) */
+		copied = 1;
+		taken = 0;
+		memset(friends->seed, 0, sizeof(friends->seed));
+		files_of_another_console();
+		platform_log("friends: this friend identity came from another console (a copied folder): a new one made, "
+			"the other console's friends list kept out (*.other-console)");
+	}
 	if (!taken)
 	{
 		posix_random_bytes(friends->seed, sizeof(friends->seed));
 		friends->epoch = 0;
 		platform_log("friends: a new friend identity made");
 	}
+	friends->identity_copied = copied;
 	identity_from_seed();
 	/* (this run's epoch: newer than every one before, written before
 	anything is sent) */
@@ -1757,8 +1862,19 @@ static void load(void)
 	friends->epoch_written = file_put("identity.dat", bytes, size);
 	if (!friends->epoch_written)
 		platform_log("friends: the identity could not be written; friends will see this run's messages, not keep it");
+	/* (this console's, once the identity is written: an identity made before
+	1.1.3 takes it now) */
+	if (friends->epoch_written && has_tag && !(has_stored_tag && p2p_equal(tag, stored_tag, P2P_SHA256_SIZE)))
+	{
+		size = device_encode(tag, bytes);
+		if (file_put("identity-device.dat", bytes, size))
+			platform_log("friends: the identity's console recorded");
+		else
+			platform_log("friends: the identity's console could not be written");
+	}
 	tester_id_write();
-	taken = 0;
+	/* (another console's list and marks: none read) */
+	taken = copied;
 	for (old = 0; old < 3 && !taken; old++)
 	{
 		size = file_take("friends.dat", bytes, sizeof(bytes), old);
@@ -1772,7 +1888,7 @@ static void load(void)
 		}
 	}
 	/* (the marks: none, a file an older build left, read as none) */
-	taken = 0;
+	taken = copied;
 	for (old = 0; old < 3 && !taken; old++)
 	{
 		size = file_take("marks.dat", bytes, MAXIMUM_MARKS_SIZE + 1, old);
@@ -5525,7 +5641,15 @@ int p2p_friends_status(char *text, int size)
 	count = friends->friend_count;
 	for (index = 0; index < count; index++)
 		online += on && friends->friends[index].heard_time && friends->friends[index].presence.online;
-	if (!setting_on("friends.enabled", "HALO_FRIENDS"))
+	if (friends->identity_copied && (!friends->identity_copied_shown ||
+		!elapsed(friends->identity_copied_shown, IDENTITY_COPIED_NOTICE_TIME)))
+	{
+		/* (said for a minute from the first time it is shown) */
+		if (!friends->identity_copied_shown)
+			friends->identity_copied_shown = now_stamp();
+		snprintf(text, (size_t)size, "%s", T("This friend identity came from another console: a new friend code was made"));
+	}
+	else if (!setting_on("friends.enabled", "HALO_FRIENDS"))
 		snprintf(text, (size_t)size, "%s", T("Friends are off"));
 	else if (!on)
 		snprintf(text, (size_t)size, "%s", T("Go online to see your friends"));

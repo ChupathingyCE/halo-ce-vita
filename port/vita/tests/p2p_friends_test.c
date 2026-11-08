@@ -133,6 +133,20 @@ const char *platform_save_root(void)
 {
 	return save_root;
 }
+/* (each machine's console id, p2p_friends.c device_tag: "console-N" unless
+a check sets its own; device_none: none to tell, as seed's folders have,
+which the game then takes as its own console's) */
+static const char *device_id[8];
+static int device_none;
+void p2p_friends_test_device_id(char *text, int size)
+{
+	if (device_none)
+		text[0] = 0;
+	else if (device_id[current])
+		snprintf(text, (size_t)size, "%s", device_id[current]);
+	else
+		snprintf(text, (size_t)size, "console-%d", current);
+}
 /* (each machine's Share with friends: p2p_fileshare.inc; set by test_fileshare) */
 static int fileshare_setting[8];
 int config_boolean(const char *name)
@@ -2113,6 +2127,8 @@ static int seed(const char *folder)
 	int index;
 
 	snprintf(roots[0], sizeof(roots[0]), "%s", folder);
+	/* (no console of the test's: the game takes the folder as its own) */
+	device_none = 1;
 	use(0);
 	quiet = 1;
 	p2p_friends_code(code, sizeof(code));
@@ -4458,6 +4474,119 @@ static void test_fileshare(void)
 	quiet = 0;
 }
 
+/* the identity bound to its console (identity-device.dat): a folder copied
+to another console makes a new identity there and keeps the other's list
+out; the same console keeps it; an identity from before (no console file)
+takes this console's; a console with no id checks nothing */
+static int device_file_exists(const char *folder, const char *name)
+{
+	char path[600];
+
+	snprintf(path, sizeof(path), "%s/friends/%s", folder, name);
+	return access(path, F_OK) == 0;
+}
+
+static void device_copy_file(const char *from_folder, const char *to_folder, const char *name)
+{
+	char from[600], to[600];
+	unsigned char bytes[MAXIMUM_LIST_SIZE + 64];
+	int size;
+
+	snprintf(from, sizeof(from), "%s/friends/%s", from_folder, name);
+	snprintf(to, sizeof(to), "%s/friends/%s", to_folder, name);
+	size = file_read(from, bytes, sizeof(bytes));
+	if (size >= 0)
+		file_write(to, bytes, size);
+}
+
+static void test_device_binding(const char *base)
+{
+	static const char *const files[] = { "identity.dat", "identity.dat.prev", "identity-device.dat", "friends.dat",
+		"friends.dat.prev", "marks.dat" };
+	char code_a[P2P_FRIEND_CODE_SIZE], code_b[P2P_FRIEND_CODE_SIZE], code[P2P_FRIEND_CODE_SIZE], status[160];
+	char folder[2][512], path[600];
+	unsigned char seed[P2P_SEED_SIZE], key[P2P_KEY_SIZE], friendship[FRIENDSHIP_LENGTH];
+	int index;
+
+	for (index = 0; index < 2; index++)
+	{
+		snprintf(folder[index], sizeof(folder[index]), "%s/device%d", base, index);
+		mkdir(folder[index], 0755);
+		snprintf(roots[index], sizeof(roots[index]), "%s", folder[index]);
+		memset(&machines[index], 0, sizeof(machines[index]));
+		device_id[index] = index ? "console-B" : "console-A";
+	}
+	/* console A: an identity and a friend */
+	code_of(0, code_a);
+	memset(seed, 0x61, sizeof(seed));
+	p2p_ed25519_public(seed, key, NULL);
+	memset(friendship, 7, sizeof(friendship));
+	use(0);
+	friend_add(key, "Foxtrot", friendship, 0, 0);
+	restart(0);
+	restart(0);
+	check(device_file_exists(folder[0], "identity-device.dat"), "device: the identity's console recorded");
+	code_of(0, code);
+	check(!strcmp(code, code_a) && machines[0].friend_count == 1 && !machines[0].identity_copied,
+		"device: the same console keeps its identity and list");
+	/* the folder copied to console B */
+	snprintf(path, sizeof(path), "%s/friends", folder[1]);
+	mkdir(path, 0755);
+	for (index = 0; index < (int)(sizeof(files) / sizeof(files[0])); index++)
+		device_copy_file(folder[0], folder[1], files[index]);
+	quiet = 1;
+	code_of(1, code_b);
+	quiet = 0;
+	check(strcmp(code_b, code_a) != 0, "device: a copied identity on another console: a new friend code");
+	check(machines[1].friend_count == 0 && machines[1].identity_copied, "device: ... the other console's list kept out");
+	check(device_file_exists(folder[1], "friends.dat.other-console") && device_file_exists(folder[1], "identity.dat.other-console") &&
+		!device_file_exists(folder[1], "friends.dat") && !device_file_exists(folder[1], "friends.dat.prev"),
+		"device: ... its files set aside as .other-console");
+	use(1);
+	p2p_friends_status(status, sizeof(status));
+	check(strstr(status, "another console") != NULL, "device: ... and the player told");
+	clock_now += IDENTITY_COPIED_NOTICE_TIME + 1;
+	p2p_friends_status(status, sizeof(status));
+	check(strstr(status, "another console") == NULL, "device: ... for a while, not forever");
+	restart(1);
+	code_of(1, code);
+	check(!strcmp(code, code_b) && machines[1].friend_count == 0 && !machines[1].identity_copied,
+		"device: console B keeps its new identity after");
+	code_of(0, code);
+	check(!strcmp(code, code_a), "device: console A's identity untouched");
+	/* an identity from before 1.1.3 (no console file): taken as this console's */
+	snprintf(path, sizeof(path), "%s/friends/identity-device.dat", folder[0]);
+	remove(path);
+	snprintf(path, sizeof(path), "%s/friends/identity-device.dat.prev", folder[0]);
+	remove(path);
+	memset(&machines[0], 0, sizeof(machines[0]));
+	code_of(0, code);
+	check(!strcmp(code, code_a) && machines[0].friend_count == 1 && !machines[0].identity_copied &&
+		device_file_exists(folder[0], "identity-device.dat"), "device: an old identity adopted, the same code and list");
+	restart(0);
+	code_of(0, code);
+	check(!strcmp(code, code_a) && machines[0].friend_count == 1, "device: ... and kept after");
+	/* a damaged console file: as none (adopted) */
+	snprintf(path, sizeof(path), "%s/friends/identity-device.dat", folder[0]);
+	{
+		unsigned char zeros[DEVICE_SIZE];
+
+		memset(zeros, 0, sizeof(zeros));
+		file_write(path, zeros, sizeof(zeros));
+	}
+	memset(&machines[0], 0, sizeof(machines[0]));
+	code_of(0, code);
+	check(!strcmp(code, code_a) && machines[0].friend_count == 1, "device: a damaged console file read as none");
+	/* a console with no id to tell: nothing checked, nothing changed */
+	device_id[0] = "console-C";
+	device_none = 1;
+	memset(&machines[0], 0, sizeof(machines[0]));
+	code_of(0, code);
+	check(!strcmp(code, code_a) && machines[0].friend_count == 1, "device: no console id: the identity kept");
+	device_none = 0;
+	device_id[0] = device_id[1] = NULL;
+}
+
 int main(void)
 {
 	char root[512];
@@ -4495,6 +4624,7 @@ int main(void)
 	test_party_restart();
 	test_backup();
 	test_fileshare();
+	test_device_binding(root);
 	if (failures)
 	{
 		printf("%d failures\n", failures);
