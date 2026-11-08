@@ -1,0 +1,5 @@
+# certifi, pinned by its wheel's SHA-256 (PyPI's; checked against the wheel
+# by hand, Nov 8 2026). Installed on its own, before requirements-build.txt:
+#   python -m pip install --require-hashes --only-binary=:all: -r tools/installer/requirements-certifi.txt
+# A new version: change requirements-build.txt's pin and this hash together.
+certifi==2026.10.23 --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1

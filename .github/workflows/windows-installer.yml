@@ -31,11 +31,24 @@ jobs:
           python-version: "3.12"
 
       - name: Install the build and test tools
-        run: python -m pip install -r tools/installer/requirements-build.txt -r tools/installer/requirements-dev.txt
+        # (certifi first, checked by its hash: what the program trusts)
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r tools/installer/requirements-certifi.txt
+          python -m pip install -r tools/installer/requirements-build.txt -r tools/installer/requirements-dev.txt
+
+      - name: Security tests (signatures, download allow-list, redirects, certificates)
+        # (blocking: the download and verify tests without the Tk window ones,
+        # INSTALLER_TESTS_NO_WINDOW: conftest.py leaves out every test that
+        # opens the window)
+        timeout-minutes: 10
+        env:
+          INSTALLER_TESTS_NO_WINDOW: "1"
+        run: python -m pytest -q -rfE tools/installer/tests/test_pc_download.py tools/installer/tests/test_vpk_download.py
 
       - name: Tests
-        # (the Tk window tests hang on the hosted Windows runners: reported,
-        # never blocking the build)
+        # (all of them; the Tk window tests hang on the hosted Windows
+        # runners: reported, never blocking the build. The security ones
+        # block above)
         continue-on-error: true
         timeout-minutes: 12
         run: python -m pytest -q -rfE --maxfail=5 tools/installer/tests

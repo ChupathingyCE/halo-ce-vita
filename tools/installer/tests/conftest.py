@@ -13,6 +13,20 @@ import halo_ce_vita_installer as hcv  # noqa: E402
 REAL_SETTINGS_PATH = hcv.settings_path
 
 
+def pytest_collection_modifyitems(config, items):
+    """INSTALLER_TESTS_NO_WINDOW=1: every test that opens the window (the
+    root fixture, Tk) left out, the rest kept - CI's blocking security run,
+    where the hosted runners' Tk hangs."""
+    if os.environ.get("INSTALLER_TESTS_NO_WINDOW") != "1":
+        return
+    kept, left = [], []
+    for item in items:
+        (left if "root" in getattr(item, "fixturenames", ()) else kept).append(item)
+    if left:
+        config.hook.pytest_deselected(items=left)
+        items[:] = kept
+
+
 @pytest.fixture(autouse=True)
 def own_settings(tmp_path, monkeypatch):
     """The window's settings file in the test's own folder (never the
