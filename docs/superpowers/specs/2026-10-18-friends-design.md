@@ -283,6 +283,18 @@ Not protected (stated):
 - A blocked player can make a new identity and send one more request (rate
   limited, and blockable again).
 - The replay window right after a restart (above).
+- **The identity's console binding (identity-device.dat, 1.1.3) is a copy
+  guard, not theft protection.** It stops two consoles speaking as one
+  identity after an *accidental* copy (a folder copied to a friend's Vita, a
+  backup restored on a second console). Anyone copying the folder on purpose
+  deletes identity-device.dat and the identity is adopted; the seed is plain
+  text on the card; the tag (an HMAC of p2p_hardware_id, which every joined
+  host sees) is not secret. A copied identity is set aside under its
+  console's tag (`<name>.<tag>.other-console`), never deleted, and given
+  back when the card returns to that console: the other console's seed stays
+  on the card for that reason (no new exposure: identity.dat held it there
+  before). A console with no id checks nothing; consoles with the same id
+  are not told apart.
 
 ## Wire changes and the network version
 

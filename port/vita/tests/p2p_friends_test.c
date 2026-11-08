@@ -527,6 +527,62 @@ static void test_request_accept(void)
 	check(drops(0) == 0 && drops(1) == 0, "nothing honest dropped");
 }
 
+/* a broker flapping (ready, dropped, ready) every 3 s for a minute (sec113
+M2): the presence asking for replies goes out again at once the first time,
+then at most once a PRESENCE_RESEND_INTERVAL, so the friend's replies too
+(before: one each flap, 21 a minute); a broker back after a quiet while: at
+once again */
+static void test_presence_resend(void)
+{
+	int index, from0 = 0, from1 = 0, start = carried_count, first = -1;
+
+	quiet = 1;
+	pass(4);
+	for (index = 0; index < 120; index++) /* 60 s of 500 ms passes */
+	{
+		int before = carried_count, at;
+
+		use(0);
+		p2p_friends_outgoing_settle(index % 6 == 0 ? 1 : 3);
+		use(1);
+		p2p_friends_outgoing_settle(1);
+		pass(1);
+		for (at = before; at < carried_count && first < 0 && index >= 1; at++)
+			if (carried[at].from == 0 && !strcmp(carried[at].topic, machines[1].mailbox_topic))
+				first = index;
+	}
+	for (index = start; index < carried_count; index++)
+	{
+		if (carried[index].from == 0 && !strcmp(carried[index].topic, machines[1].mailbox_topic))
+			from0++;
+		if (carried[index].from == 1 && !strcmp(carried[index].topic, machines[0].mailbox_topic))
+			from1++;
+	}
+	quiet = 0;
+	printf("presence resend: a broker flapping every 3 s for 60 s: machine 0 -> friend 1: %d messages, back: %d; "
+		"the first again at pass %d\n", from0, from1, first);
+	check(first >= 1 && first <= 1, "presence resend: the first broker back: sent again at once");
+	check(from0 <= 4 && from1 <= 4, "presence resend: a flapping broker: at most one a PRESENCE_RESEND_INTERVAL (and replies)");
+	/* (quiet for longer than the interval, one broker back: at once) */
+	pass(2 * PRESENCE_RESEND_INTERVAL / 500);
+	use(0);
+	p2p_friends_outgoing_settle(1);
+	pass(1);
+	start = carried_count;
+	use(0);
+	p2p_friends_outgoing_settle(3);
+	pass(1);
+	for (index = start, from0 = 0; index < carried_count; index++)
+		from0 += carried[index].from == 0 && !strcmp(carried[index].topic, machines[1].mailbox_topic);
+	check(from0 >= 1, "presence resend: a broker back after a quiet while: sent again at once");
+	for (index = 0; index < 2; index++)
+	{
+		use(index);
+		p2p_friends_outgoing_settle(0);
+	}
+	pass(4);
+}
+
 static void test_join_invite(void)
 {
 	struct p2p_friend_entry entry;
@@ -4486,6 +4542,25 @@ static int device_file_exists(const char *folder, const char *name)
 	return access(path, F_OK) == 0;
 }
 
+/* a set-aside file (p2p_friends.c console_aside_path: console_names[name],
+console_sources[source]) of console `id`'s, of group `group`, on a machine's
+card */
+static int device_aside_exists(int machine, const char *id, int name, int source, int group)
+{
+	unsigned char tag[P2P_SHA256_SIZE];
+	char path[PATH_SIZE];
+	const char *had = device_id[machine];
+	int was = current, exists;
+
+	use(machine);
+	device_id[machine] = id;
+	device_tag(tag);
+	device_id[machine] = had;
+	exists = console_aside_path(name, source, tag, group, path, sizeof(path)) && access(path, F_OK) == 0;
+	use(was);
+	return exists;
+}
+
 static void device_copy_file(const char *from_folder, const char *to_folder, const char *name)
 {
 	char from[600], to[600];
@@ -4539,9 +4614,10 @@ static void test_device_binding(const char *base)
 	quiet = 0;
 	check(strcmp(code_b, code_a) != 0, "device: a copied identity on another console: a new friend code");
 	check(machines[1].friend_count == 0 && machines[1].identity_copied, "device: ... the other console's list kept out");
-	check(device_file_exists(folder[1], "friends.dat.other-console") && device_file_exists(folder[1], "identity.dat.other-console") &&
-		!device_file_exists(folder[1], "friends.dat") && !device_file_exists(folder[1], "friends.dat.prev"),
-		"device: ... its files set aside as .other-console");
+	check(device_aside_exists(1, "console-A", 1, 0, 0) && device_aside_exists(1, "console-A", 0, 0, 0) &&
+		device_aside_exists(1, "console-A", 1, 1, 0) && !device_file_exists(folder[1], "friends.dat") &&
+		!device_file_exists(folder[1], "friends.dat.prev"),
+		"device: ... its files set aside as .<console A's tag>.other-console");
 	use(1);
 	p2p_friends_status(status, sizeof(status));
 	check(strstr(status, "another console") != NULL, "device: ... and the player told");
@@ -4587,6 +4663,98 @@ static void test_device_binding(const char *base)
 	device_id[0] = device_id[1] = NULL;
 }
 
+/* a card moved A -> B -> A -> B (sec113 M1): each console gets its own
+identity and friends back, nothing set aside is ever deleted; a backup of
+A's restored over the folder on B: set aside as a second group, A's first
+one kept, and A gets its identity back from the newest */
+static void test_card_round_trip(const char *base)
+{
+	static const char *const files[] = { "identity.dat", "identity.dat.prev", "identity-device.dat", "friends.dat",
+		"friends.dat.prev", "marks.dat" };
+	char folder[512], keep[512], path[600], code_a[P2P_FRIEND_CODE_SIZE], code_b[P2P_FRIEND_CODE_SIZE],
+		code[P2P_FRIEND_CODE_SIZE], status[160];
+	unsigned char seed[P2P_SEED_SIZE], key[P2P_KEY_SIZE], friendship[FRIENDSHIP_LENGTH];
+	int index, b_runs;
+
+	snprintf(folder, sizeof(folder), "%s/card", base);
+	mkdir(folder, 0755);
+	snprintf(keep, sizeof(keep), "%s/card-backup", base);
+	mkdir(keep, 0755);
+	snprintf(path, sizeof(path), "%s/friends", keep);
+	mkdir(path, 0755);
+	snprintf(roots[0], sizeof(roots[0]), "%s", folder);
+	/* made on console A, a friend */
+	memset(&machines[0], 0, sizeof(machines[0]));
+	device_id[0] = "console-A";
+	code_of(0, code_a);
+	memset(seed, 0x62, sizeof(seed));
+	p2p_ed25519_public(seed, key, NULL);
+	memset(friendship, 9, sizeof(friendship));
+	use(0);
+	friend_add(key, "Golf", friendship, 0, 0);
+	restart(0);
+	/* into console B (and played there more than once: identity.dat and its
+	.prev both B's), a friend of B's own */
+	device_id[0] = "console-B";
+	memset(&machines[0], 0, sizeof(machines[0]));
+	quiet = 1;
+	code_of(0, code_b);
+	quiet = 0;
+	check(strcmp(code_b, code_a) != 0 && machines[0].friend_count == 0 && machines[0].identity_copied == 1,
+		"card A->B: a new identity on B, A's list kept out");
+	check(device_aside_exists(0, "console-A", 0, 0, 0) && device_aside_exists(0, "console-A", 1, 0, 0),
+		"card A->B: A's identity and list set aside under A's name");
+	memset(seed, 0x63, sizeof(seed));
+	p2p_ed25519_public(seed, key, NULL);
+	use(0);
+	friend_add(key, "Hotel", friendship, 0, 0);
+	for (b_runs = 0; b_runs < 3; b_runs++)
+		restart(0);
+	code_of(0, code);
+	check(!strcmp(code, code_b) && machines[0].friend_count == 1, "card on B: B keeps its identity over runs");
+	/* back in console A: A's own identity and friend again */
+	device_id[0] = "console-A";
+	memset(&machines[0], 0, sizeof(machines[0]));
+	code_of(0, code);
+	check(!strcmp(code, code_a) && machines[0].friend_count == 1 && machines[0].identity_copied == 2,
+		"card A->B->A: console A's own identity and friends back");
+	use(0);
+	p2p_friends_status(status, sizeof(status));
+	check(strstr(status, "own friend code is back") != NULL, "card A->B->A: ... and the player told");
+	check(device_aside_exists(0, "console-B", 0, 0, 0) && device_aside_exists(0, "console-B", 0, 1, 0) &&
+		device_aside_exists(0, "console-B", 1, 0, 0) && !device_aside_exists(0, "console-A", 0, 0, 0),
+		"card A->B->A: B's set aside under B's name, A's put back");
+	restart(0);
+	code_of(0, code);
+	check(!strcmp(code, code_a) && machines[0].friend_count == 1 && !machines[0].identity_copied,
+		"card A->B->A: A keeps it after");
+	/* (a backup of the folder as it is on A, for below) */
+	for (index = 0; index < (int)(sizeof(files) / sizeof(files[0])); index++)
+		device_copy_file(folder, keep, files[index]);
+	/* and to B again: B's own back */
+	device_id[0] = "console-B";
+	memset(&machines[0], 0, sizeof(machines[0]));
+	code_of(0, code);
+	check(!strcmp(code, code_b) && machines[0].friend_count == 1 && machines[0].identity_copied == 2,
+		"card A->B->A->B: console B's own identity and friends back");
+	/* on B, the backup of A's folder restored over it (A's group already set
+	aside on this card): a second group, the first kept */
+	for (index = 0; index < (int)(sizeof(files) / sizeof(files[0])); index++)
+		device_copy_file(keep, folder, files[index]);
+	memset(&machines[0], 0, sizeof(machines[0]));
+	quiet = 1;
+	code_of(0, code);
+	quiet = 0;
+	check(strcmp(code, code_a) != 0 && device_aside_exists(0, "console-A", 0, 0, 0) &&
+		device_aside_exists(0, "console-A", 0, 0, 1), "card: A's identity set aside again: a second group, the first kept");
+	/* and A takes its identity back */
+	device_id[0] = "console-A";
+	memset(&machines[0], 0, sizeof(machines[0]));
+	code_of(0, code);
+	check(!strcmp(code, code_a) && machines[0].friend_count == 1, "card: A's identity back from either group");
+	device_id[0] = NULL;
+}
+
 int main(void)
 {
 	char root[512];
@@ -4606,6 +4774,7 @@ int main(void)
 	test_wires();
 	test_codes();
 	test_request_accept();
+	test_presence_resend();
 	test_join_invite();
 	test_replays_and_forgeries();
 	test_appear_offline();
@@ -4625,6 +4794,7 @@ int main(void)
 	test_backup();
 	test_fileshare();
 	test_device_binding(root);
+	test_card_round_trip(root);
 	if (failures)
 	{
 		printf("%d failures\n", failures);

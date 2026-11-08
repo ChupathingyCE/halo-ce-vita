@@ -1013,6 +1013,7 @@ static boolean forge_net_client(void);
 static boolean forge_net_quiet(void);
 static boolean forge_net_held_by_other(long object_index);
 static short forge_net_holder(long object_index, long asking_machine);
+static short forge_net_holder_of_other(long object_index);
 static void forge_net_client_spawn(long tag_index, real_point3d const *position, real_vector3d const *forward,
 	real distance);
 static void forge_net_client_grab(long object_index);
@@ -2175,8 +2176,9 @@ the browser's categories taken out of the layout and the world, as CLEAR
 ALL AI takes the characters (AI: that same clearing): they do not come back
 with the next round, a map variant saved after has them not, the history's
 steps that name them go. A category of markers: its spawn points,
-teleporters or game type objects. What is in use (forge_object_in_use) is
-left. The ones deleted, counted */
+teleporters or game type objects. What is in use (forge_object_in_use) or
+held by another player (network Forge: forge_net_holder_of_other) is left.
+The ones deleted, counted */
 static short forge_group_delete(
 	short category)
 {
@@ -2211,7 +2213,11 @@ static short forge_group_delete(
 
 			if (placed->ai || forge_tag_category(placed->tag_index) != category)
 				continue;
-			if (forge_object_alive(placed->object_index) && forge_object_in_use(placed->object_index))
+			/* (in use, or held by another player in a network Forge game -
+			the host's or another machine's, as a single delete refuses it -:
+			left) */
+			if (forge_object_alive(placed->object_index) && (forge_object_in_use(placed->object_index) ||
+				forge_net_holder_of_other(placed->object_index) != NONE))
 			{
 				kept++;
 				continue;

@@ -1819,6 +1819,7 @@
 "Request already sent" = "Solicitud ya enviada"
 "They asked first: now friends" = "Te lo pidió primero: ya son amigos"
 "This friend identity came from another console: a new friend code was made" = "Esta identidad de amigos venía de otra consola: se creó un código de amigo nuevo"
+"This friend identity came from another console: this console's own friend code is back" = "Esta identidad de amigos venía de otra consola: volvió el código de amigo de esta consola"
 "Friends are off" = "Amigos desactivados"
 "Go online to see your friends" = "Conéctate en línea para ver a tus amigos"
 "Appearing offline: %d of %d friends online" = "Apareces desconectado: %d de %d amigos en línea"

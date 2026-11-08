@@ -3,4 +3,7 @@ pyinstaller==6.22.3
 # Mozilla's certificate authorities in the program (Windows' Python trusts only
 # the roots Windows has cached; a fresh PC may not have GitHub's)
 certifi==2026.10.23
+# (checked by its hash too: the CI installs requirements-certifi.txt first,
+# with --require-hashes. Not here: one --hash in a file pip reads puts the whole
+# install in hash-checking mode, PyInstaller's and pytest's dependencies too)
 -r requirements.txt

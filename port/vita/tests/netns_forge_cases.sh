@@ -47,7 +47,11 @@
 #              asked of the host: _forge_net_command_delete_group, a host of version 8): the
 #              host places two weapons, a large platform and a respawn point; the joiner
 #              deletes all weapons and all spawning, the host all blocks: on both machines
-#              every count of the three 0 and the objects gone. forgedeleteallold the joiner
+#              every count of the three 0 and the objects gone. The host holds one weapon
+#              through the joiner's first DELETE ALL: it is kept (sec113 L1, as a single
+#              delete refuses an object another holds), deleted by the joiner's next once let
+#              go; the joiner's fourth DELETE ALL in a few seconds is refused (the host's
+#              rate limit, FORGE_NET_DELETES_*). forgedeleteallold the joiner
 #              with a 1.1.2 host (HALO_TEST_HOST_VITA, its host version 7): it is not asked,
 #              the joiner says only the host can, and the host keeps its weapons
 #   forgeitems weapons on building blocks (1.1.2, Nov 4 2026: they fell through every block,
@@ -764,7 +768,10 @@ forge_case() {
 		host_cmds="$host_cmds;L176:forge camera 55 -106 3 0 0;L182:forge spawn platform_large;L183:forge distance 5;L186:forge drop"
 		host_cmds="$host_cmds;L190:forge camera 62 -100 6 0 -89;L196:forge spawnpoint respawn;L198:forge drop;L300:forge groups"
 		join_cmds="L320:forge groups;L330:forge deleteall weapons;L360:forge deleteall spawning;L600:forge groups;L610:forge objects"
-		[ $mode = forgedeleteall ] && host_cmds="$host_cmds;L400:forge deleteall blocks"
+		if [ $mode = forgedeleteall ]; then
+			host_cmds="$host_cmds;L315:forge grab #1;L345:forge drop;L400:forge deleteall blocks"
+			join_cmds="$join_cmds;L380:forge deleteall weapons;L400:forge deleteall vehicles"
+		fi
 		host_cmds="$host_cmds;L700:forge groups;L710:forge objects"
 		run_copy host "$host_machine" "${HALO_TEST_HOST_VITA:-$vita}" "$cpu_a" HALO_NET_ONLINE=false \
 			HALO_NETWORK_TEST=host:bloodgulch:forge HALO_NETWORK_TEST_START=20 HALO_TEST_FORGE_PACKS=none \
@@ -787,7 +794,13 @@ forge_case() {
 		groups "$jl" 320 | grep -q "weapons 2 .*blocks 1 .*spawning 1" || fail "the joiner did not count the host's weapons, block and spawn point"
 		if [ $mode = forgedeleteall ]; then
 			grep -aq "forge net: machine 1 asked: delete all" "$hl" || fail "the joiner's DELETE ALL was not asked of the host"
-			grep -aq "forge: deleted all weapons: 2 " "$hl" || fail "the host did not delete the weapons for the joiner"
+			grep -aq "forge: deleted all weapons: 1 (1 in use kept)" "$hl" ||
+				fail "the joiner's DELETE ALL did not leave the weapon the host held"
+			grep -aq "forge: deleted all weapons: 1 (0 in use kept)" "$hl" ||
+				fail "the joiner's next DELETE ALL did not delete the weapon the host let go"
+			grep -aq "forge net: machine 1's delete all refused: too many too soon" "$hl" ||
+				fail "the joiner's fourth DELETE ALL in seconds was not refused"
+			grep -aq "forge: deleted all vehicles" "$hl" && fail "the host made a DELETE ALL past its limit"
 			grep -aq "forge: deleted all spawning: 1 " "$hl" || fail "the host did not delete the spawn point for the joiner"
 			grep -aq "forge: deleted all blocks: 1 " "$hl" || fail "the host did not delete its blocks"
 			grep -aq "forge net: the host said: deleted a group" "$jl" || fail "the joiner was not told what came of it"

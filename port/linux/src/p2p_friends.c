@@ -20,11 +20,28 @@ threat model: docs/superpowers/specs/2026-10-18-friends-design.md).
 - The identity's console (identity-device.dat): a hash of this console's
   id (p2p_hardware_id's keyed hash of the Vita's OpenPSID or the PC's
   machine id, hashed again for this use: never the raw id). An identity
-  whose console is another's came with a copied folder: it is not used (a
-  new identity is made, the other console's friends list and marks kept out
-  as <name>.other-console) and the player told once (p2p_friends_status).
+  whose console is another's came with a copied folder or a moved card: it
+  is not used here, and the player told once (p2p_friends_status). Its
+  identity, friends list and marks are set aside under that console's name
+  (<name>.<first 8 bytes of its tag in hex>.other-console, a numbered group
+  if one is there already: none ever deleted), and this console's own, if
+  the card was here before and they were set aside then, are used again;
+  if there are none, a new identity is made. So a card going A -> B -> A
+  gets A's friend code and list back on A, and B's on B again.
   An identity with no console file (made before 1.1.3) takes this
   console's; a console with no id to tell checks nothing.
+  Threat model: this is a guard against ACCIDENTAL copies (a folder copied
+  to a friend's Vita, a backup restored on a second console), so that two
+  consoles never speak as one identity. It is not theft protection: the
+  seed is in plain text on the card, anyone copying the folder on purpose
+  can delete identity-device.dat (an identity with no console file is
+  adopted), and the tag is not secret (p2p_hardware_id goes to every host
+  joined, for bans). The set-aside files keep the other console's private
+  seed on the card on purpose: it is that console's identity, needed to
+  give it back when the card returns (deleting it would lose that
+  console's friend code and every friendship for good). It is no new
+  exposure - identity.dat held the same seed on the same card before -
+  and it is never read except to put it back on its own console.
 - The list (friends.dat) and the identity are written whole and atomically
   (a .tmp written, read back and checked, then put in place as
   forge_store.c does) and checked as they are read.
@@ -195,6 +212,9 @@ enum
 	/* milliseconds */
 	PRESENCE_INTERVAL = 60000,
 	PRESENCE_CHANGE_INTERVAL = 3000,
+	/* (the presence asking for replies sent again for a broker come back:
+	at most this often, but at once for a broker never asked before) */
+	PRESENCE_RESEND_INTERVAL = PRESENCE_INTERVAL / 2,
 	PRESENCE_TIMEOUT = 150000,
 	PRESENCE_BUDGET = 6,
 	PRESENCE_BUDGET_INTERVAL = 2000,
@@ -673,7 +693,8 @@ struct friends_state
 	/* the identity: its seed, keys, code, topics; the epoch of this run
 	and the counter of the messages sent in it */
 	int has_identity;
-	/* this run's identity replaced one copied from another console; when
+	/* this run's identity replaced one copied from another console (1: a new
+	one made, 2: this console's own, set aside before, used again); when
 	p2p_friends_status first said so */
 	int identity_copied;
 	unsigned long identity_copied_shown;
@@ -762,7 +783,15 @@ struct friends_state
 	is sent; a friend on a broker that came later heard none of it until the
 	next PRESENCE_INTERVAL, 1.1.2's "online only after a while") */
 	int brokers_ready_mask;
-	int broker_came;
+	/* (sec113 M2: the brokers ready since, still ready; those that have had
+	a presence asking for replies; when the last such resend went out. A
+	broker that drops and comes back over and over - a flaky public broker,
+	a reset on the path - makes friends answer at most once a
+	PRESENCE_RESEND_INTERVAL, the first time at once) */
+	int brokers_came_mask;
+	int brokers_asked_mask;
+	int presence_resent;
+	unsigned long presence_resend_time;
 	int appear_offline;
 
 	struct budget request_budget;
@@ -1759,30 +1788,109 @@ static void file_set_aside(const char *name)
 		platform_log("friends: %s failed its checks; kept as %s, not used", path, bad);
 }
 
-/* (friends_file_lock held) another console's identity and lists, which came
-with a copied folder, out of the way: <name>.other-console, never read */
-static void files_of_another_console(void)
+/* a console's set-aside files: <name><source>.<tag>[.<n>].other-console,
+<tag> the first 8 bytes of that console's tag in hex (identity-device.dat's,
+itself a keyed hash: never the raw id), <n> a group set aside before under
+the same console's name, never overwritten */
+static const char *const console_names[] = { "identity.dat", "friends.dat", "marks.dat" };
+static const char *const console_sources[] = { "", ".prev", ".old" };
+enum
 {
-	static const char *const names[] = { "identity.dat", "friends.dat", "marks.dat" };
-	static const char *const sources[] = { "", ".prev", ".old" };
-	char path[PATH_SIZE], aside[PATH_SIZE], extension[32];
-	int name, source;
+	CONSOLE_NAMES = (int)(sizeof(console_names) / sizeof(console_names[0])),
+	CONSOLE_SOURCES = (int)(sizeof(console_sources) / sizeof(console_sources[0])),
+	CONSOLE_GROUPS = 16
+};
 
-	for (name = 0; name < (int)(sizeof(names) / sizeof(names[0])); name++)
+static int console_aside_path(int name, int source, const unsigned char *tag, int group, char *path, int size)
+{
+	char extension[64];
+	int index, length;
+
+	length = snprintf(extension, sizeof(extension), "%s.", console_sources[source]);
+	for (index = 0; index < 8; index++)
+		length += snprintf(extension + length, sizeof(extension) - (size_t)length, "%02x", tag[index]);
+	if (group)
+		snprintf(extension + length, sizeof(extension) - (size_t)length, ".%d.other-console", group);
+	else
+		snprintf(extension + length, sizeof(extension) - (size_t)length, ".other-console");
+	return file_path(console_names[name], extension, path, size);
+}
+
+/* (friends_file_lock held) another console's identity and lists, which came
+with a copied folder, out of the way under that console's name (its tag,
+`tag`), never read as this console's and never deleted: kept so that the
+card back in that console gives it its own identity again
+(console_files_restored) */
+static void files_of_another_console(const unsigned char *tag)
+{
+	char path[PATH_SIZE], aside[PATH_SIZE];
+	int name, source, group, taken = 1;
+
+	/* (the first group of that console's names wholly free) */
+	for (group = 0; group < CONSOLE_GROUPS && taken; group += taken)
 	{
-		for (source = 0; source < (int)(sizeof(sources) / sizeof(sources[0])); source++)
+		taken = 0;
+		for (name = 0; name < CONSOLE_NAMES && !taken; name++)
+			for (source = 0; source < CONSOLE_SOURCES && !taken; source++)
+				taken = console_aside_path(name, source, tag, group, aside, sizeof(aside)) && access(aside, F_OK) == 0;
+	}
+	for (name = 0; name < CONSOLE_NAMES; name++)
+	{
+		for (source = 0; source < CONSOLE_SOURCES; source++)
 		{
-			snprintf(extension, sizeof(extension), "%s.other-console", sources[source]);
-			if (!file_path(names[name], sources[source], path, sizeof(path)) ||
-				!file_path(names[name], extension, aside, sizeof(aside)) || access(path, F_OK) != 0)
-			{
+			if (!file_path(console_names[name], console_sources[source], path, sizeof(path)) || access(path, F_OK) != 0)
 				continue;
-			}
-			remove(aside);
-			if (rename(path, aside) != 0)
+			/* (a file that cannot be moved aside - every group taken, or the
+			rename failing - is removed: never read as this console's) */
+			if (taken || !console_aside_path(name, source, tag, group, aside, sizeof(aside)) || rename(path, aside) != 0)
+			{
+				platform_log("friends: %s%s could not be set aside: removed", console_names[name], console_sources[source]);
 				remove(path);
+			}
 		}
 	}
+}
+
+/* (friends_file_lock held, this console's files just moved out of the way)
+this console's own identity and lists, set aside when the card was in
+another console, put back: the group whose identity reads and is newest
+(its epoch). 1 if one was */
+static int console_files_restored(const unsigned char *tag)
+{
+	unsigned char bytes[IDENTITY_SIZE + 1], seed[P2P_SEED_SIZE];
+	unsigned long long epoch, best_epoch = 0;
+	char path[PATH_SIZE], aside[PATH_SIZE];
+	int group, source, name, best = -1, size;
+
+	for (group = 0; group < CONSOLE_GROUPS; group++)
+	{
+		for (source = 0; source < CONSOLE_SOURCES; source++)
+		{
+			if (!console_aside_path(0, source, tag, group, aside, sizeof(aside)))
+				continue;
+			size = file_read(aside, bytes, (int)sizeof(bytes));
+			if (size >= 0 && identity_decode(bytes, size, seed, &epoch) && (best < 0 || epoch > best_epoch))
+			{
+				best = group;
+				best_epoch = epoch;
+			}
+		}
+	}
+	memset(seed, 0, sizeof(seed));
+	if (best < 0)
+		return 0;
+	for (name = 0; name < CONSOLE_NAMES; name++)
+	{
+		for (source = 0; source < CONSOLE_SOURCES; source++)
+		{
+			if (console_aside_path(name, source, tag, best, aside, sizeof(aside)) && access(aside, F_OK) == 0 &&
+				file_path(console_names[name], console_sources[source], path, sizeof(path)) && rename(aside, path) != 0)
+			{
+				platform_log("friends: %s%s of this console could not be put back", console_names[name], console_sources[source]);
+			}
+		}
+	}
+	return 1;
 }
 
 /* the identity and the list read, once; a new identity made if there is
@@ -1839,13 +1947,33 @@ static void load(void)
 	{
 		/* (another console's identity, its folder copied here: two consoles
 		with one friend code. Its seed wiped, its files and the lists that
-		were its friends' set aside) */
+		were its friends' set aside under that console's name) */
 		copied = 1;
 		taken = 0;
 		memset(friends->seed, 0, sizeof(friends->seed));
-		files_of_another_console();
-		platform_log("friends: this friend identity came from another console (a copied folder): a new one made, "
-			"the other console's friends list kept out (*.other-console)");
+		files_of_another_console(stored_tag);
+		/* (a card back in a console it was in before: that console's own
+		identity, friends and marks, set aside then, used again) */
+		if (console_files_restored(tag))
+		{
+			for (old = 0; old < 3 && !taken; old++)
+			{
+				size = file_take("identity.dat", bytes, IDENTITY_SIZE + 1, old);
+				if (size >= 0)
+					taken = identity_decode(bytes, size, friends->seed, &friends->epoch);
+			}
+		}
+		if (taken)
+		{
+			copied = 2;
+			platform_log("friends: this friend identity came from another console (a card moved): set aside, and "
+				"this console's own identity, set aside before, used again");
+		}
+		else
+		{
+			platform_log("friends: this friend identity came from another console (a copied folder): a new one made, "
+				"the other console's friends list kept out (*.other-console)");
+		}
 	}
 	if (!taken)
 	{
@@ -1873,8 +2001,9 @@ static void load(void)
 			platform_log("friends: the identity's console could not be written");
 	}
 	tester_id_write();
-	/* (another console's list and marks: none read) */
-	taken = copied;
+	/* (another console's list and marks: none read; this console's own,
+	put back: read) */
+	taken = copied == 1;
 	for (old = 0; old < 3 && !taken; old++)
 	{
 		size = file_take("friends.dat", bytes, sizeof(bytes), old);
@@ -1888,7 +2017,7 @@ static void load(void)
 		}
 	}
 	/* (the marks: none, a file an older build left, read as none) */
-	taken = copied;
+	taken = copied == 1;
 	for (old = 0; old < 3 && !taken; old++)
 	{
 		size = file_take("marks.dat", bytes, MAXIMUM_MARKS_SIZE + 1, old);
@@ -4473,12 +4602,12 @@ void p2p_friends_outgoing_settle(int ready_mask)
 	int index;
 
 	pthread_mutex_lock(&friends_lock);
-	if (ready_mask & ~friends->brokers_ready_mask)
-		friends->broker_came = 1;
+	/* (a broker gone again before the resend: no longer waiting for it) */
+	friends->brokers_came_mask = (friends->brokers_came_mask | (ready_mask & ~friends->brokers_ready_mask)) & ready_mask;
 #ifndef HALO_RELEASE
 	/* (tests: HALO_TEST_FRIENDS_NO_RESEND=1, 1.1.2's way, for the A/B) */
 	if (getenv("HALO_TEST_FRIENDS_NO_RESEND"))
-		friends->broker_came = 0;
+		friends->brokers_came_mask = 0;
 #endif
 	friends->brokers_ready_mask = ready_mask;
 	for (index = friends->outbound_count - 1; index >= 0; index--)
@@ -4699,15 +4828,22 @@ void p2p_friends_update(const struct p2p_friends_host *host)
 			presence_sign(1, 1);
 			signatures++;
 			friends->activity_changed = 0;
-			friends->broker_came = 0;
+			friends->brokers_came_mask = 0;
+			friends->brokers_asked_mask |= friends->brokers_ready_mask;
 			presence_due_all();
 		}
-		else if (friends->broker_came)
+		else if (friends->brokers_came_mask && ((friends->brokers_came_mask & ~friends->brokers_asked_mask) ||
+			!friends->presence_resent || elapsed(friends->presence_resend_time, PRESENCE_RESEND_INTERVAL)))
 		{
 			/* (a broker ready since it went out: again, on every broker ready
 			now, the friends asked to answer - theirs may have gone where this
-			machine was not yet) */
-			friends->broker_came = 0;
+			machine was not yet. At once the first time, and for a broker never
+			asked; then at most once a PRESENCE_RESEND_INTERVAL, a broker come
+			back sooner waiting for it) */
+			friends->brokers_came_mask = 0;
+			friends->brokers_asked_mask |= friends->brokers_ready_mask;
+			friends->presence_resent = 1;
+			friends->presence_resend_time = now_stamp();
 			platform_log("friends: a broker ready since this machine's presence went out: sent again");
 			presence_sign(1, 1);
 			signatures++;
@@ -5647,7 +5783,9 @@ int p2p_friends_status(char *text, int size)
 		/* (said for a minute from the first time it is shown) */
 		if (!friends->identity_copied_shown)
 			friends->identity_copied_shown = now_stamp();
-		snprintf(text, (size_t)size, "%s", T("This friend identity came from another console: a new friend code was made"));
+		snprintf(text, (size_t)size, "%s", friends->identity_copied == 2 ?
+			T("This friend identity came from another console: this console's own friend code is back") :
+			T("This friend identity came from another console: a new friend code was made"));
 	}
 	else if (!setting_on("friends.enabled", "HALO_FRIENDS"))
 		snprintf(text, (size_t)size, "%s", T("Friends are off"));
