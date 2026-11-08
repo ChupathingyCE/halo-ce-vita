@@ -109,9 +109,11 @@ static void fuzz_request(
 	case _forge_net_request_sync:
 		break;
 	case _forge_net_request_command:
-		/* (a known command; ALL AI's on or off, the others' nothing) */
+		/* (a known command; ALL AI's on or off, DELETE ALL's category one
+		of the browser's, the others' nothing) */
 		if (copy.aux >= NUMBER_OF_FORGE_NET_COMMANDS || copy.flags != 0 ||
-			(copy.aux == _forge_net_command_all_ai ? copy.value > 1 : copy.value != 0))
+			(copy.aux == _forge_net_command_all_ai ? copy.value > 1 :
+			copy.aux == _forge_net_command_delete_group ? copy.value >= FORGE_NET_DELETE_GROUPS : copy.value != 0))
 		{
 			abort();
 		}
