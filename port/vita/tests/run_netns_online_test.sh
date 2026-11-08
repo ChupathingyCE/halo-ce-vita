@@ -720,6 +720,19 @@
 #            the map with PC maps off must have its player held while it is
 #            asked to turn PC maps on, download nothing, join the game in
 #            progress and play 45 s
+#   maplobby a dedicated server's lobby waiting on a long map share download
+#            (HALO_TEST_CE_MAP, sv_map_download 1): one joiner without the
+#            map, its downlink throttled (HALO_TEST_MAPLOBBY_RATE, default
+#            4mbit: pcgulch's 22 MB deflated takes about 45 s), so the
+#            countdown ends and the start waits on the download longer than
+#            the 15 s pregame timeout. The server's own client must not time
+#            out (the server never restarts: "the game host went down"); the
+#            joiner downloads, checks the map and plays 30 s. The server's
+#            machine is up 27 days (HALO_TEST_MAPLOBBY_UPTIME seconds,
+#            2365000; test builds only), as the official Linode was: past
+#            2^31 ms of uptime the old clocks timed the server's own client
+#            out ("the game host went down") while the start waited
+#            (xbox_kernel.c, platform_clock_now)
 #   mapmidmixed the same with old builds (HALO_TEST_VITA_OLD,
 #            HALO_TEST_SERVER_OLD: v1.1.0-beta.2's, which know nothing of it):
 #            on the new server and the new Vita host an old joiner arrives
@@ -961,6 +974,7 @@ case $mode in lan|adhoc|h3lan|h3adhoc) export HALO_TEST_ENV_host="HALO_BOTS_ONLI
 [ "$mode" = pings ] && seconds=${HALO_TEST_SECONDS:-180}
 [ "$mode" = pingsmixed ] && seconds=${HALO_TEST_SECONDS:-180}
 [ "$mode" = mapmid ] && seconds=${HALO_TEST_SECONDS:-300}
+[ "$mode" = maplobby ] && seconds=${HALO_TEST_SECONDS:-180}
 [ "$mode" = mapmidmixed ] && seconds=${HALO_TEST_SECONDS:-300}
 [ "$mode" = swat ] && seconds=${HALO_TEST_SECONDS:-500}
 [ "$mode" = swatmixed ] && seconds=${HALO_TEST_SECONDS:-500}
@@ -3947,7 +3961,7 @@ solo)
 	echo "seconds of solo game logged: $ticks"
 	[ "$ticks" -ge 30 ] || fail "the solo game ran $ticks s"
 	;;
-dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|dedicatedcoop|dedicatedmulti|dedicatedfullcache|dedicatedreload|scoreboard|pings|pingsmixed|mapmid|mapmidmixed|swat|swatmixed|dedicatedrace)
+dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|dedicatedcoop|dedicatedmulti|dedicatedfullcache|dedicatedreload|scoreboard|pings|pingsmixed|mapmid|mapmidmixed|maplobby|swat|swatmixed|dedicatedrace)
 	server=${HALO_TEST_SERVER:-$root/build/linux/halo-server}
 	if [ "$mode" = swatmixed ]; then
 		vita_old=${HALO_TEST_VITA_OLD:-}
@@ -3958,7 +3972,7 @@ dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|p
 		[ -x "$vita_old" ] && [ -x "$server_old" ] ||
 			{ echo "mapmidmixed needs HALO_TEST_VITA_OLD and HALO_TEST_SERVER_OLD (builds of v1.1.0-beta.2)"; exit 2; }
 	fi
-	if [ "$mode" = mapmid ] || [ "$mode" = mapmidmixed ]; then
+	if [ "$mode" = mapmid ] || [ "$mode" = mapmidmixed ] || [ "$mode" = maplobby ]; then
 		ce_map=${HALO_TEST_CE_MAP:-}
 		[ -f "$ce_map" ] || { echo "$mode needs HALO_TEST_CE_MAP (a Halo PC Custom Edition multiplayer map)"; exit 2; }
 		ce_name=$(basename "$ce_map" .map)
@@ -3974,6 +3988,10 @@ dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|p
 		}
 		HALO_TEST_DATA_HOST=$(maps_folder server with)
 		export HALO_TEST_SERVER_ENV="${HALO_TEST_SERVER_ENV:-} HALO_CUSTOM_EDITION=1 ${HALO_TEST_MAPMID_RATE_KB:+HALO_MAP_SHARE_INGAME_RATE_KB=$HALO_TEST_MAPMID_RATE_KB}"
+		# (maplobby: the server's machine up 27 days, as the official Linode
+		# was, HALO_TEST_MAPLOBBY_UPTIME seconds; test builds only)
+		[ "$mode" = maplobby ] &&
+			HALO_TEST_SERVER_ENV="$HALO_TEST_SERVER_ENV HALO_TEST_UPTIME_SECONDS=${HALO_TEST_MAPLOBBY_UPTIME:-2365000}"
 	fi
 	if [ "$mode" = dedicatedrace ]; then
 		# race_maps_folder NAME [with]: NAME's own maps folder ($out/maps-NAME):
@@ -4183,6 +4201,22 @@ sv_mapcycle_add $ce_name slayer
 sv_timelimit 20
 sv_scorelimit 500
 sv_start_delay 5
+sv_postgame 5
+sv_end_empty 20
+sv_map_download 1
+sv_port 2302
+INIT
+	fi
+	# (maplobby: as the official race server has it, its lobby's countdown
+	# the default; HALO_TEST_MAPLOBBY_GAME the gametype)
+	if [ "$mode" = maplobby ]; then
+		cat > "$out/server/data/init.txt" <<INIT
+sv_name "Netns Maplobby"
+sv_maxplayers 12
+sv_public 1
+sv_minplayers 1
+sv_timelimit 10
+sv_mapcycle_add $ce_name ${HALO_TEST_MAPLOBBY_GAME:-slayer}
 sv_postgame 5
 sv_end_empty 20
 sv_map_download 1
@@ -5506,6 +5540,52 @@ CHECK
 			fail "the server browser did not list the race server"
 		sed '/exiting after debug.exit_after/q' "$sl" | grep -aq "lost the connection" && fail "the server lost a player's connection"
 		;;
+	maplobby)
+		# the joiner without the map, its downlink throttled (the router's
+		# side of its LAN: what comes to it)
+		side slow 10.10.61 192.168.61
+		in_ns "$slow_router" tc qdisc add dev l_slow root tbf rate "${HALO_TEST_MAPLOBBY_RATE:-4mbit}" burst 32kbit latency 400ms ||
+			fail "the joiner's downlink could not be throttled"
+		copy_data_slow=$(maps_folder slow without)
+		run_copy slow "$slow_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=join-code:$code \
+			HALO_NET_PLAYER_NAME=slow HALO_TEST_INPUT=bot:2 HALO_EXIT_AFTER=$((seconds - 10)) \
+			HALO_CUSTOM_EDITION=1 HALO_MAP_SHARE_ANSWER=yes
+		slow_pid=$last_pid
+		# (HALO_TEST_MAPLOBBY_JOINERS=2: a second joiner without the map, 5 s
+		# on, throttled the same: two downloads, as on the race server)
+		slow2_pid=
+		if [ "${HALO_TEST_MAPLOBBY_JOINERS:-1}" = 2 ]; then
+			sleep 5
+			side slow2 10.10.62 192.168.62
+			in_ns "$slow2_router" tc qdisc add dev l_slow2 root tbf rate "${HALO_TEST_MAPLOBBY_RATE:-4mbit}" burst 32kbit latency 400ms ||
+				fail "the second joiner's downlink could not be throttled"
+			copy_data_slow2=$(maps_folder slow2 without)
+			run_copy slow2 "$slow2_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=join-code:$code \
+				HALO_NET_PLAYER_NAME=slow2 HALO_TEST_INPUT=bot:3 HALO_EXIT_AFTER=$((seconds - 15)) \
+				HALO_CUSTOM_EDITION=1 HALO_MAP_SHARE_ANSWER=yes
+			slow2_pid=$last_pid
+		fi
+		wait "$slow_pid" $slow2_pid 2>/dev/null
+		kill -TERM "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
+		echo "--- server"
+		grep -aE "^server: (the game|player)" "$sl" | head -12
+		grep -aE "map share: (sending|'.*' sent|the game's start waits)|timeout in network_connection_idle|the game host went down" "$sd" | head -20
+		d=$out/slow/data/debug.txt l=$out/slow/run.log
+		echo "--- slow"
+		grep -ahE "map share: (asking the player|downloading|'.*' (received|verified|downloaded))|Halo: custom map" "$d" "$l" | head -12
+		waits=$(grep -ac "map share: the game's start waits for machine" "$sd")
+		first=$(grep -a "map share: the game's start waits for machine" "$sd" | head -1 | cut -c10-17)
+		last=$(grep -a "map share: the game's start waits for machine" "$sd" | tail -1 | cut -c10-17)
+		echo "the server's start waited on the download: $waits lines, $first to $last"
+		[ "$waits" -ge 6 ] || fail "the server's start waited on the download for less than 30 s ($waits lines, 5 s apart)"
+		grep -aq "timeout in network_connection_idle" "$sd" && fail "a connection of the server timed out"
+		grep -aq "the game host went down" "$sd" && fail "the server's game went down (it restarted)"
+		grep -aq "map share: '$ce_name' verified" "$d" || fail "slow did not download and check $ce_name"
+		n=$(grep -a "network test: tick" "$l" | grep -ac "| playing")
+		echo "slow: $n s playing"
+		[ "$n" -ge 30 ] || fail "slow played for $n s (30 wanted)"
+		grep -aq "XLaunchNewImage" "$l" && fail "slow went to the dashboard"
+		;;
 	dedicatedfullcache)
 		# (both joiners' cache files filled at once, then checked here: the
 		# prefill's own check runs in its subshell)
@@ -6581,7 +6661,7 @@ forge|forge3|forgemp|forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeo
 	forge_case
 	;;
 *)
-	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold" >&2
+	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold" >&2
 	exit 2
 	;;
 esac
