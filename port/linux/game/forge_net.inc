@@ -158,6 +158,8 @@ struct forge_net_actor
 	struct forge_net_bucket spawns;
 	/* (its Forge menu's commands: CLEAR AI, ALL AI, NEW ROUND) */
 	struct forge_net_bucket commands;
+	/* (and its DELETE ALLs, fewer still: each takes a whole category) */
+	struct forge_net_bucket deletes;
 	struct forge_net_drops drops;
 	unsigned long drops_logged;
 	struct forge_net_drops drops_said;
@@ -1670,6 +1672,17 @@ static short forge_net_holder(
 	return NONE;
 }
 
+/* (forge.c's DELETE ALL, the host's own or made for a machine) the player
+holding an object other than the one it is made for (the machine acted for,
+or the host itself), NONE: none, or not hosting */
+static short forge_net_holder_of_other(
+	long object_index)
+{
+	if (!forge_net_host())
+		return NONE;
+	return forge_net_holder(object_index, forge_net.acting ? forge_net.acting->machine_index : FORGE_NET_HOST_ASKS);
+}
+
 /* (forge.c's own edits) the object held by another player: said, TRUE */
 static boolean forge_net_held_by_other(
 	long object_index)
@@ -1895,7 +1908,17 @@ static void forge_net_host_command(
 		break;
 	case _forge_net_command_delete_group:
 		/* (the category checked below FORGE_NET_DELETE_GROUPS: forge_net_
-		protocol.c; as that machine, its notices its own) */
+		protocol.c; as that machine, its notices its own. A few at once, then
+		one every FORGE_NET_DELETES_PER_SECOND: a layout not wiped category
+		by category in seconds) */
+		if (!forge_net_bucket_take(&actor->deletes, now, FORGE_NET_DELETES_PER_SECOND, FORGE_NET_DELETES_BURST, 1.f))
+		{
+			actor->drops.rate_limited++;
+			forge_net.requests_dropped++;
+			platform_log("forge net: machine %ld's delete all refused: too many too soon", actor->machine_index);
+			forge_net_refuse(actor, request, _forge_net_refuse_rate, 0, 0);
+			return;
+		}
 		forge_net_act_begin(actor);
 		value = (uint16_t)forge_group_delete((short)request->value);
 		forge_net_act_end(actor);

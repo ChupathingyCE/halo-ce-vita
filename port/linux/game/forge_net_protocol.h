@@ -177,6 +177,10 @@ request; and the ones that make objects (spawn, duplicate) */
 places the whole layout again */
 #define FORGE_NET_COMMANDS_PER_SECOND 1.f
 #define FORGE_NET_COMMANDS_BURST 3.f
+/* and of those DELETE ALL (1.1.3), a whole category each: three at once, then
+one in ten seconds */
+#define FORGE_NET_DELETES_PER_SECOND 0.1f
+#define FORGE_NET_DELETES_BURST 3.f
 /* a joiner's sync (palette and layout) at most once in this long */
 #define FORGE_NET_SYNC_MILLISECONDS 5000
 /* (a client) how long the host's entry of the spawn point it asked for is
