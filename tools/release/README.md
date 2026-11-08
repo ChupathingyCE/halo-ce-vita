@@ -123,6 +123,13 @@ against the game's Monocypher by `port/vita/tests/run_update_download_test.sh`).
 
 ## Each release: sign it
 
+0. Before it, the network fuzz targets on the release commit, every one
+   for at least 10 minutes (`port/vita/tests/run_net_fuzz_test.sh` with
+   `NET_FUZZ_SECONDS=600`; the eleven targets can run in parallel, one
+   `NET_FUZZ_TARGETS=<target>` each): all PASS. A target whose oracle a
+   protocol change made stale fails at once (1.1.3's DELETE ALL in
+   `net_fuzz_forge.c`), so a change to a message's rules changes its
+   fuzz target's checks in the same commit.
 1. Build the release as usual (`python3 configure.py --lto off --pgo off
    --portable --release`, `ninja vita`) with the version in
    `port/vita/include/vita_version.h` and the real public key in
