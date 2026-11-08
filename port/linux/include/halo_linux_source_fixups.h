@@ -138,6 +138,17 @@ unsigned char custom_edition_vehicle_placement_allowed(struct scenario_object_da
 /* whether such a map's local game places every type of vehicle its
 placements choose (PC map vehicles: custom_edition_objects.c) */
 unsigned char custom_edition_vehicles_every_type(void);
+/* whether a race on a Halo Custom Edition map has the map's own vehicles,
+which its start then leaves (port/linux/game/custom_edition_objects.c) */
+unsigned char custom_edition_race_keeps_map_vehicles(void);
+/* a dedicated server's race: each player spawns in a vehicle, which is
+taken away once abandoned (port/linux/game/race_vehicles.c) */
+void race_vehicles_set_spawn_in_vehicle(unsigned char enabled);
+unsigned char race_vehicles_spawn_in_vehicle(void);
+void race_vehicles_new_game(void);
+unsigned char race_vehicles_spawned(long vehicle_index);
+void race_vehicles_player_spawned(long player_index);
+void race_vehicles_update(void);
 
 /* while TRUE, drawing shifts right to center 640-column layouts */
 void halo_screen_ui_offset(unsigned char centered);

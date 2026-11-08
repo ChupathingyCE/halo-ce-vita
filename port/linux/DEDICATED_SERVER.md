@@ -250,6 +250,7 @@ These commands work in `init.txt` and on the console. The names are
 | `drop_bot [n]`, `drop_bot_red [n]`, `drop_bot_blue [n]` | A bot fewer (of that team). A team asked for in either is left as asked, not evened. |
 | `bots_reset` | The bots added or dropped by hand forgotten: the fill's own again. |
 | `sv_map_download <0\|1>` | 1: Vitas without a custom map of the cycle may download it from the server, in the lobby or before they join a game in progress (then at most 256 KB/s for all of them together: `HALO_MAP_SHARE_INGAME_RATE_KB` in the server's environment changes it). 0 (the default): no downloads. |
+| `sv_race_spawn_vehicle <0\|1>` | Race, team race and rally: 1 (the default), each player spawns as the driver of a vehicle (an empty one at the spawn point, or a new one of the race's type: the map's multiplayer Warthog, a Custom Edition map's own), which is taken away once nobody rides it (at once when its player has died, spawned again or left; after 10 seconds otherwise). 0: the game's own race vehicles alone. Any Vita sees it, the betas too. |
 | `sv_port <port>` | Internet play's UDP port (default 2302). `init.txt` only. |
 | `sv_game_port <port>` | The game's own ports on this machine: this one (the host's) and the next (its client's). The default is 5150 for `sv_port` 2302, 5152 for 2303, 5154 for 2304 and so on up to 2401 (5150 past that), so servers on 2302, 2303... never take each other's. Only a server on 5150 is found on its LAN (see "Several servers on one VPS"). Not 5149 or 5151. `init.txt` only. |
 | `sv_map_cache <folder>` | A map cache folder that several servers share: each map is decompressed into it once, by the first server that plays it, and read by all (a path relative to the server's folder, or a full one). `init.txt` only. |
@@ -448,6 +449,60 @@ not on the 6-player ones):
 Halo CE (Custom Edition) maps need `game.custom_edition = true` in the
 server's `config.toml` and the Halo PC resource maps (`bitmaps.map`,
 `sounds.map`, `loc.map`) in `maps/`, as on the Vita.
+
+### Custom Edition maps (a Race server)
+
+A cycle of Halo PC Custom Edition maps, such as a Race server's:
+
+- Put the maps in `maps/` under the names the cycle gives them (the server
+  finds a file in any case, and names it in lowercase), with Halo PC's
+  `bitmaps.map`, `sounds.map` and `loc.map` (the Halo Custom Edition
+  installer's, or Steam's MCC `halo1/maps/custom_edition` folder, not
+  `halo1/maps`). Without them `sv_mapcycle_add` says which are missing and
+  leaves the map out; without `game.custom_edition = true` it says so too.
+- A map's name must be at most 25 characters, without spaces at its ends or
+  `/ \ : * ? " < > | % ,`, and not an Xbox level's name.
+- Check each map first: `build/linux/map_validate --maps <resource maps
+  folder> map.map` (it is refused, or passed with the corrections the game
+  makes as it loads it). For Race the map needs race track flags (netgame
+  flags of type race track, numbered from its first checkpoint) and race
+  vehicle flags for the vehicles; a map without them has no race.
+- The vehicles: a Custom Edition map's race has every vehicle the map
+  places for any game type (its placements' default spawn flags: the
+  vehicles of its slayer, CTF, king and oddball games together, of every
+  type, the map's own ones too; Coldsnap's wrecks and mechs, which no game
+  type places, are left out), and keeps them. The Xbox game's own race made
+  vehicles only for the players in the game two ticks in, at the race
+  vehicle flags, and only Warthogs (four at most): a server's players come
+  in later and got none. With `sv_race_spawn_vehicle 1` (the default) each
+  player also spawns driving one (the map's multiplayer Warthog: Coldsnap's
+  and Warthog Run's own), taken away once abandoned. Placed vehicles are not
+  made again once destroyed, as in the server's other gametypes. All of it
+  is the server's: Vitas take the server's vehicles, so the betas need
+  nothing new. `sv_items` lists the vehicles and which player rides what.
+- `sv_map_download 1` gives joiners the cycle's maps: in the lobby at up to
+  2 MB/s for all of them together (the map deflated, 40-55% of it), to a
+  Vita joining a game in progress at 256 KB/s (the players' game first:
+  `HALO_MAP_SHARE_INGAME_RATE_KB`), so a 30 MB stream takes two minutes
+  there, and is cut off if the game ends first (the Vita joins again in the
+  lobby, and the part it has is kept). Map sharing never sends the resource
+  maps: a Vita needs its own, as it does for the online menus (README.md,
+  "Halo PC files"). A Vita with PC maps off is asked to turn them on with
+  the download.
+- A map is read where it lies (not copied into the map cache): the shared
+  map cache does not grow. The server used 110-135 MB with two players on
+  maps of 17 to 80 MB (`run_netns_online_test.sh dedicatedrace`).
+
+```
+sv_name "US Race - Official"
+sv_maxplayers 12
+sv_port 2304
+sv_timelimit 10
+sv_starting_weapons map
+sv_map_download 1
+sv_mapcycle_add rainbow-road race
+sv_mapcycle_add Camtrack-Arena-Race team_race
+```
 
 ## Run it on a PC
 
@@ -771,6 +826,16 @@ standing in for Vitas in network namespaces, with no internet:
   and from the server browser by its name), a Vita on their LAN joins the
   first one alone, and each map is decompressed once
   (`HALO_TEST_MULTI_SHARED=0`: each server its own cache, to compare).
+- `dedicatedrace`: a Race server of Custom Edition maps
+  (`HALO_TEST_RACE_MAPS`, a folder of them; SKIP without), PC maps on by
+  its `config.toml` and `sv_map_download 1`; two Vitas without the maps
+  (one by its code, one from the server browser into the game in progress,
+  PC maps off) download, load and play each map of the cycle. Reports each
+  download's time and the Vitas' memory once each map is loaded. Checks
+  the vehicles: the server's census (`sv_items`) has some in every game,
+  each Vita sees some, and with `sv_race_spawn_vehicle` each Vita's player
+  rides from its spawn (`HALO_TEST_RACE_SPAWN_VEHICLE=0` turns it off;
+  `HALO_TEST_RACE_JOINER2` a beta's build as the second Vita).
 
 `HALO_TEST_SYMMETRIC_NAT=joiners` (or `all`, with
 `HALO_TEST_SERVER_PUBLIC=1`) makes the routers' NAT symmetric.

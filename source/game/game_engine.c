@@ -6871,6 +6871,12 @@ boolean game_engine_vehicle_placement_allowed(
 	if (custom_edition_vehicles_every_type())
 		return TRUE;
 #endif
+#ifdef HALO_LINUX
+	/* (a Custom Edition map's race: every vehicle it places, as the PC set
+	has them, port/linux/game/custom_edition_objects.c) */
+	if (custom_edition_race_keeps_map_vehicles())
+		return TRUE;
+#endif
 	side = global_variant.universal_variant.teams ? game_engine_nearest_team(&placement->position) : 0;
 	set = options->vehicle_set[side];
 	if (set == VARIANT_VEHICLE_SET_PC)

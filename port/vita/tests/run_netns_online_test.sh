@@ -813,6 +813,36 @@
 #            takes them into the server's game through its invite: the game
 #            has one free slot and two bots, and both members must get in at
 #            once (bots leaving for them, nobody refused as full) and play
+#   dedicatedrace a Race server of Halo PC Custom Edition maps, as the
+#            official one is set up (DEDICATED_SERVER.md): the maps of
+#            HALO_TEST_RACE_MAPS (a folder of them; none is in the
+#            repository: without it the mode says SKIP and passes) beside
+#            the Xbox maps and Halo PC's bitmaps.map, sounds.map and loc.map
+#            (that folder's, else HALO_TEST_CE_RESOURCES, else Steam's MCC
+#            halo1/maps/custom_edition), PC maps on by its config.toml
+#            (game.custom_edition = true, no environment variable),
+#            sv_map_download 1, a cycle of race and team_race on
+#            HALO_TEST_RACE_CYCLE's maps (default the folder's first three,
+#            by name) for HALO_TEST_RACE_MINUTES each (2). Two Vita builds
+#            with the resource maps but none of the race maps join it, the
+#            first by its code (PC maps on), the second from the server
+#            browser HALO_TEST_RACE_STAGGER seconds later (45: into the game
+#            in progress; PC maps off: the question turns them on), each
+#            joining again when a join ends before its game, as a player
+#            would (a download in progress is cut off by the game's end, and
+#            a join in the game's first seconds is refused the map): each
+#            must download every map of the cycle from the server
+#            (HALO_MAP_SHARE_ANSWER=yes), check it, load it and play it with
+#            the other. Reported: each
+#            download's time and rate, and the joiners' memory once each
+#            map is loaded (the Custom Edition loader's window and C heap).
+#            The vehicles: the server's census (sv_items every 10 s) must
+#            have some in every game, and each joiner see some (its own
+#            census); with sv_race_spawn_vehicle (the server's default;
+#            HALO_TEST_RACE_SPAWN_VEHICLE=0 sets it 0) each joiner's player
+#            must ride from within 3 s of a spawn in 3 of 4 lives and drive
+#            on the server's census. HALO_TEST_RACE_JOINER2: the second
+#            joiner's build (a beta's: its vehicles from the server alone)
 #
 #   HALO_TEST_SERVER the dedicated server (build/linux/halo-server of this tree)
 #   HALO_TEST_SYMMETRIC_NAT=all|joiners  every router's NAT a symmetric one
@@ -961,6 +991,42 @@ fi
 [ "$mode" = h3liveagain ] && seconds=${HALO_TEST_SECONDS:-280}
 # (network Forge: netns_forge_cases.sh)
 case $mode in forge) seconds=${HALO_TEST_SECONDS:-110} ;; forge3) seconds=${HALO_TEST_SECONDS:-125} ;; forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeold111|forgeflagwarn|forgephase|forgerider) seconds=${HALO_TEST_SECONDS:-80} ;; forgelate112) seconds=${HALO_TEST_SECONDS:-180} ;; forgemp) seconds=${HALO_TEST_SECONDS:-150} ;; h3forge|h3forgeadhoc|forgepanel) seconds=${HALO_TEST_SECONDS:-130} ;; h3forgeonline) seconds=${HALO_TEST_SECONDS:-230} ;; h3variant) seconds=${HALO_TEST_SECONDS:-150} ;; h3forgeslow|h3forgeskip) seconds=${HALO_TEST_SECONDS:-330} ;; forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold) seconds=${HALO_TEST_SECONDS:-90} ;; esac
+# (dedicatedrace: its maps, or SKIP; about two minutes a game of the cycle:
+# the download, the load, the game and its scores)
+if [ "$mode" = dedicatedrace ]; then
+	race_maps=${HALO_TEST_RACE_MAPS:-}
+	if [ -z "$race_maps" ] || [ ! -d "$race_maps" ]; then
+		echo "SKIP (dedicatedrace): no folder of Custom Edition race maps (HALO_TEST_RACE_MAPS)"
+		exit 0
+	fi
+	race_resources=${HALO_TEST_CE_RESOURCES:-}
+	if [ -z "$race_resources" ]; then
+		race_resources=$race_maps
+		[ -e "$race_resources/bitmaps.map" ] ||
+			race_resources="$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/custom_edition"
+	fi
+	for name in bitmaps sounds loc; do
+		[ -e "$race_resources/$name.map" ] ||
+			{ echo "SKIP (dedicatedrace): no Halo PC $name.map (HALO_TEST_CE_RESOURCES)"; exit 0; }
+	done
+	# the cycle: map:gametype, race and team_race in turn by default
+	race_cycle=${HALO_TEST_RACE_CYCLE:-}
+	if [ -z "$race_cycle" ]; then
+		n=0
+		for file in "$race_maps"/*.map; do
+			name=$(basename "$file" .map)
+			case $name in bitmaps|sounds|loc) continue ;; esac
+			[ "$n" -ge 3 ] && break
+			gametype=race; [ $((n % 2)) = 1 ] && gametype=team_race
+			race_cycle="$race_cycle $name:$gametype"
+			n=$((n + 1))
+		done
+	fi
+	set -- $race_cycle
+	[ $# -ge 1 ] || { echo "SKIP (dedicatedrace): no race maps in $race_maps"; exit 0; }
+	seconds=${HALO_TEST_SECONDS:-$((90 + $# * (60 * ${HALO_TEST_RACE_MINUTES:-2} + 60)))}
+	set -- "$mode"
+fi
 rejoin=${HALO_TEST_REJOIN:-0}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_netns_test.$$}
 . "$here/test_out.sh"
@@ -3881,7 +3947,7 @@ solo)
 	echo "seconds of solo game logged: $ticks"
 	[ "$ticks" -ge 30 ] || fail "the solo game ran $ticks s"
 	;;
-dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|dedicatedcoop|dedicatedmulti|dedicatedfullcache|dedicatedreload|scoreboard|pings|pingsmixed|mapmid|mapmidmixed|swat|swatmixed)
+dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|dedicatedcoop|dedicatedmulti|dedicatedfullcache|dedicatedreload|scoreboard|pings|pingsmixed|mapmid|mapmidmixed|swat|swatmixed|dedicatedrace)
 	server=${HALO_TEST_SERVER:-$root/build/linux/halo-server}
 	if [ "$mode" = swatmixed ]; then
 		vita_old=${HALO_TEST_VITA_OLD:-}
@@ -3908,6 +3974,28 @@ dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|p
 		}
 		HALO_TEST_DATA_HOST=$(maps_folder server with)
 		export HALO_TEST_SERVER_ENV="${HALO_TEST_SERVER_ENV:-} HALO_CUSTOM_EDITION=1 ${HALO_TEST_MAPMID_RATE_KB:+HALO_MAP_SHARE_INGAME_RATE_KB=$HALO_TEST_MAPMID_RATE_KB}"
+	fi
+	if [ "$mode" = dedicatedrace ]; then
+		# race_maps_folder NAME [with]: NAME's own maps folder ($out/maps-NAME):
+		# the game's maps and Halo PC's resource maps, and the race maps with
+		# "with" (a joiner's downloads go in its own)
+		race_maps_folder() {
+			local d=$out/maps-$1 f entry
+			mkdir -p "$d/maps"
+			for f in "$data"/maps/*.map; do ln -sfn "$(readlink -f "$f")" "$d/maps/$(basename "$f")"; done
+			for f in bitmaps sounds loc; do ln -sfn "$(readlink -f "$race_resources/$f.map")" "$d/maps/$f.map"; done
+			if [ "${2:-}" = with ]; then
+				for entry in $race_cycle; do
+					ln -sfn "$(readlink -f "$race_maps/${entry%%:*}.map")" "$d/maps/${entry%%:*}.map"
+				done
+			fi
+			echo "$d"
+		}
+		HALO_TEST_DATA_HOST=$(race_maps_folder server with)
+		# (PC maps on as the official servers have them: config.toml, which the
+		# server completes with its other settings)
+		mkdir -p "$out/server/data"
+		printf '[game]\ncustom_edition = true\n' > "$out/server/data/config.toml"
 	fi
 	[ -x "$server" ] || { echo "$mode needs the dedicated server (ninja linux-server, HALO_TEST_SERVER)"; exit 2; }
 	if [ "$mode" = pingsmixed ]; then
@@ -4154,6 +4242,24 @@ sv_postgame 5
 sv_end_empty 20
 sv_port 2302
 INIT
+	fi
+	# (dedicatedrace: the Custom Edition race maps' cycle, downloads allowed)
+	if [ "$mode" = dedicatedrace ]; then
+		{
+			echo 'sv_name "Netns Race"'
+			echo "sv_maxplayers 12"
+			echo "sv_public 1"
+			for entry in $race_cycle; do echo "sv_mapcycle_add ${entry%%:*} ${entry#*:}"; done
+			echo "sv_timelimit ${HALO_TEST_RACE_MINUTES:-2}"
+			echo "sv_minplayers 1"
+			echo "sv_starting_weapons map"
+			echo "sv_start_delay 5"
+			echo "sv_postgame 5"
+			echo "sv_end_empty 20"
+			echo "sv_map_download 1"
+			[ "${HALO_TEST_RACE_SPAWN_VEHICLE:-1}" = 1 ] || echo "sv_race_spawn_vehicle 0"
+			echo "sv_port 2302"
+		} > "$out/server/data/init.txt"
 	fi
 	[ "${HALO_TEST_SERVER_PUBLIC:-0}" = 1 ] && echo "sv_public_address 10.10.1.2:2302" >> "$out/server/data/init.txt"
 	# (HALO_TEST_SERVER_INIT: another init.txt, e.g. one map for measuring)
@@ -5236,6 +5342,170 @@ CHECK
 			done
 		fi
 		;;
+	dedicatedrace)
+		# (the seconds a copy, its log in $1, played with another player in the game)
+		played() { grep -a "network test: tick" "$1" | grep -a "| playing" | grep -aEc "player [0-9]+:.* player [0-9]+:"; }
+		# the joiners: the resource maps, none of the race maps; the first by
+		# the code with PC maps on, the second from the server browser with
+		# them off (the question turns them on)
+		side r1 10.10.71 192.168.71
+		side r2 10.10.72 192.168.72
+		copy_data_racer1=$(race_maps_folder racer1)
+		copy_data_racer2=$(race_maps_folder racer2)
+		run_copy racer1 "$r1_machine" "${HALO_TEST_VITA_JOINER:-$vita}" "$cpu_b" HALO_NET_ONLINE=true \
+			HALO_NETWORK_TEST=join-code:$code HALO_NET_PLAYER_NAME=Racer1 HALO_CUSTOM_EDITION=1 \
+			HALO_MAP_SHARE_ANSWER=yes HALO_NETWORK_TEST_RETRY=10 HALO_TEST_INPUT=bot:2 HALO_EXIT_AFTER=$((seconds - 10))
+		race_pids=$last_pid
+		sleep "${HALO_TEST_RACE_STAGGER:-45}"
+		run_copy racer2 "$r2_machine" "${HALO_TEST_RACE_JOINER2:-${HALO_TEST_VITA_JOINER:-$vita}}" "$cpu_c" HALO_NET_ONLINE=true \
+			HALO_NETWORK_TEST=join-public "HALO_NETWORK_TEST_PUBLIC_NAME=Netns Race" HALO_NET_PLAYER_NAME=Racer2 \
+			HALO_MAP_SHARE_ANSWER=yes HALO_NETWORK_TEST_RETRY=10 HALO_TEST_INPUT=bot:3 HALO_EXIT_AFTER=$((seconds - 30))
+		race_pids="$race_pids $last_pid"
+		# (the server's census every 10 s while the copies play: its vehicles,
+		# and which a player rides; every 40 s a joiner's player killed, in
+		# turn, to spawn again: in a vehicle again, the last one taken away)
+		(
+			for i in $(seq 1 $(((seconds - 30) / 10))); do
+				sleep 10
+				echo sv_items >&"$console_fd" 2>/dev/null || exit 0
+				[ $((i % 4)) = 0 ] && { echo "sv_kill Racer$((i / 4 % 2 + 1))" >&"$console_fd" 2>/dev/null || exit 0; }
+			done
+		) & census_pid=$!; pids="$pids $census_pid"
+		wait $race_pids 2>/dev/null
+		kill "$census_pid" 2>/dev/null; wait "$census_pid" 2>/dev/null
+		kill -TERM "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
+		echo "--- server"; grep -aE "^server: (hosting|the game|player|cycle|map)" "$sl" | head -30
+		grep -aE "map share: (sending|'.*' sent)" "$sd" | head -12
+		# every game of the cycle the run reached: started on the server, and
+		# downloaded, checked, loaded and played by both joiners
+		reached=0 first=1
+		for entry in $race_cycle; do
+			# (the server and the joiners name a map in lowercase, as the game's
+			# file layer finds it)
+			map=$(echo "${entry%%:*}" | tr 'A-Z' 'a-z') gametype=${entry#*:}
+			if ! grep -aq "^server: the game starts: $gametype on $map" "$sl"; then
+				[ "$first" = 1 ] && fail "the server never started $gametype on $map"
+				echo "($gametype on $map: not reached in the run)"
+				continue
+			fi
+			first=0 reached=$((reached + 1))
+			for name in racer1 racer2; do
+				d=$out/$name/data/debug.txt l=$out/$name/run.log
+				received=$(grep -a "map share: '$map' received: " "$d" | head -1 | sed 's/.*received: //')
+				echo "$name, $map: ${received:-not received}"
+				grep -aq "map share: '$map' verified" "$d" || { fail "$name did not download and check $map"; continue; }
+				memory=$(sed -n "/custom edition: loading 'd:.maps.$map.map'/,/custom edition: loaded: /{s/.*custom edition: loaded: //p}" "$d" | head -1)
+				echo "$name, $map loaded: ${memory:-?}"
+				[ -n "$memory" ] || fail "$name did not load $map"
+			done
+		done
+		echo "games of the cycle reached: $reached"
+		# the vehicles: every game of the cycle has some on the server (its
+		# census), and the joiners see them (their own census: the betas'
+		# too); with sv_race_spawn_vehicle (on by default, HALO_TEST_RACE_SPAWN_VEHICLE=0
+		# off) each joiner's player spawns as a vehicle's driver: riding within
+		# its first seconds of a life, on its own screen and on the server
+		python3 - "$sl" "$out" "${HALO_TEST_RACE_SPAWN_VEHICLE:-1}" $race_cycle <<'CHECK' || fail "the race's vehicles (above)"
+import re, sys
+server_log, out, spawn_vehicle = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
+cycle = [entry.split(":")[0].lower() for entry in sys.argv[4:]]
+bad = []
+# the server: its games, each with its census's vehicles and riding players
+games, game = [], None
+for line in open(server_log, errors="replace"):
+    m = re.match(r"server: the game starts: (\S+) on ([^,\s]+)", line)
+    if m:
+        game = {"gametype": m.group(1), "map": m.group(2), "vehicles": [], "kinds": "", "riding": set(), "drivers": set(), "players": set()}
+        games.append(game)
+    if not game:
+        continue
+    m = re.match(r"server: vehicles: (\d+)(.*)", line)
+    if m:
+        game["vehicles"].append(int(m.group(1)))
+        if int(m.group(1)) >= max(game["vehicles"]):
+            game["kinds"] = m.group(2).strip()
+    m = re.match(r"server: player #\d+ (\S+): (shield|dead)", line)
+    if m:
+        game["players"].add(m.group(1))
+        if "; riding " in line:
+            game["riding"].add(m.group(1))
+            if "(driver)" in line:
+                game["drivers"].add(m.group(1))
+for g in games:
+    most = max(g["vehicles"]) if g["vehicles"] else None
+    print("server, %s on %s: census %d times, vehicles %s, at most %s (%s); players riding %s, driving %s" % (
+        g["gametype"], g["map"], len(g["vehicles"]), " ".join(map(str, g["vehicles"])), most, g["kinds"] or "none",
+        ",".join(sorted(g["riding"])) or "none", ",".join(sorted(g["drivers"])) or "none"))
+    # (no pile-up: the vehicles players spawned in and left are taken away)
+    if len(g["vehicles"]) >= 3 and most > g["vehicles"][0] + 2:
+        bad.append("vehicles piled up in %s on %s: %s" % (g["gametype"], g["map"], g["vehicles"]))
+    if len(g["vehicles"]) >= 3 and not most:
+        bad.append("no vehicles on the server in %s on %s" % (g["gametype"], g["map"]))
+    if spawn_vehicle and len(g["vehicles"]) >= 3 and g["players"] and not g["drivers"]:
+        bad.append("no player drove a vehicle in %s on %s (sv_race_spawn_vehicle)" % (g["gametype"], g["map"]))
+# the joiners: their census of vehicles (as they have them), and their own
+# player's lives: riding within the first 3 s of each
+for name in ("racer1", "racer2"):
+    seen, censuses = 0, 0
+    lives = riding_lives = riding_seconds = alive_seconds = 0
+    life = None
+    for line in open("%s/%s/run.log" % (out, name), errors="replace"):
+        m = re.search(r"network test: vehicles at tick \d+: (.*)", line)
+        censuses += m is not None
+        if m and m.group(1).strip() != "none":
+            seen = max(seen, sum(int(n) for n in re.findall(r"\) (\d+)", m.group(1))))
+        if "network test: tick" not in line:
+            continue
+        if "| playing" not in line:
+            life = None
+            continue
+        m = re.search(r"\| local (\d+) ", line)
+        if not m:
+            continue
+        me = m.group(1)
+        m = re.search(r" player %s: (dead|\([^)]*\) \S+( riding)?)" % me, line)
+        if not m or m.group(1) == "dead":
+            life = None
+            continue
+        alive_seconds += 1
+        riding = m.group(2) is not None
+        riding_seconds += riding
+        if life is None:
+            life = {"seconds": 0, "riding": False}
+            lives += 1
+        life["seconds"] += 1
+        if life["seconds"] <= 3 and riding and not life["riding"]:
+            life["riding"] = True
+            riding_lives += 1
+    print("%s: saw at most %s vehicles; %d lives, %d riding within 3 s of the spawn; %d of %d s alive riding" % (
+        name, seen if censuses else "? (no census: a beta's build)", lives, riding_lives, riding_seconds, alive_seconds))
+    if censuses and not seen:
+        bad.append("%s saw no vehicle" % name)
+    if spawn_vehicle and (not lives or riding_lives * 4 < lives * 3):
+        bad.append("%s spawned riding in %d of %d lives (sv_race_spawn_vehicle)" % (name, riding_lives, lives))
+for b in bad:
+    print("FAIL: " + b)
+sys.exit(1 if bad else 0)
+CHECK
+		for name in racer1 racer2; do
+			l=$out/$name/run.log d=$out/$name/data/debug.txt
+			n=$(played "$l")
+			riding=$(grep -a "network test: tick" "$l" | grep -a "| playing" | grep -ac " riding")
+			echo "$name: $n s playing with another player ($riding s with a player riding a vehicle)"
+			[ "$n" -ge 40 ] || fail "$name played with another player for $n s (40 wanted)"
+			# (a download the game's end cut off, or a join in its first
+			# seconds, is refused and joined again: said; anything else fails)
+			grep -a "Halo: custom map:" "$l" | grep -av "Halo: custom map: \(Downloading\|Checking the part\)" |
+				sort | uniq -c | sed "s/^/$name: /"
+			grep -a "Halo: custom map:" "$l" | grep -av "Halo: custom map: \(Downloading\|Checking the part\)" |
+				grep -avq "the host's game had already started" && fail "$name was told it could not play a map"
+			grep -aq "XLaunchNewImage" "$l" && fail "$name went to the dashboard"
+		done
+		grep -aq "map share: PC maps turned on" "$out/racer2/data/debug.txt" || fail "racer2's PC maps were not turned on with the download"
+		grep -aq 'network test: the public games list "Netns Race" \[dedicated\]' "$out/racer2/run.log" ||
+			fail "the server browser did not list the race server"
+		sed '/exiting after debug.exit_after/q' "$sl" | grep -aq "lost the connection" && fail "the server lost a player's connection"
+		;;
 	dedicatedfullcache)
 		# (both joiners' cache files filled at once, then checked here: the
 		# prefill's own check runs in its subshell)
@@ -6311,7 +6581,7 @@ forge|forge3|forgemp|forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeo
 	forge_case
 	;;
 *)
-	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold" >&2
+	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold" >&2
 	exit 2
 	;;
 esac

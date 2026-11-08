@@ -188,10 +188,14 @@ static struct
 	cycle with bots alone, two slots free all the time: it never looks
 	empty); 0, only while people are in */
 	boolean bots_when_empty;
+	/* sv_race_spawn_vehicle: a race's players spawn in a vehicle
+	(race_vehicles.c) */
+	boolean race_spawn_vehicle;
 	struct join_address joins[MAXIMUM_JOIN_ADDRESSES];
 } dedicated =
 {
 	.minimum_players = 1,
+	.race_spawn_vehicle = TRUE,
 	.start_delay = 10,
 	.postgame_seconds_setting = 10,
 	.end_empty_seconds = 30,
@@ -610,6 +614,7 @@ static void command_help(
 		"                                   sv_bots_fill, never past its even total",
 		"  drop_bot [n], drop_bot_red, drop_bot_blue  a bot fewer (of that team)",
 		"  bots_reset                       the bots added or dropped by hand forgotten: the fill's again",
+		"  sv_race_spawn_vehicle <0|1>      race, team_race: players spawn driving a vehicle (1)",
 		"  sv_port <port>                   internet play's UDP port (init.txt only; -port)",
 		"  sv_game_port <port>              the game's ports on this machine, <port> and the next",
 		"                                   (init.txt only; -gameport; default 5150 for sv_port 2302,",
@@ -620,6 +625,7 @@ static void command_help(
 		"  sv_players, sv_status            the players (#, name, address); the server",
 		"  sv_items                         the game's weapons and equipment; the players' weapons, shields",
 		"  sv_kick <#|name>                 drops a player (they may join again)",
+		"  sv_kill <#|name>                 kills a player's unit (# of sv_items); it respawns",
 		"  sv_ban <#|name>                  drops a player and bans their address and hardware id",
 		"  sv_ban_ip <a.b.c.d>              bans an address",
 		"  sv_banlist, sv_unban <#>         bans.txt's bans; takes one out",
@@ -853,6 +859,15 @@ static void command_items(
 						tag_get_name(object_get(weapon_index)->definition_index));
 				}
 			}
+			/* (riding: in which vehicle, which seat, the driver's or not) */
+			if (unit->object.parent_object_index != NONE && unit->unit.parent_seat_index != NONE &&
+				length < (int)sizeof(line))
+			{
+				snprintf(line + length, sizeof(line) - (size_t)length, "; riding %s seat %d%s",
+					tag_get_name(object_get(unit->object.parent_object_index)->definition_index),
+					(int)unit->unit.parent_seat_index,
+					unit_seat_is_driver(unit->object.parent_object_index, unit->unit.parent_seat_index) ? " (driver)" : "");
+			}
 			say("%s", line);
 		}
 	}
@@ -989,6 +1004,59 @@ static void command_drop(
 		if (ban ? network_game_server_ban_player(name) : network_game_server_kick_player(name))
 			say("%s %s", ban ? "banned" : "kicked", name);
 	}
+}
+
+/* damage.c's */
+void damage_kill_object_for_player(long object_index, long player_index);
+
+/* kills a player's unit (its number in sv_items' list, or its name): a
+player stuck in a race, say; it respawns as the gametype has it */
+static void command_kill(
+	char const *argument)
+{
+	struct data_iterator iterator;
+	struct player_datum *player;
+	char wanted[64];
+	char *end;
+	long number = NONE;
+	long killed = 0;
+
+	if (!argument || !argument[0])
+	{
+		say("sv_kill: give a player's number (sv_items) or name");
+		return;
+	}
+	if (!game_engine_running() || server_state() != _server_ingame)
+	{
+		say("sv_kill: only in a game");
+		return;
+	}
+	number = strtol(argument, &end, 10);
+	if (*end || argument[0] == '-')
+		number = NONE;
+	unquoted(wanted, sizeof(wanted), argument);
+	data_iterator_new(&iterator, player_data);
+	while ((player = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
+	{
+		char name[16];
+		long index;
+
+		for (index = 0; index < (long)sizeof(name) - 1 && index < 12 && player->name[index]; index++)
+			name[index] = player->name[index] >= 32 && player->name[index] < 127 ? (char)player->name[index] : '?';
+		name[index] = 0;
+		if (number != NONE ? DATUM_INDEX_TO_ABSOLUTE_INDEX(iterator.datum_index) != number : csstrcasecmp(name, wanted))
+			continue;
+		if (player->unit_index == NONE || !unit_try_and_get(player->unit_index))
+		{
+			say("sv_kill: %s is dead already", name);
+			return;
+		}
+		damage_kill_object_for_player(player->unit_index, NONE);
+		say("killed player #%ld %s", (long)DATUM_INDEX_TO_ABSOLUTE_INDEX(iterator.datum_index), name);
+		killed++;
+	}
+	if (!killed)
+		say("sv_kill: no player %s in the game", argument);
 }
 
 /* an integer setting's argument within its bounds: FALSE (said) if not */
@@ -1383,6 +1451,15 @@ static void command(
 			say(value ? "joiners may download the cycle's custom maps (in the lobby)" : "no map downloads");
 		}
 	}
+	else if (!csstrcmp(name, "sv_race_spawn_vehicle"))
+	{
+		if (integer_argument(name, argument, 0, 1, &value))
+		{
+			dedicated.race_spawn_vehicle = (boolean)value;
+			race_vehicles_set_spawn_in_vehicle(dedicated.race_spawn_vehicle);
+			say(value ? "race: players spawn driving a vehicle" : "race: players spawn on foot (the game's own race vehicles)");
+		}
+	}
 	else if (!csstrcmp(name, "sv_port") || !csstrcmp(name, "sv_public_address") || !csstrcmp(name, "sv_relay") ||
 		!csstrcmp(name, "sv_game_port") || !csstrcmp(name, "sv_map_cache"))
 	{
@@ -1396,6 +1473,8 @@ static void command(
 		command_items();
 	else if (!csstrcmp(name, "sv_status") || !csstrcmp(name, "status"))
 		command_status();
+	else if (!csstrcmp(name, "sv_kill"))
+		command_kill(argument);
 	else if (!csstrcmp(name, "sv_kick"))
 		command_drop(argument ? rest_of_line(line) : NULL, FALSE);
 	else if (!csstrcmp(name, "sv_ban"))
@@ -1599,6 +1678,8 @@ void dedicated_server_update(
 			getenv("HALO_NET_TUNNEL_PORT") ? getenv("HALO_NET_TUNNEL_PORT") : "(any)", game_ports_text(),
 			p2p_game_ports_moved() ? " (Vitas on the LAN find only a server on 5150: this one by code or "
 			"the server browser)" : "");
+		/* (on by default here: init.txt's sv_race_spawn_vehicle 0 turns it off) */
+		race_vehicles_set_spawn_in_vehicle(dedicated.race_spawn_vehicle);
 		file = dedicated_platform_command_file(&found);
 		say(found ? "commands from %s" : "no %s: the defaults (Blood Gulch slayer, public)", file);
 		while (dedicated_platform_next_command(line, sizeof(line), &from_file))

@@ -569,8 +569,14 @@ changed:
   game type by default and let any vehicle be created
   (`custom_edition_objects.c`, called from `object_types_place_all` and
   `game_engine_remap_vehicle` under `HALO_LINUX`); a variant without
-  vehicles still has none, and race, which has no spawn flag, keeps this
-  build's rule.
+  vehicles still has none. Race has no spawn flag: a Custom Edition map's
+  race places every placement that any game type places by default, of
+  every type (as the PC vehicle set does), and its start leaves them, where
+  the Xbox game's took every vehicle away and made Warthogs only for the
+  players in the game two ticks in, at the race vehicle flags
+  (`game_engine_race.c`; a dedicated server's players come in later and had
+  none). A dedicated server's race also spawns each player driving a vehicle
+  (`race_vehicles.c`, `sv_race_spawn_vehicle`).
 - **Multiplayer vehicles.** `game_engine_predict_resources` takes the three
   multiplayer vehicles Xbox globals always have; `beavercreek_halo3.yelo` has
   one, and oddball stopped on it. With fewer than three, the native builds
