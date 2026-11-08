@@ -40,6 +40,9 @@ boolean network_game_client_join_first_available_game(
 #ifdef HALO_LINUX
 void const *network_game_client_listed_game_of(
 	unsigned char const *host);
+/* port: the listed game of that host when it is full, or NULL */
+void const *network_game_client_listed_full_game_of(
+	unsigned char const *host);
 #endif
 short network_game_client_listed_game_count(
 	void);

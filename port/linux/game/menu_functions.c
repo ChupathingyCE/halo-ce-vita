@@ -16397,6 +16397,55 @@ void menu_functions_open_system_link(void)
 	menu_functions.open_system_link = TRUE;
 }
 
+/* (system_link_shortcut.c: the settings panel's join a game) Menu style
+Halo 3: the Halo 3 games browser at the next frame, as any join opens it
+(h3_join_browser_open: one screen, never the System Link screen's history,
+which the live background's fade cuts short); TRUE. Else FALSE: the System
+Link screen as before */
+int menu_functions_panel_join_open(void)
+{
+	if (!halo_menu_style_halo3())
+		return FALSE;
+	menu_functions.open_system_link = TRUE;
+	return TRUE;
+}
+
+/* (friends_game.c, debug: HALO_TEST_FRIENDS_JOIN=code:FILE) the code typed
+on JOIN WITH CODE and its A pressed (code_join): TRUE */
+int menu_functions_code_test_join(char const *code)
+{
+#ifndef HALO_RELEASE
+	snprintf(menu_functions.code, sizeof(menu_functions.code), "%.12s", code);
+	platform_log("menus: test: JOIN WITH CODE %s, A", menu_functions.code);
+	code_join();
+	return TRUE;
+#else
+	(void)code;
+	return FALSE;
+#endif
+}
+
+/* (friends_game.c, debug: HALO_TEST_FRIENDS_JOIN=menu) the first friend whose
+game is joinable joined as Cross on their row of FRIENDS joins it
+(h3_friends_do, the Halo 3 and Classic+ lists' own): TRUE when one was */
+int menu_functions_friends_test_join(void)
+{
+#ifndef HALO_RELEASE
+	static struct p2p_friend_entry entries[P2P_FRIEND_ENTRIES_MAXIMUM];
+	int count = p2p_friends_list(entries, P2P_FRIEND_ENTRIES_MAXIMUM), index;
+
+	for (index = 0; index < count; index++)
+	{
+		if (entries[index].kind != P2P_FRIEND_KIND_FRIEND || !entries[index].joinable)
+			continue;
+		platform_log("menus: test: FRIENDS, Cross on %s (%s)", entries[index].name, entries[index].activity);
+		h3_friends_do(&entries[index], P2P_FRIENDS_JOIN);
+		return TRUE;
+	}
+#endif
+	return FALSE;
+}
+
 /* (map_share.c: a join refused - the host's map not sent, the game under
 way -, the message shown) Menu style Halo 3: back to the games browser, with
 the message, rather than at the main menu */
@@ -18030,7 +18079,9 @@ static struct
 	unsigned long others_checked_time;
 	/* (ONLINE) the lobby's waiting for the player said (the tests read it) */
 	boolean said_local;
-} h3_live = { FALSE, NONE, FALSE, FALSE, FALSE, 0, 0, "", FALSE, "", FALSE, FALSE, FALSE, FALSE, 0, FALSE };
+	/* not hosted for a join of another's game under way: said */
+	boolean said_joining;
+} h3_live = { FALSE, NONE, FALSE, FALSE, FALSE, 0, 0, "", FALSE, "", FALSE, FALSE, FALSE, FALSE, 0, FALSE, FALSE };
 
 /* the network of the lobby whose game it is: the multiplayer lobby's, or
 the Forge lobby's own NETWORK */
@@ -18338,6 +18389,41 @@ static void h3_live_open(void)
 		h3_live_gametype_name(), h3_live_map_name());
 }
 
+/* whether this machine joins another's game now: a join's screen asked for
+(open_system_link), a public game's invite watched, a friend's game opened
+with its password, internet play's join (p2p_join_under_way: its invite
+being looked up, its host being reached, or reached with its game not yet
+joined from the list), or a friend's or a party's invite asked about (its
+Accept joins) */
+static boolean h3_live_join_under_way(void)
+{
+	/* (friends_game.c's: a friend's invite or a party's asked about now) */
+	extern int friends_game_question_pending(void);
+
+	return menu_functions.open_system_link || menu_functions.join_watched || h3_friends_password.watching ||
+		p2p_join_under_way() || friends_game_question_pending();
+}
+
+/* (friends_game.c: the party's follow) this machine's own Halo 3 live lobby
+up, its game still in its lobby with no other machine in it: left for the
+follow's join as BROWSE GAMES leaves it (h3_join_browser_open closes it) -
+a member's lobby hosted for its friends online would otherwise hold the
+follow until the member backed out by hand */
+int menu_functions_h3_live_alone(void)
+{
+	struct network_game_server *server = global_network_game_server_get();
+	struct network_game_client *client = global_network_game_client_get();
+	struct network_game *game;
+
+	if (!h3_live.live || h3_live.start_pending || h3_live.in_pregame || !server || !client ||
+		!network_game_server_port_in_lobby(server))
+	{
+		return FALSE;
+	}
+	game = network_game_client_get_game(client);
+	return game && game->machine_count <= 1;
+}
+
 /* (ONLINE, the lobby not live) whether someone could join its game from
 their own menus, so that it is hosted before the player asks: a friend
 online (the one-press join from their FRIENDS needs a game: the presence's
@@ -18356,7 +18442,9 @@ static boolean h3_live_others_could_join(void)
 
 		h3_live.others_checked_time = now ? now : 1;
 		p2p_friends_count(&online);
-		could = online > 0 || p2p_party_members(party, P2P_PARTY_MAXIMUM) > 1;
+		/* (the party's: while this machine leads it - a member follows the
+		leader's game, its own lobby hosting nothing for it) */
+		could = online > 0 || (p2p_party_members(party, P2P_PARTY_MAXIMUM) > 1 && p2p_party_leading());
 		if (could != h3_live.others_could_join)
 		{
 			h3_live.others_could_join = could;
@@ -18715,6 +18803,20 @@ static void h3_live_update(boolean main_menu_loaded)
 	{
 		return;
 	}
+	/* (a join of another's game under way - its invite handed on, its host
+	being reached or reached and its game not yet joined: a friend's, an
+	invite's, the party's follow, a code's -: nothing hosted meanwhile, which
+	would take the join's place) */
+	if (h3_live_join_under_way())
+	{
+		if (!h3_live.said_joining)
+		{
+			h3_live.said_joining = TRUE;
+			platform_log("menus: h3 live lobby: not hosted: this machine joins another's game");
+		}
+		return;
+	}
+	h3_live.said_joining = FALSE;
 	/* (ONLINE: when the player asks for it, or someone could join it) */
 	if (H3_LIVE_NETWORK == _h3_network_online && !h3_live.wanted && !h3_live_others_could_join())
 	{
@@ -22164,6 +22266,41 @@ static void h3_adhoc_go_on(void)
 	}
 }
 
+/* (Menu style Halo 3: a join's invite handed on - a friend's game, an invite
+accepted, the party's follow, a code, a public game -) the Halo 3 games
+browser in the System Link list's place, where the host's game is joined once
+listed, as A on its row (menu_functions_lan_join_listed): SELECT PROFILE
+(the profile chosen before: not asked again), then the browser, the main menu
+behind it. One screen, opened as one: the System Link screen's history
+(main menu, Multiplayer, its profile) is not loaded first, as the Xbox's
+screens are - the Multiplayer screen is the Halo 3 lobby, whose live
+background's camera fades (menu_functions_screen_open_deferred): the chain
+stopped there, the lobby opened by itself and hosted a game of the joiner's
+own for its friends online, and the join was lost (1.1.2, Nov 4 2026). The
+joiner's own live lobby closed first, as BROWSE GAMES closes it. FALSE: a
+screen opening at black meanwhile, tried again at the next frame (one
+deferred open at a time) */
+static boolean h3_join_browser_open(void)
+{
+	long main_menu = tag_loaded(UI_WIDGET_DEFINITION_TAG, "ui\\shell\\main_menu\\main_menu");
+
+	if (h3_scenes.open_pending)
+		return FALSE;
+	h3_live_close("the player joins another's game");
+	menu_functions.create_pending = FALSE;
+	menu_functions.browse_lan_pending = TRUE;
+	if (main_menu != NONE && (ui_widget_load_by_name_or_tag(profiles_screen, NONE, NULL, NONE, main_menu, NONE, NONE) ||
+		h3_scenes.open_pending))
+	{
+		platform_log("menus: h3 join: the games browser next, where the host's game is joined once listed%s",
+			h3_scenes.open_pending ? " (opening at black)" : "");
+		return TRUE;
+	}
+	menu_functions.browse_lan_pending = FALSE;
+	platform_log("menus: the System Link screen did not open");
+	return TRUE;
+}
+
 /* (each frame, the main loop) the screens the functions asked for, opened
 outside the widgets' own events */
 /* ---- the mouse on the ElDewrito screens (source/interface/ui_widget.c's
@@ -22540,17 +22677,17 @@ while it closes: browser dispose) */
 	h3_fsfriends_main_loop();
 	if (menu_functions.open_system_link)
 	{
-		menu_functions.open_system_link = FALSE;
-		/* (Menu style Halo 3: the Halo 3 games browser in the System Link
-		list's place, where the host's game is joined once listed, as A on
-		its row: menu_functions_lan_join_listed; no Xbox screen) */
+		/* (Menu style Halo 3: the Halo 3 games browser, where the host's game
+		is joined once listed: h3_join_browser_open; it waits for a screen
+		opening at black first) */
 		if (halo_menu_style_halo3())
+			menu_functions.open_system_link = !h3_join_browser_open();
+		else
 		{
-			menu_functions.create_pending = FALSE;
-			menu_functions.browse_lan_pending = TRUE;
+			menu_functions.open_system_link = FALSE;
+			if (!system_link_shortcut_open())
+				platform_log("menus: the System Link screen did not open");
 		}
-		if (!system_link_shortcut_open())
-			platform_log("menus: the System Link screen did not open");
 	}
 	if (menu_functions.open_system_link_list)
 	{

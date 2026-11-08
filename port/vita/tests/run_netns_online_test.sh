@@ -288,6 +288,8 @@
 #            readiness, hits and Discord user (which the host takes only
 #            over its connection). Both must drop them (logged), and the
 #            joiner's player go on moving on the host
+#   presence, presence2b  how soon friends' presence shows (online, a lobby, a game, offline);
+#            presence2b with two brokers, each machine on another one first (see the case)
 #   friends  friends (port/linux/src/p2p_friends.c): each copy writes its friend
 #            code to a file (HALO_TEST_FRIENDS code-file=), the host types the
 #            joiner's (add-file=), the joiner accepts; both must be friends,
@@ -981,6 +983,8 @@ case $mode in lan|adhoc|h3lan|h3adhoc) export HALO_TEST_ENV_host="HALO_BOTS_ONLI
 [ "$mode" = coopstarts ] && seconds=${HALO_TEST_SECONDS:-75}
 [ "$mode" = party ] && seconds=${HALO_TEST_SECONDS:-210}
 [ "$mode" = partyfollow ] && seconds=${HALO_TEST_SECONDS:-210}
+[ "$mode" = partyleave ] && seconds=${HALO_TEST_SECONDS:-160}
+[ "$mode" = friendsremove ] && seconds=${HALO_TEST_SECONDS:-150}
 [ "$mode" = friendsbackup ] && seconds=${HALO_TEST_SECONDS:-200}
 case $mode in fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsbad) seconds=${HALO_TEST_SECONDS:-130} ;; fsrefuse) seconds=${HALO_TEST_SECONDS:-150} ;; esac
 [ "$mode" = chat ] && seconds=${HALO_TEST_SECONDS:-250}
@@ -1004,7 +1008,7 @@ fi
 [ "$mode" = h3livebots ] && seconds=${HALO_TEST_SECONDS:-110}
 [ "$mode" = h3liveagain ] && seconds=${HALO_TEST_SECONDS:-280}
 # (network Forge: netns_forge_cases.sh)
-case $mode in forge) seconds=${HALO_TEST_SECONDS:-110} ;; forge3) seconds=${HALO_TEST_SECONDS:-125} ;; forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeold111|forgeflagwarn|forgephase|forgerider) seconds=${HALO_TEST_SECONDS:-80} ;; forgelate112) seconds=${HALO_TEST_SECONDS:-180} ;; forgemp) seconds=${HALO_TEST_SECONDS:-150} ;; h3forge|h3forgeadhoc|forgepanel) seconds=${HALO_TEST_SECONDS:-130} ;; h3forgeonline) seconds=${HALO_TEST_SECONDS:-230} ;; h3variant) seconds=${HALO_TEST_SECONDS:-150} ;; h3forgeslow|h3forgeskip) seconds=${HALO_TEST_SECONDS:-330} ;; forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold) seconds=${HALO_TEST_SECONDS:-90} ;; esac
+case $mode in forge) seconds=${HALO_TEST_SECONDS:-110} ;; forge3) seconds=${HALO_TEST_SECONDS:-125} ;; forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeold111|forgeflagwarn|forgephase|forgerider) seconds=${HALO_TEST_SECONDS:-80} ;; forgelate112) seconds=${HALO_TEST_SECONDS:-180} ;; forgemp) seconds=${HALO_TEST_SECONDS:-150} ;; h3forge|h3forgeadhoc|forgepanel) seconds=${HALO_TEST_SECONDS:-130} ;; h3forgeonline) seconds=${HALO_TEST_SECONDS:-230} ;; h3variant) seconds=${HALO_TEST_SECONDS:-150} ;; h3forgeslow|h3forgeskip) seconds=${HALO_TEST_SECONDS:-330} ;; forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold) seconds=${HALO_TEST_SECONDS:-90} ;; friendforge|partyforge|friendmp) seconds=${HALO_TEST_SECONDS:-180} ;; fjoin|fedge) seconds=${HALO_TEST_SECONDS:-130} ;; esac
 # (dedicatedrace: its maps, or SKIP; about two minutes a game of the cycle:
 # the download, the load, the game and its scores)
 if [ "$mode" = dedicatedrace ]; then
@@ -1131,11 +1135,11 @@ side join 10.10.2 192.168.2
 # (infection: three players, a second joiner unless told otherwise)
 [ "$mode" = infection ] && export HALO_TEST_SECOND_JOINER=${HALO_TEST_SECOND_JOINER:-1}
 { [ "${HALO_TEST_SECOND_JOINER:-0}" = 1 ] || [ "$mode" = badmap ] || [ "$mode" = splitscreen ] || [ "$mode" = party ] || [ "$mode" = chat ] ||
-	[ "$mode" = partyfollow ] ||
+	[ "$mode" = partyfollow ] || [ "$mode" = partyleave ] ||
 	[ "$mode" = partyserver ] ||
 	[ "$mode" = hostbots ] || [ "$mode" = h3scoreboard ] ||
 	[ "$mode" = friendsbackup ] || [ "$mode" = fsrefuse ] ||
-	[ "$mode" = h3forgeonline ] || [ "$mode" = vitapc ] || [ "$mode" = vitaonly ] ||
+	[ "$mode" = h3forgeonline ] || [ "$mode" = vitapc ] || [ "$mode" = vitaonly ] || { [ "$mode" = fjoin ] && [ "${FJ_TARGET:-}" = forgegame ]; } || { [ "$mode" = fedge ] && [ "${FJ_EDGE:-full}" = full ]; } ||
 	[ "$mode" = onlinebrowser ] || [ "$mode" = onlinebrowserded ] || [ "$mode" = onlinebrowsertab ]; } &&
 	side join2 10.10.3 192.168.3
 { [ "$mode" = splitscreen ] || [ "$mode" = vitapc ] || [ "$mode" = partyfollow ]; } && side join3 10.10.4 192.168.4
@@ -5832,6 +5836,80 @@ CHECK
 		fail "the server crashed"
 	fi
 	;;
+presence|presence2b)
+	# (how soon a friend's presence shows: the host (Alpha) and the joiner (Bravo) made friends
+	# first (codes through files, 40 s), then both started again, friends already: the time
+	# from each one's "friends: online" to the other's first "is online" line; then the host's
+	# own changes (HALO_TEST_PAD: MULTIPLAYER, its lobby on ONLINE, live - joinable -, then B,
+	# back in the menus), each to the joiner's line saying it; then the host quits: to the
+	# joiner's "went offline". presence2b: two brokers, the host reaching only
+	# the second and the joiner only the first for PRESENCE_SPLIT seconds (30) after the start
+	# again, as two Vitas whose first brokers came at different times (1.1.2, Nov 4 2026: one
+	# of two friends showed online only after a while))
+	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	hc=$out/host.code jc=$out/joiner.code brokers=198.51.100.1:1883
+	if [ $mode = presence2b ]; then
+		ip addr add 198.51.100.2/32 dev lo
+		python3 "$here/mqtt_test_broker.py" --host 198.51.100.2 --port 1883 > "$out/broker2.log" 2>&1 & pids="$pids $!"
+		brokers=198.51.100.1:1883,198.51.100.2:1883
+	fi
+	for name in host joiner; do
+		mkdir -p "$out/$name/save/u/UDATA/869079979327"
+		[ -r "${HALO_TEST_PROFILE:-}" ] && cp "$HALO_TEST_PROFILE" "$out/$name/save/u/UDATA/869079979327/blam.sav"
+		[ -r "$(dirname "${HALO_TEST_PROFILE:-/}")/SaveMeta.xbx" ] &&
+			cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$out/$name/save/u/UDATA/869079979327/"
+	done
+	all_seconds=$seconds seconds=40
+	HALO_TEST_DATA_HOST=$menus_data run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch \
+		HALO_LOG_TIMES=1 HALO_MENU_STYLE=halo3 HALO_NET_BROKERS=$brokers "HALO_TEST_FRIENDS=code-file=$hc,add-file=$jc"; host_pid=$last_pid
+	HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch \
+		HALO_LOG_TIMES=1 HALO_MENU_STYLE=halo3 HALO_NET_BROKERS=$brokers "HALO_TEST_FRIENDS=code-file=$jc,accept"; join_pid=$last_pid
+	wait $join_pid $host_pid 2>/dev/null
+	for name in host joiner; do mv "$out/$name/run.log" "$out/$name/run-friends.log"; done
+	grep -aq "now friends" "$out/joiner/run-friends.log" || fail "the two did not become friends first"
+	split=${PRESENCE_SPLIT:-30}
+	if [ $mode = presence2b ]; then
+		in_ns "$host_router" iptables -I FORWARD -d 198.51.100.1 -p tcp --dport 1883 -j DROP
+		in_ns "$join_router" iptables -I FORWARD -d 198.51.100.2 -p tcp --dport 1883 -j DROP
+		(sleep "$split"
+			in_ns "$host_router" iptables -D FORWARD -d 198.51.100.1 -p tcp --dport 1883 -j DROP
+			in_ns "$join_router" iptables -D FORWARD -d 198.51.100.2 -p tcp --dport 1883 -j DROP
+			echo "the brokers' split ended at $(python3 -c 'import time; print(time.monotonic())')") &
+	fi
+	seconds=$all_seconds
+	# (the host: at the main menu 50 s; MULTIPLAYER (its lobby opens on ONLINE, online play on):
+	# live, joinable; 30 s; B: the lobby left, back in the menus; quits 25 s before the joiner)
+	pad="wait:150:50000 down:150:700 a wait:150:30000 b wait:150:5000"
+	HALO_TEST_DATA_HOST=$menus_data run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch \
+		HALO_LOG_TIMES=1 HALO_UI_LOG=1 HALO_MENU_STYLE=halo3 HALO_TEST_INPUT=bot:1 HALO_BOTS_ONLINE=full HALO_NET_BROKERS=$brokers \
+		"HALO_TEST_PAD=$pad" HALO_EXIT_AFTER=$((seconds - 25)); host_pid=$last_pid
+	HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch \
+		HALO_LOG_TIMES=1 HALO_MENU_STYLE=halo3 HALO_NET_BROKERS=$brokers; join_pid=$last_pid
+	wait $join_pid $host_pid 2>/dev/null
+	hl=$out/host/run.log jl=$out/joiner/run.log
+	at() { grep -a "$2" "$1" | head -1 | awk '{print $2}'; }
+	after() { grep -a "$2" "$1" | awk -v t="$3" '$2 >= t {print $2; exit}'; }
+	delta() { [ -n "$1" ] && [ -n "$2" ] && awk -v a="$1" -v b="$2" 'BEGIN { printf "%.1f", b - a }' || echo none; }
+	h_on=$(at "$hl" "friends: online (") j_on=$(at "$jl" "friends: online (")
+	j_sees=$(at "$jl" "friends: .* is online: ") h_sees=$(at "$hl" "friends: .* is online: ")
+	later=$h_on; [ -n "$j_on" ] && awk -v a="$j_on" -v b="$h_on" 'BEGIN { exit !(a > b) }' && later=$j_on
+	lobby=$(at "$hl" "menus: h3 live lobby: open on ONLINE") lobby_seen=$(after "$jl" "is online: .*(joinable)" "${lobby:-0}")
+	game=$(at "$hl" "menus: h3 live lobby: closed") game_seen=$(after "$jl" "is online: In the menus$" "${game:-0}")
+	quit=$(at "$hl" "exiting after debug.exit_after") quit_seen=$(after "$jl" "friends: .* went offline" "${quit:-0}")
+	echo "PRESENCE $mode: online both ways after the later one's start: the joiner sees the host $(delta "$later" "$j_sees") s," \
+		"the host sees the joiner $(delta "$later" "$h_sees") s; the lobby $(delta "$lobby" "$lobby_seen") s;" \
+		"back in the menus $(delta "$game" "$game_seen") s; offline $(delta "$quit" "$quit_seen") s"
+	grep -a "friends: \|the brokers' split" "$jl" | grep -av "dropped" | head -20
+	for v in "$j_sees" "$h_sees" "$lobby_seen" "$game_seen" "$quit_seen"; do [ -n "$v" ] || fail "a presence change never showed"; done
+	limit=${PRESENCE_LIMIT:-10}
+	[ $mode = presence2b ] && limit=$((split + 10))
+	for d in "$(delta "$later" "$j_sees")" "$(delta "$later" "$h_sees")"; do
+		[ "$d" = none ] || awk -v d="$d" -v l="$limit" 'BEGIN { exit !(d <= l) }' || fail "a friend showed online only after $d s (at most $limit)"
+	done
+	for d in "$(delta "$lobby" "$lobby_seen")" "$(delta "$game" "$game_seen")" "$(delta "$quit" "$quit_seen")"; do
+		[ "$d" = none ] || awk -v d="$d" 'BEGIN { exit !(d <= 10) }' || fail "a change showed only after $d s (at most 10)"
+	done
+	;;
 friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsprivate|friendsprivatepw)
 	hc=$out/host.code jc=$out/joiner.code
 	host_steps="code-file=$hc,add-file=$jc"
@@ -5935,7 +6013,7 @@ friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|f
 		;;
 	friendsoffline)
 		grep -aq "friends: appearing offline" "$jl" || fail "the joiner did not appear offline"
-		awk '/friends: test: appearing offline/ { found = 1 } found && /friends: Alpha is online/ { seen = 1 }
+		awk '/friends: test: appearing offline/ { found = 1 } found && /friends: [^ ]+ is online/ { seen = 1 }
 			END { exit !seen }' "$jl" || fail "the joiner stopped seeing the host while appearing offline"
 		awk '/friends: .* went offline$/ { gone = 1; next } gone && /friends: .* is online/ { exit 1 }
 			END { exit !gone }' "$hl" || fail "the host did not see the joiner go offline, or saw it online again"
@@ -6281,6 +6359,55 @@ HOSTBOTS
 	for side in host old joiner joiner2; do
 		grep -aq "XLaunchNewImage" "$out/$side/run.log" && fail "$side went to the dashboard"
 	done
+	;;
+friendsremove)
+	# (a friend removed: the host and the joiner friends (codes through files), the host removes
+	# every friend at FRIENDS_REMOVE_AT (60 s): the joiner told, neither lists the other after;
+	# then the joiner adds the host again (its code), the host accepts: friends again)
+	hc=$out/host.code jc=$out/joiner.code
+	run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch HALO_LOG_TIMES=1 \
+		"HALO_TEST_FRIENDS=code-file=$hc,add-file=$jc,remove-at=${FRIENDS_REMOVE_AT:-60},accept"; host_pid=$last_pid
+	(for i in $(seq 1 120); do grep -aq "friends: .* removed this machine from their friends" "$out/joiner/run.log" 2>/dev/null && break; sleep 1; done
+		sleep 5; cp "$hc" "$out/joiner.readd") &
+	run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch HALO_LOG_TIMES=1 \
+		"HALO_TEST_FRIENDS=code-file=$jc,accept,add-file=$out/joiner.readd"; join_pid=$last_pid
+	wait $join_pid $host_pid 2>/dev/null
+	hl=$out/host/run.log jl=$out/joiner/run.log
+	echo "--- host"; grep -a "friends:" "$hl" | grep -av "is online\|dropped" | head -14
+	echo "--- joiner"; grep -a "friends:" "$jl" | grep -av "is online\|dropped" | head -14
+	grep -aq "now friends" "$hl" || fail "the two did not become friends"
+	grep -aq "friends: removed " "$hl" || fail "the host did not remove the joiner"
+	grep -aq "friends: .* removed this machine from their friends" "$jl" || fail "the joiner was not told it was removed"
+	[ "$(grep -ac "now friends" "$jl")" -ge 2 ] || fail "the two did not become friends again after the joiner asked again"
+	;;
+partyleave)
+	# (the party's members coming and going: Alpha makes a party of Bravo and Charlie (as
+	# party, at the menus: no game); Charlie leaves it at PARTY_MEMBER_LEAVE (80 s): Alpha and
+	# Bravo told, two left; then Alpha, the leader, leaves at PARTY_LEADER_LEAVE (120 s): Bravo
+	# leads, and the party is Bravo's alone)
+	hc=$out/host.code jc=$out/joiner.code j2c=$out/joiner2.code add=$out/host.add
+	(for i in $(seq 1 60); do [ -s "$jc" ] && [ -s "$j2c" ] && break; sleep 1; done
+		cat "$jc" "$j2c" > "$add.tmp" 2>/dev/null; mv "$add.tmp" "$add") &
+	run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch HALO_LOG_TIMES=1 \
+		HALO_NET_PLAYER_NAME=Alpha "HALO_TEST_FRIENDS=code-file=$hc,add-file=$add" \
+		"HALO_TEST_PARTY=invite-at=${HALO_TEST_PARTY_INVITE_AT:-40},leave-at=${PARTY_LEADER_LEAVE:-120}"; host_pid=$last_pid
+	run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch HALO_LOG_TIMES=1 \
+		HALO_NET_PLAYER_NAME=Bravo "HALO_TEST_FRIENDS=code-file=$jc,accept" HALO_TEST_PARTY_ANSWER=accept; join_pid=$last_pid
+	run_copy joiner2 "$join2_machine" "$vita" "$cpu_c" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch HALO_LOG_TIMES=1 \
+		HALO_NET_PLAYER_NAME=Charlie "HALO_TEST_FRIENDS=code-file=$j2c,accept" HALO_TEST_PARTY_ANSWER=accept \
+		"HALO_TEST_PARTY=leave-at=${PARTY_MEMBER_LEAVE:-80}"; join2_pid=$last_pid
+	wait $join_pid $join2_pid $host_pid 2>/dev/null
+	hl=$out/host/run.log jl=$out/joiner/run.log j2l=$out/joiner2/run.log
+	for side in host joiner joiner2; do echo "--- $side"; grep -a "party:" "$out/$side/run.log" | head -16; done
+	grep -aq "party: Bravo joined the party" "$hl" && grep -aq "party: Charlie joined the party" "$hl" ||
+		fail "the friends did not join Alpha's party"
+	grep -aq "party: You left" "$j2l" || fail "Charlie did not leave the party"
+	grep -aq "party: Charlie left the party" "$hl" || fail "Alpha was not told Charlie left"
+	grep -aqE "party: Charlie( #[A-Z0-9]{4})? left the party" "$jl" || fail "Bravo was not told Charlie left"
+	grep -aq "party: You left" "$hl" || fail "Alpha did not leave the party"
+	grep -aqE "party: Bravo leads the party now|party: You lead the party now|party: this machine leads" "$jl" ||
+		fail "Bravo did not lead once Alpha left"
+	grep -aq "party: Alpha left the party" "$jl" || fail "Bravo was not told Alpha left"
 	;;
 party)
 	# (the party, p2p_party.h: Alpha (the host) friends with Bravo (joiner) and Charlie
@@ -6637,7 +6764,7 @@ friendsplayers|friendsplayersoff|friendsplayersnone)
 	echo "joiner's seconds with two players playing: $two"
 	[ "$two" -ge 20 ] || fail "the joiner played the host's game for $two s with two players (20 wanted)"
 	;;
-forge|forge3|forgemp|forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold)
+forge|forge3|forgemp|forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|fedge)
 	# network Forge (port/linux/game/forge_net.inc), on the host's LAN (system
 	# link): the host hosts a Forge game of Blood Gulch (the network test's
 	# host:bloodgulch:forge), the joiners join it by the System Link search;
@@ -6661,7 +6788,7 @@ forge|forge3|forgemp|forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeo
 	forge_case
 	;;
 *)
-	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold" >&2
+	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b" >&2
 	exit 2
 	;;
 esac

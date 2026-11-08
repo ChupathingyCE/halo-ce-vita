@@ -739,6 +739,13 @@ struct friends_state
 	int presence_joinable;
 	unsigned char presence_token[P2P_TOKEN_SIZE];
 	int presence_want_reply;
+	/* the brokers ready at the last settle (p2p_signal.c's mask), and a
+	broker ready since this machine's presence went out: it sent again there,
+	its friends asked to answer (a message goes to the brokers ready when it
+	is sent; a friend on a broker that came later heard none of it until the
+	next PRESENCE_INTERVAL, 1.1.2's "online only after a while") */
+	int brokers_ready_mask;
+	int broker_came;
 	int appear_offline;
 
 	struct budget request_budget;
@@ -3363,6 +3370,27 @@ static void handle(int which, const unsigned char *payload, int size)
 /* ---------- the tests' steps (debug) */
 
 #ifndef HALO_RELEASE
+/* (debug: friends_game.c's HALO_TEST_FRIENDS_JOIN=code:FILE) a test's file
+on the host read as it is (the game's own fopen takes Xbox paths): its first
+size - 1 bytes, the count read (0 none) */
+int p2p_friends_test_read_file(const char *path, char *text, int size)
+{
+	FILE *file = fopen(path, "rb");
+	size_t got = 0;
+
+	if (size <= 0)
+		return 0;
+	if (file)
+	{
+		got = fread(text, 1, (size_t)size - 1, file);
+		fclose(file);
+	}
+	text[got] = 0;
+	return (int)got;
+}
+#endif
+
+#ifndef HALO_RELEASE
 /* HALO_TEST_FRIENDS, comma-separated: code-file=PATH (this machine's code
 written there), add-file=PATH (each code in it, once it is there, sent a
 request), accept, decline, block (each request heard), invite-after=S (each
@@ -4329,6 +4357,14 @@ void p2p_friends_outgoing_settle(int ready_mask)
 	int index;
 
 	pthread_mutex_lock(&friends_lock);
+	if (ready_mask & ~friends->brokers_ready_mask)
+		friends->broker_came = 1;
+#ifndef HALO_RELEASE
+	/* (tests: HALO_TEST_FRIENDS_NO_RESEND=1, 1.1.2's way, for the A/B) */
+	if (getenv("HALO_TEST_FRIENDS_NO_RESEND"))
+		friends->broker_came = 0;
+#endif
+	friends->brokers_ready_mask = ready_mask;
 	for (index = friends->outbound_count - 1; index >= 0; index--)
 	{
 		const struct outbound *entry = &friends->outbound[index];
@@ -4544,6 +4580,19 @@ void p2p_friends_update(const struct p2p_friends_host *host)
 		if (!friends->presence_size || !friends->presence_online)
 		{
 			/* (the first since online: friends asked to answer at once) */
+			presence_sign(1, 1);
+			signatures++;
+			friends->activity_changed = 0;
+			friends->broker_came = 0;
+			presence_due_all();
+		}
+		else if (friends->broker_came)
+		{
+			/* (a broker ready since it went out: again, on every broker ready
+			now, the friends asked to answer - theirs may have gone where this
+			machine was not yet) */
+			friends->broker_came = 0;
+			platform_log("friends: a broker ready since this machine's presence went out: sent again");
 			presence_sign(1, 1);
 			signatures++;
 			friends->activity_changed = 0;
