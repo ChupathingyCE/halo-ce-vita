@@ -769,7 +769,7 @@ forge_case() {
 		host_cmds="$host_cmds;L190:forge camera 62 -100 6 0 -89;L196:forge spawnpoint respawn;L198:forge drop;L300:forge groups"
 		join_cmds="L320:forge groups;L330:forge deleteall weapons;L360:forge deleteall spawning;L600:forge groups;L610:forge objects"
 		if [ $mode = forgedeleteall ]; then
-			host_cmds="$host_cmds;L310:forge camera 55 -100 3 0 0;L315:forge grab;L345:forge drop;L400:forge deleteall blocks"
+			host_cmds="$host_cmds;L315:forge grab #1;L345:forge drop;L400:forge deleteall blocks"
 			join_cmds="$join_cmds;L380:forge deleteall weapons;L400:forge deleteall vehicles"
 		fi
 		host_cmds="$host_cmds;L700:forge groups;L710:forge objects"
