@@ -511,6 +511,97 @@ static void show_screen(const char *const *lines, unsigned int line_count)
 	sceKernelExitProcess(0);
 }
 
+/* 1.1.3: the Vita starts with Halo MCC's files alone. The engine runs the menus
+from MCC's own halo1/maps/ui.map when there is no Xbox one (port/linux/game/
+mcc_content.c) and reads the Halo PC resource maps from its custom_edition
+folder; all that is needed here is a maps folder to exist (empty) and the
+missing-files screen only when neither source has a ui.map. */
+static int xbox_ui_missing;
+
+static int file_exists_at(const char *path)
+{
+	SceIoStat stat;
+
+	return sceIoGetstat(path, &stat) >= 0;
+}
+
+/* the Halo content folder's halo1/maps/ui.map: where the setting names (a folder
+holding halo1, or halo1 itself), else ux0:data/haloce-vita/mcc, then its data/mcc
+(the game's own search order: port/linux/src/xbox_files.c) */
+static int mcc_ui_map_found(char *where, size_t size)
+{
+	/* (as the game's search: beside the data root, then in it; the data root is
+	HALO_DATA_ROOT, ux0:data/haloce-vita/data unless a test moved it) */
+	const char *data = getenv("HALO_DATA_ROOT");
+	const char *chosen = getenv("HALO_CONTENT_ROOT");
+	char beside[320], inside[320];
+	const char *places[2] = { beside, inside };
+	unsigned int index;
+	char path[512], *slash;
+
+	snprintf(inside, sizeof(inside), "%s/mcc", data && *data ? data : VITA_DEFAULT_DATA_ROOT);
+	snprintf(beside, sizeof(beside), "%s", data && *data ? data : VITA_DEFAULT_DATA_ROOT);
+	slash = strrchr(beside, '/');
+	if (slash && slash != beside && slash[-1] != ':')
+		snprintf(slash, sizeof(beside) - (size_t)(slash - beside), "/mcc");
+	else
+		snprintf(beside, sizeof(beside), "%s", inside);
+
+	if (chosen && *chosen && strcasecmp(chosen, "auto"))
+	{
+		if (!strcasecmp(chosen, "none") || !strcasecmp(chosen, "off"))
+			return 0;
+		snprintf(path, sizeof(path), "%s/halo1/maps/ui.map", chosen);
+		if (file_exists_at(path))
+		{
+			snprintf(where, size, "%s", path);
+			return 1;
+		}
+		snprintf(path, sizeof(path), "%s/maps/ui.map", chosen);
+		if (file_exists_at(path))
+		{
+			snprintf(where, size, "%s", path);
+			return 1;
+		}
+		return 0;
+	}
+	for (index = 0; index < 2; index++)
+	{
+		snprintf(path, sizeof(path), "%s/halo1/maps/ui.map", places[index]);
+		if (file_exists_at(path))
+		{
+			snprintf(where, size, "%s", path);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void start_without_xbox_files(void)
+{
+	const char *maps = getenv("HALO_MAPS_ROOT");
+	char where[512], message[700], path[320];
+
+	if (maps && *maps)
+	{
+		snprintf(path, sizeof(path), "%s/ui.map", maps);
+		if (file_exists_at(path))
+			return;	/* (a test's scratch maps folder with an Xbox ui.map) */
+	}
+	if (!mcc_ui_map_found(where, sizeof(where)))
+		show_missing_data();
+	/* (the game wants a maps folder: an empty one) */
+	sceIoMkdir(VITA_DATA_DIRECTORY, 0777);
+	sceIoMkdir(VITA_DEFAULT_MAPS_ROOT, 0777);
+	if (maps && *maps)
+	{
+		snprintf(path, sizeof(path), "%s", maps);
+		sceIoMkdir(path, 0777);
+	}
+	snprintf(message, sizeof(message), "vita: no Xbox ui.map: starting with Halo MCC's files alone (%s)", where);
+	vita_host_log(message);
+}
+
 static void read_environment_file(void)
 {
 	FILE *file = fopen(VITA_DATA_DIRECTORY "/env.txt", "r");
@@ -946,8 +1037,9 @@ int main(int argc, char **argv)
 		int xita = !own && sceIoGetstat(VITA_XITA_MAPS_ROOT "/ui.map", &stat) >= 0;
 
 		setenv("HALO_MAPS_ROOT", xita ? VITA_XITA_MAPS_ROOT : VITA_DEFAULT_MAPS_ROOT, 0);
-		if (!own && !xita)
-			show_missing_data();
+		/* no Xbox ui.map: fine when the Halo content folder has MCC's own (1.1.3,
+		below, once the settings are read: they may name the folder) */
+		xbox_ui_missing = !own && !xita;
 	}
 	setenv("HALO_SAVE_ROOT", VITA_DATA_DIRECTORY "/saves", 0);
 	setenv("HALO_NET_ONLINE", "false", 0);
@@ -968,6 +1060,19 @@ int main(int argc, char **argv)
 			show_mcc_in_maps_folder(found);
 	}
 	vita_settings_load();
+	{
+		/* (a maps folder the environment file named: a test's scratch install) */
+		const char *named = getenv("HALO_MAPS_ROOT");
+		char path[320];
+
+		if (named && *named && strcmp(named, VITA_DEFAULT_MAPS_ROOT) && strcmp(named, VITA_XITA_MAPS_ROOT))
+		{
+			snprintf(path, sizeof(path), "%s/ui.map", named);
+			xbox_ui_missing = !file_exists_at(path);
+		}
+	}
+	if (xbox_ui_missing)
+		start_without_xbox_files();
 	movie_placeholders();
 	vita_net_adhoc_probe();
 	vita_net_selftest();

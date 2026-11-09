@@ -518,10 +518,20 @@ case " $parts " in *" inmaps "*)
 			fail "beside: MCC's maps in <data root>/mcc were not found ($out/beside_data/run.log)"
 		fi
 		# (and in the folder beside it, the documented one: that is the one taken)
-		for file in "$mcc"/maps/*.map; do
+		for file in "$mcc"/maps/*.map "$mcc"/maps/custom_edition; do
 			ln -sfn "$file" "$out/beside/haloce-vita/mcc/halo1/maps/"
 		done
+		mkdir -p "$out/beside/haloce-vita/mcc/halo1/sound"
+		[ -e "$mcc/sound/pc" ] && ln -sfn "$mcc/sound/pc" "$out/beside/haloce-vita/mcc/halo1/sound/pc"
 		irun beside_mcc "$out/beside/haloce-vita/data" HALO_CONTENT_ROOT=auto HALO_CONTENT_BESIDE_DATA=1
+		# (1.1.3: and with no Xbox file at all that is a whole start: MCC's ui.map the menus'
+		# map, the Halo PC files from its custom_edition, its sound bank found)
+		if ! grep -aq "the menu map is MCC's halo1.maps.ui.map (no Xbox ui.map" "$out/beside_mcc/data/debug.txt" 2>/dev/null &&
+			! grep -aq "the menu map is MCC's halo1.maps.ui.map (no Xbox ui.map" "$out/beside/haloce-vita/data/debug.txt"; then
+			fail "beside: no Xbox file: MCC's ui.map was not the menus' map"
+		elif ! grep -aq "mcc sound: .* play from sounds_adpcm.fsb" "$out/beside/haloce-vita/data/debug.txt"; then
+			fail "beside: MCC's sound bank was not found"
+		fi
 		if grep -aq "content: the Halo content folder: .*/beside/haloce-vita/mcc$" "$out/beside_mcc/run.log"; then
 			echo "beside: ux0:data/haloce-vita/mcc found by itself, and data/mcc when it is the one with the maps"
 		else
