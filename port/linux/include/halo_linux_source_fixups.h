@@ -80,6 +80,8 @@ holds Halo CE maps: platform.h */
 int halo_content_library_found(void);
 int platform_mcc_root(char *out, unsigned long out_size);
 void platform_mcc_root_forget(void);
+/* (port) whether the Xbox maps folder holds Halo MCC's maps instead (xbox_files.c) */
+int platform_maps_folder_is_mcc(char *found, unsigned long found_size);
 /* (port) the Halo PC resource map <name>.map: the maps folder's, else the content
 folder's halo1 maps custom_edition one (xbox_files.c) */
 int platform_halo_pc_resource_map(const char *maps_directory, const char *name, char *path, unsigned long path_size);

@@ -363,6 +363,23 @@ static void test_search(void)
 	snprintf(path, sizeof(path), "%s/lib2", search_top);
 	CHECK(!mcc_paths_root_of(path, found, sizeof(found)));
 
+	/* (1.1.3: Halo MCC's maps copied by hand into the Xbox maps folder - its
+	ui.map, or a stock map, with MCC's header: told apart from the disc's) */
+	snprintf(path, sizeof(path), "%s/xboxmaps", search_top);
+	CHECK(!mcc_paths_maps_folder_is_mcc(path, found));
+	file_make("xboxmaps/ui.map", 5, NULL);
+	file_make("xboxmaps/bloodgulch.map", 5, NULL);
+	file_make("xboxmaps/notes.txt", 0, "x");
+	CHECK(!mcc_paths_maps_folder_is_mcc(path, found));
+	file_make("xboxmaps/ui.map", 13, NULL);
+	CHECK(mcc_paths_maps_folder_is_mcc(path, found) && ends_with(found, "/xboxmaps/ui.map"));
+	file_make("xboxmaps/ui.map", 5, NULL);
+	file_make("xboxmaps/a10.map", 13, NULL);
+	CHECK(mcc_paths_maps_folder_is_mcc(path, NULL));
+	snprintf(path, sizeof(path), "%s/xboxmaps/", search_top);
+	CHECK(mcc_paths_maps_folder_is_mcc(path, found) && ends_with(found, "/xboxmaps/a10.map"));
+	CHECK(!mcc_paths_maps_folder_is_mcc("", found) && !mcc_paths_maps_folder_is_mcc(NULL, found));
+
 	/* (the temporary folder, this test's alone) */
 	snprintf(path, sizeof(path), "rm -rf '%s'", search_top);
 	CHECK(system(path) == 0);

@@ -138,6 +138,36 @@ Prefer a video? The [install tutorial](https://youtu.be/x46zLnwlRUU) walks throu
   [Halo Custom Edition installer](https://www.halomaps.org/hce/detail.cfm?fid=410)
   (see [Halo PC files](#halo-pc-files)).
 
+### Which folder? (Vita)
+
+Two kinds of game files, two folders. **Never mix them.**
+
+| Your files | Put them in (on the Vita) |
+| --- | --- |
+| **Xbox disc**: the `maps` folder, and `default.xbe` | `ux0:data/haloce-vita/maps` (and `ux0:data/haloce-vita/default.xbe`) |
+| **Steam MCC**: everything inside `halo1\maps` (`a10.map` ... `ui.map`, `bitmaps.map`, and the `custom_edition` folder) | `ux0:data/haloce-vita/mcc/halo1/maps` |
+| **Steam MCC sound**: `halo1\sound\pc\sounds_adpcm.fsb` | `ux0:data/haloce-vita/mcc/halo1/sound/pc/sounds_adpcm.fsb` |
+
+MCC's files in the Xbox `maps` folder don't work: since 1.1.3 the game says
+so and where to move them (1.1.2 showed a black screen with no sound).
+
+**Copying by hand** (the Windows tool does all this for you):
+
+1. On the Vita, open VitaShell and press SELECT to turn on FTP. It shows an
+   address like `ftp://192.168.1.20:1337`. On your PC, connect to it with
+   an FTP program (FileZilla), or plug the Vita in by USB.
+2. **Xbox disc:** copy the disc's `maps` folder to
+   `ux0:data/haloce-vita/maps`.
+3. **Steam MCC:** on your PC open Steam, right-click Halo: The Master Chief
+   Collection, Manage, Browse local files, then the `halo1` folder. Make the
+   folders `mcc`, `mcc/halo1` and `mcc/halo1/maps` in `ux0:data/haloce-vita/`
+   and copy **the files inside `halo1\maps`** (and its `custom_edition`
+   folder) into `ux0:data/haloce-vita/mcc/halo1/maps`. Not into `maps`.
+4. **MCC sound** (optional): copy `halo1\sound\pc\sounds_adpcm.fsb`
+   to `ux0:data/haloce-vita/mcc/halo1/sound/pc/sounds_adpcm.fsb`, and the
+   `lst` folder beside it.
+5. Leave FTP mode in VitaShell (Circle) and start Halo CE.
+
 ### Easy install (Windows tool)
 
 Download **`HaloCEVitaInstaller.exe`** from the
@@ -173,9 +203,12 @@ The tool isn't signed: if Windows says "Windows protected your PC", click
 3. **Copy them to the Vita:**
 
    ```
-   ux0:data/haloce-vita/maps/          <- the whole maps folder
+   ux0:data/haloce-vita/maps/          <- the Xbox disc's whole maps folder
    ux0:data/haloce-vita/default.xbe
    ```
+
+   (Steam MCC's files go in `ux0:data/haloce-vita/mcc/halo1/maps`, not here:
+   see [Which folder?](#which-folder-vita).)
 
 4. **Optional:** add the [Halo PC files](#halo-pc-files) for online play and
    the [movies](#movies-optional).

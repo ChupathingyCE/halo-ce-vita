@@ -181,6 +181,11 @@ platform_xbox_path_write_refused: TRUE (and the error set, logged) for an
 Xbox path in it, which nothing may write, make, move or delete. */
 int platform_mcc_root(char *out, unsigned long out_size);
 void platform_mcc_root_forget(void);
+/* TRUE when the Xbox maps folder (d:\maps\) holds Halo MCC's maps instead of
+the disc's (a player copied Steam's halo1/maps there by hand); `found` gets
+the file that says so. The game cannot play them from there: it says where
+they belong (ux0:data/haloce-vita/mcc/halo1/maps on the Vita). */
+int platform_maps_folder_is_mcc(char *found, unsigned long found_size);
 /* (port, PC) What the main menu says when paths.content is "auto" and no
 Halo MCC was found ("Halo MCC not found: set its folder in config.toml
 ..."; `short_form` the build number corner's few words), translated; NULL

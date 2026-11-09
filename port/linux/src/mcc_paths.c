@@ -187,6 +187,46 @@ static int path_trimmed(const char *path, char *out, unsigned long out_size)
 	return written > 0 && (unsigned long)written < out_size;
 }
 
+/* whether the file at `path` starts with MCC's Halo CE cache header: 1 yes,
+-1 a file that is not (an Xbox map's), 0 no such file */
+static int file_has_mcc_header(const char *path)
+{
+	unsigned char header[8];
+	FILE *stream = fopen(path, "rb");
+	size_t got;
+
+	if (!stream)
+		return 0;
+	got = fread(header, 1, sizeof(header), stream);
+	fclose(stream);
+	return got == sizeof(header) && !memcmp(header, HALO1_HEADER_SIGNATURE, 4) &&
+		(header[4] | header[5] << 8 | header[6] << 16 | (unsigned long)header[7] << 24) == HALO1_CACHE_VERSION ? 1 : -1;
+}
+
+int mcc_paths_maps_folder_is_mcc(const char *maps_folder, char *found)
+{
+	char base[MCC_PATHS_BYTES];
+	unsigned index;
+
+	if (!path_trimmed(maps_folder, base, sizeof(base)))
+		return 0;
+	/* (ui.map first: it is what the game needs to start; then each stock
+	map. One with MCC's header is enough: an Xbox disc's maps have none.) */
+	for (index = 0; index <= sizeof(halo1_stock_maps) / sizeof(halo1_stock_maps[0]); index++)
+	{
+		char path[MCC_PATHS_BYTES + 64];
+
+		snprintf(path, sizeof(path), "%s/%s.map", base, index ? halo1_stock_maps[index - 1] : "ui");
+		if (file_has_mcc_header(path) > 0)
+		{
+			if (found)
+				snprintf(found, MCC_PATHS_BYTES, "%.*s", MCC_PATHS_BYTES - 1, path);
+			return 1;
+		}
+	}
+	return 0;
+}
+
 /* 1: a stock map with MCC's header; -1: stock maps there, none MCC's; 0: none */
 static int halo1_state(const char *root, char *found)
 {
