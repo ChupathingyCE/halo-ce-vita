@@ -51,6 +51,13 @@ header is MCC's ('head', version 13). Only the first 8 bytes of a file are
 read. `found` (may be NULL, MCC_PATHS_BYTES) gets that file's path. */
 int mcc_paths_halo1_valid(const char *root, char *found);
 
+/* Whether a folder that should hold the Xbox disc's maps (the Vita's
+ux0:data/haloce-vita/maps) holds MCC's instead: its ui.map or a stock map
+there has MCC's header (version 13). A player copying Steam's halo1/maps
+there gets this, and the game would stop as a damaged disc. `found` (may be
+NULL, MCC_PATHS_BYTES) gets that file's path. Nothing is written. */
+int mcc_paths_maps_folder_is_mcc(const char *maps_folder, char *found);
+
 /* MCC's folder from what a player named (paths.content): that folder, its
 halo1, halo1/maps, halo1/maps/custom_edition, a Steam library holding it
 (or that library's steamapps or steamapps/common), into `out`: FALSE when

@@ -1206,6 +1206,9 @@ def test_vita_end_to_end(root, tmp_path, monkeypatch):
     assert hcv.mcc_staged(str(tmp_path / "out"))
     words = " ".join(texts(window))
     assert "press Cross on %s" % vpk.name in words and "VitaShell" in words
+    # 1.1.3: the two folders, said on the last page
+    assert "ux0:data/haloce-vita/maps" in words and "ux0:data/haloce-vita/mcc/halo1/maps" in words
+    assert "Never put MCC's files in the Xbox maps folder." in words
     assert "Launch Halo CE" not in checks(window)
 
 

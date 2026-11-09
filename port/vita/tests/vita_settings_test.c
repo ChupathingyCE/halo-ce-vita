@@ -6073,12 +6073,14 @@ int main(void)
 		!strcmp(menu_line(7, line, sizeof(line)), "!Missing: sounds.map loc.map") &&
 		!strcmp(menu_line(8, line, sizeof(line)), "!Copy them in, or the Halo CE installer") &&
 		!strcmp(menu_line(9, line, sizeof(line)), "!(halocesetup*.exe) to ux0:data/haloce-vita") &&
-		!strcmp(menu_line(10, line, sizeof(line)), "\x04" "Content: the Xbox maps (no MCC folder)"),
+		!strcmp(menu_line(10, line, sizeof(line)), "\x04" "Content: the Xbox maps (no MCC folder)") &&
+		!strcmp(menu_line(11, line, sizeof(line)), "\x04" "Steam's MCC files (halo1/maps) go in:") &&
+		!strcmp(menu_line(12, line, sizeof(line)), "\x04" "ux0:data/haloce-vita/mcc/halo1/maps"),
 		"Mod manager, PC maps switch, Halo content folder (found by itself), Map downloads (Ask), a gap; a CE map "
 		"without sounds.map/loc.map: the warning, and that the installer does; no MCC folder: the Xbox maps");
-	check(!strncmp(menu_line(11, line, sizeof(line)), "cemap\x02", 6) && !strncmp(menu_line(12, line, sizeof(line)), "cesolo\x02", 7) &&
-		!strncmp(menu_line(13, line, sizeof(line)), "inplay\x02", 7) &&
-		!strncmp(menu_line(14, line, sizeof(line)), "mygulch\x02", 8) && menu_line(15, line, sizeof(line))[0] == '\x05',
+	check(!strncmp(menu_line(13, line, sizeof(line)), "cemap\x02", 6) && !strncmp(menu_line(14, line, sizeof(line)), "cesolo\x02", 7) &&
+		!strncmp(menu_line(15, line, sizeof(line)), "inplay\x02", 7) &&
+		!strncmp(menu_line(16, line, sizeof(line)), "mygulch\x02", 8) && menu_line(17, line, sizeof(line))[0] == '\x05',
 		"the custom maps listed in order, not the Xbox's or CE resource maps");
 	/* the Halo content folder (port/linux/game/mcc_content.c): found by
 	itself, or one of the memory cards' data/mcc; in the environment the game
@@ -6223,6 +6225,19 @@ int main(void)
 	rmdir("ux0:data/haloce-vita/mcc/halo1/maps");
 	rmdir("ux0:data/haloce-vita/mcc/halo1");
 	rmdir("ux0:data/haloce-vita/mcc");
+
+	/* 1.1.3: Halo MCC's maps (version 13) copied by hand into the Xbox maps
+	folder: the page says to move them, and where */
+	write_map("ux0:data/haloce-vita/maps/ui.map", 13, 1000);
+	open_page("Modded maps");
+	check(strstr(menu, "\n!The maps folder holds MCC files: move them\n!to the mcc/halo1/maps folder above\n") &&
+		strstr(menu, "\n\x04" "ux0:data/haloce-vita/mcc/halo1/maps\n") && menu_fits(),
+		"MCC's ui.map in the Xbox maps folder: the page says to move the files, to which folder");
+	press(VITA_BUTTON_CIRCLE);
+	remove("ux0:data/haloce-vita/maps/ui.map");
+	open_page("Modded maps");
+	check(!strstr(menu, "The maps folder holds MCC files"), "no MCC file in the maps folder: no such warning");
+	press(VITA_BUTTON_CIRCLE);
 
 	/* PC map vehicles: no row while PC maps is off; with it on, Xbox, and
 	right PC, then Allowed (HALO_PC_MAP_VEHICLES, live); back to Xbox, and PC

@@ -2447,6 +2447,17 @@ def upload_vpk(host: str, vpk: str, port: int = FTP_PORT, progress: Progress = _
     return name
 
 
+# The two folders, said the same everywhere (the README's table, the game's
+# "files missing" screen, Setup's last page): a player who copies by hand put
+# Steam's MCC files in the Xbox maps folder in 1.1.2, and the game could not
+# start (1.1.3 says so on the Vita)
+FOLDER_NOTE_LINES = (
+    "Where the files go on the Vita (if you ever copy them by hand):",
+    "Xbox disc files:   ux0:data/haloce-vita/maps",
+    "Steam MCC files:   ux0:data/haloce-vita/mcc/halo1/maps",
+    "Never put MCC's files in the Xbox maps folder.",
+)
+
 VPK_INSTRUCTIONS = (
     "On the Vita, in VitaShell: leave FTP mode (Circle), open ux0:, then the data folder, "
     "press Cross on {name} and confirm the install. The bubble is called Halo CE. "
@@ -4910,7 +4921,11 @@ class InstallerWindow:
                  "Start Halo CE from its bubble."]
         for number, step in enumerate(steps, 1):
             self.text("%d.  %s" % (number, step), pady=(0, px(4)))
-        self.text("You can delete %s now." % self.out.get(), pady=(px(6), 0))
+        self.text("You can delete %s now." % self.out.get(), pady=(px(6), px(8)))
+        self.text(FOLDER_NOTE_LINES[0], pady=(0, px(2)))
+        for line in FOLDER_NOTE_LINES[1:3]:
+            self.text(line, pady=(0, px(2)), indent=16)
+        self.text(FOLDER_NOTE_LINES[3])
 
     # -- the work: everything is read from the window here, on its thread
     # (tkinter is not thread-safe), and runs in order on a thread of its own

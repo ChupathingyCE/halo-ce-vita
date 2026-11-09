@@ -36,6 +36,7 @@ ux0:data/haloce-vita/log.txt (stderr).
 #include <strings.h>
 
 #include "lang.h"
+#include "mcc_paths.h"
 #include "vita_host.h"
 #include "vita_update.h"
 #include "vita_version.h"
@@ -400,6 +401,8 @@ static void message_text(uint32_t *pixels, int x, int y, int scale, uint32_t col
 	}
 }
 
+static void show_screen(const char *const *lines, unsigned int line_count);
+
 static void show_missing_data(void)
 {
 	/* (35 characters a line fit at this size; each in the Vita's language,
@@ -414,22 +417,68 @@ static void show_missing_data(void)
 		"",
 		N_("(ui.map, bloodgulch.map ...)"),
 		"",
+		N_("Steam's MCC files go in:"),
+		"  ux0:data/haloce-vita/mcc/halo1/maps/",
+		"",
 		N_("Press START to exit."),
 	};
+
+	vita_host_log("vita: no ui.map in " VITA_DEFAULT_MAPS_ROOT " or " VITA_XITA_MAPS_ROOT);
+	show_screen(lines, sizeof(lines) / sizeof(lines[0]));
+}
+
+/* 1.1.3: Halo MCC's maps (Steam's halo1/maps) copied by hand into the Xbox
+maps folder. The game cannot play MCC's maps from there (the maps folder is
+the Xbox disc's: its ui.map, bitmaps.map and every custom map are read as
+Xbox maps), so it says where they go instead of the damaged disc error
+(black screen, no sound) that 1.1.2 ended in */
+static void show_mcc_in_maps_folder(const char *found)
+{
+	static const char *const lines[] = {
+		N_("These are Halo MCC files."),
+		"",
+		N_("Move them (the contents of"),
+		N_("halo1/maps) from the Xbox maps"),
+		N_("folder to this folder:"),
+		"",
+		"  ux0:data/haloce-vita/mcc/halo1/maps/",
+		"",
+		N_("The sound file goes in:"),
+		"  ux0:data/haloce-vita/mcc/halo1/sound/pc/",
+		"",
+		N_("Put the Xbox disc's maps in:"),
+		"  ux0:data/haloce-vita/maps/",
+		N_("Press START to exit."),
+	};
+	char message[800];
+
+	snprintf(message, sizeof(message), "vita: %s is a Halo MCC map, not an Xbox one: MCC's files belong in "
+		VITA_DATA_DIRECTORY "/mcc/halo1/maps (and sounds_adpcm.fsb in " VITA_DATA_DIRECTORY "/mcc/halo1/sound/pc)",
+		found);
+	vita_host_log(message);
+	show_screen(lines, sizeof(lines) / sizeof(lines[0]));
+}
+
+static void show_screen(const char *const *lines, unsigned int line_count)
+{
 	SceUID block = sceKernelAllocMemBlock("message", SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, 2 * 1024 * 1024, NULL);
 	SceDisplayFrameBuf frame;
 	SceCtrlData pad;
 	uint32_t *pixels;
 	unsigned int index;
 
-	vita_host_log("vita: no ui.map in " VITA_DEFAULT_MAPS_ROOT " or " VITA_XITA_MAPS_ROOT);
 	if (block < 0 || sceKernelGetMemBlockBase(block, (void **)&pixels) < 0)
 		sceKernelExitProcess(0);
 	for (index = 0; index < MESSAGE_WIDTH * MESSAGE_HEIGHT; index++)
 		pixels[index] = 0xff1a1008u;
 	message_text(pixels, 60, 50, 4, 0xff40ff40u, "HALO CE");
-	for (index = 0; index < sizeof(lines) / sizeof(lines[0]); index++)
-		message_text(pixels, 60, 130 + (int)index * 32, 3, 0xffe0e0e0u, T(lines[index]));
+	for (index = 0; index < line_count; index++)
+	{
+		const char *text = T(lines[index]);
+
+		/* (a path too long for the big letters: the small ones) */
+		message_text(pixels, 60, 120 + (int)index * 28, strlen(text) > 36 ? 2 : 3, 0xffe0e0e0u, text);
+	}
 	memset(&frame, 0, sizeof(frame));
 	frame.size = sizeof(frame);
 	frame.base = pixels;
@@ -906,6 +955,17 @@ int main(int argc, char **argv)
 	setenv("HALO_DISPLAY_WIDTH", "848", 0);
 	setenv("HALO_UPDATE_AUTO", "false", 0);
 	read_environment_file();
+	{
+		/* a maps folder with Halo MCC's maps in it (copied there by hand from
+		Steam's halo1/maps): says where they belong instead of the damaged disc
+		error and a black screen of 1.1.2. After the environment file, so that
+		HALO_MAPS_ROOT there (a test's scratch folder) is the folder looked at. */
+		const char *maps_folder = getenv("HALO_MAPS_ROOT");
+		char found[512];
+
+		if (mcc_paths_maps_folder_is_mcc(maps_folder && *maps_folder ? maps_folder : VITA_DEFAULT_MAPS_ROOT, found))
+			show_mcc_in_maps_folder(found);
+	}
 	vita_settings_load();
 	movie_placeholders();
 	vita_net_adhoc_probe();

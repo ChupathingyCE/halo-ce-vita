@@ -63,7 +63,18 @@
 #      autonone   no Steam in HOME: "Halo MCC not found" said (the main
 #                 menu's notice), the Xbox maps alone
 #
-#   run_mcc_content_test.sh [unit|harness|menu|auto]   (default all)
+# 5. inmaps (1.1.3): Newk's layout, MCC's maps copied by hand into the Xbox
+#    maps folder (ux0:data/haloce-vita/maps), no Xbox file at all:
+#      inmaps     the game does not play them from there; halo.log says the
+#                 maps folder holds Halo MCC's maps and where they belong
+#                 (mcc/halo1/maps), not the old "ui.map is missing ... or
+#                 isn't an Xbox map"
+#      beside     the Vita's layout (HALO_CONTENT_BESIDE_DATA=1: the
+#                 handhelds' always): <data root>/../mcc found by itself, and
+#                 <data root>/mcc too; one with MCC's maps wins over an empty
+#                 folder of the other
+#
+#   run_mcc_content_test.sh [unit|harness|menu|auto|inmaps]   (default all)
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
@@ -79,7 +90,7 @@ test_out_begin "$out"
 mkdir -p "$out"
 status=0
 fail() { echo "FAIL: $1"; status=1; }
-parts=${*:-unit harness menu auto}
+parts=${*:-unit harness menu auto inmaps}
 
 case " $parts " in *" unit "*)
 	cc=${CC:-gcc}
@@ -456,6 +467,65 @@ case " $parts " in *" auto "*)
 			fail "autonone: no MCC was not said, or the menus did not come up ($out/autonone)"
 		else
 			echo "autonone: no Steam: \"Halo MCC not found\" said, the Xbox maps' menus up"
+		fi
+	fi
+	;;
+esac
+
+case " $parts " in *" inmaps "*)
+	if [ ! -x "$binary" ]; then
+		echo "SKIP (inmaps): no harness at $binary (HALO_TEST_VITA)"
+	elif [ ! -r "$mcc/maps/ui.map" ]; then
+		echo "SKIP (inmaps): no MCC halo1 folder with maps/ui.map at $mcc (HALO_TEST_MCC_ROOT)"
+	else
+		# irun NAME DATA_ROOT [VAR=value...]: the harness for 15 s, no Xbox file
+		irun() {
+			local name=$1 data_root=$2 dir="$out/$1"
+			shift 2
+			mkdir -p "$dir/save"
+			(cd "$dir" && exec env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=offscreen HALO_DATA_ROOT="$data_root" \
+				HALO_SAVE_ROOT="$dir/save" HALO_NO_AUDIO=1 HALO_HIDDEN_WINDOW=1 HALO_EXIT_AFTER=15 \
+				HALO_UPDATE_AUTO=false HALO_NET_ONLINE=false "$@" \
+				timeout -k 5 100 "$binary" > "$dir/run.log" 2>&1)
+		}
+		# inmaps: MCC's files (linked, read only) where the Xbox's belong
+		mkdir -p "$out/inmaps/data/maps"
+		for file in "$mcc"/maps/*.map; do
+			ln -sfn "$file" "$out/inmaps/data/maps/"
+		done
+		irun inmaps "$out/inmaps/data" HALO_CONTENT_ROOT=none
+		if ! grep -aq "damaged disc error: the maps folder holds Halo MCC's maps (.*/inmaps/data/maps/ui.map), not the Xbox disc's: MCC's files belong in the mcc/halo1/maps folder" "$out/inmaps/run.log"; then
+			fail "inmaps: the log does not say the maps folder holds MCC's maps ($out/inmaps/run.log)"
+		elif grep -aq "ui.map is missing from the maps folder" "$out/inmaps/run.log"; then
+			fail "inmaps: the old, misleading reason was given"
+		else
+			echo "inmaps: MCC's maps in the Xbox maps folder: said so, and where they belong"
+		fi
+
+		# beside: <data root>/../mcc (ux0:data/haloce-vita/mcc), then <data root>/mcc
+		mkdir -p "$out/beside/haloce-vita/data/maps" "$out/beside/haloce-vita/mcc/halo1/maps" \
+			"$out/beside/haloce-vita/data/mcc/halo1/maps"
+		irun beside "$out/beside/haloce-vita/data" HALO_CONTENT_ROOT=auto HALO_CONTENT_BESIDE_DATA=1
+		if ! grep -aq "content: the Halo content folder: .*/beside/haloce-vita/mcc$" "$out/beside/run.log"; then
+			fail "beside: the empty folder beside the data root was not taken when both are empty ($out/beside/run.log)"
+		fi
+		# (MCC's maps only in <data root>/mcc: they win over the empty folder beside)
+		for file in "$mcc"/maps/*.map; do
+			ln -sfn "$file" "$out/beside/haloce-vita/data/mcc/halo1/maps/"
+		done
+		irun beside_data "$out/beside/haloce-vita/data" HALO_CONTENT_ROOT=auto HALO_CONTENT_BESIDE_DATA=1
+		if ! grep -aq "content: the Halo content folder: .*/beside/haloce-vita/data/mcc$" "$out/beside_data/run.log"; then
+			fail "beside: MCC's maps in <data root>/mcc were not found ($out/beside_data/run.log)"
+		fi
+		# (and in the folder beside it, the documented one: that is the one taken)
+		for file in "$mcc"/maps/*.map; do
+			ln -sfn "$file" "$out/beside/haloce-vita/mcc/halo1/maps/"
+		done
+		irun beside_mcc "$out/beside/haloce-vita/data" HALO_CONTENT_ROOT=auto HALO_CONTENT_BESIDE_DATA=1
+		if grep -aq "content: the Halo content folder: .*/beside/haloce-vita/mcc$" "$out/beside_mcc/run.log"; then
+			echo "beside: ux0:data/haloce-vita/mcc found by itself, and data/mcc when it is the one with the maps"
+		else
+			fail "beside: MCC's maps beside the data root were not found ($out/beside_mcc/run.log)"
 		fi
 	fi
 	;;

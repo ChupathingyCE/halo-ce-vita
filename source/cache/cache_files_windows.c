@@ -1249,7 +1249,23 @@ boolean cache_files_precache_map_begin(
 			error(_error_silent, "full path name '%s'", map_name);
 			if (copy_map && !_stricmp(cache_map_name, "ui"))
 			{
+#ifdef HALO_LINUX
+				{
+					/* (port) Halo MCC's maps copied into the Xbox maps folder by hand: the
+					reason said so in halo.log, and where they belong (the Vita shows the
+					same before the game starts: vita_main.c) */
+					char mcc_file[512];
+
+					if (platform_maps_folder_is_mcc(mcc_file, sizeof(mcc_file)))
+						display_error_damaged_media_reason("the maps folder holds Halo MCC's maps (%s), not the "
+							"Xbox disc's: MCC's files belong in the mcc/halo1/maps folder of the Halo content folder "
+							"(ux0:data/haloce-vita/mcc/halo1/maps on the Vita)", mcc_file);
+					else
+						display_error_damaged_media_reason("ui.map is missing from the maps folder, or isn't an Xbox map");
+				}
+#else
 				display_error_damaged_media_reason("ui.map is missing from the maps folder, or isn't an Xbox map");
+#endif
 				display_error_damaged_media();
 			}
 

@@ -265,6 +265,7 @@ Multiplayer tab's way.
 #include <unistd.h>
 
 #include "lang.h"
+#include "mcc_paths.h"
 #include "forge_store.h"
 #include "port_config.h"
 #include "mod_manager_share.h"
@@ -1368,6 +1369,9 @@ static int maps_mods_present;
 -1 for no such folder) */
 static char maps_content_folder[64];
 static int maps_content_halo1;
+/* whether the Xbox maps folder holds Halo MCC's maps (copied there by hand:
+the game cannot play them from it, mcc_paths_maps_folder_is_mcc) */
+static int maps_folder_has_mcc;
 static char maps_installer[64];
 /* the maps turned off: their names, commas between (HALO_MAPS_DISABLED) */
 static char maps_disabled[1024];
@@ -3090,6 +3094,7 @@ static void maps_scan(void)
 	if (folder)
 		closedir(folder);
 	qsort(maps, (size_t)map_count, sizeof(maps[0]), map_compare);
+	maps_folder_has_mcc = mcc_paths_maps_folder_is_mcc(directory, NULL);
 	maps_missing[0] = 0;
 	for (index = 0; index < 3; index++)
 	{
@@ -4497,7 +4502,23 @@ static int page_lines(struct line *lines)
 			snprintf(lines[count++].text, sizeof(lines[0].text), T("Halo CE: %d MCC maps (no sound yet)"), maps_content_halo1);
 		}
 		else
+		{
 			snprintf(lines[count++].text, sizeof(lines[0].text), "%s", T("Content: the Xbox maps (no MCC folder)"));
+			/* (1.1.3: the two folders, said where players look for them) */
+			lines[count].type = LINE_INFO;
+			snprintf(lines[count++].text, sizeof(lines[0].text), "%s", T("Steam's MCC files (halo1/maps) go in:"));
+			lines[count].type = LINE_INFO;
+			snprintf(lines[count++].text, sizeof(lines[0].text), "%s", DATA_DIRECTORY "/mcc/halo1/maps");
+		}
+		if (maps_folder_has_mcc)
+		{
+			lines[count].type = LINE_INFO;
+			snprintf(lines[count].text, sizeof(lines[0].text), "!%s", T("The maps folder holds MCC files: move them"));
+			count++;
+			lines[count].type = LINE_INFO;
+			snprintf(lines[count].text, sizeof(lines[0].text), "!%s", T("to the mcc/halo1/maps folder above"));
+			count++;
+		}
 		if (!map_count)
 		{
 			lines[count].type = LINE_INFO;

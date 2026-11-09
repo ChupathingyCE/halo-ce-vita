@@ -561,6 +561,31 @@ static int mcc_search_installed(char *out, int quiet)
 }
 #endif
 
+/* the folder next to the data root, mcc (the data root's parent's):
+ux0:data/haloce-vita/mcc for the Vita's ux0:data/haloce-vita/data. Handhelds
+only (or HALO_CONTENT_BESIDE_DATA=1); FALSE when not asked or no parent */
+static int mcc_beside_data(char *out, unsigned long out_size)
+{
+#ifndef HALO_NOT_DESKTOP
+	const char *knob = getenv("HALO_CONTENT_BESIDE_DATA");
+
+	if (!knob || !atoi(knob))
+		return 0;
+#endif
+	{
+		char root[MAX_PATH];
+		char *slash;
+
+		snprintf(root, sizeof(root), "%s", platform_data_root());
+		trim_separators(root);
+		slash = strrchr(root, '/');
+		if (!slash || slash == root || slash[-1] == ':')
+			return 0;
+		*slash = 0;
+		return snprintf(out, out_size, "%s/mcc", root) < (int)out_size;
+	}
+}
+
 static void mcc_root_find(void)
 {
 	const char *setting = mcc_root_setting_now();
@@ -607,9 +632,27 @@ static void mcc_root_find(void)
 #ifndef HALO_NOT_DESKTOP
 search:
 #endif
-	snprintf(path, sizeof(path), "%s/mcc", platform_data_root());
-	if (mcc_root_try(path))
-		goto found;
+	/* (the handhelds: the folder the docs, Setup and the settings panel name,
+	ux0:data/haloce-vita/mcc, which sits NEXT TO the data root
+	(ux0:data/haloce-vita/data), not in it; it was never looked for before
+	1.1.3, only <data root>/mcc. HALO_CONTENT_BESIDE_DATA=1 does the same on
+	a PC, for the tests.) */
+	{
+		char beside[MAX_PATH];
+		int has_beside = mcc_beside_data(beside, sizeof(beside));
+
+		/* (one with MCC's maps in it first, so that an empty folder of
+		the one place does not hide the maps in the other) */
+		if (has_beside && mcc_paths_halo1_valid(beside, NULL) && mcc_root_try(beside))
+			goto found;
+		snprintf(path, sizeof(path), "%s/mcc", platform_data_root());
+		if (mcc_paths_halo1_valid(path, NULL) && mcc_root_try(path))
+			goto found;
+		if (has_beside && mcc_root_try(beside))
+			goto found;
+		if (mcc_root_try(path))
+			goto found;
+	}
 #ifndef HALO_NOT_DESKTOP
 	if (mcc_search_installed(path, 0) && mcc_root_try(path))
 		goto found;
@@ -627,8 +670,16 @@ search:
 	return;
 #endif
 	mcc_root_state = -1;
-	platform_log("content: no Halo content folder (paths.content; %s/mcc; Steam's libraries): the Xbox maps alone",
-		platform_data_root());
+	{
+		char beside[MAX_PATH];
+
+		if (mcc_beside_data(beside, sizeof(beside)))
+			platform_log("content: no Halo content folder (paths.content; %s; %s/mcc): the Xbox maps alone. MCC's "
+				"halo1 folder goes in %s/halo1/maps", beside, platform_data_root(), beside);
+		else
+			platform_log("content: no Halo content folder (paths.content; %s/mcc; Steam's libraries): the Xbox maps alone",
+				platform_data_root());
+	}
 	return;
 found:
 	mcc_root_state = 1;
@@ -691,6 +742,19 @@ void platform_mcc_root_forget(void)
 	if (mcc_root_state < 0)
 		mcc_root_state = 0;
 	pthread_mutex_unlock(&mcc_root_lock);
+}
+
+int platform_maps_folder_is_mcc(char *found, unsigned long found_size)
+{
+	char maps[1024];
+	char file[MCC_PATHS_BYTES];
+
+	platform_translate_path("d:\\maps", maps, sizeof(maps));
+	if (!mcc_paths_maps_folder_is_mcc(maps, file))
+		return 0;
+	if (found && found_size)
+		snprintf(found, found_size, "%s", file);
+	return 1;
 }
 
 int platform_host_path_is_mcc(const char *host_path)

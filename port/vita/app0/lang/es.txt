@@ -589,6 +589,13 @@
 "Xbox Halo: Combat Evolved to" = "Halo: Combat Evolved de Xbox a"
 "(ui.map, bloodgulch.map ...)" = "(ui.map, bloodgulch.map ...)"
 "Press START to exit." = "Pulsa START para salir."
+"Steam's MCC files go in:" = "Los archivos MCC de Steam van en:"
+"These are Halo MCC files." = "Estos son archivos de Halo MCC."
+"Move them (the contents of" = "Muévelos (el contenido de"
+"halo1/maps) from the Xbox maps" = "halo1/maps) de la carpeta maps"
+"folder to this folder:" = "de Xbox a esta carpeta:"
+"The sound file goes in:" = "El archivo de sonido va en:"
+"Put the Xbox disc's maps in:" = "Los mapas del disco Xbox van en:"
 
 # ---------- the Halo CE installer's PC files (vita_ce_installer.c)
 "Halo CE: PC map files" = "Halo CE: archivos de mapas de PC"
@@ -2863,6 +2870,9 @@
 "Content: %.30s" = "Contenido: %.30s"
 "Halo CE: %d MCC maps (no sound yet)" = "Halo CE: %d mapas de MCC (aún sin sonido)"
 "Content: the Xbox maps (no MCC folder)" = "Contenido: los mapas de Xbox (sin MCC)"
+"Steam's MCC files (halo1/maps) go in:" = "Los MCC de Steam (halo1/maps) van en:"
+"The maps folder holds MCC files: move them" = "La carpeta maps tiene archivos MCC: muévelos"
+"to the mcc/halo1/maps folder above" = "a la carpeta mcc/halo1/maps de arriba"
 "Halo: CE Anniversary maps play only from the mods folder, offline, or the Halo content folder" = "los mapas de Halo: CE Anniversary solo se juegan desde la carpeta mods, sin conexión, o la carpeta de contenido de Halo"
 "MCC's menu file" = "Archivo de menús de MCC"
 "This menu isn't supported with MCC's menu file yet." = "Este menú aún no es compatible con el archivo de menús de MCC."

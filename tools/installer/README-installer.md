@@ -126,6 +126,17 @@ Halo CE Vita files/
 
 Custom maps you put in that `maps` folder yourself are copied too.
 
+If you copy by hand instead, keep the two kinds of files apart:
+
+| Your files | On the Vita |
+| --- | --- |
+| Xbox disc (`maps` folder, `default.xbe`) | `ux0:data/haloce-vita/maps` |
+| Steam MCC (inside `halo1\maps`, with `custom_edition`) | `ux0:data/haloce-vita/mcc/halo1/maps` |
+| Steam MCC sound (`halo1\sound\pc\sounds_adpcm.fsb`) | `ux0:data/haloce-vita/mcc/halo1/sound/pc/sounds_adpcm.fsb` |
+
+MCC's files in the Xbox `maps` folder don't work (Setup never puts them there).
+Setup's last page says the same.
+
 ## The files
 
 What each source gives, and how it is checked. In the window they are the Game

@@ -23,7 +23,7 @@ build() { # OUTPUT [FLAGS...]
 	$cc -m32 -g -O1 -Wall -Wno-unused-function -D_GNU_SOURCE -I"$out/include" -I"$root/port/linux/src" \
 		-I"$root/port/vita/include" "$@" "$here/vita_settings_test.c" "$root/port/vita/host/vita_controls.c" \
 		"$root/port/linux/src/lang.c" "$root/port/linux/src/update_check.c" \
-		"$root/port/linux/src/crossplay_guard.c" -lpthread -o "$output"
+		"$root/port/linux/src/crossplay_guard.c" "$root/port/linux/src/mcc_paths.c" -lpthread -o "$output"
 }
 build "$out/vita_settings_test"
 # (the language files, where the Vita has them: app0:lang)
