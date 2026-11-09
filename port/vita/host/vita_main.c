@@ -448,6 +448,7 @@ static void show_mcc_in_maps_folder(const char *found)
 		"",
 		N_("Put the Xbox disc's maps in:"),
 		"  ux0:data/haloce-vita/maps/",
+		"",
 		N_("Press START to exit."),
 	};
 	char message[800];
@@ -477,7 +478,7 @@ static void show_screen(const char *const *lines, unsigned int line_count)
 		const char *text = T(lines[index]);
 
 		/* (a path too long for the big letters: the small ones) */
-		message_text(pixels, 60, 120 + (int)index * 28, strlen(text) > 36 ? 2 : 3, 0xffe0e0e0u, text);
+		message_text(pixels, 60, 120 + (int)index * 26, strlen(text) > 36 ? 2 : 3, 0xffe0e0e0u, text);
 	}
 	memset(&frame, 0, sizeof(frame));
 	frame.size = sizeof(frame);
