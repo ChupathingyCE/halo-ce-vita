@@ -530,10 +530,22 @@ holding halo1, or halo1 itself), else ux0:data/haloce-vita/mcc, then its data/mc
 (the game's own search order: port/linux/src/xbox_files.c) */
 static int mcc_ui_map_found(char *where, size_t size)
 {
-	static const char *const places[] = { VITA_DATA_DIRECTORY "/mcc", VITA_DEFAULT_DATA_ROOT "/mcc" };
+	/* (as the game's search: beside the data root, then in it; the data root is
+	HALO_DATA_ROOT, ux0:data/haloce-vita/data unless a test moved it) */
+	const char *data = getenv("HALO_DATA_ROOT");
 	const char *chosen = getenv("HALO_CONTENT_ROOT");
+	char beside[320], inside[320];
+	const char *places[2] = { beside, inside };
 	unsigned int index;
-	char path[512];
+	char path[512], *slash;
+
+	snprintf(inside, sizeof(inside), "%s/mcc", data && *data ? data : VITA_DEFAULT_DATA_ROOT);
+	snprintf(beside, sizeof(beside), "%s", data && *data ? data : VITA_DEFAULT_DATA_ROOT);
+	slash = strrchr(beside, '/');
+	if (slash && slash != beside && slash[-1] != ':')
+		snprintf(slash, sizeof(beside) - (size_t)(slash - beside), "/mcc");
+	else
+		snprintf(beside, sizeof(beside), "%s", inside);
 
 	if (chosen && *chosen && strcasecmp(chosen, "auto"))
 	{
@@ -553,7 +565,7 @@ static int mcc_ui_map_found(char *where, size_t size)
 		}
 		return 0;
 	}
-	for (index = 0; index < sizeof(places) / sizeof(places[0]); index++)
+	for (index = 0; index < 2; index++)
 	{
 		snprintf(path, sizeof(path), "%s/halo1/maps/ui.map", places[index]);
 		if (file_exists_at(path))
