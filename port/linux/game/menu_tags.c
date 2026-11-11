@@ -709,7 +709,15 @@ static long tag_named(long group_tag, char const *name, char const *file, long l
 	long index = NONE;
 
 	if (strchr(name, '\\'))
+	{
+		/* (a picture a Halo PC ui.map has not, the Xbox's Y button: none shown) */
+		if (group_tag == BITMAP_GROUP_TAG && tag_loaded(group_tag, name) == NONE && !build.ingame)
+		{
+			platform_log("menus: %s:%ld: this ui.map has no bitmap %s: none shown", file, line, name);
+			return NONE;
+		}
 		return map_tag(group_tag, name, file, line);
+	}
 	switch (group_tag)
 	{
 	case UI_WIDGET_DEFINITION_TAG:
@@ -1755,6 +1763,30 @@ static struct cache_file_tag_instance *instances_grow(long count, long *first_in
 	return grown;
 }
 
+/* ---- the Xbox's screens a Halo PC ui.map (Halo MCC's) has not
+The Xbox's ui.map has its own network lobby, server list, profile and pause screens; Halo
+PC's (what MCC ships, and all an MCC-only install has) has others. The menus folder's
+screens open these by name and the Halo 3 and Online styles put their own in their place
+(a screen's replaces=), so a ui.map without one gets an empty widget of that name: as
+the map's would be, it is opened by name and stood for, and where nothing stands for it
+(Halo CE's styles, which would show the Xbox's screen) it is empty, not another screen
+made up. Said in the log, once per name. */
+static char const *const xbox_only_widgets[] =
+{
+	"ui\\shell\\main_menu\\multiplayer_type_select\\connected\\4way_profile_select\\4way_start2join_screen",
+	"ui\\shell\\main_menu\\multiplayer_type_select\\split_screen\\4way_profile_select\\4way_start2join_screen",
+	"ui\\shell\\main_menu\\multiplayer_type_select\\connected\\server_list\\server_list_screen",
+	"ui\\shell\\main_menu\\multiplayer_type_select\\connected\\pregame\\connected_pregame_screen",
+	"ui\\shell\\main_menu\\settings_select\\player_setup\\player_profile_select_screen",
+	"ui\\shell\\main_menu\\load_campaign_player_profile",
+	"ui\\shell\\main_menu\\player_profiles_select\\solo_game_player_profile_select_screen",
+	"ui\\shell\\main_menu\\button_key",
+	"ui\\shell\\main_menu\\settings_select\\player_setup\\player_profile_edit\\advanced_controls_profile_item",
+	"ui\\shell\\main_menu\\settings_select\\player_setup\\player_profile_edit\\save_changes_profile_item",
+	"ui\\shell\\main_menu\\=cancel",
+	"ui\\shell\\main_menu\\=accept",
+};
+
 static long next_tag(void)
 {
 	long tag_index = ((build.first_salt + build.next) << 16) | (build.first_index + build.next);
@@ -2593,7 +2625,8 @@ void menu_tags_loaded(
 {
 	struct halo_menus const *menus;
 	struct cache_file_tag_instance *instances;
-	long widget_count, own_lists = 0, total, index;
+	long widget_count, own_lists = 0, total, index, stub_count;
+	boolean stub_wanted[NUMBEROF(xbox_only_widgets)] = { FALSE };
 	unsigned long long started = vita_host_time_us(), checked, read;
 	boolean ingame = strcmp(map_name, "ui") != 0;
 
@@ -2642,6 +2675,13 @@ void menu_tags_loaded(
 		goto failed;
 	}
 	total = widget_count + own_lists + menus->string_list_count + menus->bitmap_count + menus->font_count;
+	/* (the Xbox's screens this ui.map has not: an empty widget each) */
+	stub_count = 0;
+	for (index = 0; !ingame && index < NUMBEROF(xbox_only_widgets); index++)
+		stub_wanted[index] = tag_loaded(UI_WIDGET_DEFINITION_TAG, xbox_only_widgets[index]) == NONE ? TRUE : FALSE;
+	for (index = 0; !ingame && index < NUMBEROF(xbox_only_widgets); index++)
+		stub_count += stub_wanted[index];
+	total += stub_count;
 	instances = build.failed ? NULL : instances_grow(total, &build.first_index, &build.first_salt);
 	if (!instances)
 		goto failed;
@@ -2658,6 +2698,24 @@ void menu_tags_loaded(
 		build.bitmap_tags[index] = next_tag();
 	for (index = 0; index < menus->font_count; index++)
 		build.font_tags[index] = next_tag();
+	for (index = 0; index < NUMBEROF(xbox_only_widgets); index++)
+	{
+		struct menu_widget_definition *stub;
+		long stub_tag;
+
+		if (!stub_wanted[index])
+			continue;
+		stub_tag = next_tag();
+		stub = allocate(sizeof(*stub));
+		if (!stub)
+			goto failed;
+		strncpy(stub->name, strrchr(xbox_only_widgets[index], '\\') + 1, sizeof(stub->name) - 1);
+		stub->type = _widget_type_container;
+		instance_set(instances, UI_WIDGET_DEFINITION_TAG, stub_tag, xbox_only_widgets[index], "", stub);
+		/* (named as the Xbox's is, for tag_loaded) */
+		instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(stub_tag)].name = (char *)xbox_only_widgets[index];
+		platform_log("menus: this ui.map has no %s: an empty widget stands in for it", xbox_only_widgets[index]);
+	}
 	/* the tags: the bitmaps and strings first, which the widgets name; the
 	widgets' names in the table before any is built, which they find there */
 	for (index = 0; index < menus->bitmap_count && !build.failed; index++)
@@ -2690,7 +2748,7 @@ void menu_tags_loaded(
 		instance_set(instances, UNICODE_STRING_LIST_TAG, build.strings_tags[index], list->name, "",
 			list->resource ? string_list_build(NULL, 0) : string_list_build(menus->strings + list->first, list->count));
 	}
-	for (index = 0; index < widget_count && !build.failed; index++)
+	for (index = 0; index < widget_count && (!build.failed); index++)
 	{
 		struct halo_menu_widget const *widget = &menus->widgets[index];
 
@@ -2712,7 +2770,7 @@ void menu_tags_loaded(
 	if (build.failed)
 		goto failed;
 	cache_files_set_tag_instances(instances, build.first_index + total);
-	for (index = 0; index < widget_count && !build.failed; index++)
+	for (index = 0; index < widget_count && (!build.failed); index++)
 		instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(build.widget_tags[index])].base_address = widget_build(index);
 	if (build.failed)
 		goto failed;

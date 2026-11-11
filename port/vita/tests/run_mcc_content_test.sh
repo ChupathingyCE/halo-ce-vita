@@ -348,6 +348,24 @@ PY
 			echo "mccmenu: MCC's ui.map alone: the six rows reached (CAMPAIGN MULTIPLAYER PROFILES SETTINGS CREDITS QUIT), SETTINGS says it is not supported yet, the menu goes on"
 		fi
 
+		# mcconline: no Xbox file, Menu style Online (ElDewrito): the set of screens is added
+		# (the Xbox's lobby, server list, profile screens a Halo PC ui.map has not stood in for
+		# by an empty widget each) and the Online main menu comes up in place of MCC's own
+		mrun mcconline 25 no HALO_MENU_STYLE=online "HALO_TEST_PAD=wait:150:4000 a wait:150:9000"
+		log=$(menu_log mcconline)
+		if grep -aq "OpenCE's multiplayer screens not added" "$log"; then
+			fail "mcconline: the menus folder's screens were not added with MCC's ui.map alone ($out/mcconline)"
+		elif ! grep -aq "connected.pregame.connected_pregame_screen: an empty widget stands in for it" "$log"; then
+			fail "mcconline: no stand-in for the Xbox's lobby screen ($out/mcconline)"
+		elif ! grep -aq "menus: online screen pc.online.main.screen for pc.h3.main.screen" "$log" ||
+			! grep -aq "menus: Halo 3 screen h3/main/screen for ui.shell.main_menu.main_menu" "$log"; then
+			fail "mcconline: the Online main menu did not replace MCC's ($out/mcconline)"
+		elif ! picture_drawn "$out/mcconline"; then
+			fail "mcconline: no picture drawn ($out/mcconline)"
+		else
+			echo "mcconline: MCC's ui.map alone, Menu style Online: the screens added, the Online main menu up"
+		fi
+
 		# b30: started from that menu (the console's map_name, as the menus' tests start a level)
 		mrun b30 "$seconds" no HALO_MENU_STYLE=classic \
 			'HALO_TEST_COMMANDS=150:map_name mods\mcc_b30;L450:(set cheat_deathless_player true);L600:@skip;L900:@skip'
