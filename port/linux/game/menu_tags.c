@@ -71,6 +71,7 @@ char const *ui_widget_event_handler_function_name(long function_index);
 
 void menu_tags_preload(char const *map_name);
 void menu_tags_loaded(char const *map_name);
+int halo_menu_style_halo3(void);
 void menu_tags_unloaded(void);
 long menu_tags_screen(long tag_index);
 boolean menu_tags_bitmap_fits_widget(long bitmap_tag_index);
@@ -2681,6 +2682,15 @@ void menu_tags_loaded(
 		stub_wanted[index] = tag_loaded(UI_WIDGET_DEFINITION_TAG, xbox_only_widgets[index]) == NONE ? TRUE : FALSE;
 	for (index = 0; !ingame && index < NUMBEROF(xbox_only_widgets); index++)
 		stub_count += stub_wanted[index];
+	/* (an MCC-only install, Halo CE's styles: Halo PC's own menus as before the stand-ins, 1.1.3 -
+	the set's Classic screens lean on the Xbox's screens, which a Halo PC ui.map has not; the
+	Online and Halo 3 styles replace them. Menu style is read here, when the map loads) */
+	if (stub_count && !halo_menu_style_halo3())
+	{
+		platform_log("menus: this ui.map is Halo PC's (no Xbox screens) and Menu style is Halo CE's: "
+			"the game's own menus; Online or Halo 3 style adds OpenCE's screens (restart after changing it)");
+		goto failed;
+	}
 	total += stub_count;
 	instances = build.failed ? NULL : instances_grow(total, &build.first_index, &build.first_salt);
 	if (!instances)
