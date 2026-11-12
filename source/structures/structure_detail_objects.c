@@ -243,6 +243,71 @@ void structure_detail_objects_dispose_from_old_map(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* (fix/mcc-tag-cache-base: game_state.c) each cell's z reference vector,
+the bsp's (in the tags) or the default one (here, in the game state): every
+cell's moved (one beyond its layer's count now is written whole before it is
+drawn again), only the cells drawn (their layers as the view data lists
+them) checked */
+void structure_detail_objects_tag_pointers(
+	void)
+{
+	struct detail_object_global_runtime_data *global = detail_object_global_runtime_data ?
+		game_state_tag_pointer_view(detail_object_global_runtime_data, sizeof(*detail_object_global_runtime_data)) : NULL;
+	short player_index;
+
+	if (!global)
+		return;
+	for (player_index = 0; player_index < NUMBEROF(global->local_player_data); player_index++)
+	{
+		struct detail_object_runtime_data *live = &detail_object_global_runtime_data->local_player_data[player_index];
+		struct detail_object_runtime_data *data = &global->local_player_data[player_index];
+		long first_layer = data->view_data.layers - live->layers;
+		short layer_index;
+
+		if (!game_state_tag_pointers_checking())
+		{
+			struct detail_object_cell_data *cell = &data->cells[0][0];
+			long cell_index;
+
+			for (cell_index = 0; cell_index < NUMBEROF(data->cells) * NUMBEROF(data->cells[0]); cell_index++)
+			{
+				if (cell[cell_index].z_reference_vector != &detail_object_global_runtime_data->default_z_reference_vector)
+					game_state_tag_pointer(&cell[cell_index].z_reference_vector);
+			}
+			continue;
+		}
+
+		/* (the view data's pointers are the game state's own: where they
+		point in the live data, the same place in this view) */
+		if (!data->view_data.layers || first_layer < 0 || data->view_data.layer_count < 0 ||
+			first_layer + data->view_data.layer_count > NUMBEROF(data->layers))
+		{
+			continue;
+		}
+		for (layer_index = 0; layer_index < data->view_data.layer_count; layer_index++)
+		{
+			struct detail_object_layer_data *layer = &data->layers[first_layer + layer_index];
+			long first_cell = layer->cells - &live->cells[0][0];
+			short cell_index;
+
+			if (!layer->cells || first_cell < 0 || layer->cell_count < 0 ||
+				first_cell + layer->cell_count > NUMBEROF(data->cells) * NUMBEROF(data->cells[0]))
+			{
+				continue;
+			}
+			for (cell_index = 0; cell_index < layer->cell_count; cell_index++)
+			{
+				struct detail_object_cell_data *cell = &(&data->cells[0][0])[first_cell + cell_index];
+
+				if (cell->z_reference_vector != &detail_object_global_runtime_data->default_z_reference_vector)
+					game_state_tag_pointer(&cell->z_reference_vector);
+			}
+		}
+	}
+}
+#endif
+
 void structure_detail_objects_dispose(
 	void)
 {

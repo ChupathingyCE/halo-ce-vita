@@ -241,6 +241,41 @@ void recorded_animations_initialize(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* (fix/mcc-tag-cache-base: game_state.c) each thread's place in its
+animation's event stream */
+void recorded_animations_tag_pointers(
+	void)
+{
+	unsigned long size;
+	struct data_array *array;
+	byte *datums;
+	long index;
+
+	if (!animation_threads)
+		return;
+	size = (unsigned long)((byte *)animation_threads->data - (byte *)animation_threads) +
+		(unsigned long)animation_threads->maximum_count * (unsigned long)animation_threads->size;
+	array = game_state_tag_pointer_view(animation_threads, size);
+	if (!array)
+		return;
+	/* (the save's datums where its array says, in this view of it) */
+	if ((byte *)array->data != (byte *)animation_threads->data || array->maximum_count != animation_threads->maximum_count ||
+		array->size != animation_threads->size)
+	{
+		return;
+	}
+	datums = (byte *)array + ((byte *)animation_threads->data - (byte *)animation_threads);
+	for (index = 0; index < array->maximum_count; index++)
+	{
+		struct animation_thread *thread = (struct animation_thread *)(datums + index * array->size);
+
+		if (thread->identifier)
+			game_state_tag_pointer(&thread->event_stream);
+	}
+}
+#endif
+
 void recorded_animations_dispose(
 	void)
 {

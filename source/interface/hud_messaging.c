@@ -701,6 +701,39 @@ void hud_messaging_dispose_from_old_map(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* (fix/mcc-tag-cache-base: game_state.c) the help and objective messages,
+each datum's state message and its icons (an info that is text holds an
+index, not a pointer) */
+void hud_messaging_tag_pointers(
+	void)
+{
+	struct hud_messaging_globals_definition *globals = hud_messaging_globals ?
+		game_state_tag_pointer_view(hud_messaging_globals, sizeof(*hud_messaging_globals)) : NULL;
+	long datum_index;
+	long info_index;
+
+	if (!globals)
+		return;
+	game_state_tag_pointer(&globals->help_message);
+	game_state_tag_pointer(&globals->objective.message);
+	for (datum_index = 0; datum_index < NUMBER_OF_HUD_MESSAGING_DATUMS; datum_index++)
+	{
+		struct hud_state_message_runtime_definition *state = &globals->message_data[datum_index].state_message;
+
+		game_state_tag_pointer(&state->state_message);
+		for (info_index = 0; info_index < NUMBEROF(state->info); info_index++)
+		{
+			/* (a text info's bits stay when a new message clears the
+			flags, until an icon is set: below the tags' range, never
+			moved; so not checked either) */
+			if (!TEST_FLAG(state->is_text_flags, info_index) && !game_state_tag_pointers_checking())
+				game_state_tag_pointer(&state->info[info_index].icon);
+		}
+	}
+}
+#endif
+
 void hud_messaging_dispose(
 	void)
 {

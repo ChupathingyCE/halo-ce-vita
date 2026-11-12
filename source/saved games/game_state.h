@@ -152,6 +152,22 @@ boolean game_state_peek_persistent_storage_header(void *header, long header_size
 boolean game_state_peek_persistent_storage(long offset, void *bytes, long size);
 int game_state_read_persistent_storage_staged(long header_size, long checksum_offset, long buffer_size);
 void game_state_load_staged_persistent_storage(void *buffer, long buffer_size);
+/* (fix/mcc-tag-cache-base) the game state's pointers into a Custom Edition
+or MCC map's tags, moved when a save made with the tags elsewhere loads
+(game_state.c): each subsystem holding some names them in its
+*_tag_pointers, through game_state_tag_pointer (a typed pointer) or
+game_state_tag_pointer_within (a script stack's word, only inside one part
+of the tags), on its allocation as game_state_tag_pointer_view gives it (the
+save's bytes, while a save is checked before it loads) */
+void *game_state_tag_pointer_view(void *live, unsigned long size);
+void game_state_tag_pointer(void *field);
+boolean game_state_tag_pointer_within(void *field, void const *here, unsigned long bytes);
+void game_state_tag_pointer_put_back(void);
+boolean game_state_tag_pointers_checking(void);
+void hud_messaging_tag_pointers(void);
+void recorded_animations_tag_pointers(void);
+void structure_detail_objects_tag_pointers(void);
+void hs_runtime_tag_pointers(void);
 #endif
 void game_state_read_from_persistent_storage(
 	void *buffer,

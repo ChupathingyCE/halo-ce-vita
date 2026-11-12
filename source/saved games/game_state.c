@@ -178,7 +178,11 @@ struct
 #ifdef HALO_LINUX
 #include "render_epoch.h"
 #include "load_profile.h"
+#include "custom_edition_cache.h"
 void platform_log(const char *format, ...);
+static void game_state_header_note_custom_edition_tags(struct game_state_header *header);
+static boolean game_state_header_custom_edition_tags_here(struct game_state_header const *header, boolean persistent);
+static void game_state_custom_edition_tags_loaded(void);
 #endif
 
 #ifdef HALO_LINUX
@@ -408,6 +412,9 @@ void game_state_initialize_for_new_map(
 	game_state_globals.header->difficulty = game_difficulty_level_get();
 	game_state_globals.header->cache_file_checksum = cache_files_get_checksum();
 	game_state_globals.header->allocation_size_checksum = game_state_globals.allocation_size_checksum;
+#ifdef HALO_LINUX
+	game_state_header_note_custom_edition_tags(game_state_globals.header);
+#endif
 
 	return;
 }
@@ -1244,6 +1251,246 @@ update_queues_reset_and_fill_with_lies took the missing queue 0 through
 NULL. The players array's pointer to its datums, saved and as it is now,
 tells; a save from elsewhere is not loaded (the level starts from its
 beginning) rather than loaded into a crash. */
+/* (fix/mcc-tag-cache-base) a Custom Edition or MCC Halo CE map's tags sit
+in a tag cache of their own (xbox_memory.c's
+halo_custom_edition_tag_cache_acquire): on the Vita a memory block whose
+address follows whatever was allocated before it (the level before, the
+menus' map, memory pressure: 0x91100000 in one session, 0x91F00000 in
+another of the same build), on the PC wherever the system maps it when the
+Custom Edition window's address is taken. The game state keeps pointers
+into those tags (found by running a level with its tags at two addresses
+and comparing the game states: tools in fix/mcc-tag-cache-base's notes):
+	- the HUD's messages: the help and objective text, the state message and
+	  its icons (hud_messaging.c);
+	- each recorded animation's event stream (recorded_animations.c);
+	- the detail objects' cells' z reference vectors (render only,
+	  structure_detail_objects.c);
+	- the scripts' string constants in the threads' stacks and the string
+	  globals (hs_runtime.c).
+The header records where the tags were (unused words 0-2: 'cetc', the base,
+the size); a save made with them elsewhere has those pointers moved by the
+difference as it loads (each where its type says it is a pointer into the
+tags, the script stacks' words only inside the string constants), so a
+campaign save resumes wherever the tags are now. A save of before this
+(no mark) on such a map is resumed only when every pointer above that it
+holds points into the tags as they are here (its tags were where they are:
+it loads as it always did); otherwise the level starts over rather than
+reading through pointers into memory that is not the tags any more. */
+enum
+{
+	GAME_STATE_HEADER_CUSTOM_EDITION_MARK = 0,
+	GAME_STATE_HEADER_CUSTOM_EDITION_BASE = 1,
+	GAME_STATE_HEADER_CUSTOM_EDITION_SIZE = 2,
+	GAME_STATE_TAG_POINTER_VIEWS = 8
+};
+
+static struct
+{
+	boolean pending;
+	boolean checking;
+	boolean view_failed;
+	unsigned long from;
+	unsigned long to;
+	unsigned long size;
+	long moved;
+	long outside;
+	void *views[GAME_STATE_TAG_POINTER_VIEWS];
+	int view_count;
+} game_state_tag_pointers;
+
+static void game_state_header_note_custom_edition_tags(
+	struct game_state_header *header)
+{
+	unsigned long size;
+	void *tags = custom_edition_cache_tag_cache(&size);
+
+	header->unused[GAME_STATE_HEADER_CUSTOM_EDITION_MARK] = tags ? 'cetc' : 0;
+	header->unused[GAME_STATE_HEADER_CUSTOM_EDITION_BASE] = (long)(unsigned long)tags;
+	header->unused[GAME_STATE_HEADER_CUSTOM_EDITION_SIZE] = (long)(tags ? size : 0);
+}
+
+void *game_state_tag_pointer_view(
+	void *live,
+	unsigned long size)
+{
+	long offset = (long)((byte *)live - (byte *)game_state_globals.base_address);
+	void *view;
+
+	if (!game_state_tag_pointers.checking)
+		return live;
+	/* (checking a save before it loads: its bytes of that allocation) */
+	view = NULL;
+	if (offset >= 0 && offset + (long)size <= GAME_STATE_SIZE &&
+		game_state_tag_pointers.view_count < GAME_STATE_TAG_POINTER_VIEWS)
+	{
+		view = malloc(size);
+	}
+	if (view && !game_state_peek_persistent_storage(offset, view, (long)size))
+	{
+		free(view);
+		view = NULL;
+	}
+	if (view)
+		game_state_tag_pointers.views[game_state_tag_pointers.view_count++] = view;
+	else
+		game_state_tag_pointers.view_failed = TRUE;
+	return view;
+}
+
+/* a pointer (at any alignment) into the tags: moved with them, or checked */
+void game_state_tag_pointer(
+	void *field)
+{
+	unsigned long value;
+	void *pointer;
+
+	csmemcpy(&pointer, field, sizeof(pointer));
+	value = (unsigned long)pointer;
+	if (!value)
+		return;
+	if (game_state_tag_pointers.checking)
+	{
+		if (value - game_state_tag_pointers.to >= game_state_tag_pointers.size)
+			game_state_tag_pointers.outside++;
+	}
+	else if (value - game_state_tag_pointers.from < game_state_tag_pointers.size)
+	{
+		pointer = (void *)(value - game_state_tag_pointers.from + game_state_tag_pointers.to);
+		csmemcpy(field, &pointer, sizeof(pointer));
+		game_state_tag_pointers.moved++;
+	}
+}
+
+/* whether the 4 bytes at field were a pointer into the part of the tags
+that is at here (bytes long) now - moved if so (never checked: only typed
+pointers can tell a save of before the fix) */
+boolean game_state_tag_pointer_within(
+	void *field,
+	void const *here,
+	unsigned long bytes)
+{
+	unsigned long value;
+	unsigned long start = (unsigned long)here - game_state_tag_pointers.to + game_state_tag_pointers.from;
+	void *pointer;
+
+	if (game_state_tag_pointers.checking || !here)
+		return FALSE;
+	csmemcpy(&pointer, field, sizeof(pointer));
+	value = (unsigned long)pointer;
+	if (value - start >= bytes)
+		return FALSE;
+	pointer = (void *)(value - game_state_tag_pointers.from + game_state_tag_pointers.to);
+	csmemcpy(field, &pointer, sizeof(pointer));
+	game_state_tag_pointers.moved++;
+	return TRUE;
+}
+
+/* (a word game_state_tag_pointer_within moved, put back by its caller) */
+void game_state_tag_pointer_put_back(
+	void)
+{
+	game_state_tag_pointers.moved--;
+}
+
+boolean game_state_tag_pointers_checking(
+	void)
+{
+	return game_state_tag_pointers.checking;
+}
+
+static void game_state_tag_pointers_visit(
+	void)
+{
+	int index;
+
+	game_state_tag_pointers.moved = 0;
+	game_state_tag_pointers.outside = 0;
+	game_state_tag_pointers.view_failed = FALSE;
+	game_state_tag_pointers.view_count = 0;
+	hud_messaging_tag_pointers();
+	recorded_animations_tag_pointers();
+	structure_detail_objects_tag_pointers();
+	hs_runtime_tag_pointers();
+	for (index = 0; index < game_state_tag_pointers.view_count; index++)
+		free(game_state_tag_pointers.views[index]);
+	game_state_tag_pointers.view_count = 0;
+}
+
+/* whether a save (its header read from the persistent storage) can resume
+with the map's tags where they are now; when they moved, the load moves its
+pointers (game_state_custom_edition_tags_loaded). (persistent: the campaign
+save, which a save of before the mark is checked in; a core save of before
+it loads as it always did) */
+static boolean game_state_header_custom_edition_tags_here(
+	struct game_state_header const *header,
+	boolean persistent)
+{
+	unsigned long size;
+	void *tags = custom_edition_cache_tag_cache(&size);
+	unsigned long saved_base = (unsigned long)header->unused[GAME_STATE_HEADER_CUSTOM_EDITION_BASE];
+	unsigned long saved_size = (unsigned long)header->unused[GAME_STATE_HEADER_CUSTOM_EDITION_SIZE];
+
+	game_state_tag_pointers.pending = FALSE;
+	if (header->unused[GAME_STATE_HEADER_CUSTOM_EDITION_MARK] == 'cetc')
+	{
+		if (!tags || saved_size != size || !saved_base)
+		{
+			platform_log("campaign save: made with a %lu KB Halo CE tag cache, here %lu KB: not loaded",
+				saved_size / 1024, tags ? size / 1024 : 0UL);
+			return FALSE;
+		}
+		if (saved_base != (unsigned long)tags)
+		{
+			game_state_tag_pointers.pending = TRUE;
+			game_state_tag_pointers.from = saved_base;
+			game_state_tag_pointers.to = (unsigned long)tags;
+			game_state_tag_pointers.size = size;
+		}
+		return TRUE;
+	}
+	if (!tags || !persistent)
+		return TRUE;
+	/* (a save of before the mark, on a Custom Edition or MCC map: resumed
+	only with every typed pointer into the tags it holds pointing into them
+	as they are here) */
+	game_state_tag_pointers.checking = TRUE;
+	game_state_tag_pointers.from = game_state_tag_pointers.to = (unsigned long)tags;
+	game_state_tag_pointers.size = size;
+	game_state_tag_pointers_visit();
+	game_state_tag_pointers.checking = FALSE;
+	if (game_state_tag_pointers.outside || game_state_tag_pointers.view_failed)
+	{
+		platform_log("campaign save: made before its tag cache's address was recorded, and %ld of its pointers into the "
+			"tags point elsewhere (the tags are at %p now%s): not loaded",
+			game_state_tag_pointers.outside, tags, game_state_tag_pointers.view_failed ? ", a part of it unread" : "");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/* after a save's bytes are in the game state, before anything reads them;
+the header (loaded with them) then names the tags as they are here, which
+the next save keeps */
+static void game_state_custom_edition_tags_loaded(
+	void)
+{
+	game_state_header_note_custom_edition_tags(game_state_globals.header);
+	if (!game_state_tag_pointers.pending)
+		return;
+	game_state_tag_pointers.pending = FALSE;
+	/* (debug) HALO_SAVE_TAG_REBASE=0: left as they were, as before the fix
+	(what a save made with the tags elsewhere did to the game) */
+	if (getenv("HALO_SAVE_TAG_REBASE") && !atoi(getenv("HALO_SAVE_TAG_REBASE")))
+	{
+		platform_log("campaign save: made with the Halo CE tags at %08lx, here at %08lx: its pointers into them NOT moved "
+			"(HALO_SAVE_TAG_REBASE=0)", game_state_tag_pointers.from, game_state_tag_pointers.to);
+		return;
+	}
+	game_state_tag_pointers_visit();
+	platform_log("campaign save: made with the Halo CE tags at %08lx, here at %08lx: %ld pointers into them moved",
+		game_state_tag_pointers.from, game_state_tag_pointers.to, game_state_tag_pointers.moved);
+}
+
 static boolean game_state_persistent_storage_made_here(
 	void)
 {
@@ -1282,7 +1529,8 @@ void game_state_try_and_load_from_persistent_storage(
 	boolean header_read = game_state_peek_persistent_storage_header(&header, sizeof(header));
 	boolean header_matches = header_read && code_001af4f0(&header, FALSE);
 	boolean difficulty_matches = header_matches && main_get_difficulty() == header.difficulty;
-	boolean header_valid = difficulty_matches && game_state_persistent_storage_made_here();
+	boolean header_valid = difficulty_matches && game_state_persistent_storage_made_here() &&
+		game_state_header_custom_edition_tags_here(&header, TRUE);
 	int staged;
 
 	/* (port) why a map start did or did not resume the campaign save: the
@@ -1313,6 +1561,7 @@ void game_state_try_and_load_from_persistent_storage(
 		started = halo_load_profile_now();
 		game_state_load_staged_persistent_storage(game_state_globals.base_address, GAME_STATE_SIZE);
 		halo_load_profile_add(_halo_load_persistent_read, started, GAME_STATE_SIZE);
+		game_state_custom_edition_tags_loaded();
 		game_difficulty_level_set(main_get_difficulty());
 		started = halo_load_profile_now();
 		game_state_call_after_load_procs();
@@ -1338,7 +1587,8 @@ void game_state_try_and_load_from_persistent_storage(
 	}
 	if (header_valid
 		&& code_001af4f0(&header, FALSE)
-		&& main_get_difficulty() == header.difficulty)
+		&& main_get_difficulty() == header.difficulty
+		&& game_state_header_custom_edition_tags_here(&header, TRUE))
 	{
 		game_state_call_before_load_procs();
 		started = halo_load_profile_now();
@@ -1346,6 +1596,7 @@ void game_state_try_and_load_from_persistent_storage(
 			game_state_globals.base_address,
 			GAME_STATE_SIZE);
 		halo_load_profile_add(_halo_load_persistent_read, started, GAME_STATE_SIZE);
+		game_state_custom_edition_tags_loaded();
 		game_difficulty_level_set(main_get_difficulty());
 		started = halo_load_profile_now();
 		game_state_call_after_load_procs();
@@ -1405,7 +1656,11 @@ void game_state_load_core(
 	struct game_state_header header;
 
 	if (game_state_read_core_header(name, &header, sizeof(header))
-		&& code_001af4f0(&header, TRUE))
+		&& code_001af4f0(&header, TRUE)
+#ifdef HALO_LINUX
+		&& game_state_header_custom_edition_tags_here(&header, FALSE)
+#endif
+		)
 	{
 		game_state_note_event("core loaded");
 		game_state_call_before_load_procs();
@@ -1413,6 +1668,9 @@ void game_state_load_core(
 			name,
 			game_state_globals.base_address,
 			GAME_STATE_SIZE);
+#ifdef HALO_LINUX
+		game_state_custom_edition_tags_loaded();
+#endif
 		console_printf(FALSE, "loaded '%s'", name);
 		game_state_call_after_load_procs();
 	}

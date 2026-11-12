@@ -894,6 +894,88 @@ void hs_runtime_initialize_for_new_map(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* (fix/mcc-tag-cache-base: game_state.c) a word of a script's stack that
+was a string constant's address (the scenario's string constants, in the
+tags): inside them as they were, at the start of a string (a constant is
+whole), and not a syntax node's index (the frames keep those beside their
+values) */
+static boolean hs_runtime_string_pointer_rebased(
+	void *field,
+	char const *strings,
+	long bytes)
+{
+	long value;
+	char const *moved;
+
+	csmemcpy(&value, field, sizeof(value));
+	if (!game_state_tag_pointer_within(field, strings, (unsigned long)bytes))
+		return FALSE;
+	csmemcpy(&moved, field, sizeof(moved));
+	if ((moved == strings || moved[-1] == '\0') &&
+		!(hs_syntax_data->valid && (value >> 16) && datum_try_and_get(hs_syntax_data, value)))
+	{
+		return TRUE;
+	}
+	/* (not a string's start, or a syntax node's index: put back) */
+	csmemcpy(field, &value, sizeof(value));
+	game_state_tag_pointer_put_back();
+	return FALSE;
+}
+
+/* the string values in the threads' frames (each frame's own data, not its
+links) and results, and the string globals */
+void hs_runtime_tag_pointers(
+	void)
+{
+	struct scenario *scenario;
+	char const *strings;
+	long bytes;
+	long index;
+
+	if (game_state_tag_pointers_checking() || !hs_thread_data || !hs_global_data || !hs_syntax_data)
+		return;
+	scenario = global_scenario_get();
+	strings = scenario ? (char const *)scenario->hs_string_constants.address : NULL;
+	bytes = scenario ? scenario->hs_string_constants.size : 0;
+	if (!strings || bytes <= 0)
+		return;
+	for (index = 0; index < hs_thread_data->maximum_count; index++)
+	{
+		struct hs_thread_datum *thread = (struct hs_thread_datum *)((byte *)hs_thread_data->data + index * hs_thread_data->size);
+		struct hs_stack_frame *frame;
+		long frames = 0;
+
+		if (!thread->identifier || index >= hs_thread_data->count || !valid_thread(thread))
+			continue;
+		for (frame = thread->stack;
+			frame && (byte *)frame >= thread->stack_data && (byte *)frame + sizeof(*frame) <= thread->stack_data + HS_THREAD_STACK_SIZE &&
+				frame->size >= 0 && frame->data + frame->size <= thread->stack_data + HS_THREAD_STACK_SIZE &&
+				frames < HS_THREAD_STACK_SIZE;
+			frame = frame->previous, frames++)
+		{
+			long offset;
+
+			for (offset = 0; offset + (long)sizeof(long) <= frame->size; offset += 2)
+			{
+				if (hs_runtime_string_pointer_rebased(frame->data + offset, strings, bytes))
+					offset += 2;
+			}
+		}
+		hs_runtime_string_pointer_rebased(&thread->result, strings, bytes);
+	}
+	for (index = 0; index < hs_global_data->maximum_count; index++)
+	{
+		struct hs_global_datum *global = (struct hs_global_datum *)((byte *)hs_global_data->data + index * hs_global_data->size);
+		short designator = index < hs_external_global_count ?
+			(short)(index | FLAG(_hs_global_external_bit)) : (short)(index - hs_external_global_count);
+
+		if (global->identifier && index < hs_global_data->count && hs_global_get_type(designator) == _hs_type_string)
+			game_state_tag_pointer_within(&global->value, strings, (unsigned long)bytes);
+	}
+}
+#endif
+
 void hs_runtime_dispose(
 	void)
 {
