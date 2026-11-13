@@ -745,6 +745,20 @@ void vita_movie_copy(void *destination, long pitch, unsigned long width, unsigne
 	}
 }
 
+/* the process ending (vita_main.c vita_process_exit): a movie's sound
+thread stopped and waited for (bounded), the player itself left for the
+system to end with the process (closing it is a teardown of its own
+threads). 1 stopped, 0 still running after 200 ms, -1 no movie playing */
+int vita_movie_stop_for_exit(void)
+{
+	SceUInt timeout = 200000;
+
+	if (!movie.open || movie.audio_thread < 0 || !movie.audio_running)
+		return -1;
+	movie.audio_running = 0;
+	return sceKernelWaitThreadEnd(movie.audio_thread, NULL, &timeout) >= 0;
+}
+
 void vita_movie_close(void)
 {
 	if (!movie.open)
