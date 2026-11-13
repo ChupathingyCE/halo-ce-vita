@@ -28,6 +28,7 @@ ux0:data/haloce-vita/log.txt (stderr).
 #include <psp2/ctrl.h>
 
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <sys/time.h>
 #include <time.h>
@@ -988,6 +989,117 @@ static int game_thread(SceSize arguments_size, void *arguments_data)
 	return 0;
 }
 
+/* ---------- the process ending
+
+exit()'s last step (on_exit, registered first: after every other
+handler) and the main thread's end both come here, vita_process_exit,
+which never returns: the threads that play or write are stopped (each
+bounded, a log line each), the log's ring written, every stream flushed,
+and the process ended by the system with every file still open.
+
+Nothing of newlib's own end may run while the game's threads do. A test's
+@exit and debug.exit_after call exit() on the game thread while the cache
+file thread, the sound decoder, the texture decoders and the others read
+their files: newlib's end (__cleanup, then _exit's _free_vita_newlib)
+closes every stream and descriptor and frees the heap under them, and the
+next fseek of a reading thread faulted in _lseek_r on the freed descriptor
+(__vita_fd_grab NULL; Nov 7 and 8 2026, dumps 20261107-214025,
+20261108-004025) or the mixer in mix_voice on the freed heap. (1.1.3 had no
+handler at all: exit() went straight into that teardown. On 1.2.0 ending
+the process in exit()'s last handler was not enough, Nov 9-12, ~20 runs:
+sceKernelExitProcess on the game thread ended that thread only - the
+dumps show it dormant - and the main thread, back from
+sceKernelWaitThreadEnd, returned from main into _start's
+__libc_fini_array and exit(), and was found in _free_vita_io's sceIoClose
+(20261112-135606, a reader faulting in _lseek_r) or _free_vita_heap
+(20261112-005642, the mixer faulting) with the readers still running.) So
+the main thread never returns from main either: it comes here too, and
+whichever thread arrives first stops the others' work once; a later one
+waits for that (bounded), then ends the process itself. The system closes
+what is open once every thread is gone. */
+static void log_drain(void);
+void vita_render_quiesce_for_exit(void);
+int dsound_sdl_stop_mixer_for_exit(unsigned long timeout_us);
+int vita_movie_stop_for_exit(void);
+int vita_settings_save_wait_for_exit(unsigned long timeout_us);
+
+static void exit_log(const char *format, ...) __attribute__((format(printf, 1, 2)));
+static void exit_log(const char *format, ...)
+{
+	char message[192];
+	va_list arguments;
+
+	va_start(arguments, format);
+	vsnprintf(message, sizeof(message), format, arguments);
+	va_end(arguments);
+	vita_host_log(message);
+}
+
+/* 0 not begun, 1 stopping, 2 stopped */
+static volatile int process_exit_state;
+
+static void process_exit_stop_threads(void)
+{
+	unsigned long long from = vita_host_time_us();
+	int result;
+
+	/* (the render worker parked between two records, the GPU idle:
+	d3d8_gxm.c; its own lines) */
+	vita_render_quiesce_for_exit();
+	result = dsound_sdl_stop_mixer_for_exit(200000);
+	exit_log("exit: sound mixer %s (%lu us)", result ? "stopped" : "NOT stopped (a mix still in after 200 ms)",
+		(unsigned long)(vita_host_time_us() - from));
+	result = vita_movie_stop_for_exit();
+	if (result >= 0)
+		exit_log("exit: movie sound thread %s (%lu us)", result ? "stopped" : "NOT stopped after 200 ms",
+			(unsigned long)(vita_host_time_us() - from));
+	result = vita_settings_save_wait_for_exit(1000000);
+	exit_log("exit: settings writer %s (%lu us)", result ? "idle (settings.txt written)" : "STILL WRITING after 1 s",
+		(unsigned long)(vita_host_time_us() - from));
+	/* (the file readers - cache file thread, sound and texture decoders,
+	Halo 2's readers, the custom map reader, the update scan, the shader
+	compiler, the network's - are not joined: each may be inside a read of
+	the memory card that takes a second; with no descriptor closed before
+	the system ends them they read nothing freed) */
+	exit_log("exit: threads stopped in %lu us; readers and the rest left to the system, no file closed before it",
+		(unsigned long)(vita_host_time_us() - from));
+}
+
+static void vita_process_exit(int status) __attribute__((noreturn));
+static void vita_process_exit(int status)
+{
+	int expected = 0;
+
+	if (__atomic_compare_exchange_n(&process_exit_state, &expected, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+	{
+		exit_log("exit: process ending (status %d, thread 0x%x)", status, (unsigned)sceKernelGetThreadId());
+		process_exit_stop_threads();
+		__atomic_store_n(&process_exit_state, 2, __ATOMIC_RELEASE);
+	}
+	else
+	{
+		/* (another thread is stopping them: its stops done first) */
+		unsigned long long from = vita_host_time_us();
+
+		while (__atomic_load_n(&process_exit_state, __ATOMIC_ACQUIRE) != 2 && vita_host_time_us() - from < 3000000ull)
+			sceKernelDelayThread(1000);
+		exit_log("exit: process ending on thread 0x%x too", (unsigned)sceKernelGetThreadId());
+	}
+	log_drain();
+	fflush(NULL);
+	sceKernelExitProcess(status);
+	/* (never back into newlib's end: the system ends this thread with
+	the process) */
+	for (;;)
+		sceKernelDelayThread(1000000);
+}
+
+static void process_end(int status, void *argument)
+{
+	(void)argument;
+	vita_process_exit(status);
+}
+
 int main(int argc, char **argv)
 {
 	static char *arguments[] = { "halo", NULL };
@@ -996,6 +1108,7 @@ int main(int argc, char **argv)
 
 	(void)argc;
 	(void)argv;
+	on_exit(process_end, NULL);
 	sceIoMkdir(VITA_DATA_DIRECTORY, 0777);
 	sceIoMkdir(VITA_DATA_DIRECTORY "/saves", 0777);
 	/* An invite from a previous process cannot join this run's host. */
@@ -1130,11 +1243,21 @@ int main(int argc, char **argv)
 		if (thread < 0)
 		{
 			vita_host_log("vita: cannot create the game thread");
-			return halo_main(1, arguments);
+			status = halo_main(1, arguments);
 		}
-		sceKernelStartThread(thread, 0, NULL);
-		sceKernelWaitThreadEnd(thread, &status, NULL);
-		return status;
+		else
+		{
+			sceKernelStartThread(thread, 0, NULL);
+			sceKernelWaitThreadEnd(thread, &status, NULL);
+		}
+		/* (never a return into _start: its __libc_fini_array and exit()
+		would tear newlib down under the running threads. The game's own
+		end - its menu's quit - goes through exit()'s handlers as before,
+		process_end last; a game thread that ended in exit() already began
+		the process's end, which is finished here) */
+		if (__atomic_load_n(&process_exit_state, __ATOMIC_ACQUIRE) != 0)
+			vita_process_exit(status);
+		exit(status);
 	}
 }
 

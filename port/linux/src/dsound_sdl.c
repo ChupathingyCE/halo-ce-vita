@@ -1210,7 +1210,7 @@ static void chant_update(void)
 		(double)chant.longest_gap_us / 1000.0);
 }
 
-static void SDLCALL audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
+static void SDLCALL audio_callback_mix(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
 {
 	float buffer[MIX_CHUNK_FRAMES * OUTPUT_CHANNELS];
 	static int pinned;
@@ -1289,6 +1289,41 @@ static void SDLCALL audio_callback(void *userdata, SDL_AudioStream *stream, int 
 		additional_amount -= (int)(frames * OUTPUT_CHANNELS * sizeof(float));
 	}
 	chant_update();
+}
+
+/* The process ending (vita_main.c vita_process_exit): the mixer stopped
+before the process is torn down - it reads the game's sounds, which the
+exiting thread no longer keeps in order. mixer_exit is set, then the exit
+waits (bounded) until a mix in progress has left; a device call after it
+returns at once (SDL plays silence). The flags are sequentially consistent
+both ways (set, then look), so a mix either sees mixer_exit or is seen
+inside. */
+static volatile int mixer_exit, mixer_inside;
+
+static void SDLCALL audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
+{
+	if (__atomic_load_n(&mixer_exit, __ATOMIC_SEQ_CST))
+		return;
+	__atomic_store_n(&mixer_inside, 1, __ATOMIC_SEQ_CST);
+	if (!__atomic_load_n(&mixer_exit, __ATOMIC_SEQ_CST))
+		audio_callback_mix(userdata, stream, additional_amount, total_amount);
+	__atomic_store_n(&mixer_inside, 0, __ATOMIC_SEQ_CST);
+}
+
+/* 1 if the mixer is out (or never ran); 0 if a mix was still in after
+timeout_us */
+int dsound_sdl_stop_mixer_for_exit(unsigned long timeout_us)
+{
+	unsigned long long from = statistics_now();
+
+	__atomic_store_n(&mixer_exit, 1, __ATOMIC_SEQ_CST);
+	while (__atomic_load_n(&mixer_inside, __ATOMIC_SEQ_CST))
+	{
+		if (statistics_now() - from >= timeout_us)
+			return 0;
+		SDL_Delay(1);
+	}
+	return 1;
 }
 
 /* without a device, drain voices in real time */

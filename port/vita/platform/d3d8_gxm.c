@@ -4702,6 +4702,20 @@ static void execute_command(struct render_record *command)
 	}
 }
 
+/* (the process ending, vita_render_quiesce_for_exit: the worker parks between
+two records - never inside a draw - and says so) */
+static volatile int worker_exit_requested, worker_parked;
+
+static void worker_park_if_exiting(void)
+{
+	if (__atomic_load_n(&worker_exit_requested, __ATOMIC_ACQUIRE))
+	{
+		__atomic_store_n(&worker_parked, 1, __ATOMIC_RELEASE);
+		for (;;)
+			vita_host_sleep_us(1000000);
+	}
+}
+
 static void *render_worker(void *unused)
 {
 	(void)unused;
@@ -4725,12 +4739,14 @@ static void *render_worker(void *unused)
 			struct render_record *command;
 			unsigned long spins = 0;
 
+			worker_park_if_exiting();
 			while (__atomic_load_n(&command_head, __ATOMIC_ACQUIRE) == command_tail + index)
 			{
 				/* a short spin covers the gap between draws; then asleep
 				until the game's thread wakes it (worker_wake_for_records) */
 				if (++spins < 200)
 					continue;
+				worker_park_if_exiting();
 				__atomic_store_n(&worker_sleep_from, command_tail + index, __ATOMIC_RELAXED);
 				waiter_sleep(&worker_waiter, worker_records_ready, command_tail + index);
 			}
@@ -4787,6 +4803,32 @@ static void *render_worker(void *unused)
 		}
 	}
 	return NULL;
+}
+
+/* exit(): the process ends with the render worker possibly in a GXM draw and
+the GPU with frames queued; the system tore the process's GXM memory down
+under them (a data abort in SceGxm on the worker's pthread after "test
+command: exiting"). The worker is parked between two records (bounded wait:
+a draw takes well under a second), then the GPU is waited idle. */
+void vita_render_quiesce_for_exit(void)
+{
+	unsigned long long from = vita_host_time_us();
+
+	if (!device.created)
+		return;
+	__atomic_store_n(&worker_exit_requested, 1, __ATOMIC_RELEASE);
+	if (worker_enabled > 0)
+	{
+		while (!__atomic_load_n(&worker_parked, __ATOMIC_ACQUIRE) && vita_host_time_us() - from < 1500000ull)
+		{
+			waiter_wake(&worker_waiter);
+			vita_host_sleep_us(1000);
+		}
+		platform_log("exit: render worker %s (%lu us)", worker_parked ? "parked" : "NOT parked",
+			(unsigned long)(vita_host_time_us() - from));
+	}
+	vgxm_wait_gpu_idle();
+	platform_log("exit: GPU idle (%lu us)", (unsigned long)(vita_host_time_us() - from));
 }
 
 /* ---------- recording (the game's side) */

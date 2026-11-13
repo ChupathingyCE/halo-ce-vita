@@ -2342,6 +2342,31 @@ void vita_settings_save_wait(void)
 	pthread_mutex_unlock(&save_lock);
 }
 
+/* the process ending (vita_main.c vita_process_exit): a settings.txt
+write in progress or asked for finished first, waited for up to timeout_us
+(the game's thread may hold nothing of the writer's: save_lock is taken a
+millisecond at a time). 1 written (or no writer), 0 still writing */
+int vita_settings_save_wait_for_exit(unsigned long timeout_us)
+{
+	unsigned long waited = 0;
+	int done;
+
+	for (;;)
+	{
+		if (pthread_mutex_trylock(&save_lock) == 0)
+		{
+			done = save_writer <= 0 || save_written == save_asked;
+			pthread_mutex_unlock(&save_lock);
+			if (done)
+				return 1;
+		}
+		if (waited >= timeout_us)
+			return 0;
+		vita_host_sleep_us(1000);
+		waited += 1000;
+	}
+}
+
 /* the chosen network as the platform layer's settings (port_config.c):
 internet play on, without UPnP, which the Vita does not have
 (vita_stubs.c); or ad hoc play, which needs no internet */
