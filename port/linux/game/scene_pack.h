@@ -206,6 +206,12 @@ struct scene_pack_recipe
 	/* (a backdrop line: the menus' backdrop, menu_backdrop.c) a structure
 	bsp and a scenario's copy may be its tags */
 	boolean backdrop;
+	/* (scene_pack_recipe_mcc_fallback) its map lines' Xbox maps are not in
+	the maps folder: its maps are MCC's own Halo CE maps of the same names
+	(the Halo content folder's halo1\maps, version 13), made its cemap
+	lines with no size or checksum (whatever MCC's version of them), read as
+	Custom Edition maps are (scene_pack_ce.c) */
+	boolean mcc_maps;
 };
 
 /* what a pack file's header says, once checked (scene_pack_open) */
@@ -288,6 +294,31 @@ boolean scene_pack_recipe_parse(
 /* (the tools) the size of a recipe, as the game's objects have it */
 unsigned long scene_pack_recipe_size(
 	void);
+
+/* (port) a recipe of Xbox maps (map lines) none of which is in
+maps_directory made one of MCC's own Halo CE maps of the same names, those
+of them in mcc_directory (the Halo content folder's halo1\maps): its map
+lines cemap lines of any size and checksum, which only MCC's own maps
+(version 13) answer, its hash told so. A recipe with blocks, a backdrop, a
+Halo 2 or Halo 3 line, or an Xbox map there is left as it is. TRUE if it was
+made so */
+boolean scene_pack_recipe_mcc_fallback(
+	struct scene_pack_recipe *recipe,
+	char const *maps_directory,
+	char const *mcc_directory);
+
+/* (port) a recipe of Xbox maps (map lines) none of which is in
+maps_directory made one of MCC's own Halo CE maps of the same names, those
+of them in mcc_directory (the Halo content folder's halo1\maps): its map
+lines cemap lines of any size and checksum, which only MCC's own maps
+(version 13) answer, its hash told so - a backdrop's too (the menus' live
+background from MCC's a30: its structure bsp read and made this build's as
+the game's loader makes it, scene_pack_ce.c). A recipe with blocks or an
+Xbox map there is left as it is. TRUE if it was made so */
+boolean scene_pack_recipe_mcc_fallback(
+	struct scene_pack_recipe *recipe,
+	char const *maps_directory,
+	char const *mcc_directory);
 
 /* (the tools) a recipe's Custom Edition map's name, by index, or NULL */
 char const *scene_pack_recipe_custom_edition_map(

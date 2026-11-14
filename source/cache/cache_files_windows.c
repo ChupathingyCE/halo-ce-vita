@@ -217,6 +217,9 @@ static volatile int cache_request_claim_lock;
 its tag (NONE: an Xbox map's read; CACHE_REQUEST_SCENE_PACK: a scene pack's
 bitmap, port/linux/game/scene_packs.c) and unrounded size, by request slot */
 #define CACHE_REQUEST_SCENE_PACK (-2)
+/* (scene_pack.h's SCENE_PACK_FILE_BASE: where the scene packs' file offsets
+begin) */
+#define SCENE_PACK_FILE_BASE_OFFSET 0x70000000UL
 static struct
 {
 	long tag_index;
@@ -1651,7 +1654,10 @@ short cache_file_read(
 
 		if (pack_reads_on_thread < 0)
 			pack_reads_on_thread = !getenv("HALO_PACK_READ_THREAD") || atoi(getenv("HALO_PACK_READ_THREAD")) != 0;
-		pack_read = !custom_edition && scene_packs_offset(offset);
+		/* (beside MCC's own map, loaded by the Custom Edition loader, too: its
+		combined offsets end below the packs', custom_edition_cache_packs_allowed) */
+		pack_read = scene_packs_offset(offset) &&
+			(!custom_edition || custom_edition_cache_packs_allowed(SCENE_PACK_FILE_BASE_OFFSET));
 		if (pack_read && (!bitmap || blocking || !pack_reads_on_thread || size < 0) &&
 			scene_packs_read(offset, size, buffer))
 		{
@@ -1660,7 +1666,7 @@ short cache_file_read(
 			return cache_request_next_free_index();
 		}
 	}
-	if (custom_edition && (!bitmap || !custom_edition_reads_on_thread()))
+	if (custom_edition && !pack_read && (!bitmap || !custom_edition_reads_on_thread()))
 	{
 		custom_edition_cache_read(tag_index, offset, size, buffer);
 		*completion_flag_reference = TRUE;
@@ -1730,8 +1736,8 @@ short cache_file_read(
 #ifdef HALO_LINUX
 	/* (a Custom Edition map's bitmap: read by the cache file thread from
 	the map's own files, at its own size; a scene pack's, from its file) */
-	cache_request_custom_edition[request_index].tag_index = custom_edition ? tag_index :
-		pack_read ? CACHE_REQUEST_SCENE_PACK : NONE;
+	cache_request_custom_edition[request_index].tag_index = pack_read ? CACHE_REQUEST_SCENE_PACK :
+		custom_edition ? tag_index : NONE;
 	cache_request_custom_edition[request_index].size = custom_edition || pack_read ? request_size : 0;
 	/* (the request is filled in before the cache file thread can see it
 	pending: on the Vita's cores it could see the flag before the fields

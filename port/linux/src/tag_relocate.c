@@ -852,6 +852,41 @@ unsigned long halo_tag_relocate_pack(void *blob, unsigned long size, unsigned lo
 	return result;
 }
 
+/* (port) a Halo: CE Anniversary map's structure bsp moved as
+halo_tag_relocate_linked_structure_bsp_rebase moves it, for the scene packs'
+builder (the menus' backdrop from MCC's a30, scene_pack_ce.c) on its own
+thread: under the walks' lock, its references checked against the map's own
+table (`tag_header`'s, its pointers already moved), and the game's walk state
+put back as it was. Returns the walk's anomalies (0: moved and consistent) */
+unsigned long halo_tag_relocate_linked_structure_bsp_rebase_isolated(void *bsp, unsigned long size, unsigned long from_link,
+	unsigned long to_link, void *tag_header)
+{
+	unsigned char *header = tag_header;
+	unsigned char saved[sizeof(relocation)];
+	void (*saved_progress)(void);
+	unsigned char *instances;
+	unsigned long anomalies;
+	long count;
+
+	if (!bsp || !tag_header)
+		return 1;
+	memcpy(&instances, header, sizeof(instances));
+	memcpy(&count, header + 12, 4);
+	halo_tag_walk_lock();
+	memcpy(saved, &relocation, sizeof(relocation));
+	saved_progress = halo_tag_relocate_progress;
+	halo_tag_relocate_progress = NULL;
+	relocation.instances = instances;
+	relocation.instance_count = count;
+	relocation.invalid = 0;
+	halo_tag_relocate_linked_structure_bsp_rebase_unlocked(bsp, size, from_link, to_link);
+	anomalies = relocation.invalid;
+	memcpy(&relocation, saved, sizeof(relocation));
+	halo_tag_relocate_progress = saved_progress;
+	halo_tag_walk_unlock();
+	return anomalies;
+}
+
 /* (port) a Custom Edition map's tags moved as halo_tag_relocate_linked_tags
 moves them, for the scene packs' builder (port/linux/game/scene_pack_ce.c)
 on its own thread: under the walks' lock, with bits of its own, every

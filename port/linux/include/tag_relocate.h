@@ -24,6 +24,11 @@ to `bsp` inside that tag cache, where its tags link it to `to_link`: its
 pointers, which the map links to `from_link`, moved to `to_link` first */
 void halo_tag_relocate_linked_structure_bsp_rebase(void *bsp, unsigned long size, unsigned long from_link,
 	unsigned long to_link);
+/* port: the same, for the scene packs' builder on its own thread, its
+references checked against the tags at `tag_header` (scene_pack_ce.c): the
+walk's anomalies (0: moved and consistent) */
+unsigned long halo_tag_relocate_linked_structure_bsp_rebase_isolated(void *bsp, unsigned long size, unsigned long from_link,
+	unsigned long to_link, void *tag_header);
 /* that tag cache is gone */
 void halo_tag_relocate_linked_release(void);
 

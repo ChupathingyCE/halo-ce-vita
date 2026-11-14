@@ -218,6 +218,13 @@ void custom_edition_load_progress_set(
 	real progress);
 boolean custom_edition_cache_tags_loaded(
 	void);
+/* (port) whether scene packs (scene_packs.c) may be put beside the map
+loaded: one of MCC's own (the Halo content folder's: its levels and its
+menus), every offset of its combined offset space (the map, bitmaps.map,
+the sound bank) below first_offset, where the packs' file offsets begin.
+FALSE with none loaded, and for any other Custom Edition map */
+boolean custom_edition_cache_packs_allowed(
+	unsigned long first_offset);
 /* Whether the Custom Edition map loaded relies on a Halo PC behaviour (enum
 custom_edition_behaviour, cache_file_formats.h); FALSE when none is loaded. */
 boolean custom_edition_cache_relies_on(

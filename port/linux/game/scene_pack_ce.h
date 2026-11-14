@@ -90,6 +90,31 @@ boolean scene_pack_ce_model_convert(
 /* a part of a model scene_pack_ce_model_convert made (at part_address): its
 compressed vertices and its strip's indices, read from the map's model data
 and checked, in the heap (the caller's): FALSE, and why, if they cannot be */
+/* (port) the menus' backdrop from MCC's a30 (scene_pack.c): the structure
+bsp MCC's own map links at file_offset and size, read into `bytes` (size
+bytes) as the game reads it, its pointers moved to `address`; then each of
+its materials' vertices (a material's 0x100 bytes there) made this build's
+- compressed environment vertices and lightmap vertices from the
+uncompressed ones in the map's file, in blocks of the C heap the caller
+frees (none of a kind it has none of) */
+boolean scene_pack_ce_structure_bsp(
+	struct scene_pack_ce *ce,
+	unsigned long file_offset,
+	unsigned long size,
+	unsigned long address,
+	unsigned char *bytes,
+	char *why,
+	long why_size);
+boolean scene_pack_ce_bsp_material_vertices(
+	struct scene_pack_ce *ce,
+	unsigned char const *material,
+	unsigned char **vertices,
+	unsigned long *vertex_bytes,
+	unsigned char **lightmap_vertices,
+	unsigned long *lightmap_vertex_bytes,
+	char *why,
+	long why_size);
+
 boolean scene_pack_ce_part_buffers(
 	struct scene_pack_ce *ce,
 	unsigned long part_address,

@@ -2897,6 +2897,19 @@ boolean custom_edition_cache_tags_loaded(
 	return custom_edition_cache_globals.tags_loaded;
 }
 
+boolean custom_edition_cache_packs_allowed(
+	unsigned long first_offset)
+{
+	struct custom_edition_cache_globals const *globals = &custom_edition_cache_globals;
+	struct custom_edition_file const *sounds = &globals->resource_files[_resource_map_sounds];
+	struct custom_edition_file const *bitmaps = &globals->resource_files[_resource_map_bitmaps];
+
+	return globals->tags_loaded && globals->map_from_mcc &&
+		globals->map.opened && globals->map.source.size <= first_offset &&
+		(!bitmaps->opened || COMBINED_BITMAPS_OFFSET + (unsigned long)bitmaps->source.size <= first_offset) &&
+		(!sounds->opened || COMBINED_SOUNDS_OFFSET + (unsigned long)sounds->source.size <= first_offset);
+}
+
 boolean custom_edition_cache_relies_on(
 	short behaviour)
 {

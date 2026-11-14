@@ -108,6 +108,7 @@ slow memory card's rate on the thread that makes them.
 #include "scene_pack_ce.h"
 #include "scene_packs.h"
 #include "mcc_sound.h"
+#include "mcc_content.h"
 #include "tag_schema.h"
 
 #include <math.h>
@@ -504,9 +505,75 @@ static struct scene_pack_slot *slot_find(char const *name)
 	return NULL;
 }
 
+/* whether packs may be put beside the map loaded: an Xbox map, or (an
+install from MCC alone, its levels and menus) one of MCC's own maps the
+Custom Edition loader loaded (custom_edition_cache_packs_allowed: its
+offsets below the packs'); never another Custom Edition map */
+static boolean packs_beside_map_allowed(void)
+{
+	return !custom_edition_cache_tags_loaded() || custom_edition_cache_packs_allowed(SCENE_PACK_FILE_BASE);
+}
+
+/* (the bytes after the map's tags the packs hold, for the structure bsp
+check's scratch: none when MCC's own map is loaded by the Custom Edition
+loader - its tags and bsps are in a cache of their own, the packs in the
+game's) */
+static void reserve_tell(void)
+{
+	tag_validate_reserve_after_tags(custom_edition_cache_tags_loaded() ? 0 : scene_packs.reserved);
+}
+
+static unsigned char *tag_cache_room_xbox(unsigned char **room_end);
+
+/* the folder a recipe's maps are in: (MCC's own Halo CE maps, the maps
+folder having none of its Xbox maps: scene_pack_recipe_mcc_fallback) the
+Halo content folder's halo1\maps, else the maps folder */
+static char const *recipe_directory(struct scene_pack_recipe const *recipe)
+{
+	if (recipe && recipe->mcc_maps)
+		return MCC_CONTENT_MAPS_DIRECTORY;
+	return cache_files_map_directory();
+}
+
+/* (a recipe as parsed) its Xbox maps MCC's own when the maps folder has none
+of them and the Halo content folder's halo1\maps has (an install from MCC
+alone): logged once a recipe */
+static void recipe_mcc_fallback(struct scene_pack_recipe *recipe)
+{
+	if (scene_pack_recipe_mcc_fallback(recipe, cache_files_map_directory(), MCC_CONTENT_MAPS_DIRECTORY))
+	{
+		static char logged[MAXIMUM_SCENE_PACK_SLOTS][SCENE_PACK_NAME_SIZE];
+		short index;
+
+		for (index = 0; index < MAXIMUM_SCENE_PACK_SLOTS && logged[index][0] && strcmp(logged[index], recipe->name); index++)
+			;
+		if (index < MAXIMUM_SCENE_PACK_SLOTS && !logged[index][0])
+		{
+			snprintf(logged[index], sizeof(logged[index]), "%s", recipe->name);
+			platform_log("scene packs: %s: no Xbox map of its in the maps folder: built from MCC's own %s.map%s",
+				recipe->name, recipe->custom_edition_maps[0].name, recipe->custom_edition_map_count > 1 ? " (or the next)" : "");
+		}
+	}
+}
+
 /* the tag cache: its base, where the map's tags and the packs end, and where
 the room for more ends (the lowest structure bsp's place) */
 static unsigned char *tag_cache_room(unsigned char **room_end)
+{
+	/* (MCC's own map, loaded by the Custom Edition loader into a tag cache
+	of its own, its structure bsps in it: the game's tag cache is free
+	then, the packs and their builds' scratch all of it) */
+	if (custom_edition_cache_tags_loaded())
+	{
+		unsigned char *cache = physical_memory_get_tag_cache_base_address();
+
+		*room_end = cache + TAG_CACHE_SIZE;
+		return cache + scene_packs.reserved;
+	}
+	return tag_cache_room_xbox(room_end);
+}
+
+static unsigned char *tag_cache_room_xbox(unsigned char **room_end)
 {
 	unsigned char *base = physical_memory_get_tag_cache_base_address();
 	unsigned char *start = base + ((cache_file_tag_data_size() + SCENE_PACK_ALIGNMENT - 1) & ~(SCENE_PACK_ALIGNMENT - 1)) +
@@ -569,9 +636,9 @@ static boolean pack_current_into(struct scene_pack_slot const *slot, struct scen
 	/* (an Xbox map's: any of the recipe's maps it was built from, as it was;
 	a Custom Edition map's: the first there of the identity it gives) */
 	if (slot->recipe->custom_edition_map_count ?
-		(!scene_pack_source_check(slot->recipe, cache_files_map_directory(), map, sizeof(map), &source_hash, NULL, 0) ||
+		(!scene_pack_source_check(slot->recipe, recipe_directory(slot->recipe), map, sizeof(map), &source_hash, NULL, 0) ||
 			strcmp(map, info->source_map)) :
-		!scene_pack_source_identity(slot->recipe, cache_files_map_directory(), info->source_map, &source_hash))
+		!scene_pack_source_identity(slot->recipe, recipe_directory(slot->recipe), info->source_map, &source_hash))
 	{
 		snprintf(why, (size_t)why_size, "its source map changed");
 		return FALSE;
@@ -662,7 +729,7 @@ static boolean build_map_choose(struct scene_pack_slot *const *slots, short coun
 	long map_size)
 {
 	struct scene_pack_recipe const *recipe = slots[lead]->recipe;
-	char const *directory = cache_files_map_directory();
+	char const *directory = recipe_directory(recipe);
 	long best_score = -1;
 	short index, other;
 
@@ -873,7 +940,7 @@ static void packs_prepare(struct scene_pack_slot **slots, short count, unsigned 
 			scene_pack_scratch_free = pack_window_free;
 			pack_window_held = pack_window_held_most = 0;
 			pack_window_free_least = platform_contiguous_largest_free();
-			built = scene_pack_build(slot->recipe, cache_files_map_directory(), slot->path, scratch, scratch_size,
+			built = scene_pack_build(slot->recipe, recipe_directory(slot->recipe), slot->path, scratch, scratch_size,
 				&scene_packs.cancel, &scene_packs_build_results[0]);
 			if (pack_window_held_most)
 			{
@@ -910,7 +977,7 @@ static void packs_prepare(struct scene_pack_slot **slots, short count, unsigned 
 			if (need[index] && !need[index]->recipe->custom_edition_map_count &&
 				!(recipe_map_index(need[index]->recipe, map) < 32 &&
 					(need[index]->maps_lacking & (1UL << recipe_map_index(need[index]->recipe, map)))) &&
-				scene_pack_source_identity(need[index]->recipe, cache_files_map_directory(), map, &hash))
+				scene_pack_source_identity(need[index]->recipe, recipe_directory(need[index]->recipe), map, &hash))
 			{
 				group[group_count] = need[index];
 				group_slot_index[group_count] = index;
@@ -919,7 +986,7 @@ static void packs_prepare(struct scene_pack_slot **slots, short count, unsigned 
 				need[index]->progress = &scene_packs_build_results[group_count].progress;
 				scene_packs_build_results[group_count].progress = 0;
 				platform_log("scene packs: %s: building it (%s) from %s%s", need[index]->name, need[index]->why, map,
-					scene_pack_source_seekable(cache_files_map_directory(), map) ? ", read in place" : "");
+					scene_pack_source_seekable(recipe_directory(need[index]->recipe), map) ? ", read in place" : "");
 				group_count++;
 				need[index] = NULL;
 			}
@@ -944,7 +1011,7 @@ the memory window, not the C heap) */
 		scene_pack_scratch_free = pack_window_free;
 		pack_window_held = pack_window_held_most = 0;
 		pack_window_free_least = platform_contiguous_largest_free();
-		built = scene_pack_build_many(recipes, group_count, map, cache_files_map_directory(), paths, scratch, scratch_size,
+		built = scene_pack_build_many(recipes, group_count, map, recipe_directory(recipes[0]), paths, scratch, scratch_size,
 			&scene_packs.cancel, scene_packs_build_results);
 		if (pack_window_held_most)
 		{
@@ -1564,7 +1631,7 @@ static boolean pack_commit(struct scene_pack_slot *slot)
 	}
 	scene_packs.tables[scene_packs.table_count++] = table;
 	scene_packs.reserved += slot->bytes;
-	tag_validate_reserve_after_tags(scene_packs.reserved);
+	reserve_tell();
 	state_set(slot, _scene_pack_state_loaded);
 	cache_files_set_tag_instances(table, existing_count + count);
 	platform_log("scene packs: %s: loaded from %s in %.2f ms (the game thread's part): %ld tags (%ld to %ld of the "
@@ -1675,7 +1742,7 @@ static struct scene_pack_slot *slot_new(char const *name)
 		state_set(slot, _scene_pack_state_failed);
 		platform_log("scene packs: %s: %s", name, slot->why);
 	}
-	else if (recipe_turned_off(slot->recipe, slot->why, sizeof(slot->why)))
+	else if ((recipe_mcc_fallback(slot->recipe), recipe_turned_off(slot->recipe, slot->why, sizeof(slot->why))))
 	{
 		state_set(slot, _scene_pack_state_failed);
 		platform_log("scene packs: %s: %s", name, slot->why);
@@ -1797,7 +1864,7 @@ static void pack_unload(short slot_index)
 	__atomic_store_n(&scene_packs.read_lock, 0, __ATOMIC_RELEASE);
 	scene_packs.reserved -= slot->bytes;
 	scene_packs.file_used = slot->file_base;
-	tag_validate_reserve_after_tags(scene_packs.reserved);
+	reserve_tell();
 	csmemset(slot->tags, 0xCD, slot->bytes);
 	platform_log("scene packs: %s: let go (%lu KB of the tag cache given back, %lu KB held by packs)", slot->name,
 		slot->bytes / 1024, scene_packs.reserved / 1024);
@@ -1841,7 +1908,7 @@ short scene_packs_want(
 	long count;
 
 	if (!scene_packs_enabled() || !name || !*name || cache_file_tag_data_size() <= 0 ||
-		custom_edition_cache_tags_loaded() || !cache_files_tag_instances(&count))
+		!packs_beside_map_allowed() || !cache_files_tag_instances(&count))
 	{
 		return _scene_pack_state_none;
 	}
@@ -1918,7 +1985,7 @@ short scene_packs_prebuild(
 	long count;
 
 	if (!scene_packs_enabled() || !name || !*name || cache_file_tag_data_size() <= 0 ||
-		custom_edition_cache_tags_loaded() || !cache_files_tag_instances(&count))
+		!packs_beside_map_allowed() || !cache_files_tag_instances(&count))
 	{
 		return _scene_pack_state_none;
 	}
@@ -2049,6 +2116,8 @@ static boolean recipe_read(char const *name, struct scene_pack_recipe *recipe)
 	if (!text)
 		return FALSE;
 	parsed = scene_pack_recipe_parse((char const *)text, (long)size, recipe, why, sizeof(why)) && !strcmp(recipe->name, name);
+	if (parsed)
+		recipe_mcc_fallback(recipe);
 	recipe_text_free(text, made);
 	return parsed;
 }
@@ -2081,7 +2150,7 @@ boolean scene_packs_recipe_available(
 	if (why && why_size > 0)
 		why[0] = 0;
 	if (recipe && recipe_read(name, recipe))
-		available = scene_pack_source_check(recipe, cache_files_map_directory(), NULL, 0, NULL, why, why_size) &&
+		available = scene_pack_source_check(recipe, recipe_directory(recipe), NULL, 0, NULL, why, why_size) &&
 			!recipe_turned_off(recipe, why, why_size);
 	else if (why && why_size > 0)
 		snprintf(why, (size_t)why_size, "its recipe cannot be read");

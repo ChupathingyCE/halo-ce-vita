@@ -480,6 +480,14 @@ static short read_s16(void const *address)
 	return (short)(bytes[0] | (bytes[1] << 8));
 }
 
+static void write_u16(void *address, unsigned short value)
+{
+	unsigned char *bytes = address;
+
+	bytes[0] = (unsigned char)(value & 0xFF);
+	bytes[1] = (unsigned char)(value >> 8);
+}
+
 static void write_u32(void *address, unsigned long value)
 {
 	unsigned char *bytes = address;
@@ -1178,6 +1186,48 @@ static boolean map_identity(char const *maps_directory, char const *map, unsigne
 }
 
 static FILE *copy_open(char const *map, unsigned char const *header, unsigned long *token);
+
+boolean scene_pack_recipe_mcc_fallback(
+	struct scene_pack_recipe *recipe,
+	char const *maps_directory,
+	char const *mcc_directory)
+{
+	short index, count = 0;
+
+	if (!recipe->map_count || recipe->custom_edition_map_count || recipe->blocks || !mcc_directory || !*mcc_directory ||
+		scene_pack_source_find(recipe, maps_directory, NULL, 0, NULL))
+	{
+		return FALSE;
+	}
+	for (index = 0; index < recipe->map_count; index++)
+	{
+		char path[512];
+		FILE *file;
+
+		map_path(path, sizeof(path), mcc_directory, recipe->maps[index]);
+		file = fopen(path, "rb");
+		if (!file)
+			continue;
+		fclose(file);
+		memcpy(recipe->custom_edition_maps[count].name, recipe->maps[index], SCENE_PACK_NAME_SIZE);
+		recipe->custom_edition_maps[count].file_size = 0;
+		recipe->custom_edition_maps[count].checksum = 0;
+		count++;
+	}
+	if (!count)
+		return FALSE;
+	recipe->custom_edition_map_count = count;
+	recipe->map_count = 0;
+	recipe->mcc_maps = TRUE;
+	{
+		char version[24];
+
+		snprintf(version, sizeof(version), "mcc%s", scene_pack_custom_edition_builder_version());
+		recipe->hash = fnv_bytes(recipe->hash, version, strlen(version) + 1);
+	}
+	return TRUE;
+}
+
 
 boolean scene_pack_source_check(
 	struct scene_pack_recipe const *recipe,
@@ -2544,6 +2594,93 @@ static void bsp_material_buffer(struct build_state *state, unsigned long source,
 	buffer_fixup(state, offset + hardware_at, buffer, FALSE);
 }
 
+/* (a backdrop made of MCC's own a30: scene_pack_ce.c) a structure bsp
+material's vertices made this build's - its environment vertices and its
+lightmap vertices compressed from the uncompressed ones in the map's file,
+as the game's Custom Edition loader makes them (custom_edition_geometry.c) -
+each a buffer of the pack's (the lightmap's among the index buffers, as an
+Xbox map's: bsp_material_buffer), and the compressed vertices, environment
+then lightmap, the material's compressed vertex data (object lighting and
+the structure's point queries read them there) */
+static void bsp_material_buffers_custom_edition(struct build_state *state, unsigned long source, unsigned long offset)
+{
+	enum
+	{
+		/* (structure_material's: its vertex buffers' type, offset, base
+		address, and its compressed vertex data; the types the game's:
+		environment compressed 1, lightmap compressed 3) */
+		VERTEX_OFFSET = 0xB8,
+		VERTEX_BASE = 0xBC,
+		LIGHTMAP_VERTEX_OFFSET = 0xCC,
+		LIGHTMAP_VERTEX_BASE = 0xD0,
+		UNCOMPRESSED_DATA = 0xD8,
+		COMPRESSED_DATA = 0xEC
+	};
+	unsigned char *material = source_at(state, source, BSP_MATERIAL_SIZE);
+	unsigned char *vertices = NULL, *lightmap_vertices = NULL;
+	unsigned long vertex_bytes = 0, lightmap_vertex_bytes = 0, data;
+	char why[SCENE_PACK_WHY_SIZE];
+	long vertex_buffer = NONE, lightmap_buffer = NONE;
+
+	if (!material)
+		return;
+	if (!scene_pack_ce_bsp_material_vertices(state->custom_edition, material, &vertices, &vertex_bytes, &lightmap_vertices,
+		&lightmap_vertex_bytes, why, sizeof(why)))
+	{
+		build_fail(state, "%s", why);
+		return;
+	}
+	/* (its compressed vertex data: a copy of both, in the pack's tag data) */
+	data = blob_alloc(state, vertex_bytes + lightmap_vertex_bytes ? vertex_bytes + lightmap_vertex_bytes : 4);
+	if (state->failed)
+	{
+		if (vertices)
+			free(vertices);
+		if (lightmap_vertices)
+			free(lightmap_vertices);
+		return;
+	}
+	if (vertex_bytes)
+		memcpy(state->blob + data, vertices, vertex_bytes);
+	if (lightmap_vertex_bytes)
+		memcpy(state->blob + data + vertex_bytes, lightmap_vertices, lightmap_vertex_bytes);
+	write_u16(state->blob + offset + BSP_MATERIAL_VERTEX_TYPE, 1);
+	write_u32(state->blob + offset + VERTEX_OFFSET, 0);
+	write_u32(state->blob + offset + VERTEX_BASE, 0);
+	write_u16(state->blob + offset + BSP_MATERIAL_LIGHTMAP_VERTEX_TYPE, 3);
+	write_u32(state->blob + offset + LIGHTMAP_VERTEX_OFFSET, vertex_bytes);
+	write_u32(state->blob + offset + LIGHTMAP_VERTEX_BASE, 0);
+	memset(state->blob + offset + UNCOMPRESSED_DATA, 0, 20);
+	memset(state->blob + offset + COMPRESSED_DATA, 0, 20);
+	write_u32(state->blob + offset + COMPRESSED_DATA, vertex_bytes + lightmap_vertex_bytes);
+	write_u32(state->blob + offset + COMPRESSED_DATA + 12, link_address(data));
+	/* (the buffers: a material of no lightmap has one of a word, as an Xbox
+	map's: bsp_material_buffer) */
+	if (vertex_bytes)
+		vertex_buffer = buffer_made(state, vertices, vertex_bytes, FALSE);
+	else if (vertices)
+		free(vertices);
+	if (!state->failed)
+	{
+		if (!lightmap_vertex_bytes)
+		{
+			if (lightmap_vertices)
+				free(lightmap_vertices);
+			lightmap_vertices = malloc(4);
+			if (lightmap_vertices)
+				memset(lightmap_vertices, 0, 4);
+			lightmap_vertex_bytes = 4;
+		}
+		lightmap_buffer = buffer_made(state, lightmap_vertices, lightmap_vertex_bytes, TRUE);
+	}
+	else if (lightmap_vertices)
+		free(lightmap_vertices);
+	if (vertex_buffer != NONE)
+		buffer_fixup(state, offset + BSP_MATERIAL_VERTEX_HARDWARE, vertex_buffer, FALSE);
+	if (lightmap_buffer != NONE)
+		buffer_fixup(state, offset + BSP_MATERIAL_LIGHTMAP_VERTEX_HARDWARE, lightmap_buffer, FALSE);
+}
+
 static void bsp_material_buffers(struct build_state *state, unsigned long source, unsigned long offset)
 {
 	bsp_material_buffer(state, source, offset, BSP_MATERIAL_VERTEX_TYPE, BSP_MATERIAL_VERTEX_COUNT,
@@ -2729,7 +2866,12 @@ static boolean layout_copy(struct build_state *state, unsigned short layout, uns
 	if (layout == state->model_part_layout && !state->failed)
 		model_part_buffers(state, source, offset);
 	if (state->bsp && layout == state->bsp_material_layout && !state->failed)
-		bsp_material_buffers(state, source, offset);
+	{
+		if (state->custom_edition)
+			bsp_material_buffers_custom_edition(state, source, offset);
+		else
+			bsp_material_buffers(state, source, offset);
+	}
 	return !state->failed;
 }
 
@@ -3298,6 +3440,80 @@ static void backdrop_prepare(struct build_state *state, unsigned char *bsp, unsi
 			sounds[element * SCENARIO_SOUND_SCENERY_SIZE + SCENARIO_OBJECT_NAME_INDEX + 1] = 0xFF;
 		}
 	}
+}
+
+/* (a backdrop made of MCC's own a30: scene_pack_ce.c) the structure bsp
+the recipe holds, read as the game reads it and moved past the source's tag
+data (where source_at finds a backdrop's bsp), then prepared as an Xbox
+map's; FALSE (and the build failed) if it cannot be. *bytes (*size bytes,
+*big: scene_pack_big_alloc's, else the C heap's) is the caller's to free */
+static boolean backdrop_custom_edition(struct build_state *state, unsigned char **bytes, unsigned long *bytes_size,
+	boolean *big)
+{
+	struct scene_pack_recipe const *recipe = state->recipe;
+	unsigned char *scenario, *references = NULL;
+	long scenario_index, bsp = NONE, count, index;
+	short root;
+	char why[SCENE_PACK_WHY_SIZE];
+
+	*bytes = NULL;
+	*bytes_size = 0;
+	*big = FALSE;
+	for (root = 0; root < recipe->root_count && recipe->roots[root].group_tag != 'sbsp'; root++)
+		;
+	scenario = backdrop_scenario(state, &scenario_index);
+	if (root < recipe->root_count && scenario)
+		bsp = source_find(state, &recipe->roots[root]);
+	if (bsp == NONE)
+	{
+		build_fail(state, "the backdrop has no structure bsp or the map no scenario%s", NULL);
+		return FALSE;
+	}
+	count = (long)read_u32(scenario + SCENARIO_STRUCTURE_BSPS);
+	if (count > 0 && count <= 32)
+		references = source_at(state, read_u32(scenario + SCENARIO_STRUCTURE_BSPS + 4), (unsigned long)count * SCENARIO_BSP_REFERENCE_SIZE);
+	for (index = 0; references && index < count; index++)
+	{
+		unsigned char *reference = references + index * SCENARIO_BSP_REFERENCE_SIZE;
+		unsigned long file_offset = read_u32(reference), size = read_u32(reference + 4);
+		/* (past the source's tag data, 64 KB aligned) */
+		unsigned long address = (state->source_address + state->tags_size + 0xFFFFUL) & ~0xFFFFUL;
+
+		if (source_tag(state, (long)read_u32(reference + 16 + 12)) != bsp)
+			continue;
+		if (size < BSP_HEADER_SIZE || size > 0x1000000UL || address + size < address)
+		{
+			build_fail(state, "the source map's structure bsp is not where a bsp is%s", NULL);
+			return FALSE;
+		}
+		/* (on the C heap when it has the room with plenty over, else in the
+		memory window, as an Xbox map's: scene_pack_build_many) */
+		*bytes = scene_pack_heap_room && scene_pack_heap_room(size) ? malloc(size) : NULL;
+		if (!*bytes && scene_pack_big_alloc)
+		{
+			*bytes = scene_pack_big_alloc(size);
+			*big = *bytes != NULL;
+		}
+		if (!*bytes && !scene_pack_big_only)
+			*bytes = malloc(size);
+		*bytes_size = size;
+		if (!*bytes)
+		{
+			build_fail(state, scene_pack_big_only ? "there is no room for the pack's build in the memory window%s" :
+				"there is no memory for the structure bsp%s", NULL);
+			return FALSE;
+		}
+		if (!scene_pack_ce_structure_bsp(state->custom_edition, file_offset, size, address, *bytes, why, sizeof(why)))
+		{
+			build_fail(state, "%s", why);
+			return FALSE;
+		}
+		state->bsp_tag = bsp;
+		backdrop_prepare(state, *bytes, size, address);
+		return !state->failed;
+	}
+	build_fail(state, "the map has no structure bsp %s it can take", recipe->roots[root].path);
+	return FALSE;
 }
 
 static void build_state_free(struct build_state *state, void *scratch)
@@ -3870,6 +4086,33 @@ static void build_items(struct build_state *state, FILE *data, unsigned long *da
 				item->source_index, state->blob + tag->base_offset, data, data_size, data_crc, why, sizeof(why));
 			if (!tag)
 				snprintf(why, sizeof(why), "a bitmap of the pack is not its own");
+			/* (the texture cache reads a bitmap's whole levels, rounded as the
+			Xbox's bitmap_read_size says - a 4x4-padded level of a DXT one -,
+			which may be a few bytes more than its pixels: the data made to
+			hold them, as an Xbox map's range is - else the pack's last bitmap
+			read past its data and the pack was refused, MCC's c20 lightning) */
+			if (written)
+			{
+				struct bitmap_data bitmap;
+				unsigned long need;
+
+				memcpy(&bitmap, state->blob + item->location, sizeof(bitmap));
+				need = bitmap.pixels_size ? (unsigned long)bitmap.pixels_offset + bitmap_read_size(&bitmap) : 0;
+				while (written && need > *data_size)
+				{
+					static unsigned char const zeros[64];
+					unsigned long more = MIN(need - *data_size, (unsigned long)sizeof(zeros));
+
+					if (!pack_write(data, zeros, more))
+					{
+						written = FALSE;
+						snprintf(why, sizeof(why), "the pack cannot be written");
+						break;
+					}
+					*data_crc = crc_bytes(*data_crc, zeros, more);
+					*data_size += more;
+				}
+			}
 		}
 		else
 		{
@@ -3920,6 +4163,9 @@ static boolean scene_pack_build_custom_edition(
 	int volatile const *cancel,
 	struct scene_pack_build_result *result)
 {
+	unsigned char *backdrop_bsp = NULL;
+	unsigned long backdrop_bsp_size = 0;
+	boolean backdrop_bsp_big = FALSE;
 	struct build_state state;
 	unsigned char pack_header[SCENE_PACK_HEADER_SIZE];
 	unsigned long long started = vita_host_time_us();
@@ -3953,6 +4199,11 @@ static boolean scene_pack_build_custom_edition(
 		build_fail(&state, "there is no memory to build the pack%s", NULL);
 	else if (!source_table_read(&state))
 		build_fail(&state, "the map's tag header is damaged%s", NULL);
+	/* (port) the menus' backdrop made of MCC's own a30: its structure bsp
+	read and made this build's (backdrop_custom_edition) */
+	state.bsp_tag = state.scenario_tag = NONE;
+	if (!state.failed && recipe->backdrop)
+		backdrop_custom_edition(&state, &backdrop_bsp, &backdrop_bsp_size, &backdrop_bsp_big);
 	if (!state.failed)
 	{
 		for (index = 0; index < 0x8000; index++)
@@ -4036,6 +4287,11 @@ static boolean scene_pack_build_custom_edition(
 	state.custom_edition = NULL;
 	/* (its tags were the source's buffer, which closing it let go) */
 	state.tags = NULL;
+	state.bsp = NULL;
+	if (backdrop_bsp && backdrop_bsp_big)
+		scene_pack_big_free(backdrop_bsp, backdrop_bsp_size);
+	else if (backdrop_bsp)
+		free(backdrop_bsp);
 	build_state_free(&state, scratch);
 	return !state.failed;
 }

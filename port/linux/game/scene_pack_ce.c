@@ -226,6 +226,14 @@ struct scene_pack_ce
 	long bitmaps_reduced;
 	long permutations_transcoded;
 	long permutations_truncated;
+	/* (port) MCC's own map's structure bsps as the map links them, and the
+	one read's vertices in the file (the menus' backdrop from MCC's a30:
+	scene_pack_ce_structure_bsp, scene_pack_ce_bsp_material_buffers) */
+	long mcc_bsp_count;
+	struct mcc_cea_structure_bsp mcc_bsps[CACHE_FILE_MAXIMUM_STRUCTURE_BSPS];
+	boolean bsp_read;
+	unsigned long bsp_vertices_offset;
+	unsigned long bsp_vertices_size;
 };
 
 /* ---------- globals */
@@ -462,7 +470,11 @@ boolean scene_pack_ce_source_check(
 			ce_file_close(&file);
 			continue;
 		}
-		if (identity.file_size != wanted->file_size || identity.checksum != wanted->checksum ||
+		/* (no size or checksum: MCC's own map of that name, whatever MCC's
+		version of it - scene_pack_recipe_mcc_fallback -, its identity the
+		header's and size's below; a Custom Edition map is never taken so) */
+		if ((wanted->file_size || wanted->checksum ? identity.file_size != wanted->file_size ||
+			identity.checksum != wanted->checksum : identity.format != _cache_file_format_mcc_cea_cache) ||
 			!ce_file_read(&file, 0, CACHE_FILE_HEADER_BYTES, header))
 		{
 			other_version = TRUE;
@@ -661,8 +673,33 @@ struct scene_pack_ce *scene_pack_ce_open(
 			cache_file_status_describe(status));
 		goto failed;
 	}
+	/* (port) MCC's own map: its tags made what this build takes, as the
+	game's loader makes them before it converts them (custom_edition_cache.c:
+	mcc_cea_cache_fix) - its bitmaps' CEA "environment" flag, which
+	bitmap_verify refuses, cleared (a lightmap the menus' backdrop's object
+	lighting reads: bitmaps.c), and the rest */
+	if (ce->mcc)
+	{
+		struct mcc_cea_fix_report fix;
+
+		status = mcc_cea_cache_fix(ce->tags, report->tag_data_bytes, &fix);
+		if (status != _cache_file_status_ok)
+		{
+			platform_log("scene packs: %s.map cannot be made this build's: %s (tag %ld)", map_name,
+				cache_file_status_describe(status), (long)fix.problem_tag_index);
+			snprintf(why, (size_t)why_size, "%s.map is damaged or not supported (%s)", map_name,
+				cache_file_status_describe(status));
+			goto failed;
+		}
+	}
 	ce->loaded_bytes = report->tag_data_bytes + report->resource_tag_bytes;
 	ce->tag_count = report->tag_count;
+	if (ce->mcc)
+	{
+		ce->mcc_bsp_count = report->structure_bsp_count < 0 ? 0 :
+			report->structure_bsp_count > CACHE_FILE_MAXIMUM_STRUCTURE_BSPS ? CACHE_FILE_MAXIMUM_STRUCTURE_BSPS : report->structure_bsp_count;
+		memcpy(ce->mcc_bsps, report->mcc_cea_structure_bsps, sizeof(ce->mcc_bsps));
+	}
 	ce->model_data_offset = report->model_data_offset;
 	ce->model_index_data_offset = report->model_index_data_offset;
 	ce->model_data_bytes = report->model_data_bytes;
@@ -1047,6 +1084,177 @@ vector_compressible: within 1.005, not a NaN) */
 static boolean vector_compressible(float const *vector)
 {
 	return fabs((double)vector[0]) <= 1.005f && fabs((double)vector[1]) <= 1.005f && fabs((double)vector[2]) <= 1.005f;
+}
+
+/* (port) the menus' backdrop from MCC's a30 (scene_pack.c): a structure
+bsp of MCC's own map, read as the game reads it (custom_edition_cache.c's
+custom_edition_cache_structure_bsp_moved): the one the map links at
+file_offset and size, its header's vertex fields taken (where its vertices
+are in the file) and cleared, its pointers moved from where the map links
+them to `address` */
+boolean scene_pack_ce_structure_bsp(
+	struct scene_pack_ce *ce,
+	unsigned long file_offset,
+	unsigned long size,
+	unsigned long address,
+	unsigned char *bytes,
+	char *why,
+	long why_size)
+{
+	struct mcc_cea_structure_bsp const *found = NULL;
+	long index;
+	unsigned long anomalies;
+
+	for (index = 0; ce->mcc && index < ce->mcc_bsp_count; index++)
+	{
+		if (ce->mcc_bsps[index].file_offset == file_offset && ce->mcc_bsps[index].size == size)
+			found = &ce->mcc_bsps[index];
+	}
+	if (!found)
+	{
+		why_set(why, why_size, "the map's structure bsp is not one of MCC's own map's%s", NULL);
+		return FALSE;
+	}
+	if (size < 0x18 || !ce_combined_read(ce, file_offset, size, bytes))
+	{
+		why_set(why, why_size, "the map's structure bsp cannot be read%s", NULL);
+		return FALSE;
+	}
+	if (found->vertices_size && read_u32(bytes + 4) != found->vertices_size)
+	{
+		why_set(why, why_size, "the map's structure bsp is not the one the map was checked with%s", NULL);
+		return FALSE;
+	}
+	memset(bytes + 4, 0, 16);
+	anomalies = halo_tag_relocate_linked_structure_bsp_rebase_isolated(bytes, size, found->linked_address, address, ce->tags);
+	if (anomalies)
+	{
+		why_set(why, why_size, "the map's structure bsp's pointers are not its own%s", NULL);
+		return FALSE;
+	}
+	ce->bsp_read = TRUE;
+	ce->bsp_vertices_offset = found->vertices_offset;
+	ce->bsp_vertices_size = found->vertices_size;
+	return TRUE;
+}
+
+boolean scene_pack_ce_bsp_material_vertices(
+	struct scene_pack_ce *ce,
+	unsigned char const *material,
+	unsigned char **vertices,
+	unsigned long *vertex_bytes,
+	unsigned char **lightmap_vertices,
+	unsigned long *lightmap_vertex_bytes,
+	char *why,
+	long why_size)
+{
+	enum
+	{
+		/* (structure_material's vertex buffers: count, then its offset in
+		the bsp's vertices in the file) */
+		VERTEX_COUNT = 0xB4,
+		VERTEX_OFFSET = 0xB8,
+		LIGHTMAP_VERTEX_COUNT = 0xC8,
+		LIGHTMAP_VERTEX_OFFSET = 0xCC,
+		UNCOMPRESSED_BYTES = 56,
+		UNCOMPRESSED_LIGHTMAP_BYTES = 20,
+		COMPRESSED_BYTES = 32,
+		COMPRESSED_LIGHTMAP_BYTES = 8,
+		MAXIMUM_VERTICES = 0xFFFF
+	};
+	long count = (long)read_u32(material + VERTEX_COUNT);
+	long lightmap_count = (long)read_u32(material + LIGHTMAP_VERTEX_COUNT);
+	unsigned long offset = read_u32(material + VERTEX_OFFSET);
+	unsigned long lightmap_offset = read_u32(material + LIGHTMAP_VERTEX_OFFSET);
+	unsigned char *source = NULL;
+	unsigned char *made = NULL;
+	unsigned char *made_lightmap = NULL;
+	long index;
+
+	*vertices = *lightmap_vertices = NULL;
+	*vertex_bytes = *lightmap_vertex_bytes = 0;
+	if (!ce->bsp_read || count < 0 || count > MAXIMUM_VERTICES || lightmap_count < 0 || lightmap_count > MAXIMUM_VERTICES ||
+		offset > ce->bsp_vertices_size || (unsigned long)count * UNCOMPRESSED_BYTES > ce->bsp_vertices_size - offset ||
+		lightmap_offset > ce->bsp_vertices_size ||
+		(unsigned long)lightmap_count * UNCOMPRESSED_LIGHTMAP_BYTES > ce->bsp_vertices_size - lightmap_offset)
+	{
+		why_set(why, why_size, "a structure bsp material's vertices are not in the map's file%s", NULL);
+		return FALSE;
+	}
+	source = malloc((unsigned long)MAX(count * UNCOMPRESSED_BYTES, lightmap_count * UNCOMPRESSED_LIGHTMAP_BYTES) + 4);
+	made = malloc((unsigned long)count * COMPRESSED_BYTES + 4);
+	made_lightmap = malloc((unsigned long)lightmap_count * COMPRESSED_LIGHTMAP_BYTES + 4);
+	if (!source || !made || !made_lightmap)
+	{
+		why_set(why, why_size, "there is no memory for a structure bsp material%s", NULL);
+		goto failed;
+	}
+	/* (an environment vertex: its position, normal, binormal and tangent,
+	its texture coordinates; compressed as rasterizer_geometry.c's
+	rasterizer_geometry_compress_vertices does, the vectors packed) */
+	if (count && !ce_combined_read(ce, ce->bsp_vertices_offset + offset, (unsigned long)count * UNCOMPRESSED_BYTES, source))
+	{
+		why_set(why, why_size, "a structure bsp material's vertices cannot be read%s", NULL);
+		goto failed;
+	}
+	for (index = 0; index < count; index++)
+	{
+		unsigned char const *in = source + index * UNCOMPRESSED_BYTES;
+		unsigned char *out = made + index * COMPRESSED_BYTES;
+		float values[14];
+
+		memcpy(values, in, sizeof(values));
+		if (!vector_compressible(values + 3) || !vector_compressible(values + 6) || !vector_compressible(values + 9))
+		{
+			why_set(why, why_size, "a structure bsp material has a vertex this game cannot compress%s", NULL);
+			goto failed;
+		}
+		memcpy(out, values, 12);
+		write_u32(out + 12, compress_vector(values + 3));
+		write_u32(out + 16, compress_vector(values + 6));
+		write_u32(out + 20, compress_vector(values + 9));
+		memcpy(out + 24, values + 12, 8);
+	}
+	/* (a lightmap vertex: its incident radiosity, then its texture
+	coordinates, each a short) */
+	if (lightmap_count && !ce_combined_read(ce, ce->bsp_vertices_offset + lightmap_offset,
+		(unsigned long)lightmap_count * UNCOMPRESSED_LIGHTMAP_BYTES, source))
+	{
+		why_set(why, why_size, "a structure bsp material's lightmap vertices cannot be read%s", NULL);
+		goto failed;
+	}
+	for (index = 0; index < lightmap_count; index++)
+	{
+		unsigned char const *in = source + index * UNCOMPRESSED_LIGHTMAP_BYTES;
+		unsigned char *out = made_lightmap + index * COMPRESSED_LIGHTMAP_BYTES;
+		float values[5];
+
+		memcpy(values, in, sizeof(values));
+		if (!vector_compressible(values))
+		{
+			why_set(why, why_size, "a structure bsp material has a lightmap vertex this game cannot compress%s", NULL);
+			goto failed;
+		}
+		write_u32(out, compress_vector(values));
+		write_u16(out + 4, (unsigned short)compress_real(values[3]));
+		write_u16(out + 6, (unsigned short)compress_real(values[4]));
+	}
+	if (source)
+		free(source);
+	*vertices = made;
+	*vertex_bytes = (unsigned long)count * COMPRESSED_BYTES;
+	*lightmap_vertices = made_lightmap;
+	*lightmap_vertex_bytes = (unsigned long)lightmap_count * COMPRESSED_LIGHTMAP_BYTES;
+	return TRUE;
+
+failed:
+	if (source)
+		free(source);
+	if (made)
+		free(made);
+	if (made_lightmap)
+		free(made_lightmap);
+	return FALSE;
 }
 
 boolean scene_pack_ce_part_buffers(
