@@ -52,12 +52,9 @@ also work).
 | Live background, menus, Forge | Yes | Yes |
 | MCC campaign mods (Steam Workshop) | - | Experimental: Settings > Multiplayer > Modded maps > MCC mods |
 
-Both installs together also work: multiplayer has both sets of maps. Note
-for the campaign: with MCC's folder there, the ElDewrito and Halo 3 menu
-styles' campaign plays MCC's copies of the missions (dialogue and music
-silent); Classic+ plays the Xbox missions. To play the Xbox campaign with
-every sound from the ElDewrito or Halo 3 menus, keep MCC's files out of
-`ux0:data/haloce-vita/mcc`.
+Both installs together also work: the campaign is the Xbox missions (MCC's
+copy of a mission is used only when its Xbox map is missing), and
+multiplayer has both sets of maps.
 
 ## I don't have a PC
 
