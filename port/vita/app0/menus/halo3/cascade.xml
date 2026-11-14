@@ -14,40 +14,40 @@ The art is this set's own; the pictures and the maps' and missions' words the pl
 	<bitmap name="h3/cascade/tab_bitmap">
 		<frame png="halo3/row_on.png" width="128" height="16"/>
 	</bitmap>
-	<widget name="h3/cascade/row_0" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_0" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_1" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_1" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_2" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_2" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_3" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_3" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_4" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_4" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_5" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_5" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_6" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_6" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_7" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_7" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_8" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_8" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_9" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_9" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_10" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_10" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="h3/cascade/row_11" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
+	<widget name="h3/cascade/row_11" type="text" width="222" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
 	<widget name="h3/cascade/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -69,31 +69,31 @@ The art is this set's own; the pictures and the maps' and missions' words the pl
 		<child widget="h3/cascade/row_10" y="190"/>
 		<child widget="h3/cascade/row_11" y="209"/>
 	</widget>
-	<widget name="h3/cascade/c1_0" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_0" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_1" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_1" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_2" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_2" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_3" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_3" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_4" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_4" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_5" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_5" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_6" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_6" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_7" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_7" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_8" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_8" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_9" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_9" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_10" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_10" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c1_11" type="text" width="200" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/c2_11" type="text" width="200" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
-	<widget name="h3/cascade/mark" width="200" height="18" bitmap="h3/cascade/mark_bitmap"/>
+	<widget name="h3/cascade/c1_0" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_0" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_1" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_1" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_2" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_2" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_3" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_3" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_4" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_4" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_5" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_5" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_6" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_6" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_7" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_7" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_8" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_8" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_9" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_9" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_10" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_10" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c1_11" type="text" width="222" height="18" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/c2_11" type="text" width="222" height="18" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2"/>
+	<widget name="h3/cascade/mark" width="222" height="18" bitmap="h3/cascade/mark_bitmap"/>
 	<widget name="h3/cascade/arrow" width="8" height="16" bitmap="h3/cascade/arrow_bitmap"/>
 	<widget name="h3/cascade/title" type="text" left="20" top="46" width="300" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1"/>
 	<widget name="h3/cascade/tab_0" type="text" width="70" height="18" font="h3/font_item" color="#FFF0F4F8" align="center" text_y="2"/>
@@ -109,17 +109,17 @@ The art is this set's own; the pictures and the maps' and missions' words the pl
 	<widget name="h3/cascade/select" type="text" left="40" top="421" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/campaign_text" string_index="5"/>
 	<widget name="h3/cascade/b_butn" left="114" top="422" width="16" height="16" bitmap="h3/glyph_circle"/>
 	<widget name="h3/cascade/back" type="text" left="134" top="421" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/main_items" string_index="10"/>
-	<widget name="h3/cascade/map_picture" left="424" top="84" width="140" height="114" bitmap="h3/mp_maps"/>
-	<widget name="h3/cascade/mp_picture" left="424" top="84" width="140" height="114" bitmap="ui\shell\bitmaps\mp_map_grafix"/>
-	<widget name="h3/cascade/mission_picture" left="424" top="84" width="140" height="114" bitmap="h3/sp_levels"/>
-	<widget name="h3/cascade/difficulty_emblem" left="424" top="84" width="44" height="48" bitmap="h3/difficulty"/>
-	<widget name="h3/cascade/panel_name" type="text" left="424" top="204" width="196" height="20" font="h3/font_item" color="#FFF2F6FA" text_y="1"/>
-	<widget name="h3/cascade/maps_text" type="text" left="424" top="226" width="196" height="84" font="h3/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
-	<widget name="h3/cascade/mp_text" type="text" left="424" top="226" width="196" height="84" font="h3/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
-	<widget name="h3/cascade/ce_text" type="text" left="424" top="226" width="196" height="84" font="h3/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\solo_level_select\map_data"/>
-	<widget name="h3/cascade/panel_text" type="text" left="424" top="226" width="196" height="84" font="h3/font_small" color="#FFCFD9E3"/>
-	<widget name="h3/cascade/difficulty_text" type="text" left="424" top="140" width="196" height="84" font="h3/font_small" color="#FFCFD9E3" string_list="h3/difficulty_text"/>
-	<widget name="h3/cascade/panel_author" type="text" left="424" top="296" width="196" height="16" font="h3/font_small" color="#FF9FB6CC"/>
+	<widget name="h3/cascade/map_picture" left="468" top="84" width="140" height="114" bitmap="h3/mp_maps"/>
+	<widget name="h3/cascade/mp_picture" left="468" top="84" width="140" height="114" bitmap="ui\shell\bitmaps\mp_map_grafix"/>
+	<widget name="h3/cascade/mission_picture" left="468" top="84" width="140" height="114" bitmap="h3/sp_levels"/>
+	<widget name="h3/cascade/difficulty_emblem" left="468" top="84" width="44" height="48" bitmap="h3/difficulty"/>
+	<widget name="h3/cascade/panel_name" type="text" left="468" top="204" width="160" height="20" font="h3/font_item" color="#FFF2F6FA" text_y="1"/>
+	<widget name="h3/cascade/maps_text" type="text" left="468" top="226" width="160" height="84" font="h3/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
+	<widget name="h3/cascade/mp_text" type="text" left="468" top="226" width="160" height="84" font="h3/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
+	<widget name="h3/cascade/ce_text" type="text" left="468" top="226" width="160" height="84" font="h3/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\solo_level_select\map_data"/>
+	<widget name="h3/cascade/panel_text" type="text" left="468" top="226" width="160" height="84" font="h3/font_small" color="#FFCFD9E3"/>
+	<widget name="h3/cascade/difficulty_text" type="text" left="468" top="140" width="160" height="84" font="h3/font_small" color="#FFCFD9E3" string_list="h3/difficulty_text"/>
+	<widget name="h3/cascade/panel_author" type="text" left="468" top="296" width="160" height="16" font="h3/font_small" color="#FF9FB6CC"/>
 	<widget name="h3/cascade/screen" flags="pass_unhandled_to_focused_child">
 		<on event="b back" run="port cascade back" back="true"/>
 		<child widget="h3/main/haze"/>
@@ -134,29 +134,29 @@ The art is this set's own; the pictures and the maps' and missions' words the pl
 		<child widget="h3/cascade/r_butn"/>
 		<child widget="h3/cascade/mark" x="16" y="84"/>
 		<child widget="h3/cascade/c1_0" x="16" y="84"/>
-		<child widget="h3/cascade/c2_0" x="216" y="84"/>
+		<child widget="h3/cascade/c2_0" x="238" y="84"/>
 		<child widget="h3/cascade/c1_1" x="16" y="103"/>
-		<child widget="h3/cascade/c2_1" x="216" y="103"/>
+		<child widget="h3/cascade/c2_1" x="238" y="103"/>
 		<child widget="h3/cascade/c1_2" x="16" y="122"/>
-		<child widget="h3/cascade/c2_2" x="216" y="122"/>
+		<child widget="h3/cascade/c2_2" x="238" y="122"/>
 		<child widget="h3/cascade/c1_3" x="16" y="141"/>
-		<child widget="h3/cascade/c2_3" x="216" y="141"/>
+		<child widget="h3/cascade/c2_3" x="238" y="141"/>
 		<child widget="h3/cascade/c1_4" x="16" y="160"/>
-		<child widget="h3/cascade/c2_4" x="216" y="160"/>
+		<child widget="h3/cascade/c2_4" x="238" y="160"/>
 		<child widget="h3/cascade/c1_5" x="16" y="179"/>
-		<child widget="h3/cascade/c2_5" x="216" y="179"/>
+		<child widget="h3/cascade/c2_5" x="238" y="179"/>
 		<child widget="h3/cascade/c1_6" x="16" y="198"/>
-		<child widget="h3/cascade/c2_6" x="216" y="198"/>
+		<child widget="h3/cascade/c2_6" x="238" y="198"/>
 		<child widget="h3/cascade/c1_7" x="16" y="217"/>
-		<child widget="h3/cascade/c2_7" x="216" y="217"/>
+		<child widget="h3/cascade/c2_7" x="238" y="217"/>
 		<child widget="h3/cascade/c1_8" x="16" y="236"/>
-		<child widget="h3/cascade/c2_8" x="216" y="236"/>
+		<child widget="h3/cascade/c2_8" x="238" y="236"/>
 		<child widget="h3/cascade/c1_9" x="16" y="255"/>
-		<child widget="h3/cascade/c2_9" x="216" y="255"/>
+		<child widget="h3/cascade/c2_9" x="238" y="255"/>
 		<child widget="h3/cascade/c1_10" x="16" y="274"/>
-		<child widget="h3/cascade/c2_10" x="216" y="274"/>
+		<child widget="h3/cascade/c2_10" x="238" y="274"/>
 		<child widget="h3/cascade/c1_11" x="16" y="293"/>
-		<child widget="h3/cascade/c2_11" x="216" y="293"/>
+		<child widget="h3/cascade/c2_11" x="238" y="293"/>
 		<child widget="h3/cascade/map_picture"/>
 		<child widget="h3/cascade/mp_picture"/>
 		<child widget="h3/cascade/mp_text"/>
@@ -168,14 +168,14 @@ The art is this set's own; the pictures and the maps' and missions' words the pl
 		<child widget="h3/cascade/panel_text"/>
 		<child widget="h3/cascade/difficulty_text"/>
 		<child widget="h3/cascade/panel_author"/>
-		<child widget="online/scroll/scroll_up" x="198" y="68"/>
-		<child widget="online/scroll/scroll_down" x="198" y="312"/>
+		<child widget="online/scroll/scroll_up" x="220" y="68"/>
+		<child widget="online/scroll/scroll_down" x="220" y="312"/>
 		<child widget="h3/cascade/strip"/>
 		<child widget="h3/cascade/a_butn"/>
 		<child widget="h3/cascade/select"/>
 		<child widget="h3/cascade/b_butn"/>
 		<child widget="h3/cascade/back"/>
 		<child widget="h3/cascade/list" x="16" y="84"/>
-		<child widget="h3/cascade/arrow" x="204" y="84"/>
+		<child widget="h3/cascade/arrow" x="226" y="84"/>
 	</widget>
 </menus>
