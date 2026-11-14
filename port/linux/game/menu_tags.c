@@ -467,6 +467,14 @@ static char const *const port_function_names[] =
 	"port cascade tab next",
 	"port cascade mp maps",
 	"port cascade gametypes",
+	/* (1.1.4: Command mode's lobby and PREPARING COMMAND) */
+	"port command lobby init",
+	"port command side",
+	"port command ai level",
+	"port command prepare cancel",
+	"port forge start command",
+	"port forge command objective",
+	"port forge command prepare",
 };
 
 /* the port's game data functions (menu_functions.c), from
@@ -507,6 +515,8 @@ static char const *const port_game_data_input_names[] =
 	"port start",
 	"port sound",
 	"port cascade",
+	/* (1.1.4) */
+	"port command prepare",
 };
 
 static struct

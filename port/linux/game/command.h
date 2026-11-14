@@ -108,6 +108,13 @@ void command_objective_next(
 rules): the row's words, and the next */
 char const *command_ai_level_text(
 	void);
+/* (1.1.4: the settings panel's Forge page) the objectives chosen (0 both, 1
+territories, 2 flag) and the AI commander's difficulty (0 Easy to 3
+Legendary) */
+int command_objective_index(
+	void);
+int command_ai_level_index(
+	void);
 void command_ai_level_next(
 	void);
 

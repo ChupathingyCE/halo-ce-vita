@@ -1566,12 +1566,24 @@ extern char halo_forge_request_variant[HALO_FORGE_VARIANT_SIZE];
 /* ... and whether on the network (the connection the game runs: a network
 Forge game others join; 0, a local game) */
 extern volatile int halo_forge_request_network;
+/* (1.1.4: Start Command, HALO_FORGE_REQUEST_MODE_COMMAND; system_link_shortcut.c) */
+extern volatile int halo_forge_request_mode;
+/* (1.1.4, port/linux/game/command.c: the Command game's objective and AI
+commander, as the Command lobby's OBJECTIVE and AI COMMANDER rows step them -
+Menu style Halo CE's way to them, keep-overlay-complete) */
+int command_objective_index(void);
+void command_objective_next(void);
+int command_ai_level_index(void);
+void command_ai_level_next(void);
+static const char *const command_objective_names[] = { N_("Both"), N_("Territories"), N_("Flag") };
+static const char *const command_ai_level_names[] = { N_("Easy"), N_("Normal"), N_("Heroic"), N_("Legendary") };
 
 /* the map variants listed (File Share's), the ones shown at once */
 #define FORGE_PANEL_MAXIMUM 32
 /* (a Forge game's rows leave room for one: 1.1.3's Delete all took the
-other's) */
-#define FORGE_PANEL_LINES (forge_panel_ai_counts(NULL, NULL) ? 1 : 6)
+other's; at the menus 1.1.4's three Command rows leave room for two - the
+list scrolls) */
+#define FORGE_PANEL_LINES (forge_panel_ai_counts(NULL, NULL) ? 1 : 2)
 
 enum
 {
@@ -1580,6 +1592,12 @@ enum
 	/* (Local, or the network: the connection's, others joining) */
 	FORGE_LINE_NETWORK,
 	FORGE_LINE_START,
+	/* (1.1.4, at the menus: Command mode - its objective, its AI commander's
+	difficulty, Start Command - for every Menu style, the Command lobby's
+	rows: a local Command game of Blood Gulch) */
+	FORGE_LINE_COMMAND_OBJECTIVE,
+	FORGE_LINE_COMMAND_AI,
+	FORGE_LINE_START_COMMAND,
 	/* (while a Forge game is played) */
 	FORGE_LINE_CLEAR_DEAD,
 	FORGE_LINE_CLEAR_ALL,
@@ -3767,7 +3785,16 @@ static void close_panel(void);
 
 /* (Start Forge) the game asked for the Forge game, the panel closed; not
 in a level or a network game's lobby */
+static void forge_start_mode(int mode);
+
 static void forge_start(void)
+{
+	forge_start_mode(HALO_FORGE_REQUEST_MODE_FORGE);
+}
+
+/* (Start Forge; 1.1.4's Start Command: HALO_FORGE_REQUEST_MODE_COMMAND) the
+game asked for */
+static void forge_start_mode(int mode)
 {
 	const struct forge_store_entry *variant = forge_variant ? forge_map_variant(forge_variant, NULL) : NULL;
 	int state = multiplayer_state();
@@ -3787,11 +3814,20 @@ static void forge_start(void)
 		set_notice("%s", T("Leave the network game's lobby first"));
 		return;
 	}
+	if (mode == HALO_FORGE_REQUEST_MODE_COMMAND && forge_network)
+	{
+		set_notice("%s", T("Command plays local from here: Network Local"));
+		return;
+	}
 	halo_forge_request_map = forge_map;
 	halo_forge_request_network = forge_network;
-	snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s", variant ? variant->file_name : "");
+	halo_forge_request_mode = mode;
+	/* (Command: the map's own layout, no map variant of Forge's) */
+	snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s",
+		variant && mode != HALO_FORGE_REQUEST_MODE_COMMAND ? variant->file_name : "");
 	__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_FORGE, __ATOMIC_RELEASE);
-	vita_host_log("settings: Forge asked for (settings panel)");
+	vita_host_log(mode == HALO_FORGE_REQUEST_MODE_COMMAND ? "settings: Command asked for (settings panel)" :
+		"settings: Forge asked for (settings panel)");
 	close_panel();
 }
 
@@ -4579,6 +4615,12 @@ static int page_lines(struct line *lines)
 			{
 				continue;
 			}
+			/* (Command's rows at the menus alone: a game played has its own) */
+			if (playing && (index == FORGE_LINE_COMMAND_OBJECTIVE || index == FORGE_LINE_COMMAND_AI ||
+				index == FORGE_LINE_START_COMMAND))
+			{
+				continue;
+			}
 			lines[count].type = LINE_FORGE;
 			lines[count++].index = index;
 		}
@@ -5021,6 +5063,9 @@ static void help_line(char *text, int size, const struct line *line)
 			line->index == FORGE_LINE_CLEAR_ALL ? T("Every AI you placed, alive or dead, out of the layout") :
 			line->index == FORGE_LINE_DELETE_GROUP ? T("Everything you placed of one kind, out of the layout") :
 			line->index == FORGE_LINE_MAGNETS ? T("A block held near another snaps flush to its edges") :
+			line->index == FORGE_LINE_COMMAND_OBJECTIVE ? T("Command: what wins - territories, the flag, or both") :
+			line->index == FORGE_LINE_COMMAND_AI ? T("Command: how well the AI commander plays the other side") :
+			line->index == FORGE_LINE_START_COMMAND ? T("Command your squads from above on Blood Gulch (local)") :
 			line->index == FORGE_LINE_NUDGE ? T("Each nudge's move: hold L, click the right stick, flick") :
 			T("A local game: you fly as the monitor and place objects"));
 	else if (line && line->type == LINE_VARIANT)
@@ -5157,7 +5202,7 @@ static void footer_line(char *text, int size, const struct line *line)
 	else if (line && line->type == LINE_VARIANT)
 		middle = T("Square: delete   ");
 	else if (line && line->type == LINE_FORGE)
-		middle = line->index == FORGE_LINE_START || line->index == FORGE_LINE_CLEAR_DEAD ||
+		middle = line->index == FORGE_LINE_START || line->index == FORGE_LINE_START_COMMAND || line->index == FORGE_LINE_CLEAR_DEAD ||
 			line->index == FORGE_LINE_CLEAR_ALL ? T("Cross: select   ") :
 			line->index == FORGE_LINE_DELETE_GROUP ? T("Left/right: kind   Cross: delete   ") : T("Left/right: change   ");
 	else if (line && line->type == LINE_MOD)
@@ -5456,6 +5501,14 @@ static int list_text(char *text, int size, const struct line *lines, int count, 
 					line->index == FORGE_LINE_CLEAR_DEAD ? T("Clear dead AI") : T("Clear all AI"),
 					line->index == FORGE_LINE_CLEAR_DEAD ? dead : alive + dead);
 			}
+			else if (line->index == FORGE_LINE_COMMAND_OBJECTIVE)
+				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02< %s >", T("Command objective"),
+					T(command_objective_names[command_objective_index() % 3]));
+			else if (line->index == FORGE_LINE_COMMAND_AI)
+				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02< %s >", T("AI commander"),
+					T(command_ai_level_names[command_ai_level_index() & 3]));
+			else if (line->index == FORGE_LINE_START_COMMAND)
+				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02  >", T("Start Command"));
 			else
 				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02  >", T("Start Forge"));
 		}
@@ -8381,16 +8434,25 @@ int vita_settings_input(const struct vita_host_pad *pad)
 					forge_panel_magnets_set(!forge_panel_magnets());
 				else if (line->index == FORGE_LINE_NUDGE && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
 					forge_panel_nudge_step(step);
-				else if (line->index == FORGE_LINE_START)
+				else if (line->index == FORGE_LINE_START || line->index == FORGE_LINE_START_COMMAND)
 				{
 					if (pressed & (VITA_BUTTON_CROSS | VITA_BUTTON_RIGHT))
 					{
 						notice[0] = 0;
-						forge_start();
+						forge_start_mode(line->index == FORGE_LINE_START_COMMAND ? HALO_FORGE_REQUEST_MODE_COMMAND :
+							HALO_FORGE_REQUEST_MODE_FORGE);
 						if (!panel_open)
 							return 1;
 					}
 				}
+				/* (Command's objective and AI commander: each choice in turn) */
+				else if (line->index == FORGE_LINE_COMMAND_OBJECTIVE &&
+					(pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT | VITA_BUTTON_CROSS)))
+				{
+					command_objective_next();
+				}
+				else if (line->index == FORGE_LINE_COMMAND_AI && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT | VITA_BUTTON_CROSS)))
+					command_ai_level_next();
 				else if (line->index == FORGE_LINE_MAP && forge_map >= 0 && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
 				{
 					/* (the next map in the maps folder, either way) */

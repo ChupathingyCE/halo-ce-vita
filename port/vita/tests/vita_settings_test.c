@@ -244,6 +244,13 @@ int forge_panel_group_placed(int category) { return category >= 0 && category < 
 void forge_panel_delete_group(int category) { test_forge_group_deleted = category; }
 static int test_forge_magnets = 1, test_forge_nudge = 5;
 int forge_panel_magnets(void) { return test_forge_magnets; }
+/* (1.1.4: the Forge page's Command rows, port/linux/game/command.c's) */
+static int test_command_objective, test_command_ai_level = 2;
+int command_objective_index(void) { return test_command_objective % 3; }
+void command_objective_next(void) { test_command_objective++; }
+int command_ai_level_index(void) { return test_command_ai_level % 4; }
+void command_ai_level_next(void) { test_command_ai_level++; }
+volatile int halo_forge_request_mode;
 void forge_panel_magnets_set(int on) { test_forge_magnets = on; }
 int forge_panel_nudge_centimetres(void) { return test_forge_nudge; }
 void forge_panel_nudge_step(int step) { test_forge_nudge = step > 0 ? (test_forge_nudge == 25 ? 1 : test_forge_nudge == 1 ? 5 : test_forge_nudge * 2) : 5; }
@@ -3122,11 +3129,18 @@ static void test_forge_page(void)
 		!strcmp(menu_line(4, line, sizeof(line)), "Map\x02  Blood Gulch") &&
 		!strcmp(menu_line(5, line, sizeof(line)), "Map variant\x02  None >") &&
 		!strcmp(menu_line(6, line, sizeof(line)), "Network\x02  Local >") &&
-		!strcmp(menu_line(7, line, sizeof(line)), "Start Forge\x02  >") && !menu_line(8, line, sizeof(line))[0] &&
-		!strcmp(menu_line(9, line, sizeof(line)), "\x08" "File Share") &&
-		strstr(menu, "\nGulch A\x02  Blood Gulch\n") && strstr(menu, "\nDamaged file\x02  Blood Gulch\n") &&
-		strstr(menu, "\nCold\x02  Chill Out\n") && menu_fits() && menu_height_fits(),
-		"Forge: Touch in Forge (On), Map (Blood Gulch first), Map variant (None), Network (Local), Start Forge; File Share's map variants, each fits");
+		!strcmp(menu_line(7, line, sizeof(line)), "Start Forge\x02  >") &&
+		/* (1.1.4: Command's rows, at the menus) */
+		!strcmp(menu_line(8, line, sizeof(line)), "Command objective\x02< Both >") &&
+		!strcmp(menu_line(9, line, sizeof(line)), "AI commander\x02< Heroic >") &&
+		!strcmp(menu_line(10, line, sizeof(line)), "Start Command\x02  >") &&
+		/* (two of File Share's variants shown at once beside Command's rows, its heading left out for room:
+		the list scrolls, "(variants 1-2 of 4)") */
+		!strcmp(menu_line(11, line, sizeof(line)), "Gulch A\x02  Blood Gulch") && strstr(menu, "(variants 1-2 of 4)") &&
+		strstr(menu, "\nGulch A\x02  Blood Gulch\n") && strstr(menu, "\nGulch B\x02  Blood Gulch\n") &&
+		!strstr(menu, "\nCold\x02") && menu_fits() && menu_height_fits(),
+		"Forge: Touch in Forge (On), Map (Blood Gulch first), Map variant (None), Network (Local), Start Forge, Command objective (Both), "
+		"AI commander (Heroic), Start Command; File Share's map variants, each fits");
 	/* Touch in Forge: on as shipped; off and on again (HALO_FORGE_TOUCH) */
 	to_line("Touch in Forge");
 	check(strstr(menu, "\n\x05" "Drag an object to move it; tap it, then drag the screen to turn it\n") != NULL, "Touch in Forge's help");

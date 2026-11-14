@@ -2,7 +2,7 @@
 MENU_WORDS.C
 
 Menu style Halo CE's main menu rows (menus/classic/main.xml: MEDIA,
-FORGE) as words in the very letters of the game's own
+EXTRAS) as words in the very letters of the game's own
 CAMPAIGN, MULTIPLAYER, SETTINGS and GAME DEMOS - the player's ui.map's word
 pictures (ui\shell\main_menu\menu_*), read and cut into letters on the
 player's machine as the menus load, never shipped. Each of those is two
@@ -79,9 +79,8 @@ static struct
 } const rows[] =
 {
 	{ "media", "MEDIA" },
-	/* (1.1.3: FORGE stays a row of its own; 1.2.0's EXTRAS - its X made of
-	Y's arms, letter_x - comes with Command in 1.1.4) */
-	{ "forge", "FORGE" },
+	/* (its X made of Y's arms: letter_x) */
+	{ "modes", "EXTRAS" },
 };
 
 /* ---------- types */

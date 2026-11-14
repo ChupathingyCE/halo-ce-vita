@@ -7977,6 +7977,16 @@ void command_objective_next(
 	platform_log("command: objectives: %s", command_objectives_log_names[command_objectives.objectives & 3]);
 }
 
+/* (1.1.4: the settings panel's Forge page, Menu style Halo CE's way to
+Command's options) the objectives chosen: 0 territories and flag, 1
+territories, 2 flag; the AI commander's difficulty, 0 Easy to 3 Legendary */
+int command_objective_index(
+	void)
+{
+	return command_objectives.objectives == _command_objectives_territories ? 1 :
+		command_objectives.objectives == _command_objectives_flag ? 2 : 0;
+}
+
 /* (the console's "where") the scores, the resources, each side's AI */
 static void command_where_scores(
 	void)
@@ -8021,6 +8031,12 @@ char const *command_ai_level_text(
 
 	snprintf(text, sizeof(text), "%s: %s", T("AI COMMANDER"), T(command_ai_levels[command_ai_level].name));
 	return text;
+}
+
+int command_ai_level_index(
+	void)
+{
+	return command_ai_level;
 }
 
 boolean command_legendary_rules(
