@@ -4058,8 +4058,9 @@ void main_framerate_render(
 				}
 				else if (now_us - window_start_us >= 500000ull)
 				{
-					average_frame_rate = (long)((unsigned long long)(presented_now - window_presented) * 1000000ull /
-						(now_us - window_start_us));
+					/* (rounded: 29.9 a second at the 30 limit says 30) */
+					average_frame_rate = (long)(((unsigned long long)(presented_now - window_presented) * 1000000ull +
+						(now_us - window_start_us) / 2) / (now_us - window_start_us));
 					window_start_us = now_us;
 					window_presented = presented_now;
 				}
