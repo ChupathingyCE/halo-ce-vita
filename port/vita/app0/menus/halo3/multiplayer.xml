@@ -159,10 +159,10 @@ The map pictures and descriptions are ui.map's own; the rest this folder's art
 		<on event="a" open="h3/network/screen"/>
 	</widget>
 	<widget name="h3/mp/game_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
-		<on event="a" open="h3/gametype/screen"/>
+		<on event="a" run="port cascade gametypes" open="h3/cascade/screen"/>
 	</widget>
 	<widget name="h3/mp/map_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
-		<on event="a" open="h3/map/screen"/>
+		<on event="a" run="port cascade mp maps" open="h3/cascade/screen"/>
 	</widget>
 	<widget name="h3/mp/start_online" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFE6ECF2" text_x="8" text_y="3" string_list="h3/mp_text" string_index="1">
 		<on event="a start" run="port h3 host online"/>
@@ -204,8 +204,8 @@ The map pictures and descriptions are ui.map's own; the rest this folder's art
 		<on event="x" run="port h3 game options"/>
 		<on event="left_trigger" run="port h3 invite ask" open="h3/invite/screen"/>
 		<child widget="h3/mp/network_row" x="0" y="0"/>
-		<child widget="h3/mp/game_row" x="0" y="38"/>
-		<child widget="h3/mp/map_row" x="0" y="58"/>
+		<child widget="h3/mp/map_row" x="0" y="38"/>
+		<child widget="h3/mp/game_row" x="0" y="58"/>
 		<child widget="h3/mp/start_online" x="0" y="84"/>
 		<child widget="h3/mp/start_link" x="0" y="84"/>
 		<child widget="h3/mp/start_adhoc" x="0" y="84"/>

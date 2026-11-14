@@ -35,6 +35,7 @@ halo3/dialog_ui.xml
 # Menu style Classic+: the port's screens in the original menus' look (a cp/<name> widget stands
 # for h3/<name>: menu_tags.c menu_tags_online)
 classic/forge.xml
+classic/modes.xml
 classic/customize.xml
 classic/standins.xml
 classic/players.xml
@@ -48,3 +49,9 @@ online/multiplayer.xml
 online/campaign.xml
 online/browser.xml
 online/host.xml
+# 1.1.4 (1.2.0's menu rework): the two-column pickers, START's MEDIA | SETTINGS, SETTINGS > SOUND
+halo3/cascade.xml
+online/cascade.xml
+halo3/start.xml
+halo3/sound.xml
+online/start.xml

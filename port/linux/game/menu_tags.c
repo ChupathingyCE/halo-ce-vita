@@ -448,6 +448,25 @@ static char const *const port_function_names[] =
 	"port fileshare friend refresh", "port fileshare friend page up", "port fileshare friend page down",
 	"port forge magnets", "port forge nudge step",
 	"port forge group choose", "port forge delete group",
+	/* (1.1.3: 1.2.0's menu rework, Halo CE's parts - menu_functions.c's enum's order) */
+	"port online main focus",
+	"port online main back",
+	"port start open",
+	"port start tab",
+	"port start panel",
+	"port start desktop",
+	"port sound left",
+	"port sound right",
+	"port cascade forge",
+	"port cascade missions",
+	"port cascade pick",
+	"port cascade back",
+	"port cascade left",
+	"port cascade right",
+	"port cascade tab previous",
+	"port cascade tab next",
+	"port cascade mp maps",
+	"port cascade gametypes",
 };
 
 /* the port's game data functions (menu_functions.c), from
@@ -483,6 +502,11 @@ static char const *const port_game_data_input_names[] =
 	"port h3 content notice",
 	"port fileshare share", "port fileshare send", "port fileshare friend", "port fileshare friend question",
 	"port forge groups", "port forge group question",
+	/* (1.1.3: the menu rework) */
+	"port online main",
+	"port start",
+	"port sound",
+	"port cascade",
 };
 
 static struct
@@ -865,7 +889,18 @@ static char const *menu_text_translated(char const *original, char *buffer, long
 	}
 	buffer[used] = 0;
 	/* (a text longer than the buffer: as the file has it) */
-	return *text ? original : T(buffer);
+	if (*text)
+		return original;
+	/* (a footer's button word, "{footer}Select": its own key - the plain word is a button's name elsewhere
+	("Select", "Back": the Vita's and the Xbox's buttons, kept as they are) -, shown without the mark when the
+	language has none for it; 1.2.0's) */
+	if (!strncmp(buffer, "{footer}", 8))
+	{
+		char const *translated = T(buffer);
+
+		return translated && strcmp(translated, buffer) ? translated : buffer + 8;
+	}
+	return T(buffer);
 }
 
 static void *string_list_build(char const *const *strings, long count)

@@ -45,7 +45,7 @@ ui.map's own, the rest this folder's art. -->
 		<string text="START GAME"/>
 		<string text="Ready"/>
 		<string text="This party is local to this PS Vita."/>
-		<string text="Select"/>
+		<string text="{footer}Select"/>
 		<string text="SELECT MISSION"/>
 		<string text="SELECT DIFFICULTY"/>
 		<string text="SELECT NETWORK"/>
@@ -95,7 +95,7 @@ ui.map's own, the rest this folder's art. -->
 		<on event="a" open="h3/campnet/screen"/>
 	</widget>
 	<widget name="h3/campaign/mission_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
-		<on event="a" open="h3/mission/screen"/>
+		<on event="a" run="port cascade missions" open="h3/cascade/screen"/>
 	</widget>
 	<widget name="h3/campaign/difficulty_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" open="h3/difficulty/screen"/>
@@ -129,11 +129,11 @@ ui.map's own, the rest this folder's art. -->
 	</widget>
 	<widget name="h3/campaign/rule2" left="8" top="146" width="250" height="2" bitmap="h3/rule"/>
 	<widget name="h3/campaign/ready" type="text" left="16" top="151" width="240" height="18" font="h3/font_item" color="#FFE6ECF2" text_y="1" string_list="h3/campaign_text" string_index="3"/>
-	<widget name="h3/campaign/ready_sub" type="text" left="16" top="167" width="240" height="16" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
-	<widget name="h3/campaign/picture" left="16" top="190" width="140" height="114" bitmap="h3/sp_levels"/>
-	<widget name="h3/campaign/emblem" left="22" top="196" width="44" height="48" bitmap="h3/difficulty"/>
-	<widget name="h3/campaign/caption" type="text" left="16" top="310" width="240" height="40" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
-	<widget name="h3/campaign/warning" type="text" left="16" top="354" width="240" height="36" font="h3/font_small" color="#FFF0B070" text_y="1"/>
+	<widget name="h3/campaign/ready_sub" type="text" left="16" top="167" width="240" height="30" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
+	<widget name="h3/campaign/picture" left="16" top="204" width="140" height="114" bitmap="h3/sp_levels"/>
+	<widget name="h3/campaign/emblem" left="22" top="210" width="44" height="48" bitmap="h3/difficulty"/>
+	<widget name="h3/campaign/caption" type="text" left="16" top="324" width="240" height="40" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/campaign/warning" type="text" left="16" top="368" width="240" height="36" font="h3/font_small" color="#FFF0B070" text_y="1"/>
 	<widget name="h3/campaign/rule3" left="8" top="440" width="250" height="2" bitmap="h3/rule"/>
 	<widget name="h3/campaign/a_butn" left="16" top="447" width="16" height="16" bitmap="h3/glyph_cross"/>
 	<widget name="h3/campaign/select" type="text" left="36" top="446" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/campaign_text" string_index="5"/>

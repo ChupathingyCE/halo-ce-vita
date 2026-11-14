@@ -30,7 +30,11 @@ Without an audio device, a clock thread runs the same mixer into a scratch
 buffer, so streams still drain at their real rate.
 
 audio.volume sets the master volume (default 1.0); audio.enabled = false
-skips opening a device (port_config.c).
+skips opening a device (port_config.c). audio.music_volume, effects_volume,
+dialogue_volume and ambience_volume scale Halo's sound classes (the game's
+sound manager asks halo_sound_class_volume for each sound's gain, Halo CE's
+and Halo 2's alike); all five live - the settings panel and the menus'
+SOUND page set their variables and bump halo_settings_generation.
 */
 
 #include "platform.h"
@@ -135,7 +139,62 @@ static struct
 	float distance_factor;
 } listener = { { 0, 0, 0 }, { 0, 0, 1 }, { 0, 1, 0 }, 1.0f, 1.0f };
 
-static float master_volume = 1.0f;
+static volatile float master_volume = 1.0f;
+
+/* ---------- the volumes (1.2.0 menu rework: Settings > Sound, owner Nov 5) */
+
+extern volatile unsigned long halo_settings_generation;
+
+enum { VOLUME_MUSIC, VOLUME_EFFECTS, VOLUME_DIALOGUE, VOLUME_AMBIENCE, NUMBER_OF_VOLUMES };
+static float class_volumes[NUMBER_OF_VOLUMES] = { 1.0f, 1.0f, 1.0f, 1.0f };
+static unsigned long volumes_generation = ~0ul;
+
+/* a volume: its variable as the settings panel and the menus set it, else config.toml's; 0 to 1 */
+static float volume_read(char const *variable, char const *name)
+{
+	char const *value = getenv(variable);
+	double volume = value && *value ? strtod(value, NULL) : config_real(name);
+
+	return volume < 0.0 ? 0.0f : volume > 1.0 ? 1.0f : (float)volume;
+}
+
+static void volumes_read(void)
+{
+	unsigned long generation = halo_settings_generation;
+
+	if (generation == volumes_generation)
+		return;
+	volumes_generation = generation;
+	master_volume = volume_read("HALO_VOLUME", "audio.volume");
+	class_volumes[VOLUME_MUSIC] = volume_read("HALO_MUSIC_VOLUME", "audio.music_volume");
+	class_volumes[VOLUME_EFFECTS] = volume_read("HALO_EFFECTS_VOLUME", "audio.effects_volume");
+	class_volumes[VOLUME_DIALOGUE] = volume_read("HALO_DIALOGUE_VOLUME", "audio.dialogue_volume");
+	class_volumes[VOLUME_AMBIENCE] = volume_read("HALO_AMBIENCE_VOLUME", "audio.ambience_volume");
+}
+
+/* (sound_manager.c sound_manager_master_gain, the main thread) a Halo sound class's volume: music (32),
+dialogue (the units' 19 and the scripts' 44, 46, 47), ambience (33 to 35), effects (the rest) - Halo 2's
+sounds are given these classes as they load (h2_sound.c sound_class_from_halo2) */
+float halo_sound_class_volume(short class_index)
+{
+	volumes_read();
+	switch (class_index)
+	{
+	case 32:
+		return class_volumes[VOLUME_MUSIC];
+	case 19:
+	case 44:
+	case 46:
+	case 47:
+		return class_volumes[VOLUME_DIALOGUE];
+	case 33:
+	case 34:
+	case 35:
+		return class_volumes[VOLUME_AMBIENCE];
+	default:
+		return class_volumes[VOLUME_EFFECTS];
+	}
+}
 
 static float gain_from_millibels(LONG millibels)
 {
@@ -1356,7 +1415,7 @@ static void audio_start(void)
 		return;
 	audio_started = TRUE;
 	ima_build_tables();
-	master_volume = (float)config_real("audio.volume");
+	volumes_read();
 
 	{
 		/* (debug) HALO_FIXED_TICK: no device and no clock thread; the

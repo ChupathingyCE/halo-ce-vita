@@ -3773,6 +3773,12 @@ static void test_tab_layouts(void)
 		{ PAGE_GRAPHICS_PERFORMANCE, "Battery saver in menus", "HALO_CLOCK_GOVERNOR", "1|0", 0, "1" },
 	};
 	static const struct layout_row sound[] = {
+		/* (1.2.0 menu rework: the volumes, the menus' SETTINGS > SOUND's too) */
+		{ TAB_AUDIO, "Master volume", "HALO_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
+		{ TAB_AUDIO, "Music volume", "HALO_MUSIC_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
+		{ TAB_AUDIO, "Effects volume", "HALO_EFFECTS_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
+		{ TAB_AUDIO, "Dialogue volume", "HALO_DIALOGUE_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
+		{ TAB_AUDIO, "Ambience volume", "HALO_AMBIENCE_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
 		/* (shown with Menu style ElDewrito) */
 		{ TAB_AUDIO, "Menu music", "HALO_MENU_MUSIC", "100|70|50|40|30|20|0", 0, "30" },
 		{ TAB_AUDIO, "Sound voices", "HALO_SOUND_CHANNELS", "16|24|32|0", 1, "0" },
@@ -3804,7 +3810,8 @@ static void test_tab_layouts(void)
 		"variable, values, default "
 		"and restart as before");
 	check(layout_is(TAB_AUDIO, 1, sound, (int)(sizeof(sound) / sizeof(sound[0]))),
-		"Sound: Menu music (ElDewrito), Sound voices*, Sound occlusion, Sound updates (Language on Game): as before");
+		"Sound: Master, Music, Effects, Dialogue and Ambience volume, Menu music (ElDewrito), Sound voices*, Sound occlusion, "
+		"Sound updates (Language on Game): as before");
 	{
 		/* (the Controls tab's pages: their rows only theirs) */
 		int buttons = 0, touch = 0, gyro = 0, other = 0;
@@ -3890,7 +3897,8 @@ static void test_headings(void)
 			"=Gyro|Gyro aiming|Gyro settings|=Touch|Rear touch guard|Touch zones" },
 		{ "Video", "=Quality|Profile|Render resolution|Dynamic minimum|Frame limit|Frame interpolation|=Screen|"
 			"Aspect ratio|Field of view|Upscale filter|Sharp interface|Brightness|Detail|Performance" },
-		{ "Sound", "Sound voices*|Sound occlusion|Sound updates" },
+		{ "Sound", "Master volume|Music volume|Effects volume|Dialogue volume|Ambience volume|Sound voices*|Sound occlusion|"
+			"Sound updates" },
 		{ "Multiplayer", "=Network|Connection|Vita and PC|Join with a code|=Bots|Bots|=Games|Co-op players|"
 			"Unseen players|Modded maps|Latency meter" },
 	};
@@ -4038,6 +4046,8 @@ static void test_variables_kept(void)
 		"HALO_CARNAGE_REPORT", "HALO_FLAMING_HELMET", "HALO_FIELD_OF_VIEW", "HALO_BRIGHTNESS", "HALO_CLOCK_GOVERNOR", "HALO_BATTERY_LOG",
 		"HALO_CHAT", "HALO_CHAT_FILTER", "HALO_BOTS_ONLINE", "HALO_SCOREBOARD", "HALO_MENU_BACKDROP", "HALO_MENU_MUSIC",
 		"HALO_CLASSIC_CARNAGE_REPORT", "HALO_CLASSIC_SCOREBOARD",
+		/* (1.1.3, 1.2.0's menu rework: the volumes) */
+		"HALO_VOLUME", "HALO_MUSIC_VOLUME", "HALO_EFFECTS_VOLUME", "HALO_DIALOGUE_VOLUME", "HALO_AMBIENCE_VOLUME",
 	};
 	int index, all = 1, choices = 0;
 
@@ -6036,11 +6046,11 @@ int main(void)
 	press(VITA_BUTTON_R);
 	press(VITA_BUTTON_R);
 	check(strstr(menu, "|*Sound|") && strstr(menu, "\nSound voices*\x02") && strstr(menu, "\nSound occlusion\x02") &&
-		strstr(menu, "\nSound updates\x02< Every 2nd >") && menu_rows() == 3 && !strstr(menu, "Language") &&
+		strstr(menu, "\nSound updates\x02< Every 2nd >") && menu_rows() == 8 && !strstr(menu, "Language") &&
 		!strchr(menu, '\x08') && menu_fits() && menu_height_fits(),
 		"R, R, R: Sound: the sound rows, no heading (Language on Game)");
-	check(!strncmp(menu_line(1, line, sizeof(line)), "Sound voices*\x02", 14) && menu_selected == 1,
-		"Sound: Sound voices first, chosen");
+	check(!strncmp(menu_line(1, line, sizeof(line)), "Master volume\x02", 14) && menu_selected == 1,
+		"Sound: Master volume first, chosen");
 	press(VITA_BUTTON_R);
 	check(!strncmp(menu, "\tGame|Controls|Video|Sound|*Multiplayer\n", sizeof("\tGame|Controls|Video|Sound|*Multiplayer\n") - 1),
 		"R: Multiplayer");

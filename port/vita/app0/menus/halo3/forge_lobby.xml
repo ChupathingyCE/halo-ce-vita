@@ -39,7 +39,7 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 		<string text="START FORGE"/>
 		<string text="Ready"/>
 		<string text="This party is local to this PS Vita."/>
-		<string text="Select"/>
+		<string text="{footer}Select"/>
 		<string text="SELECT MAP"/>
 		<string text="Leave"/>
 		<string text="EXTRA OBJECTS"/>
@@ -55,7 +55,7 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 		<data input="port h3 network status"/>
 	</widget>
 	<widget name="h3/forge/map_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
-		<on event="a" open="h3/forge/maps/screen"/>
+		<on event="a" run="port cascade forge" open="h3/cascade/screen"/>
 	</widget>
 	<widget name="h3/forge/packs_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" open="h3/forge/packs/screen"/>

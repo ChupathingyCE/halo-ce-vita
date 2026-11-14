@@ -145,6 +145,17 @@ static const struct config_setting config_settings[] =
 		"Play sound." },
 	{ "audio.volume", _config_real, "1.0", "HALO_VOLUME", _environment_value, _platform_all,
 		"The volume of everything, 0.0 to 1.0." },
+	/* (dsound_sdl.c halo_sound_class_volume: Halo's sound classes, both games'; live - the settings
+	panel's Sound and the menus' SETTINGS > SOUND set them) */
+	{ "audio.music_volume", _config_real, "1.0", "HALO_MUSIC_VOLUME", _environment_value, _platform_all,
+		"The music's volume (the music sound class), 0.0 to 1.0." },
+	{ "audio.effects_volume", _config_real, "1.0", "HALO_EFFECTS_VOLUME", _environment_value, _platform_all,
+		"The volume of the game's effects (weapons, vehicles, impacts, footsteps:\n"
+		"every sound class but music, dialogue and ambience), 0.0 to 1.0." },
+	{ "audio.dialogue_volume", _config_real, "1.0", "HALO_DIALOGUE_VOLUME", _environment_value, _platform_all,
+		"The volume of voices: the characters' dialogue and the scripts', 0.0 to 1.0." },
+	{ "audio.ambience_volume", _config_real, "1.0", "HALO_AMBIENCE_VOLUME", _environment_value, _platform_all,
+		"The volume of the levels' ambience (nature, machinery, computers), 0.0 to 1.0." },
 
 	{ "input.mouse_sensitivity", _config_real, "1.0", "HALO_MOUSE_SENSITIVITY", _environment_value, _platform_desktop,
 		"How far the view turns for the mouse's movement." },
@@ -431,8 +442,9 @@ static const struct config_setting config_settings[] =
 		"network.coop_players. The Vita's settings panel (Multiplayer, Play,\n"
 		"Max players) sets it." },
 	{ "menus.style", _config_string, "\"online\"", "HALO_MENU_STYLE", _environment_value, _platform_all,
-		"The menus: \"original\" (Classic: Halo CE's own, as they shipped),\n"
-		"\"classic\" (Classic+: Halo CE's own with the port's rows and screens),\n"
+		"The menus: \"classic\" (Classic+: Halo CE's own with the port's rows and\n"
+		"screens; plain Classic, as they shipped, is only its fallback when the\n"
+		"Halo PC menus' files are missing - a saved \"original\" becomes \"classic\"),\n"
 		"\"halo3\" (Halo 3-style screens\n"
 		"over the same animated Halo ring: port/vita/app0/menus/halo3) or \"online\"\n"
 		"(shown as ElDewrito: the Halo 3 screens' flows, port/vita/app0/menus/online's look\n"
