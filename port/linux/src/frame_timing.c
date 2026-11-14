@@ -75,8 +75,17 @@ no new game state), and those made with frame interpolation on and with two
 frames a tick: the game's ticks a second and the frames a second apart */
 static unsigned long presented_frames, between_frames, paused_frames, interpolation_frames, two_a_tick_frames;
 
+/* every frame presented since the start (the FPS counter's: main.c) */
+static unsigned long presented_total;
+
+unsigned long halo_frames_presented(void)
+{
+	return presented_total;
+}
+
 void halo_frame_timing_presented(int presented, int between_ticks, int paused, int interpolation, int two_a_tick)
 {
+	presented_total += presented != 0;
 	presented_frames += presented != 0;
 	paused_frames += presented && paused;
 	between_frames += presented && between_ticks;

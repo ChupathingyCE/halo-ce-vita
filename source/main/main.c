@@ -4036,26 +4036,32 @@ void main_framerate_render(
 			bounds = render.camera.window_bounds;
 #ifdef HALO_LINUX
 			/* The native ports draw at the display's refresh rate, up to
-			hundreds of frames a second: show frames per second averaged over
-			half a second, counting each frame once (split screen draws this
-			once per view), with no 100 cap. */
+			hundreds of frames a second: show the frames presented a second,
+			averaged over half a second of the clock (split screen draws this
+			once per view), with no 100 cap. (Not the main loop's passes: with
+			the tick on its own thread and the frame limit, the loop runs
+			passes that present nothing - StarlessLemon96's Vita showed over
+			160 at 15-20 frames a second) */
 			{
-				static unsigned long counted_frame_start = 0;
-				static real window_seconds = 0.0f;
-				static long window_frames = 0;
+				unsigned long long vita_host_time_us(void);
+				unsigned long halo_frames_presented(void);
+				static unsigned long long window_start_us = 0;
+				static unsigned long window_presented = 0;
 				static long average_frame_rate = 0;
+				unsigned long long now_us = vita_host_time_us();
+				unsigned long presented_now = halo_frames_presented();
 
-				if (main_globals.frame_start_milliseconds != counted_frame_start)
+				if (!window_start_us || now_us < window_start_us)
 				{
-					counted_frame_start = main_globals.frame_start_milliseconds;
-					window_seconds += main_globals.seconds_elapsed;
-					window_frames++;
-					if (window_seconds >= 0.5f)
-					{
-						average_frame_rate = fast_ftol(window_frames / window_seconds);
-						window_seconds = 0.0f;
-						window_frames = 0;
-					}
+					window_start_us = now_us;
+					window_presented = presented_now;
+				}
+				else if (now_us - window_start_us >= 500000ull)
+				{
+					average_frame_rate = (long)((unsigned long long)(presented_now - window_presented) * 1000000ull /
+						(now_us - window_start_us));
+					window_start_us = now_us;
+					window_presented = presented_now;
 				}
 				frame_rate = PIN(average_frame_rate, 0, 999);
 				(void)frame_seconds;
