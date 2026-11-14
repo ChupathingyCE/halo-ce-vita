@@ -39,19 +39,25 @@ also work).
   puts everything in the right place for you: choose **Manual** for your Xbox
   disc image (recommended), **Automatic** for your Steam MCC.
 
-### What an install from MCC alone has and hasn't
+### Xbox files or MCC files: what you get
 
-With MCC's files alone (no Xbox `maps` folder) the campaign, multiplayer,
-Forge, the menus and their live background all work. Different from an Xbox
-install:
+| | Your own Xbox files (recommended) | Halo: MCC's files (optional) |
+| --- | --- | --- |
+| Campaign | The 10 missions | The same 10 missions (MCC's Anniversary graphics are not used: the classic look) |
+| Campaign sound | Everything | Sound effects; MCC's dialogue and music are silent in 1.1.x |
+| Multiplayer maps | The Xbox's 13, with the Xbox's own balance | 19: Halo PC's versions of those 13 (Halo PC's tuning of weapons and vehicles, some maps changed) plus Halo PC's Danger Canyon, Death Island, Gephyrophobia, Ice Fields, Infinity and Timberland |
+| Online | With players who have the Xbox maps | With players who have MCC's maps: Xbox and MCC players can't play together yet (planned) |
+| Intro and other movies | Yes, made from the disc (optional, Setup's Manual mode) | None (they are skipped) |
+| Loading screen | The Xbox's picture (from `default.xbe`) | A picture of the menus' live background, taken once from your own files |
+| Live background, menus, Forge | Yes | Yes |
+| MCC campaign mods (Steam Workshop) | - | Experimental: Settings > Multiplayer > Modded maps > MCC mods |
 
-- The loading screen shows a picture of the menus' live background (taken
-  once from your own files the first time the main menu is up): the Xbox
-  loading picture is in the disc's `default.xbe`, which MCC doesn't have.
-- No intro or other movies: they come from the Xbox disc (they are
-  optional; the game skips them).
-- Dialogue and music of MCC's maps are silent in 1.1.x (sound effects play).
-- Online, an MCC map plays with players who have the same MCC map.
+Both installs together also work: multiplayer has both sets of maps. Note
+for the campaign: with MCC's folder there, the ElDewrito and Halo 3 menu
+styles' campaign plays MCC's copies of the missions (dialogue and music
+silent); Classic+ plays the Xbox missions. To play the Xbox campaign with
+every sound from the ElDewrito or Halo 3 menus, keep MCC's files out of
+`ux0:data/haloce-vita/mcc`.
 
 ## I don't have a PC
 
