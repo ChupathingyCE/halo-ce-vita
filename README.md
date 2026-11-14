@@ -124,6 +124,11 @@ The current list is in the [roadmap](ROADMAP.md) and the
 
 Prefer a video? The [install tutorial](https://youtu.be/x46zLnwlRUU) walks through all of it.
 
+**Quick answers** (which folder is which, no PC, where to update, common problems):
+[Install help](docs/INSTALL-HELP.md). Get the game only from this page's
+[releases](https://github.com/BirchWoodGod/halo-ce-vita/releases): mirrors such as
+PSVitaAlive or VitaDB are often versions behind.
+
 ### Requirements
 
 - A PS Vita or PS TV on HENkaku/Ensō (firmware 3.60–3.74) with
