@@ -1548,6 +1548,10 @@ static struct
 	unsigned char *runs;
 } retail_loading_image;
 
+/* (port) the loading texture is the live background's still (no retail
+picture: port/linux/game/menu_still.c) */
+static boolean loading_picture_is_still;
+
 enum
 {
 	RETAIL_LOADING_TONE_BLOCK_SIZE= 36, /* one Xbox ADPCM block, mono */
@@ -1989,7 +1993,16 @@ front buffer (game_loading_screen_begin) */
 boolean progress_bar_has_picture(
 	void)
 {
+#ifdef HALO_LINUX
+	{
+		/* (port) or the live background's still in its place (menu_still.c) */
+		int menu_still_cached(void);
+
+		return retail_loading_image.runs != NULL || menu_still_cached();
+	}
+#else
 	return retail_loading_image.runs != NULL;
+#endif
 }
 #endif
 
@@ -2820,7 +2833,8 @@ static void progress_bar_make_stuff_ready(
 	}
 
 #ifdef HALO_LINUX
-	platform_log("loading screen: up, %s, %s", retail_loading_image.runs ? "the retail picture" : "black (no picture)",
+	platform_log("loading screen: up, %s, %s", retail_loading_image.runs ? "the retail picture" :
+		loading_picture_is_still ? "the live background's still" : "black (no picture)",
 		progress_bar_globals.sounds[0] ? "the chant playing" : "silent (no chant)");
 	if (progress_bar_globals.sounds[0])
 #endif
@@ -2896,6 +2910,16 @@ static void progress_bar_load_loading_texture(
 	csmemset(pixels, 0, locked_rect.Pitch*surface_description.Height);
 	if (retail_loading_image.runs)
 		retail_decode_loading_image(&locked_rect);
+	else
+	{
+		/* (no retail picture - an install from MCC alone -: the live
+		background's still, made of the player's own map at the main menu
+		and kept, port/linux/game/menu_still.c; black without one) */
+		int menu_still_load(unsigned long *pixels, long pitch);
+
+		loading_picture_is_still= surface_description.Width>=320 && surface_description.Height>=240 &&
+			menu_still_load(pixels, locked_rect.Pitch);
+	}
 #else
 	csstrcpy(map_directory, cache_files_map_directory());
 	sprintf(source_path, "z%sloading.tga", map_directory + 1);

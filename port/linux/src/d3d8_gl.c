@@ -4301,6 +4301,27 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		if (trace_frame())
 			platform_log("present back buffer %08lx texture %u", (unsigned long)device.back_buffer.Data,
 				back_buffer->target.texture);
+		{
+			/* (port) the live background's still, drawn with no widgets this
+			frame: read back for the loading screen (menu_still.c) */
+			int menu_still_present_wanted(void);
+			void menu_still_store(const unsigned char *pixels, unsigned long pitch, unsigned long width,
+				unsigned long height);
+
+			if (menu_still_present_wanted())
+			{
+				unsigned long still_width = back_buffer->target.gl_width, still_height = back_buffer->target.gl_height;
+				unsigned char *still = malloc(still_width * still_height * 4);
+
+				if (still)
+				{
+					glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer_get(back_buffer->target.texture, 0));
+					glReadPixels(0, 0, (GLsizei)still_width, (GLsizei)still_height, GL_BGRA, GL_UNSIGNED_BYTE, still);
+				}
+				menu_still_store(still, still_width * 4, still_width, still_height);
+				free(still);
+			}
+		}
 		if (vita_preview_enabled())
 		{
 			/* (the Vita's display, shown and saved) */

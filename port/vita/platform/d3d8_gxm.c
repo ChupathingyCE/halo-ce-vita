@@ -2891,6 +2891,9 @@ struct render_record
 		struct
 		{
 			BOOL screenshot;
+			/* (port) the back buffer read for the live background's still
+			(menu_still.c) */
+			BOOL still;
 			unsigned long frame;
 			/* the movie frame drawn over the picture (halo_d3d_movie_draw):
 			NULL for none */
@@ -4662,6 +4665,17 @@ static void execute_command(struct render_record *command)
 		{
 			if (command->present.screenshot)
 				write_screenshot(back_buffer);
+			if (command->present.still)
+			{
+				/* (port) the live background's still (menu_still.c) */
+				void menu_still_store(const unsigned char *pixels, unsigned long pitch, unsigned long width,
+					unsigned long height);
+				unsigned long still_pitch = 0, still_width = back_buffer->target.width,
+					still_height = back_buffer->target.height;
+				const unsigned char *still = vgxm_target_pixels(back_buffer->id, &still_pitch, &still_width, &still_height);
+
+				menu_still_store(still, still_pitch, still_width, still_height);
+			}
 			/* (the frame's visibility counts: the game's frame they are of) */
 			vgxm_visibility_frame(command->present.frame);
 			if (command->present.movie_pixels)
@@ -9470,6 +9484,11 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 					shot_names[device.frame & 3][sizeof(shot_names[0]) - 1] = 0;
 					halo_screenshot_name[0] = 0;
 				}
+			}
+			{
+				int menu_still_present_wanted(void);
+
+				command->present.still = menu_still_present_wanted();
 			}
 			command->present.frame = device.frame;
 			frames_requested++;

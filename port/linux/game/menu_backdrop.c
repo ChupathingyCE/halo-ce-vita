@@ -71,6 +71,7 @@ map loaded (a game started) lets it go with ui.map's tags
 
 #include "halo_menus.h"
 #include "scene_packs.h"
+#include "menu_still.h"
 #include "text/draw_string.h"
 #include "rasterizer/rasterizer.h"
 #include "../src/lang.h"
@@ -96,6 +97,8 @@ void sound_class_set_gain(char const *name, real gain, short interpolation_ticks
 /* ---------- constants */
 
 #define MENU_BACKDROP_PACK "menu_backdrop"
+/* (the still: this long after the live background came up) */
+#define MENU_STILL_SETTLED_US 4000000ull
 /* (a30's first bsp has 124: room for them) */
 #define MENU_BACKDROP_SOUNDS 192
 /* (a30's first bsp has one: its beam emitter) */
@@ -930,6 +933,14 @@ it go; the ring's flight back) */
 	}
 	if (menu_backdrop.active || menu_backdrop.failed)
 	{
+		/* (port) up, settled and the main menu at rest: its still for the
+		loading screen, once an install (menu_still.c) */
+		menu_still_update();
+		if (menu_backdrop.active && menu_backdrop_fade.phase == _backdrop_fade_none && halo_main_menu_idle() &&
+			vita_host_time_us() - menu_backdrop.activated_us > MENU_STILL_SETTLED_US)
+		{
+			menu_still_request();
+		}
 		/* (up - the menus fading in at it -, or given up: the hold's end) */
 		if (menu_backdrop.active && menu_backdrop_fade.phase == _backdrop_fade_hold)
 			menu_backdrop_fade_set(menu_backdrop_fade_enabled() ? _backdrop_fade_in : _backdrop_fade_none);

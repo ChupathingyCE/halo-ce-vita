@@ -7262,6 +7262,16 @@ void render_ui_widgets(
 	ui_widget_port_text_override_count = 0;
 	if (bink_playback_ui_rendering_inhibited())
 		return;
+#ifdef HALO_LINUX
+	/* (port) the live background's still: one frame with no widgets, read
+	back for the loading screen (port/linux/game/menu_still.c) */
+	{
+		int menu_still_hide_interface(void);
+
+		if (menu_still_hide_interface())
+			return;
+	}
+#endif
 	if (!virtual_keyboard_active())
 	{
 		local_player_index = PIN(
