@@ -206,4 +206,9 @@ boolean scene_packs_command(
 char const *scene_packs_state_name(
 	short state);
 
+/* (port) the hooks a pack built from one of MCC's own maps takes its sound
+effects through (scene_pack_ce.h); set at the first update, and by the Halo 2
+level builder before its kit */
+void scene_packs_mcc_sound_hooks(void);
+
 #endif

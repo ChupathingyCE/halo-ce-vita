@@ -171,4 +171,13 @@ read of the source map, its offset and bytes, which it may change; NULL
 (the game): none */
 extern void (*scene_pack_ce_read_hook)(unsigned long offset, void *buffer, unsigned long size);
 
+/* (port) the sound effects' bank of MCC's own maps (mcc_sound.h), which the
+game gives (scene_packs.c, h2_level.c) and tools/scene_pack_test.c has not:
+opened before such a map's tags are converted, with the combined offset the
+bank starts at and its bytes; closed after. NULL: the map's sounds are
+silent */
+extern boolean (*scene_pack_ce_mcc_sound_open)(unsigned long combined_offset, unsigned long bank_bytes, char *reason,
+	long reason_size);
+extern void (*scene_pack_ce_mcc_sound_close)(void);
+
 #endif

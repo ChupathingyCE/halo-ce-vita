@@ -105,7 +105,9 @@ slow memory card's rate on the thread that makes them.
 #include "custom_edition_cache.h"
 #include "halo_menus.h"
 #include "scene_pack.h"
+#include "scene_pack_ce.h"
 #include "scene_packs.h"
+#include "mcc_sound.h"
 #include "tag_schema.h"
 
 #include <math.h>
@@ -2372,6 +2374,32 @@ short scene_packs_roots(
 	return index;
 }
 
+/* (port) MCC's own maps' sound effects for a pack of one (scene_pack_ce.h):
+the bank opened and the conversion pointed at it, as the game loads such a
+map (custom_edition_cache.c) */
+static struct mcc_sound_source scene_packs_mcc_sounds;
+
+static boolean scene_packs_mcc_sound_open(unsigned long combined_offset, unsigned long bank_bytes, char *reason,
+	long reason_size)
+{
+	if (!mcc_sound_open(&scene_packs_mcc_sounds, (uint32_t)combined_offset, (uint32_t)bank_bytes, reason, reason_size))
+		return FALSE;
+	custom_edition_cache_convert_mcc_sounds(&scene_packs_mcc_sounds);
+	return TRUE;
+}
+
+static void scene_packs_mcc_sound_close(void)
+{
+	custom_edition_cache_convert_mcc_sounds(NULL);
+	mcc_sound_close();
+}
+
+void scene_packs_mcc_sound_hooks(void)
+{
+	scene_pack_ce_mcc_sound_open = scene_packs_mcc_sound_open;
+	scene_pack_ce_mcc_sound_close = scene_packs_mcc_sound_close;
+}
+
 static void scene_packs_update_internal(void);
 
 void scene_packs_update(
@@ -2383,6 +2411,7 @@ void scene_packs_update(
 	{
 		scene_pack_io_hook = worker_io;
 		scene_pack_copy_source = &scene_packs_copy_source;
+		scene_packs_mcc_sound_hooks();
 		scene_packs.job.load = NONE;
 	}
 	scene_packs_update_internal();

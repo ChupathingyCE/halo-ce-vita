@@ -192,6 +192,10 @@ struct scene_pack_ce
 {
 	struct ce_file map;
 	struct ce_file resources[NUMBER_OF_RESOURCE_MAP_TYPES];
+	/* (port) one of MCC's own maps (a Halo: CE Anniversary cache, version
+	13): its pixels from MCC's bitmaps.map beside it, its sound effects from
+	MCC's FMOD bank in the sounds slot (mcc_sound.h), as the game loads it */
+	boolean mcc;
 	char name[SCENE_PACK_NAME_SIZE];
 	unsigned char *tags;
 	unsigned long tags_room;
@@ -377,6 +381,24 @@ static void map_path(char *path, long path_size, char const *maps_directory, cha
 
 static char const *const resource_map_names[NUMBER_OF_RESOURCE_MAP_TYPES] = { NULL, "bitmaps", "sounds", "loc" };
 
+/* a map this reader takes: Halo Custom Edition's, or (port) MCC's own, a
+Halo: CE Anniversary cache the game loads the same way (custom_edition_cache.c) */
+static boolean ce_source_format(enum cache_file_format format)
+{
+	return format == _cache_file_format_custom_edition_cache || format == _cache_file_format_mcc_cea_cache;
+}
+
+boolean (*scene_pack_ce_mcc_sound_open)(unsigned long combined_offset, unsigned long bank_bytes, char *reason,
+	long reason_size) = NULL;
+void (*scene_pack_ce_mcc_sound_close)(void) = NULL;
+
+/* (port) the sound effects' bank of MCC's own maps, which have no sounds.map
+(custom_edition_cache.c's resource loop): its path (mcc_sound.h's) */
+static void mcc_sound_bank_path(char *path, long path_size)
+{
+	snprintf(path, (size_t)path_size, "d:\\mcc\\halo1\\sound\\pc\\sounds_adpcm.fsb");
+}
+
 /* the bytes of the combined offset space (the map, bitmaps.map, sounds.map)
 at offset */
 static boolean ce_combined_read(struct scene_pack_ce *ce, unsigned long offset, unsigned long size, void *buffer)
@@ -434,7 +456,7 @@ boolean scene_pack_ce_source_check(
 		if (!ce_file_open(&file, path))
 			continue;
 		if (cache_file_identify(&file.source, &identity) != _cache_file_status_ok ||
-			identity.format != _cache_file_format_custom_edition_cache)
+			!ce_source_format(identity.format))
 		{
 			not_custom_edition = TRUE;
 			ce_file_close(&file);
@@ -463,7 +485,13 @@ boolean scene_pack_ce_source_check(
 			unsigned char size_bytes[4];
 
 			map_path(path, sizeof(path), maps_directory, resource_map_names[type]);
-			if (!ce_file_open(&resource, path))
+			if (!ce_file_open(&resource, path) && identity.format == _cache_file_format_mcc_cea_cache &&
+				type == _resource_map_sounds)
+			{
+				mcc_sound_bank_path(path, sizeof(path));
+				ce_file_open(&resource, path);
+			}
+			if (!resource.file)
 			{
 				if (used & (1UL << type))
 				{
@@ -543,18 +571,29 @@ struct scene_pack_ce *scene_pack_ce_open(
 	}
 	ce->map.hooked = TRUE;
 	if (cache_file_identify(&ce->map.source, &identity) != _cache_file_status_ok ||
-		identity.format != _cache_file_format_custom_edition_cache || identity.file_size > COMBINED_BITMAPS_OFFSET)
+		!ce_source_format(identity.format) || identity.file_size > COMBINED_BITMAPS_OFFSET)
 	{
 		snprintf(why, (size_t)why_size, "%s.map is not a Custom Edition map this game loads", map_name);
 		goto failed;
 	}
+	ce->mcc = identity.format == _cache_file_format_mcc_cea_cache;
 	/* the resource maps, as the game opens them (no OpenSauce mod set:
 	the maps folder's own) */
 	for (type = _resource_map_bitmaps; type < NUMBER_OF_RESOURCE_MAP_TYPES; type++)
 	{
 		map_path(path, sizeof(path), maps_directory, resource_map_names[type]);
 		if (!ce_file_open(&ce->resources[type], path))
+		{
+			/* (port) MCC's own map: the sounds slot is its sound effects'
+			bank, whose streams the conversion points the permutations at
+			(custom_edition_cache_convert_mcc_sounds); not a resource map */
+			if (ce->mcc && type == _resource_map_sounds)
+			{
+				mcc_sound_bank_path(path, sizeof(path));
+				ce_file_open(&ce->resources[type], path);
+			}
 			continue;
+		}
 		if (resource_map_open(&ce->resources[type].source, (enum resource_map_type)type, &maps[type]) != _cache_file_status_ok)
 		{
 			snprintf(why, (size_t)why_size, "the maps folder's %s.map is damaged", resource_map_names[type]);
@@ -605,7 +644,7 @@ struct scene_pack_ce *scene_pack_ce_open(
 		why_set(why, why_size, "there is no memory for the map's tags%s", NULL);
 		goto failed;
 	}
-	status = custom_edition_cache_load_tags(&ce->map.source, map_pointers, ce->tags, (uint32_t)ce->tags_room, report);
+	status = custom_edition_cache_load_tags(&ce->map.source, map_pointers, ce->tags, (uint32_t)ce->tags_room, ce->mcc, report);
 	for (type = _resource_map_bitmaps; type < NUMBER_OF_RESOURCE_MAP_TYPES; type++)
 	{
 		if (map_pointers[type])
@@ -633,14 +672,35 @@ struct scene_pack_ce *scene_pack_ce_open(
 	/* made this build's, moved where they are, checked */
 	custom_edition_cache_combine_resource_offsets(ce->tags, (uint32_t)ce->loaded_bytes, COMBINED_BITMAPS_OFFSET,
 		COMBINED_SOUNDS_OFFSET);
-	status = custom_edition_cache_convert(ce->tags, (uint32_t)ce->loaded_bytes, identity.name, conversion);
+	{
+		/* (port) MCC's own map: its sound effects from its bank, as the game
+		converts them (custom_edition_cache.c); none when the bank or its
+		list is not there, and the map's sounds are silent */
+		boolean mcc_sounds_open = FALSE;
+		char reason[160];
+
+		if (ce->mcc && ce->resources[_resource_map_sounds].file && scene_pack_ce_mcc_sound_open)
+		{
+			mcc_sounds_open = scene_pack_ce_mcc_sound_open(COMBINED_SOUNDS_OFFSET,
+				ce->resources[_resource_map_sounds].size, reason, sizeof(reason));
+			if (!mcc_sounds_open)
+				platform_log("scene packs: %s.map: MCC's sound effects are silent: %s", map_name, reason);
+		}
+		else if (ce->mcc)
+			platform_log("scene packs: %s.map: MCC's sound effects are silent (no bank)", map_name);
+		status = custom_edition_cache_convert(ce->tags, (uint32_t)ce->loaded_bytes, identity.name, conversion);
+		if (mcc_sounds_open && scene_pack_ce_mcc_sound_close)
+			scene_pack_ce_mcc_sound_close();
+	}
 	if (status != _cache_file_status_ok)
 	{
 		snprintf(why, (size_t)why_size, "%s.map cannot be converted (%s)", map_name, cache_file_status_describe(status));
 		goto failed;
 	}
-	anomalies = halo_tag_relocate_linked_tags_isolated(ce->tags, ce->loaded_bytes, CUSTOM_EDITION_TAG_CACHE_ADDRESS,
-		ce->tags_room);
+	/* (MCC's own map: its tags linked at MCC_CEA_TAG_CACHE_ADDRESS, as the
+	loader says) */
+	anomalies = halo_tag_relocate_linked_tags_isolated(ce->tags, ce->loaded_bytes,
+		ce->mcc ? custom_edition_cache_linked_address() : CUSTOM_EDITION_TAG_CACHE_ADDRESS, ce->tags_room);
 	if (anomalies == (unsigned long)-1)
 	{
 		why_set(why, why_size, "there is no memory to move the map's tags%s", NULL);

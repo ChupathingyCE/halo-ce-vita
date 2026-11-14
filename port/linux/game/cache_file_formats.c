@@ -3148,12 +3148,13 @@ enum cache_file_status custom_edition_cache_load_tags(
 	struct resource_map *const resource_maps[NUMBER_OF_RESOURCE_MAP_TYPES],
 	uint8_t *buffer,
 	uint32_t buffer_bytes,
+	int mcc_cea_allowed,
 	struct custom_edition_load_report *report)
 {
 	tag_cache_address = CUSTOM_EDITION_TAG_CACHE_ADDRESS;
 	linked_address = CUSTOM_EDITION_TAG_CACHE_ADDRESS;
 
-	return custom_edition_cache_load_linked(map, resource_maps, buffer, buffer_bytes, 0, 1, report);
+	return custom_edition_cache_load_linked(map, resource_maps, buffer, buffer_bytes, mcc_cea_allowed, 1, report);
 }
 
 void custom_edition_cache_checksum_finish(
