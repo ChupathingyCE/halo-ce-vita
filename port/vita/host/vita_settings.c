@@ -746,6 +746,19 @@ static struct setting settings[] = {
 		"Experimental: betas too. Stable: releases only", 1, TAB_GAME },
 	{ "Show dev settings", "HALO_DEV_SETTINGS", 0, 2, { "0", "1" }, { "Off", "On" },
 		"The Dev tab: switches for testers, Save report", 0, TAB_GAME },
+	/* (dsound_sdl.c halo_sound_class_volume, config.toml's audio.volume and audio.*_volume: the master
+	volume and Halo's sound classes'; live. The menus' SETTINGS > SOUND sets the same, 1.1.3 - 1.2.0's
+	menu rework, owner Nov 5) */
+	{ "Master volume", "HALO_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
+		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "Everything the game plays", 0, TAB_AUDIO },
+	{ "Music volume", "HALO_MUSIC_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
+		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "The music", 0, TAB_AUDIO },
+	{ "Effects volume", "HALO_EFFECTS_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
+		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "Weapons, vehicles, impacts, footsteps", 0, TAB_AUDIO },
+	{ "Dialogue volume", "HALO_DIALOGUE_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
+		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "Voices: the characters and the story", 0, TAB_AUDIO },
+	{ "Ambience volume", "HALO_AMBIENCE_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
+		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "The levels' ambience: wind, machines, computers", 0, TAB_AUDIO },
 	/* (menu_backdrop.c, config.toml's menus.backdrop_music: the menu music's
 	level under the live backdrop - the level's ambience under it -; read
 	each frame: live. Shown with Menu style ElDewrito: setting_shown) */
@@ -8054,6 +8067,24 @@ int vita_settings_input(const struct vita_host_pad *pad)
 				screen = SCREEN_LIST;
 				notice[0] = 0;
 				vita_host_log("settings: party: the Party page (the multiplayer pause's PARTY)");
+			}
+			else if (request >= HALO_SETTINGS_PANEL_GAME && request <= HALO_SETTINGS_PANEL_FSFRIENDS)
+			{
+				/* (START's SETTINGS categories and MEDIA rows - the game's menus,
+				1.2.0 menu rework -: the panel on the category's tab or page) */
+				static const int request_pages[] = { TAB_GAME, TAB_CONTROLS, TAB_GRAPHICS, TAB_AUDIO, PAGE_MENUS,
+					PAGE_FSFRIENDS };
+
+				page = request_pages[request - HALO_SETTINGS_PANEL_GAME];
+				tab = pages[page].tab;
+				screen = SCREEN_LIST;
+				notice[0] = 0;
+				{
+					char line[96];
+
+					snprintf(line, sizeof(line), "settings: the %s page (the menus' START)", pages[page].name);
+					vita_host_log(line);
+				}
 			}
 			else if (request == HALO_SETTINGS_PANEL_MULTIPLAYER)
 			{

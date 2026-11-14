@@ -470,6 +470,27 @@ enum
 	Delete) */
 	_function_forge_group_choose,
 	_function_forge_delete_group,
+	/* (1.1.3, 1.2.0's menu rework, Halo CE's parts: the main menu's rows'
+	line and focus (B on it: nothing on the PS Vita), START's MEDIA |
+	SETTINGS, SETTINGS > SOUND, the two-column cascade pickers) */
+	_function_online_main_focus,
+	_function_online_main_back,
+	_function_start_open,
+	_function_start_tab,
+	_function_start_panel,
+	_function_start_desktop,
+	_function_sound_left,
+	_function_sound_right,
+	_function_cascade_forge,
+	_function_cascade_missions,
+	_function_cascade_pick,
+	_function_cascade_back,
+	_function_cascade_left,
+	_function_cascade_right,
+	_function_cascade_tab_previous,
+	_function_cascade_tab_next,
+	_function_cascade_mp_maps,
+	_function_cascade_gametypes,
 };
 
 /* in port_game_data_input_names' order */
@@ -553,6 +574,11 @@ enum
 	/* (1.1.3, the Forge menu's DELETE ALL: its categories, its question) */
 	_input_forge_groups,
 	_input_forge_group_question,
+	/* (1.1.3) */
+	_input_online_main,
+	_input_start,
+	_input_sound,
+	_input_cascade,
 };
 
 /* what a line of typing is for */
@@ -4411,11 +4437,18 @@ static void h3_mp_gametypes_update(struct widget_instance *list)
 
 /* the picker's choice (port h3 gametype set): the game type the Xbox's list
 opens on, as its own choice keeps it */
+static void h3_mp_gametype_choose(long index);
+
 static void h3_mp_gametype_set(struct widget_instance *widget)
 {
-	char directory[MAXIMUM_FILENAME_LENGTH + 1];
-	long index = h3_mp.gametype_view.offset + h3_child_index(widget);
+	h3_mp_gametype_choose(h3_mp.gametype_view.offset + h3_child_index(widget));
+}
 
+/* (the game type picker's, the cascade's SELECT GAME TYPE) the game type of
+that index the lobby's */
+static void h3_mp_gametype_choose(long index)
+{
+	char directory[MAXIMUM_FILENAME_LENGTH + 1];
 	short before = h3_mp.gametype;
 
 	if (index < 0 || index >= h3_mp.gametype_count)
@@ -20524,6 +20557,1293 @@ static void online_host_update(struct widget_instance *list)
 	}
 }
 
+/* ---- 1.1.3: 1.2.0's menu rework, Halo CE's parts (1.2.0 008acdc6b, 7cffeb445, bd63c7d91, d91e5fc51,
+d988b906a, b894daf65: the main menu's rows and their line, the two-column cascade pickers, START's
+MEDIA | SETTINGS, SETTINGS > SOUND). No Halo 2: the pickers have no game tabs, the campaign's and the
+multiplayer lobby's lists are Halo CE's alone; no COMMAND (1.1.4), no FIREFIGHT (1.1.5), no game hub. */
+
+/* (the main menu's rows - CAMPAIGN, MULTIPLAYER, FORGE, COMMAND, EXIT on a PC - with one line under the
+list saying what the focused one does, the row last focused focused again as the menu comes back this run
+(port online main focus); the rows by name, a style's list may leave one out) */
+static long online_main_row;
+
+static struct
+{
+	char const *row;
+	char const *description;
+} const online_main_rows[] =
+{
+	{ "campaign", N_("Play the story of Halo CE.") },
+	{ "multiplayer", N_("Host a game, or browse games to join.") },
+	{ "forge", N_("Change a map's objects, then play it.") },
+	{ "exit", N_("Close Halo CE.") },
+};
+
+/* (port online main, the main menu's list) the focused row's line, the row
+kept for the menu's return */
+static void online_main_list_update(struct widget_instance *list)
+{
+	struct widget_instance *screen = screen_of(list);
+	struct widget_instance *focused = list->focused_child;
+	short index;
+
+#if defined(HALO_VITA) || defined(HALO_ANDROID)
+	/* (EXIT: the desktop's; the PS Vita closes from its system's menu) */
+	{
+		struct widget_instance *exit_row = named(list, "exit");
+
+		if (exit_row && !exit_row->disabled)
+		{
+			widget_instance_set_visibility_recursive(exit_row, FALSE);
+			exit_row->disabled = TRUE;
+		}
+	}
+#endif
+	if (focused)
+		online_main_row = h3_child_index(focused);
+	for (index = 0; index < (short)NUMBEROF(online_main_rows); index++)
+	{
+		if (focused && focused->name && !strcmp(focused->name, online_main_rows[index].row))
+		{
+			/* (in lines that fit the style's box, broken at spaces) */
+			h3_dialog_text_wrapped(named(screen, "row_text"), T(online_main_rows[index].description));
+			return;
+		}
+	}
+	text_show(named(screen, "row_text"), "");
+}
+
+/* the scroll arrows of a list that scrolls (scroll_up, scroll_down: shown where there is more) */
+static void h3_scroll_arrows(struct widget_instance *screen, struct browser_view const *view, long count)
+{
+	struct widget_instance *found;
+
+	if ((found = named(screen, "scroll_up")) != NULL)
+		widget_instance_set_visibility_recursive(found, view->offset > 0);
+	if ((found = named(screen, "scroll_down")) != NULL)
+		widget_instance_set_visibility_recursive(found, view->offset + view->visible < count);
+}
+
+/* ---- the two-column cascade picker (Halo 3's SELECT GAME TYPE, SELECT MAP and SELECT MISSION, one widget
+for every lobby - menus/halo3/cascade.xml h3/cascade/screen, menus/online/cascade.xml its Menu style
+ElDewrito stand-in). Column 1 lists the groups (the maps, the game types' base games, the game); the
+highlighted group's entries (its map variants, its game types, its missions) show greyed in column 2; A or
+right moves into column 2, B or left back to column 1, A on an entry chooses it and the screen closes (a
+group with no entries is chosen as it is). The right panel is the focused one's picture, words and author.
+After a mission, SELECT DIFFICULTY in the same screen (Halo 3's: the list, the difficulty's emblem and
+words). What is listed and what a choice does are the picker kind's (cascade_kind). 1.1.x: Halo CE's
+lists alone, no game tabs (1.2.0's ALL / HALO CE / HALO 2) */
+#define CASCADE_ROWS 12
+#define CASCADE_TABS 1
+#define CASCADE_MAXIMUM_GROUPS 64
+
+/* (CASCADE_COLUMN_VARIANTS: 1.2.0's third level - unused by Halo CE's kinds, kept with the code) */
+enum { CASCADE_COLUMN_GROUPS = 1, CASCADE_COLUMN_ITEMS, CASCADE_COLUMN_DIFFICULTY, CASCADE_COLUMN_VARIANTS };
+
+struct cascade_kind
+{
+	char const *log_name;
+	char const *title;
+	boolean tabs;
+	/* (the groups: their count) */
+	int (*groups)(void);
+	void (*group_name)(int group, char *text, int size);
+	/* (a group's entries: 0, the group is chosen as it is) */
+	int (*items)(int group);
+	void (*item_name)(int group, int item, char *text, int size);
+	/* (the right panel: item NONE, the group's) */
+	void (*panel)(struct widget_instance *screen, int group, int item);
+	/* (the lobby's choice: its group, and its entry in *item - NONE: none) */
+	int (*current)(int *item);
+	/* (A on a group with no entries - item NONE - or on an entry: TRUE, chosen) */
+	boolean (*choose)(int group, int item);
+	/* (after the choice, SELECT DIFFICULTY: the campaign's) */
+	boolean difficulty;
+	/* (an entry's own entries - NULL, none) */
+	int (*variants)(int group, int item);
+	void (*variant_name)(int group, int item, int variant, char *text, int size);
+	void (*variant_panel)(struct widget_instance *screen, int group, int item, int variant);
+	int (*variant_current)(int group, int item);
+	boolean (*variant_choose)(int group, int item, int variant);
+};
+
+static struct
+{
+	struct cascade_kind const *kind;
+	short tab;
+	short column;
+	int group;
+	int item;
+	int variant;
+	int difficulty;
+	boolean refocus;
+	int page;
+	struct browser_view view1;
+	struct browser_view view2;
+	struct browser_view view3;
+	char said[200];
+} cascade;
+
+static char const *const cascade_tab_names[CASCADE_TABS] = { N_("HALO CE") };
+static char const *const cascade_difficulty_names[4] = { N_("EASY"), N_("NORMAL"), N_("HEROIC"), N_("LEGENDARY") };
+
+static void cascade_show(struct widget_instance *screen, char const *name, boolean shown)
+{
+	struct widget_instance *found = named(screen, name);
+
+	if (found)
+		widget_instance_set_visibility_recursive(found, shown);
+}
+
+/* (the right panel's parts: each kind shows its own) */
+static void cascade_panel_clear(struct widget_instance *screen)
+{
+	static char const *const parts[] =
+	{
+		"map_picture", "maps_text", "mission_picture", "ce_text", "panel_name", "panel_text", "panel_author",
+		"difficulty_emblem", "difficulty_text", "mp_picture", "mp_text"
+	};
+	short index;
+
+	for (index = 0; index < (short)NUMBEROF(parts); index++)
+		cascade_show(screen, parts[index], FALSE);
+}
+
+/* (the panel's own words: a name, its description, its author's line) */
+static void cascade_panel_words(struct widget_instance *screen, char const *name, char const *text, char const *author)
+{
+	text_show(named(screen, "panel_name"), name ? name : "");
+	h3_dialog_text_wrapped(named(screen, "panel_text"), text ? text : "");
+	text_show(named(screen, "panel_author"), author ? author : "");
+	cascade_show(screen, "panel_name", name && name[0]);
+	cascade_show(screen, "panel_text", text && text[0]);
+	cascade_show(screen, "panel_author", author && author[0]);
+}
+
+/* ---- the Forge lobby's maps: forge.c's maps there (a damaged one marked), each one's entries
+the map itself and its saved map variants (forge_store.c), as the lobby's SELECT MAP had them */
+static short cascade_forge_maps[CASCADE_MAXIMUM_GROUPS];
+
+static int cascade_forge_groups(void)
+{
+	short map, count = 0;
+
+	for (map = 0; map < forge_map_count() && count < CASCADE_MAXIMUM_GROUPS; map++)
+	{
+		if (forge_map_state(map, NULL, 0) != _map_check_missing)
+			cascade_forge_maps[count++] = map;
+	}
+	return count;
+}
+
+static void cascade_forge_group_name(int group, char *text, int size)
+{
+	short map = cascade_forge_maps[group];
+
+	snprintf(text, (size_t)size, "%s", T(forge_map_name(map)));
+	h3_capitals(text);
+	if (forge_map_state(map, NULL, 0) == _map_check_unusable)
+		snprintf(text + strlen(text), (size_t)size - strlen(text), "%s", T(" (DAMAGED)"));
+}
+
+static int cascade_forge_items(int group)
+{
+	struct forge_store_entry const *entry;
+	int rows;
+
+	h3_variants_list(_variants_lobby, forge_map_short(cascade_forge_maps[group]), FALSE);
+	rows = h3_forge_pick_rows(-1, &entry);
+	/* (the map alone, no variant saved: the map is chosen as it is) */
+	return rows > 1 ? rows : 0;
+}
+
+static void cascade_forge_item_name(int group, int item, char *text, int size)
+{
+	struct forge_store_entry const *entry;
+
+	h3_variants_list(_variants_lobby, forge_map_short(cascade_forge_maps[group]), FALSE);
+	h3_forge_pick_rows(item, &entry);
+	snprintf(text, (size_t)size, "%s", entry ? entry->title : T(forge_map_name(cascade_forge_maps[group])));
+	if (!entry || !halo_menu_style_classic_plus())
+		h3_capitals(text);
+}
+
+static void cascade_forge_panel(struct widget_instance *screen, int group, int item)
+{
+	short map = cascade_forge_maps[group];
+	struct widget_instance *found;
+	struct forge_store_entry const *entry = NULL;
+	char why[160], text[256];
+
+	if ((found = named(screen, "map_picture")) != NULL)
+	{
+		found->animation.current_frame_index = map;
+		widget_instance_set_visibility_recursive(found, TRUE);
+	}
+	if (forge_map_state(map, why, sizeof(why)) == _map_check_unusable)
+	{
+		cascade_panel_words(screen, NULL, why, NULL);
+		return;
+	}
+	if (item > 0)
+	{
+		h3_variants_list(_variants_lobby, forge_map_short(map), FALSE);
+		h3_forge_pick_rows(item, &entry);
+	}
+	if (!entry)
+	{
+		/* (the map's own words, ui.map's, and its players) */
+		if ((found = named(screen, "maps_text")) != NULL)
+		{
+			string_show(found, map);
+			widget_instance_set_visibility_recursive(found, TRUE);
+		}
+		cascade_panel_words(screen, NULL, NULL, item == 0 ? T("The original map: nothing placed yet.") : NULL);
+		return;
+	}
+	h3_variant_details(entry, FALSE, text, sizeof(text));
+	cascade_panel_words(screen, entry->title, text, NULL);
+}
+
+static int cascade_forge_current(int *item)
+{
+	int group, count = cascade_forge_groups();
+	struct forge_store_entry const *entry;
+
+	*item = NONE;
+	for (group = 0; group < count; group++)
+	{
+		if (cascade_forge_maps[group] != h3_forge.map)
+			continue;
+		if (h3_forge.variant_file[0])
+		{
+			int row, rows;
+
+			h3_variants_list(_variants_lobby, forge_map_short(h3_forge.map), FALSE);
+			rows = h3_forge_pick_rows(-1, &entry);
+			for (row = 1; row < rows; row++)
+			{
+				h3_forge_pick_rows(row, &entry);
+				if (entry && !strcmp(entry->file_name, h3_forge.variant_file))
+					*item = row;
+			}
+		}
+		else
+			*item = 0;
+		return group;
+	}
+	return 0;
+}
+
+static boolean cascade_forge_choose(int group, int item)
+{
+	short map = cascade_forge_maps[group];
+	struct forge_store_entry const *entry = NULL;
+	char why[160];
+
+	if (forge_map_state(map, why, sizeof(why)) != _map_check_playable)
+	{
+		platform_log("menus: cascade: %s can't be chosen: %s", forge_map_name(map), why);
+		return FALSE;
+	}
+	if (item > 0)
+	{
+		h3_variants_list(_variants_lobby, forge_map_short(map), FALSE);
+		h3_forge_pick_rows(item, &entry);
+	}
+	h3_forge.map = map;
+	h3_forge.note[0] = 0;
+	if (entry)
+	{
+		snprintf(h3_forge.variant_file, sizeof(h3_forge.variant_file), "%s", entry->file_name);
+		snprintf(h3_forge.variant_title, sizeof(h3_forge.variant_title), "%s", entry->title);
+		platform_log("menus: forge lobby: %s, map variant %s (%s)", forge_map_name(map), entry->title, entry->file_name);
+	}
+	else
+	{
+		h3_forge.variant_file[0] = 0;
+		h3_forge.variant_title[0] = 0;
+		platform_log("menus: forge lobby: %s", forge_map_name(map));
+	}
+	h3_live_forge_follow();
+	return TRUE;
+}
+
+static struct cascade_kind const cascade_forge_kind =
+{
+	"forge maps", N_("SELECT MAP"), FALSE, cascade_forge_groups, cascade_forge_group_name, cascade_forge_items,
+	cascade_forge_item_name, cascade_forge_panel, cascade_forge_current, cascade_forge_choose, FALSE
+};
+
+/* ---- the campaign's missions: the game (HALO CE, 1.1.x's one), its missions, then the difficulty */
+static int cascade_mission_groups(void)
+{
+	return 1;
+}
+
+static void cascade_mission_group_name(int group, char *text, int size)
+{
+	(void)group;
+	snprintf(text, (size_t)size, "%s", T("HALO CE"));
+}
+
+static int cascade_mission_items(int group)
+{
+	(void)group;
+	return NUMBER_OF_SINGLE_PLAYER_LEVELS;
+}
+
+static void cascade_mission_item_name(int group, int item, char *text, int size)
+{
+	(void)group;
+	snprintf(text, (size_t)size, "%s", item >= 0 && item < NUMBER_OF_SINGLE_PLAYER_LEVELS ? T(h3_level_names[item]) : "");
+	h3_capitals(text);
+}
+
+static void cascade_mission_panel(struct widget_instance *screen, int group, int item)
+{
+	struct widget_instance *found;
+	char why[160];
+
+	(void)group;
+	if (item == NONE)
+	{
+		cascade_panel_words(screen, T("HALO CE"), T("Halo CE's missions."), NULL);
+		return;
+	}
+	if ((found = named(screen, "mission_picture")) != NULL)
+	{
+		found->animation.current_frame_index = item;
+		widget_instance_set_visibility_recursive(found, TRUE);
+	}
+	if (h3_mission_check((short)item, why, sizeof(why)) == _map_check_playable)
+	{
+		if ((found = named(screen, "ce_text")) != NULL)
+		{
+			string_show(found, (short)item);
+			widget_instance_set_visibility_recursive(found, TRUE);
+		}
+	}
+	else
+		cascade_panel_words(screen, NULL, why, NULL);
+}
+
+static int cascade_mission_current(int *item)
+{
+	*item = h3_campaign.level >= 0 && h3_campaign.level < NUMBER_OF_SINGLE_PLAYER_LEVELS ? h3_campaign.level : NONE;
+	return 0;
+}
+
+static boolean cascade_mission_choose(int group, int item)
+{
+	char why[160];
+
+	(void)group;
+	if (item == NONE || item < 0 || item >= NUMBER_OF_SINGLE_PLAYER_LEVELS)
+		return FALSE;
+	if (h3_mission_check((short)item, why, sizeof(why)) != _map_check_playable)
+	{
+		platform_log("menus: h3 campaign: %s can't be chosen: %s", h3_level_names[item], why);
+		return FALSE;
+	}
+	h3_campaign.level = (short)item;
+	platform_log("menus: h3 campaign: mission %s", h3_level_names[item]);
+	h3_campaign_said();
+	return TRUE;
+}
+
+static struct cascade_kind const cascade_mission_kind =
+{
+	"missions", N_("SELECT MISSION"), FALSE, cascade_mission_groups, cascade_mission_group_name, cascade_mission_items,
+	cascade_mission_item_name, cascade_mission_panel, cascade_mission_current, cascade_mission_choose, TRUE
+};
+
+/* ---- the multiplayer lobby's maps: column 1 the lobby's maps (the Xbox's, then the custom maps and mods
+the mod manager has on, marked CUSTOM: h3_mp_maps_read), column 2 a map's own entries when it has saved map
+variants - the map itself first, then its variants - as Halo 3's map -> map variant (1.2.0's column of
+games, HALO CE / HALO 2, is not in 1.1.x) */
+static short cascade_mp_lobby_map(void);
+
+static int cascade_mp_groups(void)
+{
+	return h3_mp.map_count;
+}
+
+static void cascade_mp_group_name(int map, char *text, int size)
+{
+	if (map < 0 || map >= h3_mp.map_count)
+	{
+		text[0] = 0;
+		return;
+	}
+	snprintf(text, (size_t)size, "%s", h3_mp.map_names[map]);
+	h3_capitals(text);
+	switch (map_check(h3_mp.map_paths[map], NULL, 0))
+	{
+	case _map_check_missing:
+		snprintf(text + strlen(text), (size_t)size - strlen(text), "%s", T(" (MISSING)"));
+		return;
+	case _map_check_unusable:
+		snprintf(text + strlen(text), (size_t)size - strlen(text), "%s", T(" (DAMAGED)"));
+		return;
+	}
+	if (map >= H3_MAP_COUNT)
+		snprintf(text + strlen(text), (size_t)size - strlen(text), "%s", T(" (CUSTOM)"));
+}
+
+/* (a map's own entries: the map itself and its saved map variants - none, 0) */
+static int cascade_mp_items(int map)
+{
+	struct forge_store_entry const *entry;
+	char const *map_name;
+	int rows;
+
+	if (map < 0 || map >= h3_mp.map_count || !(map_name = h3_mp_map_short(map)))
+		return 0;
+	h3_variants_list(_variants_mp, map_name, FALSE);
+	rows = h3_forge_pick_rows(-1, &entry);
+	return rows > 1 ? rows : 0;
+}
+
+static void cascade_mp_item_name(int map, int variant, char *text, int size)
+{
+	struct forge_store_entry const *entry;
+
+	h3_variants_list(_variants_mp, h3_mp_map_short(map), FALSE);
+	h3_forge_pick_rows(variant, &entry);
+	snprintf(text, (size_t)size, "%s", entry ? entry->title : h3_mp.map_names[map]);
+	h3_capitals(text);
+}
+
+static void cascade_mp_panel(struct widget_instance *screen, int map, int variant)
+{
+	struct widget_instance *found;
+	struct forge_store_entry const *entry = NULL;
+	char why[160], text[256];
+
+	if (map < 0 || map >= h3_mp.map_count)
+		return;
+	if ((found = named(screen, "mp_picture")) != NULL)
+	{
+		found->animation.current_frame_index = h3_mp.map_displays[map];
+		widget_instance_set_visibility_recursive(found, TRUE);
+	}
+	if (map_check(h3_mp.map_paths[map], why, sizeof(why)) != _map_check_playable)
+	{
+		cascade_panel_words(screen, NULL, why, NULL);
+		return;
+	}
+	if (variant > 0)
+	{
+		h3_variants_list(_variants_mp, h3_mp_map_short(map), FALSE);
+		h3_forge_pick_rows(variant, &entry);
+	}
+	if (entry)
+	{
+		h3_variant_details(entry, FALSE, text, sizeof(text));
+		cascade_panel_words(screen, entry->title, text, NULL);
+		return;
+	}
+	if ((found = named(screen, "mp_text")) != NULL)
+	{
+		string_show(found, h3_mp.map_displays[map]);
+		widget_instance_set_visibility_recursive(found, TRUE);
+	}
+	cascade_panel_words(screen, NULL, NULL, variant == 0 ? T("The original map: nothing placed yet.") : NULL);
+}
+
+/* (the lobby's map: its index in h3_mp's list, NONE) */
+static short cascade_mp_lobby_map(void)
+{
+	short index;
+
+	for (index = 0; index < h3_mp.map_count; index++)
+	{
+		if ((h3_mp.map_index != NONE && index == h3_mp.map_index) ||
+			(h3_mp.map_index == NONE && h3_mp.map_other[0] && !_stricmp(h3_mp.map_paths[index], h3_mp.map_other)))
+		{
+			return index;
+		}
+	}
+	return NONE;
+}
+
+static int cascade_mp_current(int *item)
+{
+	short map = cascade_mp_lobby_map();
+	struct forge_store_entry const *entry;
+	int row, rows;
+
+	*item = NONE;
+	if (map == NONE)
+		return 0;
+	if (cascade_mp_items(map) > 0)
+	{
+		*item = 0;
+		if (h3_mp_variant_chosen() && h3_mp.variant_map == map)
+		{
+			rows = h3_forge_pick_rows(-1, &entry);
+			for (row = 1; row < rows; row++)
+			{
+				h3_forge_pick_rows(row, &entry);
+				if (entry && !strcmp(entry->file_name, h3_mp.variant_file))
+					*item = row;
+			}
+		}
+	}
+	return map;
+}
+
+static boolean cascade_mp_choose(int map, int variant)
+{
+	struct forge_store_entry const *entry = NULL;
+	char why[160];
+
+	if (map < 0 || map >= h3_mp.map_count)
+		return FALSE;
+	if (map_check(h3_mp.map_paths[map], why, sizeof(why)) != _map_check_playable)
+	{
+		platform_log("menus: h3 maps: %s can't be chosen: %s", h3_mp.map_names[map], why);
+		return FALSE;
+	}
+	if (variant > 0)
+	{
+		h3_variants_list(_variants_mp, h3_mp_map_short(map), FALSE);
+		h3_forge_pick_rows(variant, &entry);
+	}
+	return h3_mp_map_choose(map, entry ? entry->file_name : NULL, entry ? entry->title : NULL);
+}
+
+static struct cascade_kind const cascade_mp_kind =
+{
+	"mp maps", N_("SELECT MAP"), FALSE, cascade_mp_groups, cascade_mp_group_name, cascade_mp_items,
+	cascade_mp_item_name, cascade_mp_panel, cascade_mp_current, cascade_mp_choose, FALSE
+};
+
+/* ---- the multiplayer lobby's game types: the base games (SLAYER, CTF, ODDBALL, KING OF THE HILL, RACE,
+INFECTION) that have game types, each one's game types - the built-in ones Bungie's, the player's own -
+as Halo 3's SELECT GAME TYPE */
+#define CASCADE_GAMETYPE_KINDS 6
+static char const *const cascade_gametype_kinds[CASCADE_GAMETYPE_KINDS] =
+{
+	N_("SLAYER"), N_("CTF"), N_("ODDBALL"), N_("KING OF THE HILL"), N_("RACE"), N_("INFECTION")
+};
+static char const *const cascade_gametype_words[CASCADE_GAMETYPE_KINDS] =
+{
+	N_("Kill the other players. The first to the score limit wins."),
+	N_("Bring the other team's flag to your base, and keep yours."),
+	N_("Hold the skull as long as you can: every second scores."),
+	N_("Stand on the hill and hold it against everyone else."),
+	N_("Drive through the course's checkpoints before the others."),
+	N_("The infected turn every survivor they kill. Survive."),
+};
+static struct
+{
+	short kind_of[H3_MAXIMUM_GAMETYPES];
+	short kinds[CASCADE_GAMETYPE_KINDS];
+	short kind_count;
+} cascade_gt;
+
+/* (as the picker opens) each game type's base game */
+static void cascade_gametypes_read(void)
+{
+	short index, kind;
+	boolean present[CASCADE_GAMETYPE_KINDS] = { FALSE };
+
+	h3_mp_gametypes_read();
+	for (index = 0; index < h3_mp.gametype_count; index++)
+	{
+		struct game_variant variant;
+		char const *name;
+
+		playlist_profile_get(h3_mp.gametypes[index], &variant);
+		name = h3_gametype_kind_name(&variant);
+		cascade_gt.kind_of[index] = 0;
+		for (kind = 0; kind < CASCADE_GAMETYPE_KINDS; kind++)
+		{
+			if (!strcmp(name, T(cascade_gametype_kinds[kind])))
+				cascade_gt.kind_of[index] = kind;
+		}
+		present[cascade_gt.kind_of[index]] = TRUE;
+	}
+	cascade_gt.kind_count = 0;
+	for (kind = 0; kind < CASCADE_GAMETYPE_KINDS; kind++)
+	{
+		if (present[kind])
+			cascade_gt.kinds[cascade_gt.kind_count++] = kind;
+	}
+}
+
+/* (a base game's n-th game type: its index in h3_mp's list, NONE) */
+static short cascade_gametype_at(int group, int item)
+{
+	short index, seen = 0;
+
+	for (index = 0; index < h3_mp.gametype_count; index++)
+	{
+		if (cascade_gt.kind_of[index] != cascade_gt.kinds[group])
+			continue;
+		if (seen++ == item)
+			return index;
+	}
+	return NONE;
+}
+
+static int cascade_gametype_groups(void)
+{
+	return cascade_gt.kind_count;
+}
+
+static void cascade_gametype_group_name(int group, char *text, int size)
+{
+	snprintf(text, (size_t)size, "%s", T(cascade_gametype_kinds[cascade_gt.kinds[group]]));
+}
+
+static int cascade_gametype_items(int group)
+{
+	short index, count = 0;
+
+	for (index = 0; index < h3_mp.gametype_count; index++)
+		count += cascade_gt.kind_of[index] == cascade_gt.kinds[group] ? 1 : 0;
+	return count;
+}
+
+static void cascade_gametype_item_name(int group, int item, char *text, int size)
+{
+	short index = cascade_gametype_at(group, item);
+
+	snprintf(text, (size_t)size, "%s", index != NONE ? h3_mp.gametype_names[index] : "");
+	h3_capitals(text);
+}
+
+static void cascade_gametype_panel(struct widget_instance *screen, int group, int item)
+{
+	short index = item == NONE ? NONE : cascade_gametype_at(group, item);
+	char author[96];
+
+	if (index == NONE)
+	{
+		cascade_panel_words(screen, T(cascade_gametype_kinds[cascade_gt.kinds[group]]),
+			T(cascade_gametype_words[cascade_gt.kinds[group]]), NULL);
+		return;
+	}
+	snprintf(author, sizeof(author), "%s: %s", T("AUTHOR"), TEST_FLAG(h3_mp.gametypes[index], _saved_game_file_index_read_only_bit) ?
+		T("Bungie (built in)") : T("You"));
+	cascade_panel_words(screen, h3_mp.gametype_names[index], T(cascade_gametype_words[cascade_gt.kinds[group]]), author);
+}
+
+static int cascade_gametype_current(int *item)
+{
+	int group;
+
+	*item = NONE;
+	if (h3_mp.gametype == NONE || h3_mp.gametype >= h3_mp.gametype_count)
+		return 0;
+	for (group = 0; group < cascade_gt.kind_count; group++)
+	{
+		int at, count = cascade_gametype_items(group);
+
+		for (at = 0; at < count; at++)
+		{
+			if (cascade_gametype_at(group, at) == h3_mp.gametype)
+			{
+				*item = at;
+				return group;
+			}
+		}
+	}
+	return 0;
+}
+
+static boolean cascade_gametype_choose(int group, int item)
+{
+	short index = cascade_gametype_at(group, item);
+
+	if (index == NONE)
+		return FALSE;
+	h3_mp_gametype_choose(index);
+	return TRUE;
+}
+
+static struct cascade_kind const cascade_gametype_kind =
+{
+	"game types", N_("SELECT GAME TYPE"), FALSE, cascade_gametype_groups, cascade_gametype_group_name, cascade_gametype_items,
+	cascade_gametype_item_name, cascade_gametype_panel, cascade_gametype_current, cascade_gametype_choose, FALSE
+};
+
+/* ---- START: Halo 3's MEDIA | SETTINGS (menus/halo3/start.xml h3/start/screen, menus/online/start.xml its
+Menu style ElDewrito stand-in). Two tabs, L/R or left/right between them: MEDIA's rows (FRIENDS, FILE SHARE,
+ACTIVE TRANSFERS, GAME MANAGER, SCREENSHOTS, NEWS & UPDATES) and SETTINGS' categories (CONTROLS, APPEARANCE,
+GRAPHICS, SOUND, INTERFACE, ONLINE, ADVANCED), each opening its screen, or the settings panel on its tab or
+page (the PS Vita's: port start panel); the focused row's description at the right */
+static struct
+{
+	short tab;
+	boolean refocus;
+	char said[96];
+} start_hub;
+
+static struct
+{
+	char const *row;
+	char const *description;
+	int panel;
+} const start_rows[] =
+{
+	{ "friends", N_("Your friends: who is online, joining them, inviting them, your party."), 0 },
+	{ "fileshare", N_("Your saved map variants and game types, shared with your friends."), 0 },
+	{ "transfers", N_("What you are sending to your friends, and getting from them."), HALO_SETTINGS_PANEL_FSFRIENDS },
+	{ "games", N_("Your custom maps and mods, and their files."), 0 },
+	{ "screenshots", N_("Not in this version yet."), 0 },
+	{ "news", N_("This build's version, and whether a newer one is out."), HALO_SETTINGS_PANEL_GAME },
+	{ "controls", N_("Look sensitivity, inversion, button layout, gyro and touch."), HALO_SETTINGS_PANEL_CONTROLS },
+	{ "appearance", N_("Your Spartan: model, armor, colors, emblem and name."), 0 },
+	{ "graphics", N_("Quality, resolution, frame rate, field of view and detail."), HALO_SETTINGS_PANEL_GRAPHICS },
+	{ "sound", N_("Volume, music, voices and the sound's quality."), HALO_SETTINGS_PANEL_AUDIO },
+	{ "interface", N_("Language, menu style, menu background, carnage report."), HALO_SETTINGS_PANEL_MENUS },
+	{ "online", N_("Connection, who can join, chat, the browser, crossplay."), HALO_SETTINGS_PANEL_MULTIPLAYER },
+	{ "advanced", N_("Every other setting: updates, battery, the developer's."), HALO_SETTINGS_PANEL_GAME },
+};
+
+static int start_row_of(struct widget_instance *row)
+{
+	short index;
+
+	for (index = 0; row && row->name && index < (short)NUMBEROF(start_rows); index++)
+	{
+		if (!strcmp(row->name, start_rows[index].row))
+			return index;
+	}
+	return NONE;
+}
+
+/* (port start, each tab's list) the tab's list shown and focused, the other hidden; the focused row's
+words */
+static void start_hub_update(struct widget_instance *list)
+{
+	struct widget_instance *screen = screen_of(list);
+	boolean mine = (list->name && !strcmp(list->name, start_hub.tab ? "settings_list" : "media_list"));
+	struct widget_instance *found;
+	int row;
+
+	widget_instance_set_visibility_recursive(list, mine);
+	list->disabled = !mine;
+	if (!mine)
+		return;
+	if (start_hub.refocus || screen->focused_child != list)
+	{
+		start_hub.refocus = FALSE;
+		ui_widget_port_give_focus(screen, list);
+	}
+	if ((found = named(screen, "tab_media")) != NULL)
+		found->alpha_modifier = start_hub.tab ? 0.45f : 1.f;
+	if ((found = named(screen, "tab_settings")) != NULL)
+		found->alpha_modifier = start_hub.tab ? 1.f : 0.45f;
+	if ((found = named(screen, "tab_mark")) != NULL && named(screen, start_hub.tab ? "tab_settings" : "tab_media"))
+		found->horizontal_offset = named(screen, start_hub.tab ? "tab_settings" : "tab_media")->horizontal_offset;
+	row = start_row_of(list->focused_child);
+	h3_dialog_text_wrapped(named(screen, "desc"), row != NONE ? T(start_rows[row].description) : "");
+	if (row != NONE && strcmp(start_rows[row].row, start_hub.said))
+	{
+		snprintf(start_hub.said, sizeof(start_hub.said), "%s", start_rows[row].row);
+		platform_log("menus: start: %s, %s", start_hub.tab ? "SETTINGS" : "MEDIA", start_rows[row].row);
+	}
+}
+
+/* (port start panel) the row's settings panel tab or page asked for (the PS Vita's panel: TRUE); none
+here (FALSE) */
+static boolean start_hub_panel(struct widget_instance *widget)
+{
+	int row = start_row_of(widget);
+
+	if (row == NONE || !start_rows[row].panel)
+		return FALSE;
+#if defined(HALO_VITA)
+	__atomic_store_n(&halo_settings_panel_request, start_rows[row].panel, __ATOMIC_RELEASE);
+	platform_log("menus: start: the settings panel for %s", start_rows[row].row);
+	return TRUE;
+#else
+	platform_log("menus: start: %s: no settings panel on this platform", start_rows[row].row);
+	return FALSE;
+#endif
+}
+
+/* (port cascade forge, port cascade missions...: a picker opened on the lobby's choice) */
+static boolean cascade_open(struct cascade_kind const *kind)
+{
+	int item;
+
+	cascade.kind = kind;
+	cascade.tab = 0;
+	cascade.group = kind->current(&item);
+	cascade.item = item == NONE ? 0 : item;
+	cascade.variant = 0;
+	/* (Halo 3's: the picker opens in column 1, on the lobby's group) */
+	cascade.column = CASCADE_COLUMN_GROUPS;
+	cascade.difficulty = h3_campaign.difficulty;
+	cascade.refocus = TRUE;
+	cascade.page = 0;
+	cascade.said[0] = 0;
+	browser_view_reset(&cascade.view1);
+	browser_view_reset(&cascade.view2);
+	browser_view_reset(&cascade.view3);
+	platform_log("menus: cascade: %s", kind->log_name);
+	return TRUE;
+}
+
+/* the column the list stands in: its rows placed over column 1's or column 2's (c1_0, c2_0: the
+screen's static rows, laid out by the style) */
+static void cascade_list_place(struct widget_instance *screen, struct widget_instance *list, short column)
+{
+	struct widget_instance *c1 = named(screen, "c1_0"), *c2 = named(screen, "c2_0");
+	static short list_left_of_column1;
+	static long list_creation;
+
+	if (!c1 || !c2)
+		return;
+	if (list_creation != list->creation_time)
+	{
+		list_creation = list->creation_time;
+		list_left_of_column1 = list->horizontal_offset;
+	}
+	list->horizontal_offset = (short)(list_left_of_column1 +
+		(column == CASCADE_COLUMN_ITEMS || column == CASCADE_COLUMN_VARIANTS ? c2->horizontal_offset - c1->horizontal_offset : 0));
+}
+
+/* (port cascade, the list) the rows of the column in use, the other column's static rows, the panel */
+static void cascade_update(struct widget_instance *list)
+{
+	struct widget_instance *screen = screen_of(list);
+	struct widget_instance *child, *focus = NULL, *found;
+	struct cascade_kind const *kind = cascade.kind;
+	long index, focused_row = NONE;
+	int groups, count, target, items;
+	char text[160], title[160];
+
+	if (!kind || list->type != _ui_widget_type_column_list)
+		return;
+	groups = kind->groups();
+	for (index = 0, child = list->child; child; child = child->next, index++)
+	{
+		if (child == list->focused_child)
+			focused_row = index;
+	}
+	if (cascade.refocus)
+	{
+		focused_row = NONE;
+		cascade.refocus = FALSE;
+	}
+	cascade_list_place(screen, list, cascade.column);
+	cascade_panel_clear(screen);
+	if (cascade.column == CASCADE_COLUMN_DIFFICULTY)
+	{
+		count = 4;
+		target = browser_view_follow(&cascade.view2, CASCADE_ROWS, count, (int)focused_row, cascade.difficulty, 0);
+		cascade.difficulty = target;
+		snprintf(title, sizeof(title), "%s", T("SELECT DIFFICULTY"));
+	}
+	else if (cascade.column == CASCADE_COLUMN_VARIANTS)
+	{
+		count = kind->variants(cascade.group, cascade.item);
+		target = browser_view_follow(&cascade.view3, CASCADE_ROWS, count, (int)focused_row, cascade.variant, cascade.page);
+		cascade.variant = target < 0 ? 0 : target;
+		snprintf(title, sizeof(title), "%s", T(kind->title));
+	}
+	else if (cascade.column == CASCADE_COLUMN_ITEMS)
+	{
+		count = kind->items(cascade.group);
+		target = browser_view_follow(&cascade.view2, CASCADE_ROWS, count, (int)focused_row, cascade.item, cascade.page);
+		cascade.item = target;
+		snprintf(title, sizeof(title), "%s", T(kind->title));
+	}
+	else
+	{
+		count = groups;
+		target = browser_view_follow(&cascade.view1, CASCADE_ROWS, count, (int)focused_row, cascade.group, cascade.page);
+		cascade.group = target < 0 ? 0 : target;
+		snprintf(title, sizeof(title), "%s", T(kind->title));
+	}
+	cascade.page = 0;
+	text_show(named(screen, "title"), title);
+	/* (the list: the column in use's rows) */
+	{
+		struct browser_view const *view = cascade.column == CASCADE_COLUMN_GROUPS ? &cascade.view1 :
+			cascade.column == CASCADE_COLUMN_VARIANTS ? &cascade.view3 : &cascade.view2;
+
+		for (index = 0, child = list->child; child; child = child->next, index++)
+		{
+			boolean shown = index < view->visible;
+			int shown_index = view->offset + (int)index;
+
+			widget_instance_set_visibility_recursive(child, shown);
+			child->disabled = !shown;
+			if (!shown)
+				continue;
+			if (cascade.column == CASCADE_COLUMN_DIFFICULTY)
+				snprintf(text, sizeof(text), "%s", T(cascade_difficulty_names[shown_index]));
+			else if (cascade.column == CASCADE_COLUMN_VARIANTS)
+				kind->variant_name(cascade.group, cascade.item, shown_index, text, (int)sizeof(text));
+			else if (cascade.column == CASCADE_COLUMN_ITEMS)
+				kind->item_name(cascade.group, shown_index, text, (int)sizeof(text));
+			else
+				kind->group_name(shown_index, text, (int)sizeof(text));
+			text_show(child, text);
+			if (index == view->row)
+				focus = child;
+		}
+		if (focus && focus != list->focused_child)
+			ui_widget_port_give_focus(list, focus);
+		h3_scroll_arrows(screen, view, count);
+	}
+	/* (the other column: column 1's groups, the chosen one marked, while in column 2; the highlighted
+	group's entries greyed in column 2 while in column 1) */
+	items = cascade.column == CASCADE_COLUMN_GROUPS && groups > 0 ? kind->items(cascade.group) : 0;
+	for (index = 0; index < CASCADE_ROWS; index++)
+	{
+		char name[8];
+		boolean shown;
+
+		snprintf(name, sizeof(name), "c1_%ld", index);
+		/* (column 1 while in column 2: the groups; while in a map's variants: the group's entries, slid over) */
+		shown = cascade.column == CASCADE_COLUMN_VARIANTS ? index < cascade.view2.visible :
+			cascade.column == CASCADE_COLUMN_ITEMS && index < cascade.view1.visible;
+		if ((found = named(screen, name)) != NULL)
+		{
+			widget_instance_set_visibility_recursive(found, shown);
+			if (shown && cascade.column == CASCADE_COLUMN_VARIANTS)
+			{
+				kind->item_name(cascade.group, cascade.view2.offset + (int)index, text, (int)sizeof(text));
+				text_show(found, text);
+			}
+			else if (shown)
+			{
+				kind->group_name(cascade.view1.offset + (int)index, text, (int)sizeof(text));
+				text_show(found, text);
+			}
+		}
+		snprintf(name, sizeof(name), "c2_%ld", index);
+		shown = cascade.column == CASCADE_COLUMN_GROUPS && index < items;
+		if ((found = named(screen, name)) != NULL)
+		{
+			widget_instance_set_visibility_recursive(found, shown);
+			if (shown)
+			{
+				kind->item_name(cascade.group, (int)index, text, (int)sizeof(text));
+				text_show(found, text);
+			}
+		}
+	}
+	if ((found = named(screen, "mark")) != NULL)
+	{
+		struct widget_instance *row;
+
+		snprintf(text, sizeof(text), "c1_%d", cascade.column == CASCADE_COLUMN_VARIANTS ? cascade.view2.row : cascade.view1.row);
+		row = named(screen, text);
+		widget_instance_set_visibility_recursive(found, (cascade.column == CASCADE_COLUMN_ITEMS ||
+			cascade.column == CASCADE_COLUMN_VARIANTS) && row != NULL);
+		if (row)
+			found->vertical_offset = row->vertical_offset;
+	}
+	cascade_show(screen, "arrow", cascade.column == CASCADE_COLUMN_GROUPS && items > 0);
+	if ((found = named(screen, "arrow")) != NULL)
+	{
+		snprintf(text, sizeof(text), "c1_%d", cascade.view1.row);
+		if (named(screen, text))
+			found->vertical_offset = named(screen, text)->vertical_offset;
+	}
+	/* (the game tabs, L and R: the one chosen marked) */
+	for (index = 0; index < CASCADE_TABS; index++)
+	{
+		snprintf(text, sizeof(text), "tab_%ld", index);
+		if ((found = named(screen, text)) != NULL)
+		{
+			widget_instance_set_visibility_recursive(found, kind->tabs);
+			text_show(found, T(cascade_tab_names[index]));
+			if (index == cascade.tab && named(screen, "tab_mark"))
+				named(screen, "tab_mark")->horizontal_offset = found->horizontal_offset;
+		}
+	}
+	cascade_show(screen, "tab_mark", kind->tabs);
+	cascade_show(screen, "l_butn", kind->tabs);
+	cascade_show(screen, "r_butn", kind->tabs);
+	/* (the panel) */
+	if (cascade.column == CASCADE_COLUMN_DIFFICULTY)
+	{
+		if ((found = named(screen, "difficulty_emblem")) != NULL)
+		{
+			found->animation.current_frame_index = cascade.difficulty;
+			widget_instance_set_visibility_recursive(found, TRUE);
+		}
+		if ((found = named(screen, "difficulty_text")) != NULL)
+		{
+			string_show(found, (short)cascade.difficulty);
+			widget_instance_set_visibility_recursive(found, TRUE);
+		}
+	}
+	else if (cascade.column == CASCADE_COLUMN_VARIANTS)
+		kind->variant_panel(screen, cascade.group, cascade.item, cascade.variant);
+	else if (groups > 0)
+		kind->panel(screen, cascade.group, cascade.column == CASCADE_COLUMN_ITEMS ? cascade.item : NONE);
+	else
+		cascade_panel_words(screen, NULL, T("Nothing to choose from in this tab."), NULL);
+	{
+		char said[200];
+
+		snprintf(said, sizeof(said), "%s: column %d, %s, row %d of %d", kind->log_name, cascade.column,
+			kind->tabs ? cascade_tab_names[cascade.tab] : "-", target + 1, count);
+		if (strcmp(said, cascade.said))
+		{
+			snprintf(cascade.said, sizeof(cascade.said), "%s", said);
+			platform_log("menus: cascade: %s", said);
+		}
+	}
+}
+
+/* (port cascade pick, a row's A; port cascade right) column 1: into the group's entries (the screen
+stays: FALSE), or the group chosen as it is (TRUE, with A); column 2: the entry chosen, then SELECT
+DIFFICULTY where the kind has it; SELECT DIFFICULTY: the difficulty chosen */
+static boolean cascade_pick(struct widget_instance *widget, boolean choose)
+{
+	struct cascade_kind const *kind = cascade.kind;
+	int row = widget ? (int)h3_child_index(widget) : 0;
+
+	if (!kind)
+		return FALSE;
+	if (cascade.column == CASCADE_COLUMN_GROUPS)
+	{
+		int group = cascade.view1.offset + row, current_item;
+
+		if (group >= kind->groups())
+			return FALSE;
+		if (kind->items(group) <= 0)
+			return choose && kind->choose(group, NONE);
+		cascade.group = group;
+		cascade.column = CASCADE_COLUMN_ITEMS;
+		cascade.item = kind->current(&current_item) == group && current_item != NONE ? current_item : 0;
+		cascade.refocus = TRUE;
+		browser_view_reset(&cascade.view2);
+		platform_log("menus: cascade: into column 2");
+		return FALSE;
+	}
+	/* (an entry with entries of its own: the picker slides over to them, A or right) */
+	if (cascade.column == CASCADE_COLUMN_ITEMS && kind->variants)
+	{
+		int item = cascade.view2.offset + row;
+
+		if (item < kind->items(cascade.group) && kind->variants(cascade.group, item) > 1)
+		{
+			cascade.item = item;
+			cascade.column = CASCADE_COLUMN_VARIANTS;
+			cascade.variant = kind->variant_current(cascade.group, item);
+			cascade.refocus = TRUE;
+			browser_view_reset(&cascade.view3);
+			platform_log("menus: cascade: into the entry's own (column 3)");
+			return FALSE;
+		}
+	}
+	if (!choose)
+		return FALSE;
+	if (cascade.column == CASCADE_COLUMN_VARIANTS)
+		return kind->variant_choose(cascade.group, cascade.item, cascade.view3.offset + row);
+	if (cascade.column == CASCADE_COLUMN_ITEMS)
+	{
+		if (!kind->choose(cascade.group, cascade.view2.offset + row))
+			return FALSE;
+		if (!kind->difficulty)
+			return TRUE;
+		cascade.column = CASCADE_COLUMN_DIFFICULTY;
+		cascade.difficulty = h3_campaign.difficulty;
+		cascade.refocus = TRUE;
+		browser_view_reset(&cascade.view2);
+		return FALSE;
+	}
+	h3_campaign.difficulty = (short)PIN(cascade.view2.offset + row, 0, 3);
+	h3_campaign_said();
+	return TRUE;
+}
+
+/* (port cascade back: B; port cascade left) one column back - the screen stays, FALSE -; from column 1
+the screen closes (TRUE, with B) */
+static boolean cascade_back(void)
+{
+	if (cascade.column == CASCADE_COLUMN_GROUPS)
+		return TRUE;
+	if (cascade.column == CASCADE_COLUMN_VARIANTS)
+	{
+		/* (back to the entries, on the one whose own were open) */
+		cascade.column = CASCADE_COLUMN_ITEMS;
+		cascade.refocus = TRUE;
+		platform_log("menus: cascade: back to column %d", cascade.column);
+		return FALSE;
+	}
+	cascade.column = cascade.column == CASCADE_COLUMN_DIFFICULTY ? CASCADE_COLUMN_ITEMS : CASCADE_COLUMN_GROUPS;
+	if (cascade.column == CASCADE_COLUMN_ITEMS && cascade.kind)
+	{
+		int item;
+
+		cascade.kind->current(&item);
+		cascade.item = item == NONE ? 0 : item;
+	}
+	cascade.refocus = TRUE;
+	browser_view_reset(&cascade.view2);
+	platform_log("menus: cascade: back to column %d", cascade.column);
+	return FALSE;
+}
+
+/* (port cascade tab next / previous: R, L) the next game's tab, column 1 on its first group; without
+tabs a page of the list */
+static void cascade_tab(int direction)
+{
+	if (!cascade.kind)
+		return;
+	if (!cascade.kind->tabs || cascade.column != CASCADE_COLUMN_GROUPS)
+	{
+		cascade.page = direction;
+		return;
+	}
+	cascade.tab = (short)((cascade.tab + CASCADE_TABS + direction) % CASCADE_TABS);
+	cascade.group = 0;
+	cascade.refocus = TRUE;
+	browser_view_reset(&cascade.view1);
+	platform_log("menus: cascade: the %s tab", cascade_tab_names[cascade.tab]);
+}
+
+/* ---- SETTINGS > SOUND (1.2.0 menu rework, owner Nov 5: menus/halo3/sound.xml h3/sound/screen, every menu
+style): the master volume, Halo's sound classes' volumes - music, effects, dialogue, ambience
+(dsound_sdl.c halo_sound_class_volume, live) - and the menu music under the live background; each row's
+value in the second column, "(DEFAULT)" on the default, the selected row's description under them. Left
+and right change it by a tenth (the menu music by the settings panel's steps), set as the settings panel
+sets it - on the Vita its row (settings.txt), on a PC config.toml */
+static struct
+{
+	char const *row;
+	char const *name;
+	char const *variable;
+	char const *config;
+	char const *description;
+} const sound_rows[] =
+{
+	{ "master", N_("MASTER VOLUME"), "HALO_VOLUME", "audio.volume", N_("The volume of everything the game plays.") },
+	{ "music", N_("MUSIC"), "HALO_MUSIC_VOLUME", "audio.music_volume", N_("The music's volume.") },
+	{ "effects", N_("EFFECTS"), "HALO_EFFECTS_VOLUME", "audio.effects_volume",
+		N_("Weapons, vehicles, impacts, footsteps: every sound but the music, the voices and the ambience.") },
+	{ "dialogue", N_("DIALOGUE"), "HALO_DIALOGUE_VOLUME", "audio.dialogue_volume",
+		N_("The voices: the characters' dialogue and the story's.") },
+	{ "ambience", N_("AMBIENCE"), "HALO_AMBIENCE_VOLUME", "audio.ambience_volume",
+		N_("The levels' ambience: wind, water, machines, computers.") },
+	{ "menu_music", N_("MENU MUSIC"), "HALO_MENU_MUSIC", "menus.backdrop_music",
+		N_("The menus' music under the live background: lower lets the level's ambience come through.") },
+};
+#define SOUND_MENU_MUSIC_ROW 5
+/* (the settings panel's Menu music steps, percent; 30 the default) */
+static short const sound_menu_music_steps[] = { 100, 70, 50, 40, 30, 20, 0 };
+
+static int sound_row_of(struct widget_instance *row)
+{
+	short index;
+
+	for (index = 0; row && row->name && index < (short)NUMBEROF(sound_rows); index++)
+	{
+		if (!strcmp(row->name, sound_rows[index].row))
+			return index;
+	}
+	return NONE;
+}
+
+/* a row's value, percent */
+static int sound_value(int row)
+{
+	char const *value = getenv(sound_rows[row].variable);
+
+	if (row == SOUND_MENU_MUSIC_ROW)
+	{
+		char const *kept = value && *value ? value : config_string(sound_rows[row].config);
+
+		return kept && *kept ? (int)PIN(atol(kept), 0, 100) : 30;
+	}
+	return (int)PIN(floor((value && *value ? strtod(value, NULL) : config_real(sound_rows[row].config)) * 100.0 + 0.5),
+		0, 100);
+}
+
+static void sound_set(int row, int percent)
+{
+	char text[16];
+
+	if (row == SOUND_MENU_MUSIC_ROW)
+		snprintf(text, sizeof(text), "%d", percent);
+	else
+		snprintf(text, sizeof(text), "%d.%d", percent / 100, (percent % 100) / 10);
+	setting_set(sound_rows[row].variable, text);
+#if !defined(HALO_VITA)
+	if (row == SOUND_MENU_MUSIC_ROW)
+		config_write_string(sound_rows[row].config, text);
+	else
+		config_write_real(sound_rows[row].config, percent / 100.0);
+#endif
+	platform_log("menus: sound: %s %d%%", sound_rows[row].row, percent);
+}
+
+/* (port sound left / right) the focused row's value a step down or up */
+static void sound_step(struct widget_instance *list, int direction)
+{
+	int row = list ? sound_row_of(list->focused_child) : NONE;
+	int value, index, at = 0;
+
+	if (row == NONE)
+		return;
+	value = sound_value(row);
+	if (row == SOUND_MENU_MUSIC_ROW)
+	{
+		/* (the steps run from 100 down: right is louder, a step up the list) */
+		for (index = 0; index < (int)NUMBEROF(sound_menu_music_steps); index++)
+		{
+			if (abs(sound_menu_music_steps[index] - value) < abs(sound_menu_music_steps[at] - value))
+				at = index;
+		}
+		at = PIN(at - direction, 0, (int)NUMBEROF(sound_menu_music_steps) - 1);
+		sound_set(row, sound_menu_music_steps[at]);
+		return;
+	}
+	sound_set(row, PIN((value + 5) / 10 * 10 + direction * 10, 0, 100));
+}
+
+/* (port sound, the list) the rows' names, their values, the focused one's description */
+static void sound_page_update(struct widget_instance *list)
+{
+	struct widget_instance *screen = screen_of(list);
+	struct widget_instance *child;
+	static int said = NONE;
+	char text[96], name[24];
+	int row;
+
+	for (child = list->child; child; child = child->next)
+	{
+		if ((row = sound_row_of(child)) != NONE)
+			text_show(child, T(sound_rows[row].name));
+	}
+	for (row = 0; row < (int)NUMBEROF(sound_rows); row++)
+	{
+		int value = sound_value(row);
+		boolean standard = row == SOUND_MENU_MUSIC_ROW ? value == 30 : value == 100;
+
+		if (!value)
+			snprintf(text, sizeof(text), "%s", T("OFF"));
+		else
+			snprintf(text, sizeof(text), "%d%%", value);
+		if (standard)
+			snprintf(text + strlen(text), sizeof(text) - strlen(text), " %s", T("(DEFAULT)"));
+		snprintf(name, sizeof(name), "v_%s", sound_rows[row].row);
+		text_show(named(screen, name), text);
+	}
+	row = sound_row_of(list->focused_child);
+	h3_dialog_text_wrapped(named(screen, "desc"), row != NONE ? T(sound_rows[row].description) : "");
+	if (row != said && row != NONE)
+	{
+		said = row;
+		platform_log("menus: sound: %s", sound_rows[row].row);
+	}
+}
+
 boolean pc_menu_event_function_invoke(
 	struct widget_instance *widget,
 	struct event_record *event,
@@ -20735,6 +22055,66 @@ boolean pc_menu_event_function_invoke(
 		main_set_difficulty((word)h3_campaign.difficulty);
 		platform_log("menus: h3 campaign: start %s on %s", h3_level_path(h3_campaign.level),
 			h3_difficulty_names[h3_campaign.difficulty]);
+		return TRUE;
+	/* (1.1.3, the menu rework) */
+	case _function_online_main_focus:
+		h3_focus_child(widget, online_main_row);
+		return TRUE;
+	case _function_online_main_back:
+		/* (B on the main menu: the desktop asks "Quit Halo?" - the exit screen opens, TRUE -; the PS Vita has no exit,
+		its PS button does that: nothing opens) */
+#if defined(HALO_VITA) || defined(HALO_ANDROID)
+		return FALSE;
+#else
+		return TRUE;
+#endif
+	case _function_start_open:
+		start_hub.tab = 0;
+		start_hub.refocus = TRUE;
+		platform_log("menus: start: MEDIA | SETTINGS");
+		return TRUE;
+	case _function_start_tab:
+		start_hub.tab = (short)!start_hub.tab;
+		start_hub.refocus = TRUE;
+		return TRUE;
+	case _function_start_panel:
+		return start_hub_panel(widget);
+	case _function_start_desktop:
+		/* (a row the PS Vita's panel has, another screen's on a PC) */
+#if defined(HALO_VITA)
+		return FALSE;
+#else
+		return TRUE;
+#endif
+	case _function_sound_left:
+	case _function_sound_right:
+		sound_step(widget && widget->type == _ui_widget_type_column_list ? widget : widget ? widget->parent : NULL,
+			function_index == _function_sound_right ? 1 : -1);
+		return TRUE;
+	case _function_cascade_forge:
+		return cascade_open(&cascade_forge_kind);
+	case _function_cascade_mp_maps:
+		h3_mp_maps_read();
+		return cascade_open(&cascade_mp_kind);
+	case _function_cascade_gametypes:
+		cascade_gametypes_read();
+		return cascade_open(&cascade_gametype_kind);
+	case _function_cascade_missions:
+		return cascade_open(&cascade_mission_kind);
+	case _function_cascade_pick:
+		return cascade_pick(widget, TRUE);
+	case _function_cascade_right:
+		return cascade_pick(cascade.kind && (cascade.column == CASCADE_COLUMN_GROUPS || cascade.column == CASCADE_COLUMN_ITEMS) &&
+			widget ? widget->focused_child : NULL, FALSE);
+	case _function_cascade_back:
+		return cascade_back();
+	case _function_cascade_left:
+		if (cascade.column == CASCADE_COLUMN_ITEMS || cascade.column == CASCADE_COLUMN_VARIANTS)
+			cascade_back();
+		return FALSE;
+	case _function_cascade_tab_previous:
+	case _function_cascade_tab_next:
+		cascade_tab(function_index == _function_cascade_tab_next ? 1 : -1);
 		return TRUE;
 	case _function_forge_lobby_init:
 		h3_forge_lobby_initialize();
@@ -21630,6 +23010,21 @@ void pc_menu_game_data_function_invoke(
 		break;
 	case _input_forge_lobby:
 		h3_forge_lobby_update(widget);
+		break;
+	case _input_online_main:
+		if (widget->type == _ui_widget_type_column_list)
+			online_main_list_update(widget);
+		break;
+	case _input_start:
+		if (widget->type == _ui_widget_type_column_list)
+			start_hub_update(widget);
+		break;
+	case _input_sound:
+		if (widget->type == _ui_widget_type_column_list)
+			sound_page_update(widget);
+		break;
+	case _input_cascade:
+		cascade_update(widget);
 		break;
 	case _input_forge_maps:
 		h3_forge_maps_update(widget);

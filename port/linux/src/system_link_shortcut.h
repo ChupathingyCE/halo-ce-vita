@@ -166,6 +166,14 @@ enum
 	HALO_SETTINGS_PANEL_OPEN = 1,
 	HALO_SETTINGS_PANEL_PARTY = 2,
 	HALO_SETTINGS_PANEL_MULTIPLAYER = 3,
+	/* (1.1.3, 1.2.0's menu rework: START's SETTINGS categories and MEDIA
+	rows, each the panel on its tab or page) */
+	HALO_SETTINGS_PANEL_GAME = 4,
+	HALO_SETTINGS_PANEL_CONTROLS = 5,
+	HALO_SETTINGS_PANEL_GRAPHICS = 6,
+	HALO_SETTINGS_PANEL_AUDIO = 7,
+	HALO_SETTINGS_PANEL_MENUS = 8,
+	HALO_SETTINGS_PANEL_FSFRIENDS = 9,
 };
 extern volatile int halo_settings_panel_request;
 extern char halo_text_input_title[HALO_TEXT_INPUT_SIZE];

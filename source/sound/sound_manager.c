@@ -1177,6 +1177,14 @@ static real sound_manager_master_gain(
 {
 	real gain = sound_class_get_gain(class_index);
 
+#ifdef HALO_LINUX
+	/* port: the player's volumes for the class (Settings > Sound: music, effects, dialogue, ambience) */
+	{
+		float halo_sound_class_volume(short class_index);
+
+		gain *= halo_sound_class_volume(class_index);
+	}
+#endif
 	if (class_index != _sound_class_scripted_dialog_to_player &&
 		class_index != _sound_class_scripted_dialog_to_other &&
 		class_index != _sound_class_scripted_dialog_force_unspatialized)

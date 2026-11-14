@@ -1,8 +1,8 @@
 /*
 MENU_WORDS.C
 
-Menu style Halo CE's main menu rows (menus/classic/main.xml: FORGE, FRIENDS,
-FILE SHARE, MOD MANAGER) as words in the very letters of the game's own
+Menu style Halo CE's main menu rows (menus/classic/main.xml: MEDIA,
+FORGE) as words in the very letters of the game's own
 CAMPAIGN, MULTIPLAYER, SETTINGS and GAME DEMOS - the player's ui.map's word
 pictures (ui\shell\main_menu\menu_*), read and cut into letters on the
 player's machine as the menus load, never shipped. Each of those is two
@@ -10,12 +10,13 @@ player's machine as the menus load, never shipped. Each of those is two
 game's column list shows the one by focus); each letter is the columns
 between the gaps of its word, half way to its neighbours (the same columns
 in both; letters that touch, CA, LT, LAYE..., split at their faintest
-column), set one after the other the originals' mean gap apart. F and H,
+column), set one after the other the originals' mean gap apart. F, H and X,
 which those words have not, are made of the font's own strokes, copied
 pixel for pixel: F is E down to its middle arm, E's straight stem row on
 to the bottom, I's square end and side glow, the top arm's glow under the
 middle arm; H is two I stems N's width apart and E's middle arm between
-them (letter_f, letter_h). The words are kept in the game's data folder
+them; X is Y's arms over the row they meet at and the same mirrored under it
+(letter_f, letter_h, letter_x). The words are kept in the game's data folder
 (t:\menu_words_<row>_<frame>.rgba, with the pictures' checksum: made again
 when the map's pictures change).
 
@@ -54,7 +55,7 @@ unsigned long long vita_host_time_us(void);
 /* (DXT3: 16 bytes a block of 4 x 4) */
 #define BITMAP_FORMAT_DXT3 15
 #define BITMAP_CACHED_BIT 7
-#define WORDS_FILE_SIGNATURE 0x3844574DUL /* 'MWD8': made again when the way of making them changes */
+#define WORDS_FILE_SIGNATURE 0x3944574DUL /* 'MWD9': made again when the way of making them changes */
 
 /* the game's words and the letters of each, in their pictures */
 static struct
@@ -77,10 +78,10 @@ static struct
 	char const *word;
 } const rows[] =
 {
+	{ "media", "MEDIA" },
+	/* (1.1.3: FORGE stays a row of its own; 1.2.0's EXTRAS - its X made of
+	Y's arms, letter_x - comes with Command in 1.1.4) */
 	{ "forge", "FORGE" },
-	{ "friends", "FRIENDS" },
-	{ "fileshare", "FILE SHARE" },
-	{ "mods", "MOD MANAGER" },
 };
 
 /* ---------- types */
@@ -795,6 +796,67 @@ static void letter_l_clean(struct letter const *letter, byte *word, long at_x)
 	}
 }
 
+/* X: Y's arms (MULTIPLAYER's Y) above the row they meet at, and the same
+arms mirrored below it down to Y's foot - X is Y's V and an upside-down V,
+the arms' slope kept by stretching the mirror over the rows Y's stem has;
+the glow over the arms' tops mirrored under their feet. Its cell Y's.
+FALSE (none) when Y's arms do not meet in one run */
+static boolean letter_x(struct letter const *y_letter, long frame, byte *word, long at_x)
+{
+	long top = WORD_HEIGHT, bottom = -1, meet = -1, x, y;
+
+	for (y = 0; y < WORD_HEIGHT; y++)
+	{
+		for (x = y_letter->ink0; x <= y_letter->ink1; x++)
+		{
+			if (inked(y_letter->source, x, y))
+			{
+				top = MIN(top, y);
+				bottom = MAX(bottom, y);
+			}
+		}
+	}
+	if (bottom - top < 8)
+		return FALSE;
+	/* (the meeting row: the first under the top whose ink is one run) */
+	for (y = top + 2; y <= bottom && meet < 0; y++)
+	{
+		long runs = 0;
+		boolean was = FALSE;
+
+		for (x = y_letter->ink0; x <= y_letter->ink1; x++)
+		{
+			boolean now = inked(y_letter->source, x, y);
+
+			if (now && !was)
+				runs++;
+			was = now;
+		}
+		if (runs == 1)
+			meet = y;
+	}
+	if (meet < 0 || meet >= bottom - 2)
+		return FALSE;
+	if (!word)
+		return TRUE;
+	for (y = 0; y < WORD_HEIGHT; y++)
+	{
+		long from;
+
+		if (y <= meet)
+			from = y;
+		else if (y <= bottom)
+			from = meet - (long)((double)(y - meet) * (double)(meet - top) / (double)(bottom - meet) + 0.5);
+		else
+			from = top - (y - bottom);
+		if (from < 0)
+			continue;
+		for (x = y_letter->x0; x <= y_letter->x1; x++)
+			put(word, at_x + (x - y_letter->x0), y, cell_pixel(y_letter, frame, x, from));
+	}
+	return TRUE;
+}
+
 /* a letter of the pictures, or made of the font's strokes (F, H): its
 cell's width (-1: none), and, with word, it drawn with its cell at at_x */
 static long glyph(char character, long frame, byte *word, long at_x)
@@ -811,6 +873,17 @@ static long glyph(char character, long frame, byte *word, long at_x)
 				letter_l_clean(letter, word, at_x);
 		}
 		return letter->x1 - letter->x0 + 1;
+	}
+	/* (X: of Y's arms, letter_x) */
+	if (character == 'X')
+	{
+		struct letter const *y_letter = letter_find('Y');
+
+		if (!y_letter || !letter_x(y_letter, frame, NULL, 0))
+			return -1;
+		if (word)
+			letter_x(y_letter, frame, word, at_x);
+		return y_letter->x1 - y_letter->x0 + 1;
 	}
 	if ((character != 'F' && character != 'H') || !strokes_find(&strokes))
 		return -1;
@@ -832,6 +905,8 @@ static void glyph_margins(char character, long *left, long *right)
 		letter = letter_find('E');
 	if (!letter && character == 'H')
 		letter = letter_find('I');
+	if (!letter && character == 'X')
+		letter = letter_find('Y');
 	*left = letter ? letter->ink0 - letter->x0 : 0;
 	*right = letter ? letter->x1 - letter->ink1 : 0;
 }
