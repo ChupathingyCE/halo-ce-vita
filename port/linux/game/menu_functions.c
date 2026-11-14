@@ -1550,9 +1550,10 @@ static char const *const h3_level_names[NUMBER_OF_SINGLE_PLAYER_LEVELS] =
 	"Assault on the Control Room", "343 Guilty Spark", "The Library", "Two Betrayals", "Keyes", "The Maw",
 };
 static char const *const h3_difficulty_names[4] = { "Easy", "Normal", "Heroic", "Legendary" };
-/* (port) with a Halo content folder (mcc_content.h), each mission whose map
-it has is MCC's own campaign map, as the mods' (custom_edition_mods.c),
-else the Xbox's: played on this machine alone, every one open (they keep
+/* (port) with a Halo content folder (mcc_content.h), each mission whose
+Xbox map is not in the maps folder and whose MCC map it has is MCC's own
+campaign map, as the mods' (custom_edition_mods.c), else the Xbox's (1.1.3:
+the Xbox's first, the recommended install): played on this machine alone, every one open (they keep
 no profile progress), saved in the custom campaign maps' save,
 savegame_custom.bin. Looked at as the lobby opens (h3_mcc_levels_find) */
 static char const *const h3_mcc_level_paths[NUMBER_OF_SINGLE_PLAYER_LEVELS] =
@@ -1574,11 +1575,15 @@ static void h3_mcc_levels_find(void)
 	h3_mcc_any = FALSE;
 	for (level = 0; level < NUMBER_OF_SINGLE_PLAYER_LEVELS; level++)
 	{
-		h3_mcc_levels[level] = halo_content_library_found() && custom_edition_cache_playable(h3_mcc_level_paths[level]);
+		/* (the Xbox's mission when its map is there and can be played - the
+		player's own Xbox files are the recommended install, owner Nov 13 -;
+		MCC's copy only in place of an Xbox map that is not there) */
+		h3_mcc_levels[level] = halo_content_library_found() && !map_check_playable(h3_level_paths[level]) &&
+			custom_edition_cache_playable(h3_mcc_level_paths[level]);
 		h3_mcc_any |= h3_mcc_levels[level];
 	}
 	if (h3_mcc_any)
-		platform_log("menus: h3 campaign: the missions of the Halo content folder are MCC's");
+		platform_log("menus: h3 campaign: the missions of the Halo content folder are MCC's (no Xbox map of theirs here)");
 }
 
 static boolean h3_mcc_campaign(void)
