@@ -16,6 +16,7 @@ for the monitor).
 
 #include "cseries.h"
 #include "real_math.h"
+#include "forge_files.h"
 
 /* ---------- constants */
 
@@ -32,6 +33,11 @@ enum
 	/* the player spawn points of a layout (forge_spawns.inc: the SPAWNING
 	category's), within the objects' budget */
 	FORGE_MAXIMUM_SPAWNS = 64,
+	/* the game modes' markers of a layout (forge_mode_markers.inc: the
+	OBJECTIVES category's (after its game type objects); forge_files.h FORGE_FILE_MAXIMUM_MODE_MARKERS),
+	within the objects' budget, kept in the spawn points' table */
+	FORGE_MAXIMUM_MODE_MARKERS = 64,
+	FORGE_SPAWN_TABLE = FORGE_MAXIMUM_SPAWNS + FORGE_MAXIMUM_MODE_MARKERS,
 };
 
 /* the object browser's categories, in its order */
@@ -48,7 +54,8 @@ enum
 	the map's: forge_netgame.inc) */
 	_forge_category_teleporters,
 	/* (game type objects: CTF FLAG, HILL POINT, ODDBALL SPAWN, RACE
-	CHECKPOINT, the engine's netgame flags: forge_netgame.inc) */
+	CHECKPOINT, the engine's netgame flags: forge_netgame.inc; then the game
+	modes' markers, FIREFIGHT's and WARZONE's: forge_mode_markers.inc) */
 	_forge_category_objectives,
 	/* (the player spawn points, Halo 3's: RESPAWN POINT and INITIAL SPAWN,
 	no tag of the map's: forge_spawns.inc; last, as the browser's L from
@@ -87,6 +94,37 @@ enum
 	_forge_spawn_oddball,
 	_forge_spawn_race,
 	NUMBER_OF_FORGE_MARKER_KINDS
+};
+/* each category of markers: its first kind and how many */
+#define FORGE_TELEPORTER_KINDS 2
+#define FORGE_OBJECTIVE_KINDS 4
+/* (forge_netgame.inc) a teleporter's channels (forge_files.h's) */
+#define FORGE_TELEPORTER_CHANNELS 16
+
+/* a game mode's marker's kind (the OBJECTIVES category's (after its game type objects) items, in its
+order; in the spawn points' table after the other markers' kinds:
+forge_mode_markers.inc),
+each forge_files.h's record kind from _forge_record_ai_zone in this order */
+enum
+{
+	_forge_mode_marker_ai_zone = NUMBER_OF_FORGE_MARKER_KINDS,
+	_forge_mode_marker_boss,
+	_forge_mode_marker_base,
+	_forge_mode_marker_core,
+	_forge_mode_marker_drop_point,
+	_forge_mode_marker_ff_objective,
+	/* (Firefight round 3) the bonus round's place and settings */
+	_forge_mode_marker_bonus_round,
+	/* (the mode layouts, forge_files.h version 9) a BOUNDARY box: a wall or
+	a kill zone that blocks off an area */
+	_forge_mode_marker_boundary,
+	/* (the mode layouts, forge_files.h version 10) the LOBBY CAMERA: where
+	the lobby looks at the map from (one a layout; its pitch in its mode
+	fields) */
+	_forge_mode_marker_camera,
+	FORGE_MODE_MARKER_KINDS_END,
+	FIRST_FORGE_MODE_MARKER = _forge_mode_marker_ai_zone,
+	NUMBER_OF_FORGE_MODE_MARKERS = FORGE_MODE_MARKER_KINDS_END - FIRST_FORGE_MODE_MARKER
 };
 /* each category of markers: its first kind and how many */
 #define FORGE_TELEPORTER_KINDS 2
@@ -156,6 +194,11 @@ struct forge_properties
 	a checkpoint's order) */
 	short channel;
 	boolean linked;
+	/* a game mode's marker's (forge_mode_markers.inc): its rows' words,
+	each row's own, the rows past marker_rows hidden */
+	boolean marker;
+	short marker_rows;
+	char marker_row[NUMBER_OF_FORGE_PROPERTIES][48];
 };
 
 /* what the monitor's controls ask of the flying camera this frame */
@@ -219,6 +262,64 @@ void director_forge_camera(
 /* the lobby's maps (the Xbox's multiplayer maps, in ui.map's picture
 order: mp_map_grafix): how many, each one's scenario path and English
 name, whether its file is in the maps folder */
+/* (the mode layouts) the lobby's maps come first (forge_map_lobby_count of
+them); the campaign missions Ark Editor builds Firefight layouts on follow
+(forge_map_campaign). A map by its lobby index, its short name (a30) or its
+level path, or NONE */
+short forge_map_lobby_count(
+	void);
+/* (step 3, command.c) the layout's home base of a team (0 red, 1 blue): its
+point and radius, FALSE when the layout has none */
+boolean forge_mode_home_base(
+	short team,
+	real_point3d *point,
+	real *radius);
+
+/* (editor6, Nov 10: Command plays the layout as the editor shows it) a
+layout's area for Command: a base (a territory, a home) or an objective */
+struct forge_mode_area
+{
+	real_point3d center;
+	real radius;
+	short seconds;
+	/* NONE neutral (a home base taken by its letter: NONE) */
+	short owner;
+	char letter;
+	long id;
+};
+/* how many markers of a kind the session's layout has (NONE: of the game
+modes' kinds) */
+short forge_mode_layout_count(
+	short kind);
+boolean forge_mode_home_area(
+	short team,
+	struct forge_mode_area *area);
+/* the bases that are no side's home, in their letters' order */
+short forge_mode_command_territories(
+	struct forge_mode_area *areas,
+	short capacity);
+/* the Firefight objectives of a zone's kind and the hill points */
+short forge_mode_command_objectives(
+	struct forge_mode_area *areas,
+	short capacity);
+/* a side's drop point: its own, else the nearest of no side to its base */
+boolean forge_mode_drop_point(
+	short team,
+	real_point3d const *base,
+	real_point3d *point,
+	real *yaw);
+/* the layout's CTF flag spot of a team */
+boolean forge_mode_layout_flag(
+	short team,
+	real_point3d *point);
+/* the layout's placed objects of a tag, the nth one alive (NONE past them) */
+long forge_mode_layout_object(
+	long tag_index,
+	short nth,
+	short *team);
+
+short forge_map_of_word(
+	char const *word);
 short forge_map_count(
 	void);
 char const *forge_map_path(
@@ -516,6 +617,22 @@ boolean forge_play_host_begin(
 	char const *variant_file,
 	char *why,
 	int why_size);
+/* (1.2.0) ... a Command game of the map (command.c's network play): a game
+played, its hello saying so - a build that does not play network Command is
+refused from it -; whether this machine's network game is one (the host's,
+or a joiner's told so); (the host) whether a machine answered the hello and
+plays the game */
+boolean forge_command_host_begin(
+	char const *map_path,
+	char *why,
+	int why_size);
+struct game_variant;
+void forge_command_variant_build(
+	struct game_variant *variant);
+boolean forge_net_command_session(
+	void);
+boolean forge_net_machine_plays(
+	long machine_index);
 /* ... the local game (split screen) about to start on the map at map_path
 plays that map variant: placed once the player has spawned, if the game's
 map is that one. FALSE with why if the variant could not be read */

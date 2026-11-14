@@ -1297,6 +1297,12 @@ void hud_draw_screen(
 			extern void forge_draw(short local_player_index);
 
 			forge_draw(render.local_player_index);
+			/* (and command mode's: port/linux/game/command.c) */
+			{
+				extern void command_draw(short local_player_index);
+
+				command_draw(render.local_player_index);
+			}
 		}
 
 		if (!game_time_get_paused() &&

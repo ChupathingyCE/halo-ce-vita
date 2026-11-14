@@ -188,6 +188,10 @@ struct game_options;
 #include "units/units.h"
 #include "units/vehicles.h"
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
+#ifdef HALO_LINUX
+/* port: port/linux/game/command.c */
+void command_player_quitting(long player_index);
+#endif
 
 /* network_game_globals.c's */
 boolean network_game_distributed_client(void);
@@ -602,6 +606,14 @@ void game_tick(
 #endif
 	recorded_animations_update();
 #ifdef HALO_LINUX
+	/* port: command mode's dropships flown along their paths, as a
+	recording moves its unit, before the objects update (port/linux/game/
+	command.c; nothing unless a Command game runs) */
+	{
+		extern void command_tick(void);
+
+		command_tick();
+	}
 	tick_phase_end(8, "recorded_animations_update");
 #endif
 #ifdef HALO_LINUX
@@ -1596,8 +1608,15 @@ void remove_quitting_players_from_game(
 			ticks it missed to the host's, game_time_set_distributed) */
 			if (current_time >= quit_time)
 			{
-				long unit_index = player->unit_index;
+				long unit_index;
 
+#ifdef HALO_LINUX
+				/* port: a Command game's commander in his side's Spartan out
+				of it first: the Spartan is his side's, not his to take along
+				(port/linux/game/command.c) */
+				command_player_quitting(iterator.datum_index);
+#endif
+				unit_index = player->unit_index;
 				player->quit_out_of_game = TRUE;
 				if (unit_index != NONE)
 				{

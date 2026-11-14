@@ -561,6 +561,7 @@ symbols in this file:
 #endif
 #ifdef HALO_LINUX
 #include "forge.h" /* port: port/linux/game/forge.c */
+#include "command.h" /* port: port/linux/game/command.c */
 #endif
 #include "interface/hud_messaging.h"
 #include "interface/player_ui.h"
@@ -4722,6 +4723,9 @@ boolean game_engine_should_end_game(
 	if (game_engine && !multiple_teams_alive()
 #ifdef HALO_LINUX
 		&& !forge_game_active()
+		/* port: nor a Command game: a side with no human is the AI
+		commander's (port/linux/game/command.c ends it by its objectives) */
+		&& !command_game_running() && !forge_net_command_session()
 #endif
 		)
 		should_end_game = TRUE;

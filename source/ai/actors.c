@@ -4446,6 +4446,15 @@ static void actor_update(
 				{ HALO_DETAIL_BEGIN(); actor_action_control(actor_index); HALO_DETAIL_END("ai:action_control"); }
 				actor_communication_update(actor_index);
 				actor_conversation_control(actor_index);
+#ifdef HALO_LINUX
+				/* port: command mode's squads' orders (port/linux/game/command.c;
+				nothing unless it runs) */
+				{
+					extern void command_actor_orders(long actor_index);
+
+					command_actor_orders(actor_index);
+				}
+#endif
 				{ HALO_DETAIL_BEGIN(); actor_destination_update(actor_index); HALO_DETAIL_END("ai:destination"); }
 				actor_look_affect_movement(actor_index);
 				{ HALO_DETAIL_BEGIN(); actor_move_update(actor_index); HALO_DETAIL_END("ai:move"); }

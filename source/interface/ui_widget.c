@@ -6796,8 +6796,24 @@ static void ui_widgets_process_mouse(
 	struct halo_ui_pointer pointer;
 	struct ui_mouse_target *target;
 	short controller_index = 0;
-	boolean present = halo_ui_pointer_update(ui_mouse_menus_active(), &pointer);
+	/* (port: command mode's view from above has it while no menu is up:
+	port/linux/game/command.c) */
+	extern boolean command_pointer_wanted(void);
+	extern void command_pointer_update(struct halo_ui_pointer const *pointer, boolean present);
+	boolean command = !ui_mouse_menus_active() && command_pointer_wanted();
+	boolean present = halo_ui_pointer_update(ui_mouse_menus_active() || command, &pointer);
 	boolean touch_dragging;
+
+	if (command)
+	{
+		command_pointer_update(&pointer, present);
+		ui_widget_port_pointer_state.present = FALSE;
+		ui_mouse_press_count = 0;
+		ui_mouse_hover_pending = FALSE;
+		ui_mouse_click_pending = FALSE;
+		ui_mouse_target_count = 0;
+		return;
+	}
 
 	ui_widget_port_pointer_state.present = present;
 	ui_widget_port_pointer_state.held = present && pointer.held;

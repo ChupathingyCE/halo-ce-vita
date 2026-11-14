@@ -195,9 +195,29 @@ static real game_difficulty_get_value_by_difficulty(
 	return result;
 }
 
+#ifdef HALO_LINUX
+/* port: Command mode (port/linux/game/command.c, C13): while a Command game
+is played every soldier - both sides' - fights on Halo CE's Legendary
+rules, its enemies' values for every team (both armies the AI's; the
+multiplayer game engine's Normal not taken) */
+boolean command_legendary_rules(void);
+
+/* port: a difficulty's value (command.c's console "rules": the table) */
+real game_difficulty_value_at(
+	short value_type,
+	short difficulty)
+{
+	return game_difficulty_get_value_by_difficulty(value_type, difficulty);
+}
+#endif
+
 real game_difficulty_get_value(
 	short value_type)
 {
+#ifdef HALO_LINUX
+	if (command_legendary_rules())
+		return game_difficulty_get_value_by_difficulty(value_type, _game_difficulty_level_impossible);
+#endif
 	return game_difficulty_get_value_by_difficulty(value_type, game_difficulty_level_get());
 }
 
@@ -208,6 +228,10 @@ real game_difficulty_get_team_value(
 	short difficulty = game_difficulty_level_get();
 	short friend_value_type;
 
+#ifdef HALO_LINUX
+	if (command_legendary_rules())
+		return game_difficulty_get_value_by_difficulty(value_type, _game_difficulty_level_impossible);
+#endif
 	if (game_engine_running())
 		difficulty = _game_difficulty_level_normal;
 	else if (!game_team_is_enemy(_game_team_player, team_index))

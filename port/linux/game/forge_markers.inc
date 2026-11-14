@@ -47,7 +47,13 @@ of them the map's own spawns */
 #define FORGE_SPAWN_MAP_DRAW_DISTANCE 60.f
 /* (the pick's and culling's height of an initial spawn's: the same, flat) */
 #define FORGE_MARKER_INITIAL_HEIGHT FORGE_MARKER_HEIGHT
-#define FORGE_MARKER_TRIANGLES 96
+#define FORGE_MARKER_TRIANGLES 176
+/* (a game mode's marker, forge_mode_markers.inc) its radius's ring on the
+ground: its sides, its width, how far up and down each side's point finds
+the ground */
+#define FORGE_MARKER_AREA_SIDES 40
+#define FORGE_MARKER_AREA_WIDTH 0.12f
+#define FORGE_MARKER_AREA_PROBE 3.f
 
 enum
 {
@@ -74,6 +80,13 @@ struct forge_marker
 	boolean lit;
 	/* (a player spawn) an initial spawn: a second ring, a filled centre */
 	boolean initial;
+	/* (a game mode's marker) its area's radius on the ground (0: none), and
+	a filled centre too (a base's, a core's) */
+	real area_radius;
+	boolean filled;
+	/* (a boundary) its box's half extents along its facing, across it and
+	up (0: no box) */
+	real box[3];
 };
 
 /* ---------- private code */
@@ -191,6 +204,60 @@ static void forge_marker_ring(
 	}
 }
 
+/* a ground point under a point of an area's ring (as high as found within
+FORGE_MARKER_AREA_PROBE up and down; else the centre's height) */
+static void forge_marker_area_point(
+	real_point3d const *center,
+	real x,
+	real y,
+	real_point3d *point)
+{
+	real_vector3d down = { 0.f, 0.f, -2.f * FORGE_MARKER_AREA_PROBE };
+	real_point3d from;
+	struct collision_result collision;
+
+	point->x = x;
+	point->y = y;
+	point->z = center->z;
+	from = *point;
+	from.z += FORGE_MARKER_AREA_PROBE;
+	if (collision_test_vector(FLAG(_collision_test_structure_bit) | FLAG(_collision_test_front_facing_surfaces_bit), &from,
+		&down, NONE, &collision))
+	{
+		point->z = from.z + down.k * collision.t + FORGE_MARKER_LIFT;
+	}
+}
+
+/* an area's ring, FORGE_MARKER_AREA_WIDTH wide inside radius, on the ground */
+static void forge_marker_area(
+	struct forge_net_orb_vertex *vertices,
+	long *count,
+	real_point3d const *center,
+	real radius,
+	unsigned long color)
+{
+	real_point3d out_last, in_last;
+	short side;
+
+	for (side = 0; side <= FORGE_MARKER_AREA_SIDES; side++)
+	{
+		real angle = (real)side * (real)(2.0 * 3.14159265358979) / (real)FORGE_MARKER_AREA_SIDES;
+		real_point3d out, in;
+
+		forge_marker_area_point(center, center->x + cosf(angle) * radius, center->y + sinf(angle) * radius, &out);
+		in = out;
+		in.x = center->x + cosf(angle) * (radius - FORGE_MARKER_AREA_WIDTH);
+		in.y = center->y + sinf(angle) * (radius - FORGE_MARKER_AREA_WIDTH);
+		if (side > 0)
+		{
+			forge_marker_triangle(vertices, count, &in_last, &out_last, &out, color);
+			forge_marker_triangle(vertices, count, &in_last, &out, &in, color);
+		}
+		out_last = out;
+		in_last = in;
+	}
+}
+
 /* a marker drawn in the 3D (render.c's hook, after the objects), flat on
 the ground as Halo 3's (the owner, Oct 22 2026: no shaft standing up): a
 ring in its colour over a faint disc, a chevron on it pointing where it
@@ -235,6 +302,12 @@ static void forge_marker_draw(
 	forge_marker_ring(vertices, &count, &center, 0.f, FORGE_MARKER_RING_INNER, forge_marker_pixel(marker, 0.8f, alpha * 0.35f));
 	forge_marker_ring(vertices, &count, &center, FORGE_MARKER_RING_INNER, FORGE_MARKER_DISC_RADIUS,
 		forge_marker_pixel(marker, 1.f, alpha));
+	/* (a game mode's marker's area: a thin ring on the ground under each of
+	its points) */
+	if (marker->area_radius > FORGE_MARKER_DISC_RADIUS)
+		forge_marker_area(vertices, &count, &center, marker->area_radius, forge_marker_pixel(marker, 1.f, alpha * 0.8f));
+	if (marker->filled)
+		forge_marker_ring(vertices, &count, &center, 0.f, FORGE_MARKER_DISC_RADIUS * 0.3f, forge_marker_pixel(marker, 1.f, alpha));
 	/* (an initial spawn's: a second ring and a filled centre) */
 	if (marker->initial)
 	{
@@ -266,6 +339,38 @@ static void forge_marker_draw(
 			tip.z = tip_in.z = end.z = end_in.z = center.z + 0.005f;
 			forge_marker_triangle(vertices, &count, &tip, &end, &end_in, forge_marker_pixel(marker, 1.f, alpha));
 			forge_marker_triangle(vertices, &count, &tip, &end_in, &tip_in, forge_marker_pixel(marker, 1.f, alpha));
+		}
+	}
+	/* (a boundary's box: its four walls, see-through, standing on the
+	marker's ground up to its height, and a brighter band at their feet) */
+	if (marker->box[0] > 0.f && marker->box[1] > 0.f && marker->box[2] > 0.f)
+	{
+		real_point3d corner[4];
+		short side;
+		unsigned long wall = forge_marker_pixel(marker, 1.f, alpha * 0.22f);
+		unsigned long foot = forge_marker_pixel(marker, 1.f, alpha * 0.8f);
+
+		for (side = 0; side < 4; side++)
+		{
+			real along = (side == 0 || side == 3) ? marker->box[0] : -marker->box[0];
+			real across = (side < 2) ? marker->box[1] : -marker->box[1];
+
+			corner[side].x = center.x + forward.i * along + left.i * across;
+			corner[side].y = center.y + forward.j * along + left.j * across;
+			corner[side].z = center.z;
+		}
+		for (side = 0; side < 4; side++)
+		{
+			real_point3d a = corner[side], b = corner[(side + 1) % 4], a_up = a, b_up = b, a_foot = a, b_foot = b;
+
+			a_up.z += marker->box[2] * 2.f;
+			b_up.z += marker->box[2] * 2.f;
+			a_foot.z += 0.15f;
+			b_foot.z += 0.15f;
+			forge_marker_triangle(vertices, &count, &a, &b, &b_up, wall);
+			forge_marker_triangle(vertices, &count, &a, &b_up, &a_up, wall);
+			forge_marker_triangle(vertices, &count, &a, &b, &b_foot, foot);
+			forge_marker_triangle(vertices, &count, &a, &b_foot, &a_foot, foot);
 		}
 	}
 	if (count < 3)
@@ -310,11 +415,25 @@ static boolean forge_marker_of_spawn(
 }
 
 /* a player spawn point's colour: its team's (any: white); a teleporter's
-its channel's (a sender and its receiver the same) */
+its channel's (a sender and its receiver the same); a game mode's marker's
+its own (forge_mode_markers.inc), with its area */
 static void forge_marker_spawn_color(
 	struct forge_spawn const *spawn,
 	struct forge_marker *marker)
 {
+	if (forge_kind_is_mode_marker(spawn->kind))
+	{
+		forge_mode_marker_color(spawn, &marker->red, &marker->green, &marker->blue);
+		marker->area_radius = forge_mode_marker_radius(spawn);
+		if (spawn->kind == _forge_mode_marker_boundary)
+		{
+			forge_mode_boundary_extents(spawn, &marker->box[0], &marker->box[1], &marker->box[2]);
+			marker->area_radius = square_root(marker->box[0] * marker->box[0] + marker->box[1] * marker->box[1]);
+		}
+		marker->filled = spawn->kind == _forge_mode_marker_base || spawn->kind == _forge_mode_marker_core ||
+			spawn->kind == _forge_mode_marker_boss;
+		return;
+	}
 	/* (a game type object's: a CTF flag its team's, a hill point yellow, an
 	oddball spawn white, a race checkpoint orange) */
 	if (forge_spawn_is_objective(spawn))
@@ -465,7 +584,7 @@ static long forge_marker_under_crosshair(
 		}
 	}
 	/* (the player spawn points') */
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 		real_point3d at;
@@ -506,7 +625,7 @@ static short forge_markers_render_teleporters(
 	short index;
 	short drawn = 0;
 
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS && drawn < FORGE_MARKER_MOST_DRAWN; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE && drawn < FORGE_MARKER_MOST_DRAWN; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 		struct forge_marker marker;
@@ -573,7 +692,7 @@ static void forge_markers_render(
 		drawn++;
 	}
 	/* (the player spawn points, in their team's colour) */
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS && drawn < FORGE_MARKER_MOST_DRAWN; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE && drawn < FORGE_MARKER_MOST_DRAWN; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 		struct forge_marker marker;
@@ -589,12 +708,17 @@ static void forge_markers_render(
 		to_marker.i = marker.position.x - render.camera.position.x;
 		to_marker.j = marker.position.y - render.camera.position.y;
 		to_marker.k = marker.position.z - render.camera.position.z;
-		if (dot_product3d(&to_marker, &render.camera.forward) < -FORGE_MARKER_INITIAL_HEIGHT ||
-			!render_frustum_sphere_visible(&render.frustum, &marker.position, FORGE_MARKER_INITIAL_HEIGHT))
-		{
-			continue;
-		}
+		/* (a game mode's marker: as big as its area) */
 		forge_marker_spawn_color(spawn, &marker);
+		{
+			real extent = MAX(FORGE_MARKER_INITIAL_HEIGHT, marker.area_radius);
+
+			if (dot_product3d(&to_marker, &render.camera.forward) < -extent ||
+				!render_frustum_sphere_visible(&render.frustum, &marker.position, extent))
+			{
+				continue;
+			}
+		}
 		marker.lit = spawn->id == under || spawn->id == forge_globals.held_marker_id;
 		forge_marker_draw(&marker);
 		drawn++;

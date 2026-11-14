@@ -826,7 +826,11 @@ static boolean director_update_controls(
 	{
 		struct forge_camera_input forge_input;
 
-		if (forge_camera_input(local_player_index, director_globals.dtime, &forge_input))
+		extern boolean command_camera_input(short local_player_index, real seconds, struct forge_camera_input *input);
+
+		/* (and command mode's commander, port/linux/game/command.c) */
+		if (forge_camera_input(local_player_index, director_globals.dtime, &forge_input) ||
+			command_camera_input(local_player_index, director_globals.dtime, &forge_input))
 		{
 			controls->facing_delta.yaw = forge_input.facing_delta.yaw;
 			controls->facing_delta.pitch = forge_input.facing_delta.pitch;
@@ -1150,6 +1154,15 @@ void director_forge_camera(
 	}
 
 	return;
+}
+
+/* port: (command mode, port/linux/game/command.c) whether the flying camera
+director_forge_camera put up is still this player's: a respawn chooses
+the game's perspective again */
+boolean director_forge_camera_flying(
+	short local_player_index)
+{
+	return director_get(local_player_index)->camera_mode_index == _camera_flying;
 }
 
 #endif

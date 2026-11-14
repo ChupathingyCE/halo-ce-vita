@@ -161,7 +161,7 @@ static short forge_objectives_count(
 	short at;
 	short count = 0;
 
-	for (at = 0; at < forge_globals.spawn_count && at < FORGE_MAXIMUM_SPAWNS; at++)
+	for (at = 0; at < forge_globals.spawn_count && at < FORGE_SPAWN_TABLE; at++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[at];
 
@@ -228,7 +228,7 @@ static short forge_teleporters_count(
 	short index;
 	short count = 0;
 
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 
@@ -405,7 +405,7 @@ static void forge_netgame_flags_build(
 	}
 	forge_netgame.own_count = forge_netgame.count;
 	/* (the layout's game type objects) */
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 		struct scenario_netgame_flag *flag;
@@ -422,7 +422,7 @@ static void forge_netgame_flags_build(
 		platform_log("forge: netgame flag: the %s #%ld as type %d, index %d, at %.2f %.2f %.2f", forge_spawn_kind_log_names[spawn->kind],
 			spawn->id, (int)flag->type, (int)flag->team_index, flag->position.x, flag->position.y, flag->position.z);
 	}
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 		struct scenario_netgame_flag *flag;
@@ -512,7 +512,7 @@ static unsigned long forge_netgame_hash(
 	unsigned long hash = 2166136261UL;
 	short index;
 
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 		real values[5];
@@ -539,7 +539,7 @@ static unsigned long forge_netgame_flags_hash(
 	unsigned long hash = 2166136261UL;
 	short index;
 
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 		real values[4];
@@ -592,7 +592,7 @@ static boolean forge_netgame_team_spawns_skipped(
 
 	if (!own || !enemy)
 		return FALSE;
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 

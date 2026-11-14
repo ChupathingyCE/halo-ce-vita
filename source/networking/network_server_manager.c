@@ -475,6 +475,8 @@ symbols in this file:
 #include "custom_edition_cache.h"
 #include "custom_edition_maps.h"
 #include "map_share.h"
+/* port: port/linux/game/forge_net.inc's (a Command game hosted) */
+boolean forge_net_command_session(void);
 #include "forge.h"
 #include "dedicated_server.h"
 #include "bots.h"
@@ -3708,6 +3710,11 @@ boolean server_needs_more_teams(
 	second team is never there to wait for - RC6, Cass: a host alone with
 	its bots, or with people and bots, could never start Infection */
 	if (infection_variant(&server->game.variant))
+		return FALSE;
+	/* (port) a Command game's side with no human is the AI commander's
+	(port/linux/game/command.c): a host alone, or its co-op commanders all on
+	one side, start it */
+	if (forge_net_command_session())
 		return FALSE;
 	if (server->game.variant.universal_variant.teams)
 	{

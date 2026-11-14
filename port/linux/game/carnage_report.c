@@ -19,6 +19,7 @@ every machine shows the host's numbers, and nothing a client counts itself.
 #include "input/input.h"
 #include "player_cosmetics.h"
 #include "carnage_report.h"
+#include "command.h"
 #include "../src/lang.h"
 
 #include <stdio.h>
@@ -175,6 +176,9 @@ char const *carnage_report_objective_name(long type, int index)
 		return index == 0 ? N_("BALL KILLS") : index == 1 ? N_("CARRIERS") : NULL;
 	case game_engine_race:
 		return index == 0 ? N_("BEST LAP") : NULL;
+	case CARNAGE_REPORT_TYPE_COMMAND:
+		/* (flags scored; seconds of the objective territories held) */
+		return index == 0 ? N_("CAPTURES") : index == 1 ? N_("TERRITORY") : NULL;
 	}
 	return NULL;
 }
@@ -193,19 +197,33 @@ void carnage_report_objective_text(struct carnage_report const *report, struct c
 				(value % TICKS_PER_SECOND) * 10 / TICKS_PER_SECOND);
 		return;
 	}
+	if (report->type == CARNAGE_REPORT_TYPE_COMMAND && index == 1)
+	{
+		snprintf(text, size, "%ld:%02ld", value / 60, value % 60);
+		return;
+	}
 	snprintf(text, size, "%ld", value);
 }
 
 static boolean carnage_report_read_ranked(struct carnage_report *report, boolean in_game);
 
+/* (a Command game's sides over the game's rows: command.c) */
 boolean carnage_report_read(struct carnage_report *report)
 {
-	return carnage_report_read_ranked(report, FALSE);
+	boolean read = carnage_report_read_ranked(report, FALSE);
+
+	if (read)
+		command_carnage_report(report, FALSE);
+	return read;
 }
 
 boolean carnage_report_read_in_game(struct carnage_report *report)
 {
-	return carnage_report_read_ranked(report, TRUE);
+	boolean read = carnage_report_read_ranked(report, TRUE);
+
+	if (read)
+		command_carnage_report(report, TRUE);
+	return read;
 }
 
 static boolean carnage_report_read_ranked(struct carnage_report *report, boolean in_game)

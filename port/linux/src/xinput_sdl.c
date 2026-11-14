@@ -725,6 +725,9 @@ static void keyboard_menus(XINPUT_GAMEPAD *pad)
 	pad->bAnalogButtons[XINPUT_GAMEPAD_WHITE] |= analog(menu_key(SDL_SCANCODE_Q));
 	pad->bAnalogButtons[XINPUT_GAMEPAD_BLACK] |= analog(menu_key(SDL_SCANCODE_X));
 	pad->bAnalogButtons[XINPUT_GAMEPAD_LEFT_TRIGGER] |= analog(menu_key(SDL_SCANCODE_G));
+	/* (H the right trigger beside it: the screens' page tabs - the carnage
+	report's SUMMARY and DETAILS - show one device's icons) */
+	pad->bAnalogButtons[XINPUT_GAMEPAD_RIGHT_TRIGGER] |= analog(menu_key(SDL_SCANCODE_H));
 }
 
 static void keyboard_gamepad(const struct platform_input_state *input, XINPUT_GAMEPAD *pad)
@@ -752,6 +755,19 @@ static void keyboard_gamepad(const struct platform_input_state *input, XINPUT_GA
 	forge_keys_held = (k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT] ? 1UL << 0 : 0) |
 		(k[SDL_SCANCODE_DELETE] ? 1UL << 1 : 0) | (k[SDL_SCANCODE_TAB] ? 1UL << 2 : 0) |
 		(wheel_scrolling || SDL_GetTicks() < wheel_press_until_ms ? 1UL << 3 : 0);
+	/* (and command mode's, port/linux/game/command.c: Q and E turn the view,
+	H holds, B the base, Ctrl + A every squad; Forge's bits as they were) */
+	forge_keys_held |= (k[SDL_SCANCODE_Q] ? 1UL << 4 : 0) | (k[SDL_SCANCODE_E] ? 1UL << 5 : 0) |
+		(k[SDL_SCANCODE_H] ? 1UL << 6 : 0) | (k[SDL_SCANCODE_B] ? 1UL << 7 : 0) |
+		((k[SDL_SCANCODE_LCTRL] || k[SDL_SCANCODE_RCTRL]) && k[SDL_SCANCODE_A] ? 1UL << 8 : 0);
+	/* (command mode's HQ: F opens it, 1 to 9 buy its rows) */
+	forge_keys_held |= k[SDL_SCANCODE_F] ? 1UL << 9 : 0;
+	{
+		int digit;
+
+		for (digit = 0; digit < 9; digit++)
+			forge_keys_held |= k[SDL_SCANCODE_1 + digit] ? 1UL << (10 + digit) : 0;
+	}
 }
 
 /* (port/linux/game/forge.c, Forge's monitor) the keyboard's keys the
@@ -759,7 +775,8 @@ controller's layout above has no room for, held at the last poll: Shift
 (thrust: bit 0), Delete (delete: bit 1), Tab (the monitor and the Spartan:
 bit 2, as well as Y), and whether the wheel is scrolling (bit 3: its Y is
 not a delete there); and the wheel's notches since the last call (push and
-pull). None on the Vita, whose port 0 is its own controls */
+pull); past them command mode's (port/linux/game/command.c): Q 4, E 5, H 6,
+B 7, Ctrl + A 8. None on the Vita, whose port 0 is its own controls */
 /* (Forge's monitor: forge_touch.inc) the fingers on the Vita's front screen,
 none on the desktop builds */
 struct forge_touch_finger;
@@ -1375,12 +1392,18 @@ until both buttons are let go, neither reaches it, so it neither zooms nor
 shows the scoreboard; forge.c reads forge_combo_held instead. Back alone
 reaches the game once held FORGE_COMBO_BACK_GRACE_MS without the click (the
 scoreboard, held, as in any game); the click alone is the Spartan's zoom. */
+/* (port/linux/game/command.c) set while command mode runs: its combo is
+also Back + D-pad up on a desktop's pad, the owner's Select + D-pad up as
+the Vita's is (the Vita's D-pad up is the right stick's click already) */
+extern int command_combo_dpad;
+
 static void forge_combo_filter(XINPUT_GAMEPAD *pad)
 {
 	static Uint64 back_since;
 	static int held;
 	BOOL back = (pad->wButtons & XINPUT_GAMEPAD_BACK) != 0;
-	BOOL click = (pad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB) != 0;
+	BOOL click = (pad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB) != 0 ||
+		(command_combo_dpad && (pad->wButtons & XINPUT_GAMEPAD_DPAD_UP) != 0);
 
 	if (!forge_game_playing)
 	{
@@ -1395,7 +1418,8 @@ static void forge_combo_filter(XINPUT_GAMEPAD *pad)
 			platform_log("forge: the monitor and Spartan combo (Back + the right stick's click), kept from the game");
 		held = back || click;
 		forge_combo_held = held && back && click;
-		pad->wButtons &= (WORD)~(XINPUT_GAMEPAD_BACK | XINPUT_GAMEPAD_RIGHT_THUMB);
+		pad->wButtons &= (WORD)~(XINPUT_GAMEPAD_BACK | XINPUT_GAMEPAD_RIGHT_THUMB |
+			(command_combo_dpad ? XINPUT_GAMEPAD_DPAD_UP : 0));
 		back_since = 0;
 		return;
 	}

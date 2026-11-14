@@ -991,4 +991,9 @@ extern boolean debug_unit_all_animations;
 
 /* ---------- public code */
 
+/* port: (Command mode, port/linux/game/command.c) the unit riding a
+vehicle's seat, NONE for none; an item the unit holds thrown down */
+long unit_seat_occupant(long vehicle_index, short seat_index);
+void unit_drop_weapon_item(long unit_index, long item_index);
+
 #endif // __UNITS_H

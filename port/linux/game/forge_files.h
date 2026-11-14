@@ -92,6 +92,63 @@ as ever), never both, on an object's record (_forge_record_object) that is
 not a character's only. A file of version 6 or before holds neither (the
 bits must be zero in them); a layout with one is written as version 7, and
 a version 7 file has one at least.
+
+Version 8 (Nov 5 2026) adds the game modes' setup (FIREFIGHT and WARZONE,
+port/linux/game/forge_modes.c; the design:
+docs/superpowers/specs/2026-11-05-forge-warzone-firefight-design.md): the
+mode markers, records of the kinds from _forge_record_ai_zone on (an AI
+spawn zone, a boss, a base, a core, a drop point, a Firefight objective), no
+path, their 12 reserved bytes their mode fields (struct
+forge_file_mode_fields, each kind's own checked: forge_file_mode_record_check;
+every other kind's, and every older version's, still zeros); a player spawn's
+game types FIREFIGHT's and WARZONE's bits too; and the modes' settings
+(header flag bit 1, FORGE_FILE_FLAG_MODE_SETTINGS: a 64-byte block between
+the records and the meta). A layout with a mode marker or the settings is
+written as version 8, any other as before, so a variant without them stays
+readable by older builds (which refuse a version 5 file as another
+version); a version 8 file has one at least.
+
+Version 9 (Nov 8 2026, the mode layouts: Ark Editor and Forge) adds a
+BOUNDARY: a record of kind _forge_record_boundary, no path, a box on the
+map that blocks off an area for a mode's game (a campaign Firefight map's
+rest of the mission) - its centre the position, its yaw the angles' first,
+its half extents in the mode fields (points: along its facing, seconds:
+across it, both quarter world units 1 to FORGE_FILE_BOUNDARY_MAXIMUM_HALF_UNITS;
+radius: its half height, quarter world units 1 to 255), its kind in the
+variant byte (FORGE_FILE_BOUNDARY_WALL: players and AI are held out of it;
+FORGE_FILE_BOUNDARY_KILL: a player inside it dies as in a map's own kill
+zone), nothing else; at most FORGE_FILE_MAXIMUM_BOUNDARIES. A file of
+version 8 or before holds none (the kind was never written: refused there);
+a layout with one is written as version 9, and a version 9 file has one at
+least.
+
+Version 10 (Nov 9 2026, the mode layouts step 2) adds the LOBBY CAMERA: a
+record of kind _forge_record_camera, no path, where the lobby's view of the
+map stands - its position, its yaw the angles' first, its pitch in the mode
+fields' radius as degrees up from level plus FORGE_FILE_CAMERA_PITCH_OFFSET
+(0 to 2 * FORGE_FILE_CAMERA_PITCH_OFFSET: straight down to straight up),
+nothing else; one a layout at most. A layout with one is written as version
+10, and a version 10 file has one.
+
+Version 11 (Nov 10 2026, the mode layouts step 4: Ark Editor's BLANK CANVAS)
+adds the CANVAS: which of the map's OWN placed things the layout takes away
+while it is played or edited - the scenario's scenery (a Halo 2 level's
+crates with it), bipeds, vehicles, weapons, equipment, machines, controls,
+light fixtures, sound scenery and a multiplayer map's item spawns (netgame
+equipment). Nothing of the map is in the file and the map's file is never
+changed: the placements are named by their category and their index in the
+scenario's own blocks, and are simply not made (forge_canvas.inc) in a game
+of the layout. Header flag bit 2 (FORGE_FILE_FLAG_CANVAS): a block between
+the mode settings and the meta - its version u8 (FORGE_FILE_CANVAS_VERSION),
+a zero, the categories taken away whole u16 (a bit each, _forge_canvas_*),
+the entries' count u16 (at most FORGE_FILE_MAXIMUM_CANVAS_ENTRIES), a zero
+u16; then the entries, 4 bytes each: category u8, kept u8, index u16 (at
+most FORGE_FILE_CANVAS_MAXIMUM_INDEX). An entry of a category taken away
+whole is one placement KEPT (restored one by one; kept 1); an entry of any
+other category is one placement taken away (kept 0). The entries ascend
+strictly (category, then index): one way to write a canvas. A layout with a
+canvas is written as version 11; a version 11 file has one that takes
+something away or keeps something.
 */
 
 #ifndef __FORGE_FILES_H
@@ -101,7 +158,7 @@ a version 7 file has one at least.
 
 #define FORGE_FILE_EXTENSION ".hmv"
 /* the version written when a layout needs it, and the oldest read */
-#define FORGE_FILE_VERSION 7
+#define FORGE_FILE_VERSION 11
 #define FORGE_FILE_FIRST_VERSION 1
 #define FORGE_FILE_HEADER_SIZE 64
 #define FORGE_FILE_MAXIMUM_SIZE 65536
@@ -142,6 +199,15 @@ player spawns: infection too), a bit each in the engine's order */
 #define FORGE_FILE_GAME_TYPE_RACE (1 << 4)
 #define FORGE_FILE_GAME_TYPE_INFECTION (1 << 5)
 #define FORGE_FILE_SPAWN_GAME_TYPES_MASK 0x3F
+/* (version 8) the game modes: a player spawn's game types (with the six
+above), and a mode marker's (0: both) */
+#define FORGE_FILE_GAME_TYPE_FIREFIGHT (1 << 6)
+#define FORGE_FILE_GAME_TYPE_WARZONE (1 << 7)
+#define FORGE_FILE_MODE_GAME_TYPES_MASK (FORGE_FILE_GAME_TYPE_FIREFIGHT | FORGE_FILE_GAME_TYPE_WARZONE)
+#define FORGE_FILE_SPAWN_GAME_TYPES_MASK_8 0xFF
+/* the mode settings block's size (version 8) */
+#define FORGE_FILE_MODE_SETTINGS_SIZE 64
+#define FORGE_FILE_MODE_SETTINGS_VERSION 1
 /* a player spawn's teams: any (-1), red, blue */
 #define FORGE_FILE_MAXIMUM_SPAWN_TEAM 1
 /* (version 5) teleporters: their channels (a record's team), the most of
@@ -169,7 +235,13 @@ MAXIMUM_HILL_POINTS) */
 enum
 {
 	FORGE_FILE_FLAG_NETGAME_SPAWNS = 1 << 0,
-	FORGE_FILE_FLAGS_KNOWN = FORGE_FILE_FLAG_NETGAME_SPAWNS,
+	/* (version 8) the mode settings block follows the records */
+	FORGE_FILE_FLAG_MODE_SETTINGS = 1 << 1,
+	/* (version 11) the canvas block follows the mode settings */
+	FORGE_FILE_FLAG_CANVAS = 1 << 2,
+	FORGE_FILE_FLAGS_VERSION_7 = FORGE_FILE_FLAG_NETGAME_SPAWNS,
+	FORGE_FILE_FLAGS_VERSION_10 = FORGE_FILE_FLAG_NETGAME_SPAWNS | FORGE_FILE_FLAG_MODE_SETTINGS,
+	FORGE_FILE_FLAGS_KNOWN = FORGE_FILE_FLAG_NETGAME_SPAWNS | FORGE_FILE_FLAG_MODE_SETTINGS | FORGE_FILE_FLAG_CANVAS,
 };
 
 /* a record's flags */
@@ -233,8 +305,182 @@ enum
 	_forge_record_teleporter_in,
 	_forge_record_teleporter_out,
 	_forge_record_kill_zone,
-	NUMBER_OF_FORGE_RECORD_KINDS
+	/* (version 8: the mode markers, no path, their mode fields) */
+	_forge_record_ai_zone,
+	_forge_record_boss,
+	_forge_record_base,
+	_forge_record_core,
+	_forge_record_drop_point,
+	_forge_record_ff_objective,
+	/* (Firefight round 3, Nov 8 2026) a BONUS ROUND marker: where the
+	bonus round's rush comes from and its settings */
+	_forge_record_bonus_round,
+	/* (version 9) a BOUNDARY box: its half extents in the mode fields, its
+	kind in the variant byte */
+	_forge_record_boundary,
+	/* (version 10) the lobby camera */
+	_forge_record_camera,
+	NUMBER_OF_FORGE_RECORD_KINDS,
+	FIRST_FORGE_MODE_RECORD_KIND = _forge_record_ai_zone
 };
+
+/* (version 8) the mode markers' ids, saved in files: stable, new ones at the
+end (forge_modes.c's tables are in this order) */
+enum
+{
+	/* an AI spawn zone's squad (its record's variant) */
+	_forge_mode_squad_marines = 0,
+	_forge_mode_squad_armored_marines,
+	_forge_mode_squad_grunts,
+	_forge_mode_squad_grunts_jackals,
+	_forge_mode_squad_elite_grunts,
+	_forge_mode_squad_elites,
+	_forge_mode_squad_stealth_elites,
+	_forge_mode_squad_hunters,
+	_forge_mode_squad_flood_combat,
+	_forge_mode_squad_flood_pod,
+	_forge_mode_squad_sentinels,
+	_forge_mode_squad_shade_crew,
+	/* (Firefight round 3) an Elite commander with his majors: a heavy
+	wave's */
+	_forge_mode_squad_elite_commanders,
+	NUMBER_OF_FORGE_MODE_SQUADS
+};
+
+enum
+{
+	/* a boss's kind (its record's variant) */
+	_forge_mode_boss_elite_commander = 0,
+	_forge_mode_boss_elite_major,
+	_forge_mode_boss_stealth_elite,
+	_forge_mode_boss_hunter,
+	_forge_mode_boss_flood_carrier,
+	_forge_mode_boss_sentinel_major,
+	NUMBER_OF_FORGE_MODE_BOSSES
+};
+
+/* a boss's name: one of forge_modes.c's own list (never typed text) */
+#define FORGE_FILE_MODE_BOSS_NAMES 16
+
+enum
+{
+	/* a drop point's ship (its record's variant) */
+	_forge_mode_ship_by_species = 0,
+	_forge_mode_ship_pelican,
+	_forge_mode_ship_covenant_dropship,
+	NUMBER_OF_FORGE_MODE_SHIPS
+};
+
+enum
+{
+	/* a Firefight objective's kind (its record's variant) */
+	_forge_mode_objective_defend_zone = 0,
+	_forge_mode_objective_hold_zone,
+	_forge_mode_objective_defend_object,
+	_forge_mode_objective_kill_boss,
+	NUMBER_OF_FORGE_MODE_OBJECTIVES
+};
+
+/* a mode marker's team (its record's team): an AI spawn zone's or a boss's
+side, a base's owner at the start, a core's team, a drop point's side */
+enum
+{
+	/* (a zone, a boss, a drop point: hostile to everyone - its species' own
+	AI team -; a base: no one's; a drop point: any side's) */
+	FORGE_MODE_TEAM_NONE = -1,
+	FORGE_MODE_TEAM_RED = 0,
+	FORGE_MODE_TEAM_BLUE = 1,
+	/* (a drop point's only: the hostile AI's, apart from any side's) */
+	FORGE_MODE_TEAM_HOSTILE = 2,
+};
+
+/* a mode marker's flags (its mode fields' flags) */
+enum
+{
+	/* (a base) a team's home base: taken only once that team's other bases
+	are lost; a core's shield is down while the other team holds it */
+	FORGE_MODE_FLAG_HOME = 1 << 0,
+	/* (a zone, a boss) brought by dropship to the nearest drop point, not
+	made on the ground */
+	FORGE_MODE_FLAG_DROPSHIP = 1 << 1,
+	/* (a boss, Warzone) back after its respawn time once killed */
+	FORGE_MODE_FLAG_RETURNS = 1 << 2,
+	/* (a bonus round marker) the bonus round off */
+	FORGE_MODE_FLAG_OFF = 1 << 3,
+	FORGE_MODE_FLAGS_KNOWN = FORGE_MODE_FLAG_HOME | FORGE_MODE_FLAG_DROPSHIP | FORGE_MODE_FLAG_RETURNS | FORGE_MODE_FLAG_OFF,
+};
+
+/* the Firefight skulls (the settings' skull list): Halo 2's, by its names,
+applied to Halo CE's AI (the owner, Nov 5) */
+enum
+{
+	FORGE_MODE_SKULL_MYTHIC = 1 << 0,
+	FORGE_MODE_SKULL_CATCH = 1 << 1,
+	FORGE_MODE_SKULL_BLACK_EYE = 1 << 2,
+	FORGE_MODE_SKULL_FAMINE = 1 << 3,
+	FORGE_MODE_SKULL_THUNDERSTORM = 1 << 4,
+	FORGE_MODE_SKULL_IRON = 1 << 5,
+	FORGE_MODE_SKULL_BLIND = 1 << 6,
+	FORGE_MODE_SKULLS_KNOWN = 0x7F,
+};
+
+/* the mode markers' ranges (forge_file_mode_record_check) */
+#define FORGE_FILE_MAXIMUM_MODE_MARKERS 64
+#define FORGE_FILE_MAXIMUM_BASES 5
+#define FORGE_FILE_MAXIMUM_DROP_POINTS 8
+/* a radius in quarter world units */
+#define FORGE_FILE_MODE_RADIUS_UNITS 4
+/* the rounds' and the waves' masks: rounds 1 to 5; waves 1 to 5 and the
+heavy wave (0: all). The heavy wave is each round's last (Firefight round 3:
+Reach's, heavier squads; before it the set's last wave, its bosses'): a
+zone of that bit alone comes on it only, HEAVY WAVE ONLY */
+#define FORGE_FILE_MODE_ROUNDS_MASK 0x1F
+#define FORGE_FILE_MODE_WAVES_MASK 0x3F
+#define FORGE_FILE_MODE_HEAVY_WAVE (1 << 5)
+#define FORGE_FILE_MODE_BOSS_WAVE FORGE_FILE_MODE_HEAVY_WAVE
+/* a bonus round marker's seconds and points a kill (Firefight round 3) */
+#define FORGE_FILE_BONUS_MINIMUM_SECONDS 30
+#define FORGE_FILE_BONUS_MAXIMUM_SECONDS 120
+/* (version 9) a boundary's kinds (its record's variant), its half extents'
+range (quarter world units: 500 world units at most along and across, its
+half height a byte's), and the most of them in a layout */
+#define FORGE_FILE_BOUNDARY_WALL 0
+#define FORGE_FILE_BOUNDARY_KILL 1
+#define NUMBER_OF_FORGE_FILE_BOUNDARY_KINDS 2
+#define FORGE_FILE_BOUNDARY_MAXIMUM_HALF_UNITS 2000
+#define FORGE_FILE_BOUNDARY_MAXIMUM_HEIGHT_UNITS 255
+#define FORGE_FILE_MAXIMUM_BOUNDARIES 32
+/* (version 10) the lobby camera's pitch, degrees up from level, kept as
+pitch + this in its radius byte; one a layout */
+#define FORGE_FILE_CAMERA_PITCH_OFFSET 90
+#define FORGE_FILE_MAXIMUM_CAMERAS 1
+/* (version 11) the canvas: the categories of the map's own placements (ids
+saved in files: stable, new ones at the end), its block's sizes and ranges */
+enum
+{
+	_forge_canvas_scenery = 0,
+	_forge_canvas_bipeds,
+	_forge_canvas_vehicles,
+	_forge_canvas_weapons,
+	_forge_canvas_equipment,
+	_forge_canvas_machines,
+	_forge_canvas_controls,
+	_forge_canvas_light_fixtures,
+	_forge_canvas_sound_scenery,
+	/* a multiplayer map's item spawns (the scenario's netgame equipment) */
+	_forge_canvas_items,
+	NUMBER_OF_FORGE_CANVAS_CATEGORIES
+};
+#define FORGE_FILE_CANVAS_VERSION 1
+#define FORGE_FILE_CANVAS_HEADER_SIZE 8
+#define FORGE_FILE_CANVAS_ENTRY_SIZE 4
+#define FORGE_FILE_MAXIMUM_CANVAS_ENTRIES 1024
+#define FORGE_FILE_CANVAS_MAXIMUM_INDEX 8191
+#define FORGE_FILE_CANVAS_CATEGORIES_MASK ((1 << NUMBER_OF_FORGE_CANVAS_CATEGORIES) - 1)
+/* what BLANK CANVAS takes away unless told otherwise: all but the doors and
+machines, the controls, the light fixtures and the sound scenery */
+#define FORGE_FILE_CANVAS_DEFAULT ((1 << _forge_canvas_scenery) | (1 << _forge_canvas_bipeds) | (1 << _forge_canvas_vehicles) | \
+	(1 << _forge_canvas_weapons) | (1 << _forge_canvas_equipment) | (1 << _forge_canvas_items))
 
 /* why a file was refused (forge_file_decode), in the order checked */
 enum
@@ -276,6 +522,34 @@ struct forge_file_path
 	char path[FORGE_FILE_PATH_MAXIMUM_LENGTH + 1];
 };
 
+/* (version 8) a mode marker's fields, its record's 12 reserved bytes in
+this order: radius u8 (quarter world units), rounds u8, waves u8, points
+u16, toughness u8, seconds u16, start minute u8, index u8, flags u8, a zero */
+struct forge_file_mode_fields
+{
+	unsigned char radius;
+	/* (FORGE_FILE_MODE_ROUNDS_MASK, FORGE_FILE_MODE_WAVES_MASK; 0 all) */
+	unsigned char rounds;
+	unsigned char waves;
+	/* a boss's points, a core's or a defended object's hull; a bonus round's
+	points a kill */
+	unsigned short points;
+	/* a boss's body and shield, times this (1 to 8) */
+	unsigned char toughness;
+	/* a base's capture time, a Firefight objective's time, a bonus round's
+	length */
+	unsigned short seconds;
+	/* (Warzone) the minute a zone's waves or a boss begin */
+	unsigned char start_minute;
+	/* a boss's name (below FORGE_FILE_MODE_BOSS_NAMES); a base's letter (0
+	to FORGE_FILE_MAXIMUM_BASES - 1, A to E, each base its own); an AI spawn
+	zone's base it defends (0 none, else its letter + 1: its squads hold
+	that base, which cannot be taken while one of them lives) */
+	unsigned char index;
+	/* FORGE_MODE_FLAG_* */
+	unsigned char flags;
+};
+
 struct forge_file_record
 {
 	unsigned short path_index;
@@ -291,8 +565,86 @@ struct forge_file_record
 	unsigned char flags;
 	/* (version 2, a character's only: FORGE_AI_TEAM_*; else 0) */
 	unsigned char ai_team;
+	/* (version 8, a mode marker's only; else zeros) */
+	struct forge_file_mode_fields mode;
 };
 
+/* (version 8) the Firefight settings (the design's section 3), each a byte
+but the point limit */
+struct forge_file_firefight_settings
+{
+	/* 0 endless, 1 to 5 (3) */
+	unsigned char sets;
+	/* 1 to 5 (3) */
+	unsigned char rounds;
+	/* 1 to 5 (5) */
+	unsigned char waves;
+	/* the team's lives: 0 unlimited, 1 to 30 (7) */
+	unsigned char lives;
+	/* given back for each round cleared, 0 to 3 (1) */
+	unsigned char lives_per_round;
+	/* easy, normal, heroic, legendary (normal: 1) */
+	unsigned char difficulty;
+	/* off, each set, each round (each set: 1) */
+	unsigned char ramp;
+	/* off, one more each set, all from the start (each set: 1) */
+	unsigned char skull_mode;
+	/* 0 off, 3 to 15 (0) */
+	unsigned char round_minutes;
+	/* round time run out: 0 the game over, 1 a life lost (0) */
+	unsigned char round_time_rule;
+	/* the players' allied AI on (1) */
+	unsigned char allies;
+	/* the map's weapons put back between rounds (1) */
+	unsigned char resupply;
+};
+
+/* (version 8) the Warzone settings */
+struct forge_file_warzone_settings
+{
+	/* 250 to 2000 (1000) */
+	unsigned short point_limit;
+	/* the cores on (1): destroyed, the other team wins early */
+	unsigned char cores;
+	/* points: a player killed 0 to 100 (5), a base captured 0 to 100 (50),
+	each base held each 5 s 0 to 100 (1) */
+	unsigned char player_kill_points;
+	unsigned char base_capture_points;
+	unsigned char base_hold_points;
+	/* the first wave after 0 to 300 s (30), then every 30 to 300 s (90) */
+	unsigned short first_wave_seconds;
+	unsigned short wave_seconds;
+	/* the AI's shares: hostile 0 to 32 (16), each team's allies 0 to 16 (8);
+	32 in all at most */
+	unsigned char hostile_ai;
+	unsigned char red_ai;
+	unsigned char blue_ai;
+	/* 0 none, to 60 (20) */
+	unsigned char time_limit_minutes;
+};
+
+struct forge_file_mode_settings
+{
+	struct forge_file_firefight_settings firefight;
+	struct forge_file_warzone_settings warzone;
+	/* the Firefight skulls the map maker chose (FORGE_MODE_SKULL_*) */
+	unsigned short skulls;
+};
+
+/* (version 11) the canvas: the categories taken away whole, and the single
+placements kept of those or taken away of the others */
+struct forge_file_canvas_entry
+{
+	unsigned char category;
+	unsigned char kept;
+	unsigned short index;
+};
+struct forge_file_canvas
+{
+	unsigned short categories;
+	short entry_count;
+	struct forge_file_canvas_entry entries[FORGE_FILE_MAXIMUM_CANVAS_ENTRIES];
+};
 /* a map variant, as read or to be written */
 struct forge_file_layout
 {
@@ -312,6 +664,10 @@ struct forge_file_layout
 	char author[FORGE_FILE_AUTHOR_SIZE];
 	char description[FORGE_FILE_DESCRIPTION_SIZE];
 	char date[FORGE_FILE_DATE_SIZE];
+	/* (version 8, with FORGE_FILE_FLAG_MODE_SETTINGS; else zeros) */
+	struct forge_file_mode_settings modes;
+	/* (version 11, with FORGE_FILE_FLAG_CANVAS; else zeros) */
+	struct forge_file_canvas canvas;
 };
 
 /* ---------- prototypes/FORGE_FILES.C */
@@ -350,10 +706,21 @@ int forge_file_layout_check(
 	char const *expected_map);
 
 /* the version a layout is written as: its own when set, else the lowest
-that holds it (7 with an object's physics, 6 with a game type object, 5 with a teleporter, 4 with a player spawn, 3 with a
+that holds it (11 with a canvas, 10 with a lobby camera, 9 with a boundary, 8 with a mode marker or the mode settings, 7 with an object's physics, 6 with a game type object, 5 with a teleporter, 4 with a player spawn, 3 with a
 respawning character, 2 when a record has an AI setting) */
 int forge_file_layout_version(
 	struct forge_file_layout const *layout);
+
+/* (version 8) the mode settings' defaults (the design's), and whether
+settings are all within their ranges */
+void forge_file_mode_settings_default(
+	struct forge_file_mode_settings *settings);
+int forge_file_mode_settings_valid(
+	struct forge_file_mode_settings const *settings);
+
+/* whether a record's kind is a mode marker's (version 8) */
+int forge_file_kind_is_mode_marker(
+	int kind);
 
 /* a result's words (English, for the log) */
 char const *forge_file_result_name(

@@ -5825,6 +5825,12 @@ void main_loop(
 						void menu_scene_objects_update(void);
 
 						forge_update();
+						/* (and command mode's commander: port/linux/game/command.c) */
+						{
+							void command_update(void);
+
+							command_update();
+						}
 						/* (and the characters in the Halo 3 menus'
 						scenes: port/linux/game/menu_scene_objects.c) */
 						menu_scene_objects_update();

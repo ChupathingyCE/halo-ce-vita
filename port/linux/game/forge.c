@@ -156,6 +156,9 @@ HALO_TEST_COMMANDS):
   forge property yaw|pitch|roll [-]  the held object's exact angle stepped
                            (back with -), as its properties' rows; "property
                            resetrot" its angles none
+  forge objective zone|boss|base|core|drop|ffobjective  a game mode's
+                           marker placed and held (the browser's OBJECTIVES);
+                           "property row <n> [-]" steps its row n
   forge distance <wu>      the held object that far from the camera
   forge snap [on|off]      the Forge menu's SNAP (the grid), flipped or set
   forge blocks ray|projectiles  (tests) a projectile's line along the view
@@ -235,7 +238,10 @@ Each logs what it did ("forge: ...").
 #include "interface/hud_messaging.h"
 #include "items/equipment_definitions.h"
 #include "items/weapon_definitions.h"
+#include "items/weapons.h"
 #include "main/main.h"
+#include "cutscene/cinematics.h"
+#include "hs/hs.h"
 #include "objects/damage.h"
 #include "objects/objects.h"
 #include "objects/object_types.h"
@@ -259,7 +265,12 @@ Each logs what it did ("forge: ...").
 #include "units/unit_definitions.h"
 #include "networking/network_game_globals.h"
 
+#include "command.h"
 #include "forge.h"
+#include "forge_modes.h"
+#include "command_squads.h"
+#include "command_hud.h"
+#include "carnage_report.h"
 #include "forge_blocks.h"
 #include "forge_files.h"
 #include "forge_net_protocol.h"
@@ -271,6 +282,7 @@ Each logs what it did ("forge: ...").
 #include "../src/lang.h"
 #include "map_checks.h"
 #include "../src/forge_store.h"
+#include "../src/p2p_fileshare.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -435,6 +447,13 @@ static char const *const forge_category_names[NUMBER_OF_FORGE_CATEGORIES] =
 static char const *const forge_category_log_names[NUMBER_OF_FORGE_CATEGORIES] =
 {
 	"vehicles", "weapons", "equipment", "scenery", "characters", "blocks", "teleporters", "objectives", "spawning",
+};
+/* the OBJECTIVES category's game modes' items' names, after its game type
+objects (forge.h's order) */
+static char const *const forge_mode_marker_names[NUMBER_OF_FORGE_MODE_MARKERS] =
+{
+	N_("AI Spawn Zone"), N_("Boss"), N_("Base"), N_("Core"), N_("Drop Point"), N_("Firefight Objective"), N_("Bonus Round"),
+	N_("Boundary"), N_("Lobby Camera"),
 };
 /* (forge_spawns.inc) the markers' categories' items (SPAWNING's,
 TELEPORTERS'), its kinds' names */
@@ -760,6 +779,12 @@ struct forge_spawn
 	short channel;
 	/* where, facing along the ground */
 	struct forge_transform home;
+	/* (a game mode's marker's: forge_mode_markers.inc; its record's fields,
+	forge_files.h version 5) */
+	unsigned char variant;
+	unsigned char count;
+	unsigned short respawn_seconds;
+	struct forge_file_mode_fields mode;
 };
 
 /* (the players a round's spawns are kept for: absolute indices) */
@@ -789,6 +814,10 @@ static struct
 	boolean game_requested;
 	char game_map[256];
 	boolean game_active;
+	/* (editor6) a game asked for from within a game (Ark Editor's play and
+	back): the map loads again first - the session never starts on the
+	map still loaded, which may be the same one (forge_map_loaded clears it) */
+	boolean reload_pending;
 	/* the monitor */
 	boolean active;
 	short local_player_index;
@@ -968,7 +997,7 @@ static struct
 	/* (forge_spawns.inc) the layout's player spawn points; the players that
 	spawned this round (a bit each: a round's first spawn takes the initial
 	spawns) and since when each waits for a blocked one */
-	struct forge_spawn spawns[FORGE_MAXIMUM_SPAWNS];
+	struct forge_spawn spawns[FORGE_SPAWN_TABLE];
 	short spawn_count;
 	unsigned long spawns_spawned;
 	long spawn_wait_since[FORGE_SPAWN_PLAYERS];
@@ -1002,6 +1031,9 @@ static struct
 	struct forge_touch_finger test_touch[2];
 	short test_touch_count;
 	boolean test_touch_probe;
+	/* (forge_mode_markers.inc) the game modes' settings, the layout's (the
+	map maker's; the defaults until a layout gives them) */
+	struct forge_file_mode_settings mode_settings;
 } forge_globals = { FALSE, "", FALSE, FALSE, 0, NONE, FALSE, NONE, 0.f, { 0.f }, { 0.f }, _forge_speed_normal };
 
 /* ---------- private code */
@@ -1081,6 +1113,21 @@ static char const *const forge_physics_log_names[NUMBER_OF_FORGE_PHYSICS_MODES] 
 static void forge_netgame_log(void);
 static char const *forge_netgame_flags_warning(void);
 static void forge_spawn_remove(struct forge_spawn *spawn);
+static short forge_spawn_points(void);
+static boolean forge_kind_is_mode_marker(short kind);
+static void forge_mode_marker_name(struct forge_spawn const *spawn, char *name, int size);
+static void forge_mode_marker_log(char const *what, struct forge_spawn const *spawn);
+static void forge_mode_marker_properties_get(struct forge_spawn const *spawn, struct forge_properties *properties);
+static void forge_mode_marker_property_apply(struct forge_spawn *spawn, short property, short step, boolean held);
+static void forge_mode_marker_choose(short kind);
+static short forge_mode_markers_capture(struct forge_file_layout *layout);
+static void forge_mode_markers_from_layout(struct forge_file_layout const *layout);
+static short forge_mode_markers_of_kind(short kind);
+static short forge_mode_markers_count(void);
+static void forge_mode_marker_color(struct forge_spawn const *spawn, real *red, real *green, real *blue);
+static real forge_mode_marker_radius(struct forge_spawn const *spawn);
+static void forge_spawn_grounded(real_point3d *position);
+static void forge_mode_boundary_extents(struct forge_spawn const *spawn, real *along, real *across, real *up);
 static void forge_net_update(void);
 static void forge_net_monitor_pack_want(void);
 static void forge_net_monitor_models_update(void);
@@ -1579,6 +1626,23 @@ static void forge_placed_update(
 
 		if (placed->object_index != NONE && !forge_object_alive(placed->object_index))
 			placed->object_index = NONE;
+		/* (the mode layouts, Nov 9 2026) a placed item - a weapon, ammunition,
+		a health pack: a layout's pickup - stays while no one holds it: the
+		game engine's purge deletes every item unowned for 30 s
+		(game_engine_update_purge), which took a layout's pickups 30 s after
+		they were placed. Dropped by a player, it is the player's as any */
+		if (placed->object_index != NONE && !placed->ai)
+		{
+			short type = object_get_type(placed->object_index);
+
+			if (type == _object_type_weapon || type == _object_type_equipment)
+			{
+				struct item_datum *item = item_get(placed->object_index);
+
+				if (item && !TEST_FLAG(item->item.flags, _item_attached_to_unit_bit) && item->object.owner_player_index == NONE)
+					item->item.last_owned_time = game_time_get();
+			}
+		}
 		if (placed->ai)
 		{
 			forge_globals.ai_count++;
@@ -2153,7 +2217,7 @@ short forge_group_placed_count(
 		return 0;
 	if (first != NONE)
 	{
-		for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+		for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 		{
 			short kind = forge_globals.spawns[index].kind;
 
@@ -4399,7 +4463,11 @@ static boolean forge_variant_capture(
 		}
 	}
 	if (spawns)
+	{
 		skipped = (short)(skipped + forge_spawns_capture(layout));
+		/* (the game modes' markers and settings, version 5's: a save's) */
+		skipped = (short)(skipped + forge_mode_markers_capture(layout));
+	}
 	if (skipped)
 		platform_log("forge: %d placed objects left out of the map variant", skipped);
 	snprintf(layout->title, sizeof(layout->title), "%s", title);
@@ -4542,6 +4610,10 @@ static void forge_variant_apply(
 		}
 		if (record->kind == _forge_record_flag && forge_file_layout_version(layout) >= 6)
 			continue;
+		/* (a game mode's marker: taken as the map loaded too,
+		forge_mode_markers_from_layout) */
+		if (forge_file_kind_is_mode_marker(record->kind))
+			continue;
 		if (record->kind != _forge_record_object)
 		{
 			other_kinds++;
@@ -4651,7 +4723,7 @@ static void forge_session_update(
 {
 	long player_index;
 
-	if (!forge_globals.game_active)
+	if (!forge_globals.game_active || forge_globals.reload_pending)
 		return;
 	/* (a local game, or a network Forge game's host or client:
 	forge_net.inc; a map variant played, any game this machine hosts -
@@ -5038,6 +5110,35 @@ short forge_map_count(
 	return (short)NUMBEROF(forge_maps);
 }
 
+static short forge_map_of_level(
+	char const *level_name);
+
+short forge_map_lobby_count(
+	void)
+{
+	/* (1.1.4: the lobby's maps are every map of Forge's: no campaign
+	missions, no editor) */
+	return forge_map_count();
+}
+
+short forge_map_of_word(
+	char const *word)
+{
+	short map_index;
+	char *end = NULL;
+	long number;
+
+	if (!word || !word[0])
+		return NONE;
+	number = strtol(word, &end, 10);
+	if (end && *end == 0)
+		return number >= 0 && number < forge_map_count() ? (short)number : NONE;
+	map_index = forge_map_of_short(word);
+	if (map_index != NONE)
+		return map_index;
+	return forge_map_of_level(word);
+}
+
 /* (port) the level a lobby map is played as: the Xbox's, or - its file not
 in the maps folder - MCC's own copy of it in the Halo content folder
 (levels\test\mcc_bloodgulch\mcc_bloodgulch, map_checks.h), as an install
@@ -5121,13 +5222,33 @@ void forge_variant_build(
 	struct game_variant *variant)
 {
 	static wchar_t const name[] = L"Forge";
+	/* (a Command game is named the mode's: the carnage report's title,
+	command.c) */
+	static wchar_t const command_name[] = L"Command";
 
 	build_game_variant_slayer(variant);
 	csmemset(variant->human_readable_game_description, 0, sizeof(variant->human_readable_game_description));
-	csmemcpy(variant->human_readable_game_description, name, sizeof(name));
+	if (command_game_asked())
+		csmemcpy(variant->human_readable_game_description, command_name, sizeof(command_name));
+	else
+		csmemcpy(variant->human_readable_game_description, name, sizeof(name));
 	variant->universal_variant.score_to_win = 999;
 	variant->universal_variant.respawn_time = 0;
 	variant->universal_variant.suicide_penalty = 0;
+}
+
+/* (1.2.0) a network Command game's variant: Forge's, named the mode's, in
+teams - red's commanders on team 0, blue's on team 1, as the lobby has them
+(command.c's command_player_side) */
+void forge_command_variant_build(
+	struct game_variant *variant)
+{
+	static wchar_t const command_name[] = L"Command";
+
+	forge_variant_build(variant);
+	csmemset(variant->human_readable_game_description, 0, sizeof(variant->human_readable_game_description));
+	csmemcpy(variant->human_readable_game_description, command_name, sizeof(command_name));
+	variant->universal_variant.teams = TRUE;
 }
 
 boolean forge_game_start(
@@ -5200,6 +5321,7 @@ boolean forge_game_start(
 	csstrncpy(forge_globals.game_map, forge_maps[map_index].path, sizeof(forge_globals.game_map) - 1);
 	forge_globals.game_map[sizeof(forge_globals.game_map) - 1] = 0;
 	forge_globals.game_requested = TRUE;
+	forge_globals.reload_pending = forge_globals.game_active;
 	platform_log("forge: a Forge game of %s asked for%s", forge_globals.game_map,
 		forge_map_path(map_index) != forge_maps[map_index].path ? " (MCC's own copy of the map)" : "");
 	/* (as "main menu switch to solo game": the map loads after the main
@@ -5777,6 +5899,8 @@ void forge_map_loaded(
 			forge_globals.playing = forge_net_client_playing();
 		}
 	}
+	/* (the map asked for is the one loaded, by its path) */
+	forge_globals.reload_pending = FALSE;
 	forge_globals.game_active = forge_globals.game_requested && scenario_name &&
 		!_stricmp(scenario_name, forge_globals.game_map);
 	if (forge_globals.game_requested && !forge_globals.game_active)
@@ -5787,7 +5911,10 @@ void forge_map_loaded(
 	spawns - forge_spawns.inc; none of another map's, nor in another game) */
 	forge_spawns_clear();
 	if (forge_globals.game_active && forge_globals.variant_pending)
+	{
 		forge_spawns_from_layout(&forge_variant_layout);
+		forge_mode_markers_from_layout(&forge_variant_layout);
+	}
 	/* (its teleporters the engine's netgame flags as its game starts:
 	forge_netgame.inc; any other game's the map's own) */
 	forge_netgame_changed();
@@ -5795,6 +5922,8 @@ void forge_map_loaded(
 	Forge game's the Monitor's after them, for the other monitors) */
 	if (forge_globals.game_active)
 		forge_packs_load();
+	/* (and a Command game's: its map built out - command.c) */
+	command_map_loaded(scenario_name, forge_globals.game_active);
 	forge_net_monitor_pack_want();
 	/* (a network Forge game's host keeps its request between games: its
 	lobby's next START FORGE plays it again) */
@@ -6373,7 +6502,12 @@ void forge_update(
 	if (!forge_globals.active)
 	{
 		forge_globals.browser_chosen = FALSE;
-		if ((toggle_pressed && !menu_open) || forge_globals.toggle_requested)
+		/* (command mode runs: the combo leaves a unit dropped into, never
+		the monitor - port/linux/game/command.c -; the Forge menu's MONITOR
+		waits for command mode to end, which it asks too) */
+		if (command_active())
+			;
+		else if ((toggle_pressed && !menu_open) || forge_globals.toggle_requested)
 		{
 			forge_globals.toggle_requested = FALSE;
 			forge_begin();
@@ -7295,6 +7429,9 @@ boolean forge_command(
 		team's row) */
 		else if (!strncmp(rest, "channel", 7) || !strncmp(rest, "index", 5))
 			property = _forge_property_team;
+		/* (a game mode's marker's: "row <n> [-]", its own row n from 0) */
+		else if (!strncmp(rest, "row ", 4) && atoi(rest + 4) >= 0 && atoi(rest + 4) < NUMBER_OF_FORGE_PROPERTIES)
+			property = (short)atoi(rest + 4);
 		if (strchr(rest, '-'))
 			step = -1;
 		if (property == NONE || (!forge_properties_target() && !forge_properties_spawn()))
@@ -7473,6 +7610,28 @@ boolean forge_command(
 	SPAWNING item placed and held; "spawns": the layout's player spawn
 	points and the markers drawn; "spawndelete #<id>|#last": one deleted, as
 	Y on its marker */
+	/* (forge_mode_markers.inc) "objective zone|boss|base|core|drop|ffobjective":
+	the browser's OBJECTIVES item placed and held (then "property row <n>"
+	steps its rows) */
+	if (!strcmp(word, "objective"))
+	{
+		static char const *const kinds[NUMBER_OF_FORGE_MODE_MARKERS] = { "zone", "boss", "base", "core", "drop", "ffobjective",
+			"bonus", "boundary" };
+		short kind;
+
+		if (!forge_globals.active)
+			return FALSE;
+		for (kind = 0; kind < NUMBER_OF_FORGE_MODE_MARKERS && strcmp(rest, kinds[kind]); kind++)
+			;
+		if (kind >= NUMBER_OF_FORGE_MODE_MARKERS)
+			return FALSE;
+		if (forge_globals.held_marker_id)
+			forge_marker_drop();
+		if (object_try_and_get(forge_globals.held_object_index))
+			forge_drop();
+		forge_mode_marker_choose((short)(FIRST_FORGE_MODE_MARKER + kind));
+		return TRUE;
+	}
 	if (!strcmp(word, "spawnpoint"))
 	{
 		if (!forge_globals.active)
@@ -7514,7 +7673,9 @@ boolean forge_command(
 			forge_spawns_of_kind(_forge_spawn_teleporter_receiver), forge_spawns_of_kind(_forge_spawn_teleporter_sender),
 			forge_spawns_of_kind(_forge_spawn_teleporter_receiver), forge_globals.markers_drawn,
 			forge_globals.map_markers_drawn, forge_objects_counted(), FORGE_MAXIMUM_OBJECTS);
-		for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+		if (forge_mode_markers_count())
+			platform_log("forge: %d game mode markers", forge_mode_markers_count());
+		for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 			forge_spawn_log("spawns:", &forge_globals.spawns[index]);
 		platform_log("forge: %d game type objects (%d CTF flags, %d hill points, %d oddball spawns, %d race checkpoints)",
 			forge_objectives_count(NONE, NONE), forge_spawns_of_kind(_forge_spawn_flag), forge_spawns_of_kind(_forge_spawn_hill),
@@ -7686,3 +7847,5 @@ boolean forge_command(
 #include "forge_physics.inc"
 #include "forge_precision.inc"
 #include "forge_touch.inc"
+#include "forge_mode_markers.inc"
+

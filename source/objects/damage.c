@@ -109,6 +109,9 @@ symbols in this file:
 #endif
 #include "damage.h"
 #include "ai/ai.h"
+#ifdef HALO_LINUX
+boolean command_ai_damage_owner(long owner_object_index);
+#endif
 #include "cseries/errors.h"
 #include "effects/effects.h"
 #include "effects/player_effects.h"
@@ -1549,7 +1552,14 @@ void object_cause_damage(
 		SET_FLAG(damage->flags, _damage_kill_instantly_bit, TRUE);
 	}
 	else if (damage->owner_team_index != NONE &&
-		game_team_is_enemy(damage->owner_team_index, _game_team_player))
+		(game_team_is_enemy(damage->owner_team_index, _game_team_player)
+#ifdef HALO_LINUX
+		/* port: a Command game (port/linux/game/command.c, C13): every
+		soldier's damage, both armies', the Legendary enemies' - not only
+		the player's enemies' */
+		|| command_ai_damage_owner(damage->owner_object_index)
+#endif
+		))
 	{
 		total_damage *= game_difficulty_get_value(_game_difficulty_value_enemy_damage);
 		damage_was_modified = TRUE;
@@ -1715,6 +1725,17 @@ void object_cause_damage(
 		}
 	}
 
+#ifdef HALO_LINUX
+	/* port: command mode's dropships - the campaign's, which no damage
+	hurts - kept a hull of their own, to be shot down, and who hurt each
+	unit last, for the kills' tally (port/linux/game/command.c; nothing
+	unless a Command game runs) */
+	{
+		extern void command_object_damaged(long object_index, real damage, long owner_object_index);
+
+		command_object_damaged(object_index, total_damage, damage->owner_object_index);
+	}
+#endif
 	if (total_damage > 0.f)
 	{
 		do
@@ -2107,15 +2128,20 @@ void object_damage_update(
 			long player_index = player_index_from_unit_index(object_index);
 			real overcharge = object->object.shield_vitality - 1.f;
 
+			/* port: an overshield on a unit no player has (command mode's
+			Spartan as AI, port/linux/game/command.c) drains the same, with no
+			player's HUD to tick */
 			if (0.00074074074f > overcharge)
 			{
 				object->object.shield_vitality = 1.f;
-				hud_tick_shield(player_index, overcharge);
+				if (player_index != NONE)
+					hud_tick_shield(player_index, overcharge);
 			}
 			else
 			{
 				object->object.shield_vitality -= 0.00074074074f;
-				hud_tick_shield(player_index, 0.00074074074f);
+				if (player_index != NONE)
+					hud_tick_shield(player_index, 0.00074074074f);
 			}
 		}
 		else if (object->object.shield_vitality < 1.f)

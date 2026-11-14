@@ -75,12 +75,26 @@ static struct forge_spawn *forge_spawn_of_id(
 
 	if (id == NONE || id == 0)
 		return NULL;
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		if (forge_globals.spawns[index].id == id)
 			return &forge_globals.spawns[index];
 	}
 	return NULL;
+}
+
+/* the table's markers but its game modes' (forge_mode_markers.inc: kept
+apart, FORGE_MAXIMUM_MODE_MARKERS of them): the spawn points, teleporters
+and game type objects, FORGE_MAXIMUM_SPAWNS of them at most */
+static short forge_spawn_points(
+	void)
+{
+	short index;
+	short count = 0;
+
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
+		count += forge_kind_is_mode_marker(forge_globals.spawns[index].kind) ? 0 : 1;
+	return count;
 }
 
 static short forge_spawns_of_kind(
@@ -89,7 +103,7 @@ static short forge_spawns_of_kind(
 	short index;
 	short count = 0;
 
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 		count += forge_globals.spawns[index].kind == kind ? 1 : 0;
 	return count;
 }
@@ -129,8 +143,14 @@ static void forge_spawn_name(
 	char *name,
 	int size)
 {
-	char const *kind = T(forge_spawn_kind_names[spawn->kind % NUMBER_OF_FORGE_MARKER_KINDS]);
+	char const *kind;
 
+	if (forge_kind_is_mode_marker(spawn->kind))
+	{
+		forge_mode_marker_name(spawn, name, size);
+		return;
+	}
+	kind = T(forge_spawn_kind_names[spawn->kind % NUMBER_OF_FORGE_MARKER_KINDS]);
 	if (forge_spawn_is_teleporter(spawn))
 		snprintf(name, (size_t)size, T("%s, Channel %d"), kind, spawn->channel + 1);
 	/* (a game type object's: its team, hill, ball or order) */
@@ -154,6 +174,11 @@ static void forge_spawn_log(
 	char const *what,
 	struct forge_spawn const *spawn)
 {
+	if (forge_kind_is_mode_marker(spawn->kind))
+	{
+		forge_mode_marker_log(what, spawn);
+		return;
+	}
 	if (forge_spawn_is_objective(spawn))
 	{
 		platform_log("forge: %s the %s #%ld (index %d) at %.2f %.2f %.2f facing %.2f %.2f", what,
@@ -260,7 +285,14 @@ static struct forge_spawn *forge_spawn_add(
 	boolean teleporter = kind == _forge_spawn_teleporter_sender || kind == _forge_spawn_teleporter_receiver;
 	boolean objective = kind >= _forge_spawn_flag && kind < NUMBER_OF_FORGE_MARKER_KINDS;
 
-	if (forge_globals.spawn_count < 0 || forge_globals.spawn_count >= FORGE_MAXIMUM_SPAWNS)
+	if (forge_globals.spawn_count < 0 || forge_globals.spawn_count >= FORGE_SPAWN_TABLE ||
+		forge_spawn_points() >= FORGE_MAXIMUM_SPAWNS)
+	{
+		return NULL;
+	}
+	if (objective)
+		channel = (short)PIN(channel, 0, forge_objective_indices(kind) - 1);
+	if (!forge_marker_kind_room(kind, objective ? channel : NONE, FALSE))
 		return NULL;
 	if (objective)
 		channel = (short)PIN(channel, 0, forge_objective_indices(kind) - 1);
@@ -303,6 +335,7 @@ static void forge_spawns_clear(
 {
 	forge_globals.spawn_count = 0;
 	forge_globals.spawns_spawned = 0;
+	forge_file_mode_settings_default(&forge_globals.mode_settings);
 	csmemset(forge_globals.spawn_wait_since, 0, sizeof(forge_globals.spawn_wait_since));
 }
 
@@ -408,13 +441,16 @@ static short forge_spawns_capture(
 	short skipped = 0;
 	short unpaired = 0;
 
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		struct forge_spawn const *spawn = &forge_globals.spawns[index];
 		struct forge_file_record *record;
 		float angles[3];
 		short axis;
 
+		/* (the game modes' markers: forge_mode_markers_capture's) */
+		if (forge_kind_is_mode_marker(spawn->kind))
+			continue;
 		if (spawn->kind == _forge_spawn_teleporter_sender &&
 			!forge_teleporters_count(_forge_spawn_teleporter_receiver, spawn->channel))
 		{
@@ -489,6 +525,8 @@ static short forge_spawns_capture(
 	return skipped;
 }
 
+static void forge_spawn_yaw_step(struct forge_spawn *spawn, short property, short step, boolean held);
+
 /* a spawn point's property stepped (the properties window's rows: team,
 the respawn's row its game type, the place at start's its kind, yaw): the
 host's and a local game's (a client asks the host: forge_property_apply).
@@ -499,6 +537,12 @@ static void forge_spawn_property_apply(
 	short step,
 	boolean held)
 {
+	/* (a game mode's marker: its own rows, each its own: forge_mode_markers.inc) */
+	if (forge_kind_is_mode_marker(spawn->kind))
+	{
+		forge_mode_marker_property_apply(spawn, property, step, held);
+		return;
+	}
 	/* (a teleporter's: its channel in the team's row, sender or receiver in
 	the place at start's, its yaw; no game type) */
 	if (forge_spawn_is_teleporter(spawn) && property == _forge_property_team)
@@ -558,6 +602,22 @@ static void forge_spawn_property_apply(
 		break;
 	case _forge_property_yaw:
 	case _forge_property_reset_rotation:
+		forge_spawn_yaw_step(spawn, property, step, held);
+		break;
+	default:
+		return;
+	}
+	forge_spawn_log("properties of", spawn);
+}
+
+/* a spawn point's (or a game mode's marker's) yaw stepped by the rotate
+mode's snapping, or reset (property _forge_property_reset_rotation) */
+static void forge_spawn_yaw_step(
+	struct forge_spawn *spawn,
+	short property,
+	short step,
+	boolean held)
+{
 	{
 		/* (the yaw alone: a player spawns upright) */
 		real_vector3d *forward = held ? &forge_globals.held_forward : &spawn->home.forward;
@@ -579,12 +639,7 @@ static void forge_spawn_property_apply(
 		forward->k = 0.f;
 		if (held)
 			forge_globals.held_up = *global_up3d;
-		break;
 	}
-	default:
-		return;
-	}
-	forge_spawn_log("properties of", spawn);
 }
 
 static void forge_spawn_properties_get(
@@ -595,6 +650,11 @@ static void forge_spawn_properties_get(
 		&spawn->home.forward;
 	short game_type = forge_spawn_game_type_index(spawn->game_types);
 
+	if (forge_kind_is_mode_marker(spawn->kind))
+	{
+		forge_mode_marker_properties_get(spawn, properties);
+		return;
+	}
 	forge_spawn_name(spawn, properties->name, sizeof(properties->name));
 	properties->spawn = TRUE;
 	properties->spawn_kind = spawn->kind;
@@ -654,12 +714,12 @@ static void forge_spawn_choose(
 
 	if (!forge_camera_get(&position, &forward))
 		return;
-	if (forge_objects_counted() >= FORGE_MAXIMUM_OBJECTS || forge_globals.spawn_count >= FORGE_MAXIMUM_SPAWNS ||
+	if (forge_objects_counted() >= FORGE_MAXIMUM_OBJECTS || forge_spawn_points() >= FORGE_MAXIMUM_SPAWNS ||
 		!forge_marker_kind_room(kind, NONE, FALSE))
 	{
 		if (!forge_marker_kind_room(kind, NONE, TRUE))
 			;
-		else if (forge_globals.spawn_count >= FORGE_MAXIMUM_SPAWNS)
+		else if (forge_spawn_points() >= FORGE_MAXIMUM_SPAWNS)
 			forge_notice(T("Spawn points full: %d. Delete one to place another."), FORGE_MAXIMUM_SPAWNS);
 		else
 			forge_notice(T("Budget full: %d objects. Delete one to place another."), FORGE_MAXIMUM_OBJECTS);
@@ -762,11 +822,13 @@ short forge_spawn_location(
 	long now = game_time_get();
 	unsigned long spawn_seed;
 
-	if (!forge_globals.game_active || forge_globals.spawn_count <= 0 || player_index == NONE)
+	if (!forge_globals.game_active || player_index == NONE)
 		return _forge_spawn_location_map;
 	player = player_get(player_index);
 	absolute = (short)DATUM_INDEX_TO_ABSOLUTE_INDEX(player_index);
 	if (absolute < 0 || absolute >= FORGE_SPAWN_PLAYERS)
+		return _forge_spawn_location_map;
+	if (forge_globals.spawn_count <= 0)
 		return _forge_spawn_location_map;
 	game_bit = forge_spawn_game_bit();
 	teams = game_engine_running() && game_engine_has_teams();
@@ -789,7 +851,7 @@ short forge_spawn_location(
 		short pass_fitting = 0;
 		short index;
 
-		for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+		for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 		{
 			struct forge_spawn const *spawn = &forge_globals.spawns[index];
 			real rating;

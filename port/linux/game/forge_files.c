@@ -23,7 +23,12 @@ taken whole or not at all). The checks, in order:
   respawn, count, game types, variant and flags in range (version 2's AI
   team and brain flag only on a character's record, the team one of
   FORGE_AI_TEAM_*; both zero in version 1); every float finite, positions
-  within the world, angles within +-pi; reserved bytes zero; a teleporter
+  within the world, angles within +-pi; reserved bytes zero (but version
+  8's mode markers': their mode fields, each kind's in its ranges, the rest
+  of their record's as each kind takes, forge_file_mode_record_check; at
+  most FORGE_FILE_MAXIMUM_MODE_MARKERS of them, one core a team, a few bases
+  and drop points; and version 8's header flag's mode settings, every one in
+  range, its version known, its unused bytes zero); a teleporter
   (version 5 only) no path, its channel below FORGE_FILE_MAXIMUM_TELEPORTER_
   CHANNELS, its yaw alone, nothing else; at most FORGE_FILE_MAXIMUM_
   TELEPORTERS, every sender's channel with a receiver; a game type object
@@ -481,6 +486,137 @@ static int forge_file_kind_has_object(
 		kind == _forge_record_vehicle_spawn;
 }
 
+int forge_file_kind_is_mode_marker(
+	int kind)
+{
+	return kind >= FIRST_FORGE_MODE_RECORD_KIND && kind < NUMBER_OF_FORGE_RECORD_KINDS;
+}
+
+static int forge_file_mode_fields_zero(
+	struct forge_file_mode_fields const *mode)
+{
+	return !mode->radius && !mode->rounds && !mode->waves && !mode->points && !mode->toughness && !mode->seconds &&
+		!mode->start_minute && !mode->index && !mode->flags;
+}
+
+/* a radius in quarter world units within whole units minimum to maximum */
+static int forge_file_mode_radius_in(
+	unsigned char radius,
+	int minimum,
+	int maximum)
+{
+	return radius >= minimum * FORGE_FILE_MODE_RADIUS_UNITS && radius <= maximum * FORGE_FILE_MODE_RADIUS_UNITS;
+}
+
+/* (version 5) a mode marker's record: what each kind takes (the design's
+section 2), the rest zero */
+static int forge_file_mode_record_check(
+	struct forge_file_record const *record)
+{
+	struct forge_file_mode_fields const *mode = &record->mode;
+
+	if (record->path_index != FORGE_FILE_NO_PATH || record->flags || record->ai_team ||
+		(record->game_types & ~FORGE_FILE_MODE_GAME_TYPES_MASK) || (mode->flags & ~FORGE_MODE_FLAGS_KNOWN) ||
+		(mode->rounds & ~FORGE_FILE_MODE_ROUNDS_MASK) || (mode->waves & ~FORGE_FILE_MODE_WAVES_MASK) ||
+		mode->start_minute > 20)
+	{
+		return 0;
+	}
+	switch (record->kind)
+	{
+	case _forge_record_ai_zone:
+		/* a squad, 1 to 8 of it, its side (hostile, red, blue), a radius of
+		2 to 16; Warzone's waves every 30 to 300 s (0: the Warzone's own);
+		the base it defends (0 none, A to E as 1 to 5) */
+		return record->variant < NUMBER_OF_FORGE_MODE_SQUADS && record->count >= 1 && record->count <= 8 &&
+			record->team >= FORGE_MODE_TEAM_NONE && record->team <= FORGE_MODE_TEAM_BLUE &&
+			forge_file_mode_radius_in(mode->radius, 2, 16) &&
+			(record->respawn_seconds == 0 || (record->respawn_seconds >= 30 && record->respawn_seconds <= 300)) &&
+			!mode->points && !mode->toughness && !mode->seconds && mode->index <= FORGE_FILE_MAXIMUM_BASES &&
+			!(mode->flags & (FORGE_MODE_FLAG_HOME | FORGE_MODE_FLAG_RETURNS | FORGE_MODE_FLAG_OFF));
+	case _forge_record_boss:
+		/* a kind, a name of the list, 25 to 500 points, toughness 1 to 8,
+		its side, its leash 0 (the design's) to 16; its rounds (Firefight)
+		or its minute and its return after 30 to 600 s (Warzone) */
+		return record->variant < NUMBER_OF_FORGE_MODE_BOSSES && !record->count &&
+			record->team >= FORGE_MODE_TEAM_NONE && record->team <= FORGE_MODE_TEAM_BLUE &&
+			(mode->radius == 0 || forge_file_mode_radius_in(mode->radius, 2, 16)) &&
+			mode->index < FORGE_FILE_MODE_BOSS_NAMES && mode->points >= 25 && mode->points <= 500 &&
+			mode->toughness >= 1 && mode->toughness <= 8 && !mode->waves && !mode->seconds &&
+			!(mode->flags & (FORGE_MODE_FLAG_HOME | FORGE_MODE_FLAG_OFF)) &&
+			((mode->flags & FORGE_MODE_FLAG_RETURNS) ? record->respawn_seconds >= 30 : record->respawn_seconds == 0);
+	case _forge_record_base:
+		/* its letter, its owner at the start (a home base a team's), a
+		radius of 3 to 20, 5 to 30 s to take */
+		return !record->variant && !record->count && !record->respawn_seconds &&
+			record->team >= FORGE_MODE_TEAM_NONE && record->team <= FORGE_MODE_TEAM_BLUE &&
+			(!(mode->flags & FORGE_MODE_FLAG_HOME) || record->team != FORGE_MODE_TEAM_NONE) &&
+			forge_file_mode_radius_in(mode->radius, 3, 20) && mode->seconds >= 5 && mode->seconds <= 30 &&
+			mode->index < FORGE_FILE_MAXIMUM_BASES &&
+			!mode->rounds && !mode->waves && !mode->points && !mode->toughness && !mode->start_minute &&
+			!(mode->flags & (FORGE_MODE_FLAG_DROPSHIP | FORGE_MODE_FLAG_RETURNS | FORGE_MODE_FLAG_OFF));
+	case _forge_record_core:
+		/* red's or blue's, a hull of 1000 to 10000 */
+		return !record->variant && !record->count && !record->respawn_seconds &&
+			(record->team == FORGE_MODE_TEAM_RED || record->team == FORGE_MODE_TEAM_BLUE) &&
+			mode->points >= 1000 && mode->points <= 10000 && forge_file_mode_fields_zero(&(struct forge_file_mode_fields){
+				mode->radius, mode->rounds, mode->waves, 0, mode->toughness, mode->seconds, mode->start_minute, mode->index,
+				mode->flags });
+	case _forge_record_drop_point:
+		/* a ship, its side (any, red, blue, the hostile AI's) */
+		return record->variant < NUMBER_OF_FORGE_MODE_SHIPS && !record->count && !record->respawn_seconds &&
+			record->team >= FORGE_MODE_TEAM_NONE && record->team <= FORGE_MODE_TEAM_HOSTILE &&
+			forge_file_mode_fields_zero(mode);
+	case _forge_record_ff_objective:
+		/* a kind, its rounds, a radius of 2 to 20 (a zone's; a defended
+		object's or a boss kill's 0 or so), 30 to 300 s (but a boss kill's,
+		0), a defended object's hull 500 to 10000 */
+		if (record->variant >= NUMBER_OF_FORGE_MODE_OBJECTIVES || record->count || record->respawn_seconds ||
+			record->team != FORGE_MODE_TEAM_NONE || mode->waves || mode->toughness || mode->start_minute || mode->index ||
+			mode->flags)
+		{
+			return 0;
+		}
+		switch (record->variant)
+		{
+		case _forge_mode_objective_defend_zone:
+		case _forge_mode_objective_hold_zone:
+			return forge_file_mode_radius_in(mode->radius, 2, 20) && mode->seconds >= 30 && mode->seconds <= 300 &&
+				!mode->points;
+		case _forge_mode_objective_defend_object:
+			return (mode->radius == 0 || forge_file_mode_radius_in(mode->radius, 2, 20)) && mode->seconds >= 30 &&
+				mode->seconds <= 300 && mode->points >= 500 && mode->points <= 10000;
+		default:
+			return !mode->radius && !mode->seconds && !mode->points;
+		}
+	case _forge_record_bonus_round:
+		/* (Firefight round 3) the bonus round's squad, 1 to 8 of it, hostile,
+		a radius of 2 to 16, 30 to 120 s, 25 to 500 points a kill; by
+		dropship or not, the bonus round off or not */
+		return record->variant < NUMBER_OF_FORGE_MODE_SQUADS && record->count >= 1 && record->count <= 8 &&
+			record->team == FORGE_MODE_TEAM_NONE && !record->respawn_seconds && forge_file_mode_radius_in(mode->radius, 2, 16) &&
+			mode->seconds >= FORGE_FILE_BONUS_MINIMUM_SECONDS && mode->seconds <= FORGE_FILE_BONUS_MAXIMUM_SECONDS &&
+			mode->points >= 25 && mode->points <= 500 && !mode->rounds && !mode->waves && !mode->toughness &&
+			!mode->start_minute && !mode->index && !(mode->flags & (FORGE_MODE_FLAG_HOME | FORGE_MODE_FLAG_RETURNS));
+	case _forge_record_boundary:
+		/* (version 9) a wall or a kill zone, no side, its half extents (along
+		and across 1 to 500 world units, its half height 1/4 to 63 3/4),
+		nothing else */
+		return record->variant < NUMBER_OF_FORGE_FILE_BOUNDARY_KINDS && !record->count && !record->respawn_seconds &&
+			record->team == FORGE_MODE_TEAM_NONE && !record->game_types && mode->points >= 1 &&
+			mode->points <= FORGE_FILE_BOUNDARY_MAXIMUM_HALF_UNITS && mode->seconds >= 1 &&
+			mode->seconds <= FORGE_FILE_BOUNDARY_MAXIMUM_HALF_UNITS && mode->radius >= 1 && !mode->rounds && !mode->waves &&
+			!mode->toughness && !mode->start_minute && !mode->index && !mode->flags;
+	case _forge_record_camera:
+		/* (version 10) the lobby camera: its pitch (plus the offset) in its
+		radius, nothing else */
+		return !record->variant && !record->count && !record->respawn_seconds && record->team == FORGE_MODE_TEAM_NONE &&
+			!record->game_types && mode->radius <= 2 * FORGE_FILE_CAMERA_PITCH_OFFSET && !mode->rounds && !mode->waves &&
+			!mode->points && !mode->seconds && !mode->toughness && !mode->start_minute && !mode->index && !mode->flags;
+	}
+	return 0;
+}
+
 static int forge_file_finite(
 	float value)
 {
@@ -525,6 +661,22 @@ static int forge_file_record_check(
 	int spawn;
 
 	if (record->kind >= NUMBER_OF_FORGE_RECORD_KINDS)
+		return 0;
+	/* (version 8's mode markers: their own checks, the floats', the yaw
+	alone; none before version 8; every other record's mode fields zero) */
+	if (forge_file_kind_is_mode_marker(record->kind))
+	{
+		/* (a version 9 boundary: none before version 9; a version 10
+		camera: none before 10) */
+		if (version < 8 || (record->kind == _forge_record_boundary && version < 9) ||
+			(record->kind == _forge_record_camera && version < 10) || !forge_file_mode_record_check(record) ||
+			!forge_file_record_floats_check(record) || record->angles[1] != 0.f || record->angles[2] != 0.f)
+		{
+			return 0;
+		}
+		return 1;
+	}
+	if (!forge_file_mode_fields_zero(&record->mode))
 		return 0;
 	/* (the kinds no build has written: a hill, a kill zone - refused in any
 	version, as unknown kinds are) */
@@ -584,7 +736,7 @@ static int forge_file_record_check(
 	spawn = version >= 4 && record->kind == _forge_record_player_spawn;
 	if (spawn && (record->team > FORGE_FILE_MAXIMUM_SPAWN_TEAM || record->respawn_seconds || record->count ||
 		record->variant || record->ai_team || (record->flags & ~FORGE_RECORD_SPAWN_INITIAL) ||
-		(record->game_types & ~FORGE_FILE_SPAWN_GAME_TYPES_MASK)))
+		(record->game_types & ~(version >= 8 ? FORGE_FILE_SPAWN_GAME_TYPES_MASK_8 : FORGE_FILE_SPAWN_GAME_TYPES_MASK))))
 	{
 		return 0;
 	}
@@ -650,13 +802,23 @@ int forge_file_layout_version(
 
 	if (layout->version)
 		return layout->version;
+	if (layout->flags & FORGE_FILE_FLAG_MODE_SETTINGS)
+		version = 8;
+	if (layout->flags & FORGE_FILE_FLAG_CANVAS)
+		version = 11;
 	/* (the highest any record needs) */
 	for (index = 0; index < layout->record_count && index < FORGE_FILE_MAXIMUM_RECORDS; index++)
 	{
 		struct forge_file_record const *record = &layout->records[index];
 		int needs = FORGE_FILE_FIRST_VERSION;
 
-		if (record->flags & FORGE_RECORD_PHYSICS_MASK)
+		if (record->kind == _forge_record_camera)
+			needs = 10;
+		else if (record->kind == _forge_record_boundary)
+			needs = 9;
+		else if (forge_file_kind_is_mode_marker(record->kind))
+			needs = 8;
+		else if (record->flags & FORGE_RECORD_PHYSICS_MASK)
 			needs = 7;
 		else if (record->kind == _forge_record_flag)
 			needs = 6;
@@ -689,6 +851,13 @@ int forge_file_layout_check(
 	unsigned char hill_points[FORGE_FILE_MAXIMUM_HILLS];
 	unsigned int sender_channels = 0;
 	unsigned int receiver_channels = 0;
+	int mode_markers = 0;
+	int boundaries = 0;
+	int cameras = 0;
+	int bases = 0;
+	int drop_points = 0;
+	int cores[2] = { 0, 0 };
+	int letters = 0;
 	int version;
 
 	if (!layout || !forge_file_meta_terminated(layout))
@@ -731,10 +900,88 @@ int forge_file_layout_check(
 		}
 	}
 	version = forge_file_layout_version(layout);
+	/* (the mode settings: version 8's alone, in range; none, zeros) */
+	if (layout->flags & FORGE_FILE_FLAG_MODE_SETTINGS)
+	{
+		if (version < 8)
+			return _forge_file_bad_flags;
+		if (!forge_file_mode_settings_valid(&layout->modes))
+			return _forge_file_bad_record;
+	}
+	else
+	{
+		static struct forge_file_mode_settings const none;
+
+		if (memcmp(&layout->modes.firefight, &none.firefight, sizeof(none.firefight)) ||
+			memcmp(&layout->modes.warzone, &none.warzone, sizeof(none.warzone)) || layout->modes.skulls)
+		{
+			return _forge_file_bad_record;
+		}
+	}
+	/* (the canvas: version 11's alone, taking something away or keeping
+	something, its entries in range and ascending; none, zeros) */
+	if (layout->flags & FORGE_FILE_FLAG_CANVAS)
+	{
+		struct forge_file_canvas const *canvas = &layout->canvas;
+
+		if (version < 11)
+			return _forge_file_bad_flags;
+		if ((canvas->categories & ~FORGE_FILE_CANVAS_CATEGORIES_MASK) || canvas->entry_count < 0 ||
+			canvas->entry_count > FORGE_FILE_MAXIMUM_CANVAS_ENTRIES || (!canvas->categories && !canvas->entry_count))
+		{
+			return _forge_file_bad_record;
+		}
+		for (index = 0; index < canvas->entry_count; index++)
+		{
+			struct forge_file_canvas_entry const *entry = &canvas->entries[index];
+
+			if (entry->category >= NUMBER_OF_FORGE_CANVAS_CATEGORIES || entry->index > FORGE_FILE_CANVAS_MAXIMUM_INDEX ||
+				entry->kept != ((canvas->categories >> entry->category) & 1))
+			{
+				return _forge_file_bad_record;
+			}
+			if (index > 0 && (entry[-1].category > entry->category ||
+				(entry[-1].category == entry->category && entry[-1].index >= entry->index)))
+			{
+				return _forge_file_bad_record;
+			}
+		}
+	}
+	else
+	{
+		if (layout->canvas.categories || layout->canvas.entry_count)
+			return _forge_file_bad_record;
+	}
 	for (index = 0; index < layout->record_count; index++)
 	{
-		if (!forge_file_record_check(layout, version, &layout->records[index]))
+		struct forge_file_record const *record = &layout->records[index];
+
+		if (!forge_file_record_check(layout, version, record))
 			return _forge_file_bad_record;
+		/* (version 8's mode markers: within their most, one core a team,
+		each base its own letter) */
+		if (forge_file_kind_is_mode_marker(record->kind))
+		{
+			mode_markers++;
+			bases += record->kind == _forge_record_base;
+			drop_points += record->kind == _forge_record_drop_point;
+			boundaries += record->kind == _forge_record_boundary;
+			cameras += record->kind == _forge_record_camera;
+			if (record->kind == _forge_record_core)
+				cores[record->team == FORGE_MODE_TEAM_BLUE]++;
+			if (mode_markers > FORGE_FILE_MAXIMUM_MODE_MARKERS || bases > FORGE_FILE_MAXIMUM_BASES ||
+				drop_points > FORGE_FILE_MAXIMUM_DROP_POINTS || boundaries > FORGE_FILE_MAXIMUM_BOUNDARIES ||
+				cameras > FORGE_FILE_MAXIMUM_CAMERAS || cores[0] > 1 || cores[1] > 1)
+			{
+				return _forge_file_too_many;
+			}
+			if (record->kind == _forge_record_base)
+			{
+				if (letters & (1 << record->mode.index))
+					return _forge_file_bad_record;
+				letters |= 1 << record->mode.index;
+			}
+		}
 		if (layout->records[index].kind != _forge_record_object)
 			netgame = 1;
 		if (layout->records[index].flags & FORGE_RECORD_AI_RESPAWN)
@@ -771,7 +1018,9 @@ int forge_file_layout_check(
 	for a player spawn, version 5 only for a teleporter: a file of one
 	without it is not one this writer made) */
 	if ((version == 3 && !respawning) || (version == 4 && !player_spawns) || (version == 5 && !teleporters) ||
-		(version == 6 && !game_objects) || (version == 7 && !physics))
+		(version == 6 && !game_objects) || (version == 7 && !physics) ||
+		(version == 8 && !mode_markers && !(layout->flags & FORGE_FILE_FLAG_MODE_SETTINGS)) || (version == 9 && !boundaries) ||
+		(version == 10 && !cameras) || (version == 11 && !(layout->flags & FORGE_FILE_FLAG_CANVAS)))
 	{
 		return _forge_file_bad_version;
 	}
@@ -794,6 +1043,151 @@ int forge_file_layout_check(
 		return _forge_file_bad_meta;
 	}
 	return _forge_file_ok;
+}
+
+/* ---------- the mode settings (version 8)
+
+The block, 64 bytes: its version u8 (FORGE_FILE_MODE_SETTINGS_VERSION),
+three zeros; at 4 Firefight's twelve bytes (sets, rounds, waves, lives,
+lives a round, difficulty, ramp, skull mode, round minutes, round time's
+rule, allies, resupply) and twelve zeros; at 28 Warzone's: point limit u16,
+cores, a player's kill points, a base's capture points, a base's hold
+points, the first wave's seconds u16, the waves' seconds u16, the hostile,
+red and blue AI, the time limit's minutes, and ten zeros; at 52 the skulls
+u16; ten zeros. */
+
+void forge_file_mode_settings_default(
+	struct forge_file_mode_settings *settings)
+{
+	memset(settings, 0, sizeof(*settings));
+	settings->firefight.sets = 3;
+	settings->firefight.rounds = 3;
+	settings->firefight.waves = 5;
+	settings->firefight.lives = 7;
+	settings->firefight.lives_per_round = 1;
+	settings->firefight.difficulty = 1;
+	settings->firefight.ramp = 1;
+	settings->firefight.skull_mode = 1;
+	settings->firefight.allies = 1;
+	settings->firefight.resupply = 1;
+	settings->warzone.point_limit = 1000;
+	settings->warzone.cores = 1;
+	settings->warzone.player_kill_points = 5;
+	settings->warzone.base_capture_points = 50;
+	settings->warzone.base_hold_points = 1;
+	settings->warzone.first_wave_seconds = 30;
+	settings->warzone.wave_seconds = 90;
+	settings->warzone.hostile_ai = 16;
+	settings->warzone.red_ai = 8;
+	settings->warzone.blue_ai = 8;
+	settings->warzone.time_limit_minutes = 20;
+}
+
+int forge_file_mode_settings_valid(
+	struct forge_file_mode_settings const *settings)
+{
+	struct forge_file_firefight_settings const *firefight = &settings->firefight;
+	struct forge_file_warzone_settings const *warzone = &settings->warzone;
+
+	return firefight->sets <= 5 && firefight->rounds >= 1 && firefight->rounds <= 5 && firefight->waves >= 1 &&
+		firefight->waves <= 5 && firefight->lives <= 30 && firefight->lives_per_round <= 3 && firefight->difficulty <= 3 &&
+		firefight->ramp <= 2 && firefight->skull_mode <= 2 &&
+		(firefight->round_minutes == 0 || (firefight->round_minutes >= 3 && firefight->round_minutes <= 15)) &&
+		firefight->round_time_rule <= 1 && firefight->allies <= 1 && firefight->resupply <= 1 &&
+		warzone->point_limit >= 250 && warzone->point_limit <= 2000 && warzone->cores <= 1 &&
+		warzone->player_kill_points <= 100 && warzone->base_capture_points <= 100 && warzone->base_hold_points <= 100 &&
+		warzone->first_wave_seconds <= 300 && warzone->wave_seconds >= 30 && warzone->wave_seconds <= 300 &&
+		warzone->hostile_ai <= 32 && warzone->red_ai <= 16 && warzone->blue_ai <= 16 &&
+		warzone->hostile_ai + warzone->red_ai + warzone->blue_ai <= 32 && warzone->time_limit_minutes <= 60 &&
+		!(settings->skulls & ~FORGE_MODE_SKULLS_KNOWN);
+}
+
+static void forge_file_mode_settings_write(
+	struct forge_file_mode_settings const *settings,
+	unsigned char *block)
+{
+	struct forge_file_firefight_settings const *firefight = &settings->firefight;
+	struct forge_file_warzone_settings const *warzone = &settings->warzone;
+
+	memset(block, 0, FORGE_FILE_MODE_SETTINGS_SIZE);
+	block[0] = FORGE_FILE_MODE_SETTINGS_VERSION;
+	block[4] = firefight->sets;
+	block[5] = firefight->rounds;
+	block[6] = firefight->waves;
+	block[7] = firefight->lives;
+	block[8] = firefight->lives_per_round;
+	block[9] = firefight->difficulty;
+	block[10] = firefight->ramp;
+	block[11] = firefight->skull_mode;
+	block[12] = firefight->round_minutes;
+	block[13] = firefight->round_time_rule;
+	block[14] = firefight->allies;
+	block[15] = firefight->resupply;
+	block[28] = (unsigned char)warzone->point_limit;
+	block[29] = (unsigned char)(warzone->point_limit >> 8);
+	block[30] = warzone->cores;
+	block[31] = warzone->player_kill_points;
+	block[32] = warzone->base_capture_points;
+	block[33] = warzone->base_hold_points;
+	block[34] = (unsigned char)warzone->first_wave_seconds;
+	block[35] = (unsigned char)(warzone->first_wave_seconds >> 8);
+	block[36] = (unsigned char)warzone->wave_seconds;
+	block[37] = (unsigned char)(warzone->wave_seconds >> 8);
+	block[38] = warzone->hostile_ai;
+	block[39] = warzone->red_ai;
+	block[40] = warzone->blue_ai;
+	block[41] = warzone->time_limit_minutes;
+	block[52] = (unsigned char)settings->skulls;
+	block[53] = (unsigned char)(settings->skulls >> 8);
+}
+
+/* the block read: its version known, the bytes no setting takes zeros (the
+settings' ranges: forge_file_layout_check) */
+static int forge_file_mode_settings_read(
+	unsigned char const *block,
+	struct forge_file_mode_settings *settings)
+{
+	static unsigned char const used[FORGE_FILE_MODE_SETTINGS_SIZE] =
+	{
+		1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	};
+	int index;
+
+	if (block[0] != FORGE_FILE_MODE_SETTINGS_VERSION)
+		return 0;
+	for (index = 0; index < FORGE_FILE_MODE_SETTINGS_SIZE; index++)
+	{
+		if (!used[index] && block[index])
+			return 0;
+	}
+	settings->firefight.sets = block[4];
+	settings->firefight.rounds = block[5];
+	settings->firefight.waves = block[6];
+	settings->firefight.lives = block[7];
+	settings->firefight.lives_per_round = block[8];
+	settings->firefight.difficulty = block[9];
+	settings->firefight.ramp = block[10];
+	settings->firefight.skull_mode = block[11];
+	settings->firefight.round_minutes = block[12];
+	settings->firefight.round_time_rule = block[13];
+	settings->firefight.allies = block[14];
+	settings->firefight.resupply = block[15];
+	settings->warzone.point_limit = (unsigned short)(block[28] | (block[29] << 8));
+	settings->warzone.cores = block[30];
+	settings->warzone.player_kill_points = block[31];
+	settings->warzone.base_capture_points = block[32];
+	settings->warzone.base_hold_points = block[33];
+	settings->warzone.first_wave_seconds = (unsigned short)(block[34] | (block[35] << 8));
+	settings->warzone.wave_seconds = (unsigned short)(block[36] | (block[37] << 8));
+	settings->warzone.hostile_ai = block[38];
+	settings->warzone.red_ai = block[39];
+	settings->warzone.blue_ai = block[40];
+	settings->warzone.time_limit_minutes = block[41];
+	settings->skulls = (unsigned short)(block[52] | (block[53] << 8));
+	return 1;
 }
 
 /* the payload's size, from the counts and the paths' lengths */
@@ -848,7 +1242,7 @@ static int forge_file_decode_checked(
 	if (header_size != FORGE_FILE_HEADER_SIZE)
 		return forge_file_refused(_forge_file_bad_header_size, why, why_size, NULL);
 	layout->flags = read_u32(&reader);
-	if (layout->flags & ~FORGE_FILE_FLAGS_KNOWN)
+	if (layout->flags & ~(version >= 11 ? FORGE_FILE_FLAGS_KNOWN : version >= 8 ? FORGE_FILE_FLAGS_VERSION_10 : FORGE_FILE_FLAGS_VERSION_7))
 		return forge_file_refused(_forge_file_bad_flags, why, why_size, NULL);
 	/* (the map's name, zeros after it) */
 	memcpy(layout->map_name, bytes + reader.offset, FORGE_FILE_MAP_NAME_SIZE);
@@ -966,11 +1360,31 @@ static int forge_file_decode_checked(
 		record->flags = (unsigned char)read_u8(&reader);
 		/* (version 1's first reserved byte: checked with the record) */
 		record->ai_team = (unsigned char)read_u8(&reader);
-		for (reserved = 0; reserved < FORGE_FILE_RECORD_RESERVED_SIZE; reserved++)
+		/* (version 8's mode marker: its mode fields, checked with the
+		record; every other record's, zeros) */
+		if (version >= 8 && forge_file_kind_is_mode_marker(record->kind))
 		{
+			record->mode.radius = (unsigned char)read_u8(&reader);
+			record->mode.rounds = (unsigned char)read_u8(&reader);
+			record->mode.waves = (unsigned char)read_u8(&reader);
+			record->mode.points = (unsigned short)read_u16(&reader);
+			record->mode.toughness = (unsigned char)read_u8(&reader);
+			record->mode.seconds = (unsigned short)read_u16(&reader);
+			record->mode.start_minute = (unsigned char)read_u8(&reader);
+			record->mode.index = (unsigned char)read_u8(&reader);
+			record->mode.flags = (unsigned char)read_u8(&reader);
 			if (read_u8(&reader))
 				finite = 0;
 		}
+		else
+		{
+			for (reserved = 0; reserved < FORGE_FILE_RECORD_RESERVED_SIZE; reserved++)
+			{
+				if (read_u8(&reader))
+					finite = 0;
+			}
+		}
+
 		if (reader.failed)
 			return forge_file_refused(_forge_file_bad_payload_size, why, why_size, "the records");
 		if (!finite)
@@ -978,6 +1392,42 @@ static int forge_file_decode_checked(
 			snprintf(detail, sizeof(detail), "record %d", index);
 			return forge_file_refused(_forge_file_bad_record, why, why_size, detail);
 		}
+	}
+	/* (version 8) the mode settings */
+	if (layout->flags & FORGE_FILE_FLAG_MODE_SETTINGS)
+	{
+		if (size - reader.offset < FORGE_FILE_MODE_SETTINGS_SIZE)
+			return forge_file_refused(_forge_file_bad_payload_size, why, why_size, "the mode settings");
+		if (!forge_file_mode_settings_read(bytes + reader.offset, &layout->modes))
+			return forge_file_refused(_forge_file_bad_record, why, why_size, "the mode settings");
+		reader.offset += FORGE_FILE_MODE_SETTINGS_SIZE;
+	}
+	/* (version 11) the canvas: its header, then its entries */
+	if (layout->flags & FORGE_FILE_FLAG_CANVAS)
+	{
+		unsigned int block_version, zero, categories, count, zero2;
+
+		if (size - reader.offset < FORGE_FILE_CANVAS_HEADER_SIZE)
+			return forge_file_refused(_forge_file_bad_payload_size, why, why_size, "the canvas");
+		block_version = read_u8(&reader);
+		zero = read_u8(&reader);
+		categories = read_u16(&reader);
+		count = read_u16(&reader);
+		zero2 = read_u16(&reader);
+		if (block_version != FORGE_FILE_CANVAS_VERSION || zero || zero2 || count > FORGE_FILE_MAXIMUM_CANVAS_ENTRIES)
+			return forge_file_refused(_forge_file_bad_record, why, why_size, "the canvas");
+		if (size - reader.offset < (int)count * FORGE_FILE_CANVAS_ENTRY_SIZE)
+			return forge_file_refused(_forge_file_bad_payload_size, why, why_size, "the canvas");
+		layout->canvas.categories = (unsigned short)categories;
+		layout->canvas.entry_count = (short)count;
+		for (index = 0; index < (int)count; index++)
+		{
+			layout->canvas.entries[index].category = (unsigned char)read_u8(&reader);
+			layout->canvas.entries[index].kept = (unsigned char)read_u8(&reader);
+			layout->canvas.entries[index].index = (unsigned short)read_u16(&reader);
+		}
+		if (reader.failed)
+			return forge_file_refused(_forge_file_bad_payload_size, why, why_size, "the canvas");
 	}
 	/* the meta: four texts, each ended by a zero, filling it exactly */
 	if ((unsigned int)(size - reader.offset) != meta_size || meta_size < 4)
@@ -1118,8 +1568,38 @@ int forge_file_encode(
 		write_bytes(&writer, record->variant, 1);
 		write_bytes(&writer, record->flags, 1);
 		write_bytes(&writer, record->ai_team, 1);
-		for (axis = 0; axis < FORGE_FILE_RECORD_RESERVED_SIZE; axis++)
-			write_bytes(&writer, 0, 1);
+		/* (version 8's mode fields: zeros but a mode marker's, as checked) */
+		write_bytes(&writer, record->mode.radius, 1);
+		write_bytes(&writer, record->mode.rounds, 1);
+		write_bytes(&writer, record->mode.waves, 1);
+		write_bytes(&writer, record->mode.points, 2);
+		write_bytes(&writer, record->mode.toughness, 1);
+		write_bytes(&writer, record->mode.seconds, 2);
+		write_bytes(&writer, record->mode.start_minute, 1);
+		write_bytes(&writer, record->mode.index, 1);
+		write_bytes(&writer, record->mode.flags, 1);
+		write_bytes(&writer, 0, 1);
+	}
+	if (layout->flags & FORGE_FILE_FLAG_MODE_SETTINGS)
+	{
+		unsigned char block[FORGE_FILE_MODE_SETTINGS_SIZE];
+
+		forge_file_mode_settings_write(&layout->modes, block);
+		write_text(&writer, (char const *)block, FORGE_FILE_MODE_SETTINGS_SIZE);
+	}
+	if (layout->flags & FORGE_FILE_FLAG_CANVAS)
+	{
+		write_bytes(&writer, FORGE_FILE_CANVAS_VERSION, 1);
+		write_bytes(&writer, 0, 1);
+		write_bytes(&writer, layout->canvas.categories, 2);
+		write_bytes(&writer, (unsigned int)layout->canvas.entry_count, 2);
+		write_bytes(&writer, 0, 2);
+		for (index = 0; index < layout->canvas.entry_count; index++)
+		{
+			write_bytes(&writer, layout->canvas.entries[index].category, 1);
+			write_bytes(&writer, layout->canvas.entries[index].kept, 1);
+			write_bytes(&writer, layout->canvas.entries[index].index, 2);
+		}
 	}
 	write_text(&writer, layout->title, (int)strlen(layout->title) + 1);
 	write_text(&writer, layout->author, (int)strlen(layout->author) + 1);

@@ -3026,7 +3026,7 @@ static void distributed_handle_unit_state(
 		network_player_attach_unit(player_index, state->unit_index);
 		/* (a unit of a life this machine missed the end of, no player's
 		now: unit_kill_no_statistics is for players' units only) */
-		if (unit_index != NONE && unit_index != state->unit_index)
+		if (unit_index != NONE && unit_index != state->unit_index && !command_net_unit_kept(unit_index))
 			unit_kill(unit_index);
 	}
 	unit_index = state->unit_index;
@@ -5287,6 +5287,8 @@ void network_distributed_handle_message(
 	case _distributed_message_forge_updates: entry_size = sizeof(struct forge_net_record); break;
 	case _distributed_message_forge_palette: entry_size = sizeof(struct forge_net_palette_entry); break;
 	case _distributed_message_forge_layout: entry_size = sizeof(struct forge_net_layout_entry); break;
+	case _distributed_message_command_requests:
+	case _distributed_message_command_state: entry_size = command_net_entry_size(header.type); break;
 	case _distributed_message_damage_events:
 	case _distributed_message_hit_reports: entry_size = network_damage_entry_size(header.type); break;
 	default: entry_size = network_objects_entry_size(header.type); break;
@@ -5317,14 +5319,15 @@ void network_distributed_handle_message(
 	if ((header.type == _distributed_message_client_ready ||
 			header.type == _distributed_message_client_identity ||
 			header.type == _distributed_message_hit_reports ||
-			header.type == _distributed_message_forge_requests) &&
+			header.type == _distributed_message_forge_requests ||
+			header.type == _distributed_message_command_requests) &&
 		!distributed_handling_stream_message)
 	{
 		return;
 	}
 	/* (network Forge's: never on the crossplay wire, a PC's game; a
 	host's only over its connection, never a datagram: forge_net.inc) */
-	if (header.type >= _distributed_message_forge_requests && header.type <= _distributed_message_forge_layout &&
+	if (header.type >= _distributed_message_forge_requests && header.type <= _distributed_message_command_state &&
 		(network_wire_crossplay() || (machine_index == NONE && network_connection_last_read_was_unreliable()) ||
 			distributed_handling_batch))
 	{
@@ -5341,6 +5344,7 @@ void network_distributed_handle_message(
 	case _distributed_message_player_inputs:
 	case _distributed_message_coop_skip_vote:
 	case _distributed_message_forge_requests:
+	case _distributed_message_command_requests:
 		if (machine_index == NONE || game_connection() != _game_connection_network_server)
 			return;
 		/* (heard from: the latency meter's connection problem) */
@@ -5443,6 +5447,12 @@ void network_distributed_handle_message(
 		break;
 	case _distributed_message_forge_layout:
 		forge_net_handle_layout(entries, header.count);
+		break;
+	case _distributed_message_command_requests:
+		command_net_handle_requests(machine_index, entries, header.count);
+		break;
+	case _distributed_message_command_state:
+		command_net_handle_state(entries, header.count);
 		break;
 	case _distributed_message_player_statistics:
 	{

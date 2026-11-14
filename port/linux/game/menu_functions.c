@@ -1424,6 +1424,13 @@ static void h3_player_name(char *name, int size)
 			getenv("HALO_NET_PLAYER_NAME") : "Player");
 }
 
+/* (command.c's carnage report) the local player's name as the nameplate
+shows it */
+void menus_player_name(char *name, int size)
+{
+	h3_player_name(name, size);
+}
+
 static short h3_swatch_frame(short color);
 
 static void h3_nameplate_update(struct widget_instance *widget)

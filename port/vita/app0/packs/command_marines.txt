@@ -1,0 +1,10 @@
+# Command mode's UNSC infantry (port/linux/game/command.c), built in memory
+# as a Command game loads, from the player's own Halo map: marines (assault
+# rifle) and armored marines (assault rifle, sniper rifle), with their
+# weapons and their dialogue - nothing left out (Forge's marine_ai strips the
+# dialogue to keep its file small; nothing of this is written anywhere).
+pack command_marines
+map a30
+tag actv characters\marine\marine assault rifle
+tag actv characters\marine_armored\marine_armored assault rifle
+tag actv characters\marine_armored\marine_armored sniper rifle

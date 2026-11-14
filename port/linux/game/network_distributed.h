@@ -73,6 +73,15 @@ enum
 	_distributed_message_forge_updates,
 	_distributed_message_forge_palette,
 	_distributed_message_forge_layout,
+	/* network Command (port/linux/game/command.c's command_net.inc,
+	command_net_protocol.h), on network Forge's session (a machine that
+	answered the host's Command game's hello alone): a client's requests
+	(reliable, over its stream only), the host's state and notices
+	(reliable, over its connection only); never on the crossplay wire, never
+	in a datagram or a batch. Numbers of their own past network Forge's (44,
+	45, as 1.2.0's): a build without them drops them as kinds it does not know */
+	_distributed_message_command_requests,
+	_distributed_message_command_state,
 	/* the host's actors' units: their control and state (network_actors.c).
 	A number of its own, clear of the kinds upstream adds: a build without
 	it drops the message as a kind it does not know, so the network version
@@ -315,6 +324,17 @@ real distributed_angle_unpack(short value, boolean signed_angle);
 /* shields and health in 16 bits */
 word distributed_vitality_pack(real value);
 real distributed_vitality_unpack(word value);
+
+/* ---------- prototypes/COMMAND.C (command_net.inc) */
+
+/* (the host) a client's requests; (a client) the host's state entries */
+void command_net_handle_requests(long machine_index, void const *entries, short count);
+void command_net_handle_state(void const *entries, short count);
+word command_net_entry_size(byte type);
+/* (a client, its player's unit the host put it in) whether the unit it had
+is kept, not killed here (a Command game's Spartan or seat: the host's to
+end) */
+boolean command_net_unit_kept(long unit_index);
 
 /* ---------- prototypes/NETWORK_ACTORS.C */
 
