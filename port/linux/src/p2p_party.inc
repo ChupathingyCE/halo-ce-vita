@@ -90,7 +90,7 @@ enum
 	PARTY_CHAT_SEND_INTERVAL = 1500,
 	PARTY_STATUS_BUDGET = 4,
 	PARTY_STATUS_BUDGET_INTERVAL = 1000,
-	PARTY_SEEN = 32,
+	PARTY_SEEN = P2P_FRIENDS_MAXIMUM + P2P_PARTY_MAXIMUM,
 };
 
 static const char *const party_presets[P2P_PARTY_PRESETS] = {
@@ -1293,7 +1293,9 @@ static void party_pair_heard(struct friend_record *record, struct party_member *
 	{
 		int fresh = party_replay_check(sender, message->epoch, message->counter);
 
-		if (fresh <= 0 || (message->type == TYPE_PARTY_INVITE && message->epoch < record->epoch))
+		/* (a friend's: never older than their run last seen, whatever the
+		message - that run's party went with it; party audit 1.1.3) */
+		if (fresh <= 0 || (record && message->epoch < record->epoch))
 		{
 			/* (a copy through another broker: counted, not logged - insider.21
 			logged ~15 a minute in a party; an older one is a replay) */

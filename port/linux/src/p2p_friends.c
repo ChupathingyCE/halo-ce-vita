@@ -734,7 +734,9 @@ struct friends_state
 	struct party_state party;
 	struct party_invite_record party_invites[P2P_FRIEND_INVITES_MAXIMUM];
 	int party_invite_count;
-	struct party_seen party_seen[32];
+	/* (one per friend and member: none pushed out by others, a replay of
+	theirs never taken as new: party audit 1.1.3) */
+	struct party_seen party_seen[P2P_FRIENDS_MAXIMUM + P2P_PARTY_MAXIMUM];
 	struct party_chat_record chat[P2P_PARTY_CHAT_LINES];
 	int chat_count;
 	unsigned long chat_number;

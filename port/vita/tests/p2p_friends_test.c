@@ -2315,6 +2315,53 @@ static void test_party_handoff_follow(void)
 	party_reset();
 }
 
+/* (party audit 1.1.3) a friend's party message from a run of theirs older
+than the one last seen (a replay a broker kept): dropped, even once its
+sender's replay slot is gone */
+static void test_party_old_run(void)
+{
+	struct message message;
+	unsigned char plain[MAXIMUM_PLAIN_SIZE];
+	unsigned long long epoch;
+	int size;
+
+	party_reset();
+	use(0);
+	p2p_friends_set_name("Alpha");
+	use(1);
+	p2p_friends_set_name("Bravo");
+	party_make_friends(0, 1);
+	party_pass(10);
+	use(0);
+	check(find_friend(machines[1].key) && find_friend(machines[1].key)->epoch, "old run: Bravo's run seen");
+	/* (Alpha's replay slots let go, as many others' would push Bravo's out) */
+	memset(friends->party_seen, 0, sizeof(friends->party_seen));
+	use(1);
+	epoch = friends->epoch;
+	friends->epoch = epoch - 1;
+	message_start(&message, TYPE_PARTY_PRESENCE, NULL);
+	message.party_count = 2;
+	memcpy(message.party_keys[0], friends->key, P2P_KEY_SIZE);
+	size = plain_encode(&message, plain);
+	friends->epoch = epoch;
+	check(size && party_seal_to(machines[0].key, plain, size), "old run: a party presence of Bravo's last run sent");
+	party_pass(2);
+	use(0);
+	check(find_friend(machines[1].key) && find_friend(machines[1].key)->party_size == 0,
+		"old run: a party message of a run before the one seen dropped");
+	/* (and one of the run seen is taken) */
+	use(1);
+	message_start(&message, TYPE_PARTY_PRESENCE, NULL);
+	message.party_count = 2;
+	memcpy(message.party_keys[0], friends->key, P2P_KEY_SIZE);
+	size = plain_encode(&message, plain);
+	check(size && party_seal_to(machines[0].key, plain, size), "old run: one of the run seen sent");
+	party_pass(2);
+	use(0);
+	check(find_friend(machines[1].key) && find_friend(machines[1].key)->party_size == 2, "old run: the run seen's taken");
+	party_reset();
+}
+
 static void test_party_restart(void)
 {
 	char id[P2P_FRIEND_ID_SIZE];
@@ -4860,6 +4907,7 @@ int main(void)
 	test_party();
 	test_party_restart();
 	test_party_handoff_follow();
+	test_party_old_run();
 	test_backup();
 	test_fileshare();
 	test_device_binding(root);
