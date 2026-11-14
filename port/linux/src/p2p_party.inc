@@ -1248,8 +1248,14 @@ static void party_chat_heard(struct party_member *member, const struct message *
 	party_member_name(member, name, sizeof(name));
 	party_chat_add(member->key, name, message->party_code == PARTY_CHAT_PRESET ? party_presets[message->party_value] :
 		message->chat, 0, message->party_code == PARTY_CHAT_PRESET ? 2 : 0);
+	/* (what was said stays out of a release build's log, as game_chat.c's:
+	logs are posted in public channels; party audit 1.1.3) */
+#ifndef HALO_RELEASE
 	platform_log("party: chat from %s: %s", name, message->party_code == PARTY_CHAT_PRESET ?
 		party_presets[message->party_value] : message->chat);
+#else
+	platform_log("party: a chat line from a member");
+#endif
 }
 
 static void party_presence_heard(struct friend_record *record, const struct message *message)
@@ -2331,7 +2337,11 @@ static int party_chat_send_message(int kind, int preset, const char *text)
 	own_name(name);
 	party_chat_add(friends->key, name, kind == PARTY_CHAT_PRESET ? party_presets[preset] : text, 1,
 		kind == PARTY_CHAT_PRESET ? 2 : 0);
+#ifndef HALO_RELEASE
 	platform_log("party: chat sent: %s", kind == PARTY_CHAT_PRESET ? party_presets[preset] : text);
+#else
+	platform_log("party: a chat line sent");
+#endif
 	return P2P_PARTY_DONE;
 }
 
