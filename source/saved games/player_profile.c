@@ -895,8 +895,14 @@ void player_profile_save_last_level_played(
 void player_profile_save_level_completed(
 	short local_player_index)
 {
-	player_profile_save_level_completed_at(local_player_index, main_get_current_solo_level(),
-		game_difficulty_level_get());
+	/* (port: MCC's own copy of a campaign level counts for that level,
+	main_get_current_profile_level - 1.1.2 recorded nothing for it) */
+	short main_get_current_profile_level(void);
+	short level = main_get_current_profile_level();
+
+	if (level != NONE && level != main_get_current_solo_level())
+		error(_error_silent, "profile: MCC's copy of campaign level %d completed: recorded as that level", level);
+	player_profile_save_level_completed_at(local_player_index, level, game_difficulty_level_get());
 }
 
 void player_profile_save_level_completed_at(

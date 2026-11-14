@@ -1438,6 +1438,22 @@ short main_get_current_solo_level(
 }
 
 #ifdef HALO_LINUX
+/* (port) the campaign level whose progress the level being played alone
+counts for in the player's profile: the campaign's own, or - MCC's own copy
+of it, mods\mcc_<level>, which an MCC install plays in its place
+(custom_edition_mods.c: the mod keyed mcc) - that level; NONE for any other
+map (a Custom Edition campaign map, another mod's) */
+short main_get_current_profile_level(
+	void)
+{
+	char const *name = main_globals.soloplayer_map_name;
+	short level = main_get_current_solo_level();
+
+	if (level == NONE && !_strnicmp(name, "mods\\mcc_", 9))
+		level = main_get_solo_level_from_name(name + 9);
+	return level;
+}
+
 /* (port) whether the level being played alone is a Custom Edition campaign
 map (custom_maps\...) or an MCC mod's (mods\...): its Save and Quit writes
 the custom campaign maps' save (game_state_save_to_persistent_storage) */
@@ -2632,6 +2648,14 @@ static void main_won_map_private(
 		its next map */
 		char const *next_level_name = custom_edition_maps_campaign_next_level(main_globals.soloplayer_map_name);
 
+		/* port: MCC's own copy of a campaign level (mods\mcc_a10) is that
+		level's progress in the profiles (main_get_current_profile_level;
+		1.1.2 kept none for it) */
+		if (main_get_current_profile_level() != NONE)
+		{
+			for (local_player_index = 0; local_player_index < player_spawn_count; local_player_index++)
+				player_profile_save_level_completed(local_player_index);
+		}
 		if (next_level_name)
 		{
 			error(_error_silent, "won '%s': on to '%s'", main_globals.soloplayer_map_name, next_level_name);
