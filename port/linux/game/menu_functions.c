@@ -18325,7 +18325,11 @@ static boolean h3_forge_command_start(void)
 {
 	platform_log("menus: forge lobby: START COMMAND on %s", forge_map_path(h3_forge.map));
 	command_game_request();
-	if (!forge_game_start(h3_forge.map, NULL, h3_forge.note, sizeof(h3_forge.note)))
+	/* (a map variant chosen - a layout made in Ark Editor, or Forge's -: its
+	bases, objectives, drop points, flags and Shades the game's, the rest the
+	map's own; none chosen: Command's own layout) */
+	if (!forge_game_start(h3_forge.map, h3_forge.variant_file[0] ? h3_forge.variant_file : NULL, h3_forge.note,
+		sizeof(h3_forge.note)))
 	{
 		command_game_cancel();
 		platform_log("menus: forge lobby: not started: %s", h3_forge.note);
@@ -21064,10 +21068,6 @@ static int cascade_forge_items(int group)
 	struct forge_store_entry const *entry;
 	int rows;
 
-	/* (1.1.4, the Command lobby's: the map itself - Command plays the map's
-	own layout -, no map variant of Forge's) */
-	if (h3_forge.mode == H3_FORGE_MODE_COMMAND)
-		return 0;
 	h3_variants_list(_variants_lobby, forge_map_short(cascade_forge_maps[group]), FALSE);
 	rows = h3_forge_pick_rows(-1, &entry);
 	/* (the map alone, no variant saved: the map is chosen as it is) */
@@ -21115,8 +21115,11 @@ static void cascade_forge_panel(struct widget_instance *screen, int group, int i
 			string_show(found, map);
 			widget_instance_set_visibility_recursive(found, TRUE);
 		}
+		/* (the Command lobby's: the map's own layout, or - its saved map
+		variants, an Ark Editor layout among them - a layout's bases,
+		objectives, drop points and flags: command.c) */
 		cascade_panel_words(screen, NULL, NULL, h3_forge.mode == H3_FORGE_MODE_COMMAND ?
-			(forge_map_short(map) && !strcmp(forge_map_short(map), "bloodgulch") ? T("Command's own layout, ready to play.") :
+			(forge_map_short(map) && !strcmp(forge_map_short(map), "bloodgulch") ? T("Command's own layout.") :
 			T("Command mode plays on Blood Gulch for now.")) :
 			item == 0 ? T("The original map: nothing placed yet.") : NULL);
 		return;

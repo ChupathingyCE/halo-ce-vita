@@ -244,7 +244,7 @@ int forge_panel_group_placed(int category) { return category >= 0 && category < 
 void forge_panel_delete_group(int category) { test_forge_group_deleted = category; }
 static int test_forge_magnets = 1, test_forge_nudge = 5;
 int forge_panel_magnets(void) { return test_forge_magnets; }
-/* (1.1.4: the Forge page's Command rows, port/linux/game/command.c's) */
+/* (1.1.4: the Command page's rows, port/linux/game/command.c's) */
 static int test_command_objective, test_command_ai_level = 2;
 int command_objective_index(void) { return test_command_objective % 3; }
 void command_objective_next(void) { test_command_objective++; }
@@ -3129,18 +3129,40 @@ static void test_forge_page(void)
 		!strcmp(menu_line(4, line, sizeof(line)), "Map\x02  Blood Gulch") &&
 		!strcmp(menu_line(5, line, sizeof(line)), "Map variant\x02  None >") &&
 		!strcmp(menu_line(6, line, sizeof(line)), "Network\x02  Local >") &&
-		!strcmp(menu_line(7, line, sizeof(line)), "Start Forge\x02  >") &&
-		/* (1.1.4: Command's rows, at the menus) */
-		!strcmp(menu_line(8, line, sizeof(line)), "Command objective\x02< Both >") &&
-		!strcmp(menu_line(9, line, sizeof(line)), "AI commander\x02< Heroic >") &&
-		!strcmp(menu_line(10, line, sizeof(line)), "Start Command\x02  >") &&
-		/* (two of File Share's variants shown at once beside Command's rows, its heading left out for room:
-		the list scrolls, "(variants 1-2 of 4)") */
-		!strcmp(menu_line(11, line, sizeof(line)), "Gulch A\x02  Blood Gulch") && strstr(menu, "(variants 1-2 of 4)") &&
-		strstr(menu, "\nGulch A\x02  Blood Gulch\n") && strstr(menu, "\nGulch B\x02  Blood Gulch\n") &&
-		!strstr(menu, "\nCold\x02") && menu_fits() && menu_height_fits(),
-		"Forge: Touch in Forge (On), Map (Blood Gulch first), Map variant (None), Network (Local), Start Forge, Command objective (Both), "
-		"AI commander (Heroic), Start Command; File Share's map variants, each fits");
+		!strcmp(menu_line(7, line, sizeof(line)), "Start Forge\x02  >") && !menu_line(8, line, sizeof(line))[0] &&
+		!strcmp(menu_line(9, line, sizeof(line)), "\x08" "File Share") &&
+		strstr(menu, "\nGulch A\x02  Blood Gulch\n") && strstr(menu, "\nDamaged file\x02  Blood Gulch\n") &&
+		strstr(menu, "\nCold\x02  Chill Out\n") && menu_fits() && menu_height_fits(),
+		"Forge: Touch in Forge (On), Map (Blood Gulch first), Map variant (None), Network (Local), Start Forge; File Share's map variants, each fits");
+	/* (1.1.4) Command's page: Menu style Halo CE's way to Command mode - the Forge page above as before */
+	{
+		char saved[16];
+
+		snprintf(saved, sizeof(saved), "%s", setting_named("HALO_MENU_STYLE")->values[setting_named("HALO_MENU_STYLE")->choice]);
+		vita_settings_set("HALO_MENU_STYLE", "original");
+		press(VITA_BUTTON_R);
+		press(VITA_BUTTON_L);
+		check(to_tab("Game") && strstr(menu, "\nCommand\x02  >") && open_page("Command") &&
+			strstr(menu, "\n\x03Game > Command\n") && !strcmp(menu_line(2, line, sizeof(line)), "Layout\x02  Command's own >") &&
+			!strcmp(menu_line(3, line, sizeof(line)), "Command objective\x02< Both >") &&
+			!strcmp(menu_line(4, line, sizeof(line)), "AI commander\x02< Heroic >") &&
+			!strcmp(menu_line(5, line, sizeof(line)), "Start Command\x02  >") && menu_fits() && menu_height_fits(),
+			"Command (Menu style Halo CE): Layout (Command's own, Blood Gulch's two variants next), Command objective (Both), "
+			"AI commander (Heroic), Start Command; it fits");
+		to_line("Command objective");
+		press(VITA_BUTTON_RIGHT);
+		check(!strcmp(menu_line(3, line, sizeof(line)), "Command objective\x02< Territories >"), "Command objective: right, Territories");
+		to_line("Layout");
+		press(VITA_BUTTON_RIGHT);
+		check(!strncmp(menu_line(2, line, sizeof(line)), "Layout\x02< Gulch A", 15), "Layout: right, Blood Gulch's first variant");
+		press(VITA_BUTTON_LEFT);
+		press(VITA_BUTTON_CIRCLE);
+		vita_settings_set("HALO_MENU_STYLE", saved);
+		press(VITA_BUTTON_R);
+		press(VITA_BUTTON_L);
+		check(to_tab("Game") && !strstr(menu, "\nCommand\x02  >"), "Command's page row: Menu style Halo CE's alone");
+		check(open_page("Forge"), "the Forge page again");
+	}
 	/* Touch in Forge: on as shipped; off and on again (HALO_FORGE_TOUCH) */
 	to_line("Touch in Forge");
 	check(strstr(menu, "\n\x05" "Drag an object to move it; tap it, then drag the screen to turn it\n") != NULL, "Touch in Forge's help");
@@ -3721,6 +3743,8 @@ static void test_tab_layouts(void)
 		{ PAGE_MENUS, "Scoreboard", "HALO_CLASSIC_SCOREBOARD", "classic|halo3", 0, "classic" },
 		/* (Forge and File Share, shown with Menu style Halo CE: under Menus) */
 		{ TAB_GAME, "Forge and File Share", NULL, NULL, 0, NULL, ACTION_PAGE, PAGE_FORGE },
+		/* (1.1.4: Command's page, Menu style Halo CE's) */
+		{ TAB_GAME, "Command", NULL, NULL, 0, NULL, ACTION_PAGE, PAGE_COMMAND },
 		/* (File Share with friends: its page on Forge and File Share's) */
 		{ PAGE_FORGE, "Share with friends", NULL, NULL, 0, NULL, ACTION_PAGE, PAGE_FSFRIENDS },
 		{ PAGE_FORGE, "Touch in Forge", "HALO_FORGE_TOUCH", "1|0", 0, "1" },
@@ -3851,7 +3875,7 @@ static void test_tab_layouts(void)
 			old |= !strcmp(pages[index].name, "Screen") || !strcmp(pages[index].name, "First person") ||
 				!strcmp(pages[index].name, "Advanced") || !strcmp(pages[index].name, "General") ||
 				!strcmp(pages[index].name, "Graphics") || !strcmp(pages[index].name, "Audio");
-		check(!old && PAGE_GRAPHICS_DETAIL == TAB_COUNT && PAGE_COUNT == TAB_COUNT + 21 &&
+		check(!old && PAGE_GRAPHICS_DETAIL == TAB_COUNT && PAGE_COUNT == TAB_COUNT + 22 &&
 			!strcmp(pages[PAGE_GRAPHICS_DETAIL].name, "Detail") && !strcmp(pages[PAGE_GRAPHICS_PERFORMANCE].name, "Performance") &&
 			!strcmp(pages[PAGE_BUTTONS].name, "Button layout") && !strcmp(pages[PAGE_TOUCH].name, "Touch zones") &&
 			!strcmp(pages[PAGE_GYRO].name, "Gyro settings") && !strcmp(pages[PAGE_PLAY].name, "Play") &&
@@ -3862,10 +3886,11 @@ static void test_tab_layouts(void)
 			!strcmp(pages[PAGE_INFECTION].name, "Infection") && !strcmp(pages[PAGE_MENUS].name, "Menus") &&
 			!strcmp(pages[PAGE_CHAT].name, "Chat") && !strcmp(pages[PAGE_APPEARANCE].name, "Appearance") &&
 			pages[PAGE_APPEARANCE].tab == TAB_GAME && !strcmp(pages[PAGE_FSFRIENDS].name, "Share with friends") &&
-			!strcmp(pages[PAGE_FSSEND].name, "Send to a friend") && !strcmp(pages[PAGE_FSBROWSE].name, "A friend's File Share"),
+			!strcmp(pages[PAGE_FSSEND].name, "Send to a friend") && !strcmp(pages[PAGE_FSBROWSE].name, "A friend's File Share") &&
+			!strcmp(pages[PAGE_COMMAND].name, "Command") && pages[PAGE_COMMAND].tab == TAB_GAME,
 			"the pages rows open: Detail, Performance, Button layout, Touch zones, Gyro settings, Play, Modded maps, Vita and PC, A/B "
 			"switches, Forge and File Share, Mod manager, Friends, Party, Players, Infection, Menus, Chat, Appearance (Game's), "
-			"Share with friends, Send to a friend, A friend's File Share (no Screen, First person or Advanced page; no General, "
+			"Share with friends, Send to a friend, A friend's File Share, Command (1.1.4) (no Screen, First person or Advanced page; no General, "
 			"Graphics or Audio tab)");
 	}
 	{

@@ -360,6 +360,9 @@ enum
 	PAGE_FSFRIENDS,
 	PAGE_FSSEND,
 	PAGE_FSBROWSE,
+	/* (1.1.4, Game's Command, Menu style Halo CE: Command mode's layout,
+	objective, AI commander, Start Command - port/linux/game/command.c) */
+	PAGE_COMMAND,
 	PAGE_COUNT
 };
 
@@ -396,6 +399,7 @@ static const struct
 	{ "Share with friends", TAB_GAME },
 	{ "Send to a friend", TAB_GAME },
 	{ "A friend's File Share", TAB_GAME },
+	{ "Command", TAB_GAME },
 };
 /* the headings over a tab's rows, as Halo Online's settings have them
 (HUD, Interface...): each above the row it names, when that row is shown */
@@ -667,6 +671,9 @@ static struct setting settings[] = {
 	last row, under Updates, insider.21), shown with Menu style Halo CE; the
 	Halo 3 main menu has FORGE and FILE SHARE: setting_shown) */
 	PAGE_ROW("Forge and File Share", "Forge a map; your map variants (File Share)", TAB_GAME, PAGE_FORGE),
+	/* (1.1.4: Command mode for the original menus - the Halo 3 and ElDewrito
+	main menus have COMMAND, Classic+ its EXTRAS -, at the menus) */
+	PAGE_ROW("Command", "Lead squads in battle on Blood Gulch", TAB_GAME, PAGE_COMMAND),
 	/* (File Share with friends, for the original menus: p2p_fileshare.h) */
 	PAGE_ROW("Share with friends", "Share your variants, send one, a friend's File Share", PAGE_FORGE,
 		PAGE_FSFRIENDS),
@@ -1581,9 +1588,8 @@ static const char *const command_ai_level_names[] = { N_("Easy"), N_("Normal"), 
 /* the map variants listed (File Share's), the ones shown at once */
 #define FORGE_PANEL_MAXIMUM 32
 /* (a Forge game's rows leave room for one: 1.1.3's Delete all took the
-other's; at the menus 1.1.4's three Command rows leave room for two - the
-list scrolls) */
-#define FORGE_PANEL_LINES (forge_panel_ai_counts(NULL, NULL) ? 1 : 2)
+other's) */
+#define FORGE_PANEL_LINES (forge_panel_ai_counts(NULL, NULL) ? 1 : 6)
 
 enum
 {
@@ -1592,9 +1598,11 @@ enum
 	/* (Local, or the network: the connection's, others joining) */
 	FORGE_LINE_NETWORK,
 	FORGE_LINE_START,
-	/* (1.1.4, at the menus: Command mode - its objective, its AI commander's
-	difficulty, Start Command - for every Menu style, the Command lobby's
-	rows: a local Command game of Blood Gulch) */
+	/* (1.1.4, at the menus, its own page PAGE_COMMAND: Command mode - its
+	layout, its objective, its AI commander's difficulty, Start Command -, the
+	Command lobby's rows for Menu style Halo CE: a local Command game of Blood
+	Gulch) */
+	FORGE_LINE_COMMAND_LAYOUT,
 	FORGE_LINE_COMMAND_OBJECTIVE,
 	FORGE_LINE_COMMAND_AI,
 	FORGE_LINE_START_COMMAND,
@@ -1889,6 +1897,11 @@ static int setting_shown(const struct setting *setting)
 	Forge, the magnets) */
 	if (setting->action == ACTION_PAGE && setting->opens == PAGE_FORGE)
 		return classic_panel() || forge_panel_ai_counts(NULL, NULL);
+	/* (Command: Menu style Classic's - the Halo 3 and ElDewrito main menus
+	have COMMAND, Classic+ its EXTRAS -, at the menus - a game played has its
+	own rows) */
+	if (setting->action == ACTION_PAGE && setting->opens == PAGE_COMMAND)
+		return original_style() && !forge_panel_ai_counts(NULL, NULL);
 	/* (the Halo 3 menus' report: with Menu style Halo 3) */
 	if (setting->variable && (!strcmp(setting->variable, "HALO_CARNAGE_REPORT") ||
 		!strcmp(setting->variable, "HALO_SCOREBOARD")))
@@ -3769,6 +3782,24 @@ static const struct forge_store_entry *forge_map_variant(int number, int *count)
 	return found;
 }
 
+/* (the Command page) Blood Gulch's map variants that can be played - an
+Ark Editor layout among them -: how many, the nth (1 the first), NULL past
+them; the one chosen (0: Command's own layout) */
+static int command_variant;
+
+static const struct forge_store_entry *command_map_variant(int number, int *count)
+{
+	const struct forge_store_entry *found = NULL;
+	int index, seen = 0;
+
+	for (index = 0; index < forge_entry_count; index++)
+		if (!forge_entries[index].damaged && !strcmp(forge_entries[index].map_name, "bloodgulch") && ++seen == number)
+			found = &forge_entries[index];
+	if (count)
+		*count = seen;
+	return found;
+}
+
 /* a map's name by its short name (bloodgulch: Blood Gulch) */
 static const char *forge_map_title(const char *short_name)
 {
@@ -3814,17 +3845,30 @@ static void forge_start_mode(int mode)
 		set_notice("%s", T("Leave the network game's lobby first"));
 		return;
 	}
-	if (mode == HALO_FORGE_REQUEST_MODE_COMMAND && forge_network)
-	{
-		set_notice("%s", T("Command plays local from here: Network Local"));
-		return;
-	}
 	halo_forge_request_map = forge_map;
 	halo_forge_request_network = forge_network;
 	halo_forge_request_mode = mode;
-	/* (Command: the map's own layout, no map variant of Forge's) */
-	snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s",
-		variant && mode != HALO_FORGE_REQUEST_MODE_COMMAND ? variant->file_name : "");
+	snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s", variant ? variant->file_name : "");
+	/* (Command, its own page: a local game of Blood Gulch, the page's layout -
+	an Ark Editor layout or a Forge map variant: its bases, objectives, drop
+	points and flags -, else Command's own) */
+	if (mode == HALO_FORGE_REQUEST_MODE_COMMAND)
+	{
+		int index;
+
+		variant = command_variant ? command_map_variant(command_variant, NULL) : NULL;
+		halo_forge_request_map = -1;
+		for (index = 0; index < forge_panel_map_count(); index++)
+			if (forge_panel_map_available(index) && !strcmp(forge_panel_map_short(index), "bloodgulch"))
+				halo_forge_request_map = index;
+		if (halo_forge_request_map < 0)
+		{
+			set_notice("%s", T("Command plays on Blood Gulch: it is not in the maps folder"));
+			return;
+		}
+		halo_forge_request_network = 0;
+		snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s", variant ? variant->file_name : "");
+	}
 	__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_FORGE, __ATOMIC_RELEASE);
 	vita_host_log(mode == HALO_FORGE_REQUEST_MODE_COMMAND ? "settings: Command asked for (settings panel)" :
 		"settings: Forge asked for (settings panel)");
@@ -4604,6 +4648,17 @@ static int page_lines(struct line *lines)
 			lines[count++].index = index;
 		}
 	}
+	if (page == PAGE_COMMAND)
+	{
+		static const int command_lines[] = { FORGE_LINE_COMMAND_LAYOUT, FORGE_LINE_COMMAND_OBJECTIVE, FORGE_LINE_COMMAND_AI,
+			FORGE_LINE_START_COMMAND };
+
+		for (index = 0; index < (int)(sizeof(command_lines) / sizeof(command_lines[0])); index++)
+		{
+			lines[count].type = LINE_FORGE;
+			lines[count++].index = command_lines[index];
+		}
+	}
 	if (page == PAGE_FORGE)
 	{
 		int playing = forge_panel_ai_counts(NULL, NULL);
@@ -4615,9 +4670,9 @@ static int page_lines(struct line *lines)
 			{
 				continue;
 			}
-			/* (Command's rows at the menus alone: a game played has its own) */
-			if (playing && (index == FORGE_LINE_COMMAND_OBJECTIVE || index == FORGE_LINE_COMMAND_AI ||
-				index == FORGE_LINE_START_COMMAND))
+			/* (Command's rows: its own page, PAGE_COMMAND) */
+			if (index == FORGE_LINE_COMMAND_LAYOUT || index == FORGE_LINE_COMMAND_OBJECTIVE || index == FORGE_LINE_COMMAND_AI ||
+				index == FORGE_LINE_START_COMMAND)
 			{
 				continue;
 			}
@@ -5063,6 +5118,7 @@ static void help_line(char *text, int size, const struct line *line)
 			line->index == FORGE_LINE_CLEAR_ALL ? T("Every AI you placed, alive or dead, out of the layout") :
 			line->index == FORGE_LINE_DELETE_GROUP ? T("Everything you placed of one kind, out of the layout") :
 			line->index == FORGE_LINE_MAGNETS ? T("A block held near another snaps flush to its edges") :
+			line->index == FORGE_LINE_COMMAND_LAYOUT ? T("Command's own layout, or a Blood Gulch layout you saved or got") :
 			line->index == FORGE_LINE_COMMAND_OBJECTIVE ? T("Command: what wins - territories, the flag, or both") :
 			line->index == FORGE_LINE_COMMAND_AI ? T("Command: how well the AI commander plays the other side") :
 			line->index == FORGE_LINE_START_COMMAND ? T("Command your squads from above on Blood Gulch (local)") :
@@ -5500,6 +5556,15 @@ static int list_text(char *text, int size, const struct line *lines, int count, 
 				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02  %d  >",
 					line->index == FORGE_LINE_CLEAR_DEAD ? T("Clear dead AI") : T("Clear all AI"),
 					line->index == FORGE_LINE_CLEAR_DEAD ? dead : alive + dead);
+			}
+			else if (line->index == FORGE_LINE_COMMAND_LAYOUT)
+			{
+				int layouts = 0;
+				const struct forge_store_entry *layout = command_variant ? command_map_variant(command_variant, &layouts) : NULL;
+
+				command_map_variant(0, &layouts);
+				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02%c %.24s %c", T("Layout"),
+					command_variant > 0 ? '<' : ' ', layout ? layout->title : T("Command's own"), command_variant < layouts ? '>' : ' ');
 			}
 			else if (line->index == FORGE_LINE_COMMAND_OBJECTIVE)
 				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02< %s >", T("Command objective"),
@@ -6929,7 +6994,7 @@ static void act(const struct setting *setting)
 		page = setting->opens;
 		if (page == PAGE_MAPS)
 			maps_scan();
-		if (page == PAGE_FORGE)
+		if (page == PAGE_FORGE || page == PAGE_COMMAND)
 			forge_scan();
 		if (page == PAGE_FSFRIENDS)
 			fs_scan();
@@ -8453,6 +8518,14 @@ int vita_settings_input(const struct vita_host_pad *pad)
 				}
 				else if (line->index == FORGE_LINE_COMMAND_AI && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT | VITA_BUTTON_CROSS)))
 					command_ai_level_next();
+				else if (line->index == FORGE_LINE_COMMAND_LAYOUT && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
+				{
+					int layouts = 0;
+
+					command_map_variant(0, &layouts);
+					if (command_variant + step >= 0 && command_variant + step <= layouts)
+						command_variant += step;
+				}
 				else if (line->index == FORGE_LINE_MAP && forge_map >= 0 && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
 				{
 					/* (the next map in the maps folder, either way) */
