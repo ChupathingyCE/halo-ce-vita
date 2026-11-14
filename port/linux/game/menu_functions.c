@@ -108,6 +108,7 @@ for a gamepad); a test build's HALO_TEST_TEXT_INPUT answers in its place,
 #include "mod_manager.h"
 #include "custom_edition_maps.h"
 #include "map_checks.h"
+#include "mcc_content.h"
 #include "../src/port_config.h"
 #include "../src/pc_text_entry.h"
 #include "camera/observer.h"
@@ -4178,6 +4179,26 @@ static void h3_mp_gametypes_read(void)
 	}
 }
 
+static void h3_mp_maps_read(void);
+
+/* (port) the level an Xbox map of the lobby plays: its own, or - its file
+not in the maps folder, an install from MCC alone - MCC's copy of it, as
+Forge's (forge_map_path; custom_edition_maps_level_list shows that copy in
+the Xbox map's place) */
+static char const *h3_mp_xbox_level(short index)
+{
+	static char mcc_levels[H3_MAP_COUNT][64];
+
+	if (index < 0 || index >= H3_MAP_COUNT)
+		return "";
+	if (map_check(h3_map_paths[index], NULL, 0) == _map_check_missing &&
+		map_check_mcc_level(h3_map_paths[index], mcc_levels[index], sizeof(mcc_levels[index])))
+	{
+		return mcc_levels[index];
+	}
+	return h3_map_paths[index];
+}
+
 /* (the lobby's map one of the Xbox's whose file is missing or cannot be
 played - Ben's 0-byte beavercreek.map, Battle Creek being the lobby's
 first: its live lobby never opened -) the first that can be, said */
@@ -4186,11 +4207,11 @@ static void h3_mp_map_playable(void)
 	char why[160];
 	short index;
 
-	if (h3_mp.map_index == NONE || map_check(h3_map_paths[h3_mp.map_index], why, sizeof(why)) == _map_check_playable)
+	if (h3_mp.map_index == NONE || map_check(h3_mp_xbox_level(h3_mp.map_index), why, sizeof(why)) == _map_check_playable)
 		return;
 	for (index = 0; index < H3_MAP_COUNT; index++)
 	{
-		if (map_check_playable(h3_map_paths[index]))
+		if (map_check_playable(h3_mp_xbox_level(index)))
 		{
 			platform_log("menus: h3 mp: %s can't be played (%s): the lobby's map is %s", h3_map_names[h3_mp.map_index], why,
 				h3_map_names[index]);
@@ -4219,7 +4240,8 @@ static void h3_mp_map_read(void)
 	map[sizeof(map) - 1] = 0;
 	for (index = 0; index < H3_MAP_COUNT; index++)
 	{
-		if (!_stricmp(map, h3_map_paths[index]))
+		/* (or MCC's copy of it, played in its place: h3_mp_xbox_level) */
+		if (!_stricmp(map, h3_map_paths[index]) || !_stricmp(map, h3_mp_xbox_level(index)))
 		{
 			h3_mp.map_index = index;
 			h3_mp_map_playable();
@@ -9620,7 +9642,10 @@ static char const *lan_map_title(char const *map)
 	{
 		char const *leaf = strrchr(h3_map_paths[index], '\\');
 
-		if (leaf && !_stricmp(leaf + 1, map))
+		/* (or MCC's copy of it: mcc_<name>, an install from MCC alone's) */
+		if (leaf && (!_stricmp(leaf + 1, map) ||
+			(!_strnicmp(map, MCC_CONTENT_NAME_PREFIX, strlen(MCC_CONTENT_NAME_PREFIX)) &&
+			!_stricmp(leaf + 1, map + strlen(MCC_CONTENT_NAME_PREFIX)))))
 			return h3_map_names[index];
 	}
 	for (index = 0; index < NUMBER_OF_SINGLE_PLAYER_LEVELS; index++)
@@ -16909,7 +16934,7 @@ map refused, no game type), their lists, as before */
 static boolean h3_mp_host_choices(void)
 {
 	struct game_variant variant;
-	char const *map = h3_mp.map_index != NONE ? h3_map_paths[h3_mp.map_index] : h3_mp.map_other;
+	char const *map = h3_mp.map_index != NONE ? h3_mp_xbox_level(h3_mp.map_index) : h3_mp.map_other;
 	long variant_index = h3_mp.gametype != NONE ? h3_mp.gametypes[h3_mp.gametype] : NONE;
 	struct network_game_server *server = global_network_game_server_get();
 	char build[0x20], directory[256];
@@ -16974,7 +16999,7 @@ map list and game type list as before */
 static boolean h3_mp_local_start(void)
 {
 	struct game_variant variant;
-	char const *map = h3_mp.map_index != NONE ? h3_map_paths[h3_mp.map_index] : h3_mp.map_other;
+	char const *map = h3_mp.map_index != NONE ? h3_mp_xbox_level(h3_mp.map_index) : h3_mp.map_other;
 	long variant_index = h3_mp.gametype != NONE ? h3_mp.gametypes[h3_mp.gametype] : NONE;
 	struct network_game_server *server;
 	char directory[256], why[160];
@@ -18397,7 +18422,7 @@ static void h3_live_open(void)
 	/* (on the lobby's map from the start: the playlist's first map never
 	copied meanwhile) */
 	if (!ui_widget_port_start_network_game_server_on_map(h3_live.forge ? forge_map_path(h3_forge.map) :
-		h3_mp.map_index != NONE ? h3_map_paths[h3_mp.map_index] : h3_mp.map_other))
+		h3_mp.map_index != NONE ? h3_mp_xbox_level(h3_mp.map_index) : h3_mp.map_other))
 	{
 		h3_live_refuse("the game's server did not start");
 		return;
@@ -19249,9 +19274,20 @@ static void h3_pregame_update(struct widget_instance *widget)
 		wide[index] = 0;
 		h3_utf8(gametype, (int)sizeof(gametype), wide);
 		snprintf(map, sizeof(map), "%s", custom_edition_maps_level_title(game->map.name));
+		/* (an Xbox map, or MCC's copy of one played in its place - an install
+		from MCC alone, h3_mp_xbox_level -: the Xbox map's name and picture) */
+		for (map_index = 0; map_index < H3_MAP_COUNT; map_index++)
+		{
+			char const *level = h3_mp_xbox_level(map_index);
+			char const *leaf = strrchr(level, '\\');
+
+			if (!_stricmp(game->map.name, h3_map_paths[map_index]) || !_stricmp(game->map.name, level) ||
+				!_stricmp(game->map.name, leaf ? leaf + 1 : level))
+				break;
+		}
+		if (map_index < H3_MAP_COUNT)
+			snprintf(map, sizeof(map), "%s", T(h3_map_names[map_index]));
 		snprintf(text, sizeof(text), T("%s on %s"), gametype[0] ? gametype : T("Slayer"), map);
-		for (map_index = 0; map_index < H3_MAP_COUNT && _stricmp(game->map.name, h3_map_paths[map_index]); map_index++)
-			;
 		if ((found = named(screen, "map_picture")) != NULL)
 		{
 			short display = map_index < H3_MAP_COUNT ? NONE : custom_edition_maps_display_index(game->map.name);
@@ -22401,7 +22437,7 @@ boolean pc_menu_event_function_invoke(
 		Cross starts the local game with the lobby's GAME and MAP,
 		h3_mp_local_start; the lobby's map variant played if the game's map
 		is its) */
-		char const *map = h3_mp.map_index != NONE ? h3_map_paths[h3_mp.map_index] : h3_mp.map_other;
+		char const *map = h3_mp.map_index != NONE ? h3_mp_xbox_level(h3_mp.map_index) : h3_mp.map_other;
 
 		h3_mp_variant_play(FALSE, map);
 		h3_local.asked = TRUE;

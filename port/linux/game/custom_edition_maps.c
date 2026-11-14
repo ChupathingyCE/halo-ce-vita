@@ -191,6 +191,12 @@ struct custom_edition_maps_globals
 	/* the latest level list: its Xbox levels, then the maps' level names */
 	short xbox_level_count;
 	char *levels[MAXIMUM_XBOX_LEVELS + MAXIMUM_CUSTOM_EDITION_MAPS];
+	/* (port) the list's maps after the Xbox levels: each one's index in
+	maps (MCC's copy of an Xbox level whose file is not there stands in
+	that level's place instead: list_levels) */
+	short list_maps[MAXIMUM_CUSTOM_EDITION_MAPS];
+	short list_count;
+	char list_levels[MAXIMUM_XBOX_LEVELS][64];
 };
 
 /* What each map file of the maps folder was found to be, by its name and
@@ -896,7 +902,14 @@ static void mcc_multiplayer_maps_add(
 		map->mcc_frame = (short)mcc_content_picture_frame(stem);
 		csstrcpy(map->name, name);
 		csprintf(map->level_name, LEVEL_NAME_FORMAT, name, name);
-		snprintf(title, sizeof(title), "%s (MCC)", mcc_content_title(stem));
+		/* (MCC's copy of an Xbox map "(MCC)", told from the Xbox's beside it -
+		an MCC-only install shows it in the Xbox map's place, under the Xbox's
+		name: custom_edition_maps_level_list -; MCC's own maps, Halo PC's
+		Danger Canyon and the rest, under their own names) */
+		if (xbox_level_stock(stem))
+			snprintf(title, sizeof(title), "%s (MCC)", mcc_content_title(stem));
+		else
+			snprintf(title, sizeof(title), "%s", mcc_content_title(stem));
 		for (character = 0; title[character]; character++)
 		{
 			map->display_name[character] = (wchar_t)(unsigned char)title[character];
@@ -1209,11 +1222,60 @@ char **custom_edition_maps_level_list(
 	{
 		custom_edition_maps_look_for();
 	}
-	for (map_index = 0; map_index < globals->multiplayer_count; map_index++)
+	/* (port: an install from MCC alone - the Vita's Setup, automatic mode;
+	the recommended one - has none of the Xbox's multiplayer maps: each Xbox
+	level whose file is not there but whose MCC copy is (map_check_mcc_level,
+	as Forge, Command and FIREFIGHT play it) is that copy, in the Xbox
+	level's place - its name, picture and description the Xbox's -, and the
+	copy is not listed again after them; the Xbox layout's list is as it was) */
 	{
-		globals->levels[globals->xbox_level_count + map_index] = globals->maps[map_index].level_name;
+		boolean taken[MAXIMUM_CUSTOM_EDITION_MAPS];
+		short substituted = 0;
+
+		csmemset(taken, 0, sizeof(taken));
+		for (level_index = 0; level_index < globals->xbox_level_count; level_index++)
+		{
+			char mcc_level[64];
+
+			if (!globals->levels[level_index] || map_check(globals->levels[level_index], NULL, 0) != _map_check_missing ||
+				!map_check_mcc_level(globals->levels[level_index], mcc_level, sizeof(mcc_level)))
+			{
+				continue;
+			}
+			for (map_index = 0; map_index < globals->multiplayer_count; map_index++)
+			{
+				if (!taken[map_index] && globals->maps[map_index].mcc && !csstrcasecmp(globals->maps[map_index].level_name, mcc_level))
+				{
+					break;
+				}
+			}
+			if (map_index == globals->multiplayer_count)
+			{
+				continue;
+			}
+			taken[map_index] = TRUE;
+			csstrcpy(globals->list_levels[level_index], mcc_level);
+			globals->levels[level_index] = globals->list_levels[level_index];
+			substituted++;
+		}
+		globals->list_count = 0;
+		for (map_index = 0; map_index < globals->multiplayer_count; map_index++)
+		{
+			if (taken[map_index])
+			{
+				continue;
+			}
+			globals->list_maps[globals->list_count] = map_index;
+			globals->levels[globals->xbox_level_count + globals->list_count] = globals->maps[map_index].level_name;
+			globals->list_count++;
+		}
+		if (substituted)
+		{
+			error(_error_silent, "custom edition: %d of the Xbox's levels are MCC's copies (their files not in the maps folder)",
+				substituted);
+		}
 	}
-	*level_count = globals->xbox_level_count + globals->multiplayer_count;
+	*level_count = globals->xbox_level_count + globals->list_count;
 	{
 		/* (port: the custom maps it offers, said - those turned off in the
 		mod manager are not among them) */
@@ -1237,9 +1299,10 @@ short custom_edition_maps_level_display_index(
 	short level_index)
 {
 	struct custom_edition_maps_globals *globals = &custom_edition_maps_globals;
-	short map_index = level_index - globals->xbox_level_count;
+	short list_index = level_index - globals->xbox_level_count;
 
-	return map_index >= 0 && map_index < globals->multiplayer_count ? FIRST_DISPLAY_INDEX + map_index : level_index;
+	return list_index >= 0 && list_index < globals->list_count ? FIRST_DISPLAY_INDEX + globals->list_maps[list_index] :
+		level_index;
 }
 
 short custom_edition_maps_display_index(
