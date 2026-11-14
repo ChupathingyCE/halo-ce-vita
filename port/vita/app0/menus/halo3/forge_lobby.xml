@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- The Halo 3-style Forge lobby (the main menu's FORGE): laid out as Halo 3's - the column at the
-left (FORGE LOBBY, NETWORK, MAP, EXTRA OBJECTS, START FORGE, START COMMAND and its OBJECTIVE, Ready, the map's picture with Forge's emblem, "Edit
+left (FORGE LOBBY, NETWORK, MAP, EXTRA OBJECTS, START FORGE, Ready, the map's picture with Forge's emblem, "Edit
 Objects on <map>"), the nameplate at the right; NETWORK is the multiplayer lobby's (LOCAL, its OFFLINE: a
 local game; ONLINE, SYSTEM LINK, AD HOC: the settings panel's Connection, switched as it is chosen, its status
 under it). On a network the lobby is live as the multiplayer lobby is (menu_functions.c h3_live): its game a
@@ -175,17 +175,24 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 		<child widget="h3/forge/packs_row" x="0" y="58"/>
 		<child widget="h3/forge/start_row" x="0" y="78"/>
 		<child widget="h3/forge/start_live" x="0" y="78"/>
-		<child widget="h3/forge/command_row" x="0" y="98"/>
-		<child widget="h3/forge/objective_row" x="0" y="118"/>
 	</widget>
-	<widget name="h3/forge/rule2" left="8" top="192" width="250" height="2" bitmap="h3/rule"/>
-	<widget name="h3/forge/ready" type="text" left="16" top="197" width="240" height="18" font="h3/font_item" color="#FFE6ECF2" text_y="1"/>
-	<widget name="h3/forge/ready_sub" type="text" left="16" top="213" width="240" height="34" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
-	<widget name="h3/forge/map_picture" left="16" top="252" width="140" height="114" bitmap="h3/mp_maps"/>
-	<widget name="h3/forge/emblem" left="22" top="258" width="64" height="64" bitmap="h3/forge_emblem"/>
-	<widget name="h3/forge/caption" type="text" left="16" top="370" width="240" height="20" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/forge/rule2" left="8" top="172" width="250" height="2" bitmap="h3/rule"/>
+	<widget name="h3/forge/ready" type="text" left="16" top="177" width="240" height="18" font="h3/font_item" color="#FFE6ECF2" text_y="1"/>
+	<widget name="h3/forge/ready_sub" type="text" left="16" top="193" width="240" height="34" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
+	<widget name="h3/forge/map_picture" left="16" top="232" width="140" height="114" bitmap="h3/mp_maps"/>
+	<widget name="h3/forge/emblem" left="22" top="238" width="64" height="64" bitmap="h3/forge_emblem"/>
+	<widget name="h3/forge/caption" type="text" left="16" top="350" width="240" height="20" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
 	<!-- (the variant's words, or why START FORGE did not start: port forge lobby) -->
-	<widget name="h3/forge/note" type="text" left="16" top="392" width="240" height="32" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
+	<widget name="h3/forge/note" type="text" left="16" top="372" width="240" height="60" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
+	<!-- (1.1.4: the Command lobby's, under its longer list - OBJECTIVE, AI COMMANDER, SIDE, START COMMAND -:
+	the Forge lobby's, lower; each found by its name as the Forge lobby's are) -->
+	<widget name="h3/command/rule2" left="8" top="192" width="250" height="2" bitmap="h3/rule"/>
+	<widget name="h3/command/ready" type="text" left="16" top="197" width="240" height="18" font="h3/font_item" color="#FFE6ECF2" text_y="1"/>
+	<widget name="h3/command/ready_sub" type="text" left="16" top="213" width="240" height="34" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
+	<widget name="h3/command/map_picture" left="16" top="252" width="140" height="114" bitmap="h3/mp_maps"/>
+	<widget name="h3/command/emblem" left="22" top="258" width="64" height="64" bitmap="h3/forge_emblem"/>
+	<widget name="h3/command/caption" type="text" left="16" top="370" width="240" height="20" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/command/note" type="text" left="16" top="392" width="240" height="32" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
 	<widget name="h3/forge/a_butn" left="16" top="447" width="16" height="16" bitmap="h3/glyph_cross"/>
 	<widget name="h3/forge/select" type="text" left="36" top="446" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/forge_text" string_index="5"/>
 	<widget name="h3/forge/b_butn" left="110" top="447" width="16" height="16" bitmap="h3/glyph_circle"/>
@@ -273,13 +280,13 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 		<child widget="h3/command/title"/>
 		<child widget="h3/campaign/rule1"/>
 		<child widget="h3/forge/network_status"/>
-		<child widget="h3/forge/rule2"/>
-		<child widget="h3/forge/ready"/>
-		<child widget="h3/forge/ready_sub"/>
-		<child widget="h3/forge/map_picture"/>
-		<child widget="h3/forge/emblem"/>
-		<child widget="h3/forge/caption"/>
-		<child widget="h3/forge/note"/>
+		<child widget="h3/command/rule2"/>
+		<child widget="h3/command/ready"/>
+		<child widget="h3/command/ready_sub"/>
+		<child widget="h3/command/map_picture"/>
+		<child widget="h3/command/emblem"/>
+		<child widget="h3/command/caption"/>
+		<child widget="h3/command/note"/>
 		<child widget="h3/campaign/rule3"/>
 		<child widget="h3/forge/a_butn"/>
 		<child widget="h3/forge/select"/>
