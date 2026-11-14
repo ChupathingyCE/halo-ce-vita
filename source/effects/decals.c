@@ -267,7 +267,8 @@ enum
 enum
 {
 	_decal_locked_bit,
-	_decal_permanent_bit
+	_decal_permanent_bit,
+	_decal_hidden_bit           /* (port) HALO_DECAL_MIN_PIXELS: made as ever, never drawn (rasterizer_xbox_decals.c, bit 2) */
 };
 
 enum
@@ -2362,6 +2363,7 @@ void decal_new_from_collision(
 }
 
 #ifdef HALO_LINUX
+static boolean decal_hide_new = FALSE; /* the decal_new in progress's decals are not drawn (tiny) */
 /* (port) HALO_DECAL_MIN_PIXELS=n (0, the default: off): a decal that would
 be less than n pixels across from every local player's view is not made -
 the bullet holes and scorches of a battle far off, each a collision ray, a
@@ -2438,11 +2440,11 @@ void decal_new(
 	struct decal_editor_geometry *editor_geometry)
 {
 #ifdef HALO_LINUX
-	if (decals_enabled && !permanent && !editor_geometry &&
-		decal_too_small_to_see(decal_definition_index, origin, radius_modifier))
-	{
-		return;
-	}
+	/* (a setting must never change the game's random numbers, which decals
+	share with the effects: the tiny decal is made like any other - the same
+	collision test, the same random draws - and only not drawn) */
+	decal_hide_new = decals_enabled && !permanent && !editor_geometry &&
+		decal_too_small_to_see(decal_definition_index, origin, radius_modifier);
 #endif
 	if (decals_enabled)
 	{
@@ -2751,6 +2753,10 @@ static long decal_insert(
 		{
 			new_decal->flags = 0;
 		}
+#ifdef HALO_LINUX
+		if (decal_hide_new)
+			SET_FLAG(new_decal->flags, _decal_hidden_bit, TRUE);
+#endif
 		if (next_decal_index != NONE)
 		{
 			struct decal_datum *next = DECAL_GET(next_decal_index);

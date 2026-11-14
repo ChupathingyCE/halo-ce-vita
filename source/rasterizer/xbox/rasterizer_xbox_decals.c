@@ -979,6 +979,11 @@ static long decal_sort_cluster(long decal_index)
 		struct decal_sort_entry *entry;
 		pixel32 color = decal->color;
 
+		if (TEST_FLAG(decal->flags, 2)) /* (_decal_hidden_bit: too small to see) */
+		{
+			decal_index = decal->next_decal_index;
+			continue;
+		}
 		if (count == DECAL_SORT_MAXIMUM)
 			return 0;
 		entry = &decal_sorted[count];
@@ -1093,6 +1098,14 @@ void _rasterizer_decals_draw(
 		unsigned long intensity;
 #ifdef HALO_LINUX
 		long key[4];
+
+		if (TEST_FLAG(decal->flags, 2)) /* (_decal_hidden_bit: too small to see, HALO_DECAL_MIN_PIXELS) */
+		{
+			decal_index = decal_sorted_count > 0 ?
+				(++decal_sorted_cursor < decal_sorted_count ? decal_sorted[decal_sorted_cursor].decal_index : NONE) :
+				decal->next_decal_index;
+			continue;
+		}
 
 		color = decal->color;
 		intensity = decal_intensity_rounded((decal->intensity * (color >> 24) + 127) >> 8);
