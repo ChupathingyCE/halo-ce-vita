@@ -136,9 +136,9 @@ PSVitaAlive or VitaDB are often versions behind.
 - The shader compiler `ur0:data/libshacccg.suprx`: if you don't have it, run
   [ShaRKF00D](https://github.com/Rinnegatamante/ShaRKF00D/releases) once.
 - About 1.5 GB free on `ux0:`.
-- Your own **Xbox** copy of Halo: Combat Evolved (disc or image), or your
-  own Halo: The Master Chief Collection on Steam. The PC version's maps don't
-  work.
+- Your own **Xbox** copy of Halo: Combat Evolved (disc or image) -
+  recommended - or, optional and fully supported, your own Halo: The Master
+  Chief Collection on Steam. The PC version's maps don't work.
 - For online play and Custom Edition maps: the free
   [Halo Custom Edition installer](https://www.halomaps.org/hce/detail.cfm?fid=410)
   (see [Halo PC files](#halo-pc-files)).

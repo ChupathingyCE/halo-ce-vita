@@ -29,14 +29,15 @@ kind in the other's folder.
 | MCC's sound effects: `halo1\sound\pc\sounds_adpcm.fsb` and the `lst` folder beside it | `ux0:data/haloce-vita/mcc/halo1/sound/pc/` |
 | Movies (optional, made from the Xbox disc's `bink` folder) | `ux0:data/haloce-vita/movies/` |
 
-You need **one** of the two: the Xbox files, or MCC's files. Both together
-also work.
+You need **one** of the two. Your own **Xbox** files are the recommended
+install; Halo: MCC's files are optional and fully supported (both together
+also work).
 
 - MCC's files in `ux0:data/haloce-vita/maps/` do **not** work: the game says
   so and where to move them.
 - The Windows Setup tool (`HaloCEVitaInstaller.exe`, on the releases page)
-  puts everything in the right place for you: choose **Automatic** for your
-  Steam MCC, **Manual** for an Xbox disc image.
+  puts everything in the right place for you: choose **Manual** for your Xbox
+  disc image (recommended), **Automatic** for your Steam MCC.
 
 ### What an install from MCC alone has and hasn't
 
