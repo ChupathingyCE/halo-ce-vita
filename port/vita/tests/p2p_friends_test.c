@@ -2247,6 +2247,74 @@ brokers (each heard twice: the copies dropped as replays, nothing new
 dropped) - insider.18: the invite sent to the run that closed stood for two
 minutes, a new one refused as too soon, so "I didn't get it, try again?" got
 nothing */
+/* (party audit 1.1.3) the leader gone, the new leader - a friend of every
+member - moves the party: its follows are taken, though its own serials
+start below the old leader's */
+static void party_host(int machine, int base, int hosting)
+{
+	int at;
+
+	hosts[machine].hosting = hosting;
+	for (at = 0; at < P2P_KEY_HASH_SIZE; at++)
+		hosts[machine].key_hash[at] = (unsigned char)(base + at);
+	for (at = 0; at < P2P_TOKEN_SIZE; at++)
+		hosts[machine].token[at] = (unsigned char)(base + 0x20 + at);
+	hosts[machine].open = 1;
+	hosts[machine].players = 1;
+	hosts[machine].maximum = 16;
+	use(machine);
+	if (hosting)
+		p2p_friends_set_activity(P2P_FRIEND_STATE_MULTIPLAYER, "bloodgulch", "Slayer", 2, -1, 0, 1, 16);
+	else
+		p2p_friends_set_activity(P2P_FRIEND_STATE_MENUS, "", "", 0, -1, 0, 0, 0);
+	party_pass(4);
+}
+
+static void test_party_handoff_follow(void)
+{
+	char id[P2P_FRIEND_ID_SIZE];
+	struct p2p_party_follow follow;
+	int round;
+
+	party_reset();
+	use(0);
+	p2p_friends_set_name("Alpha");
+	use(1);
+	p2p_friends_set_name("Bravo");
+	use(2);
+	p2p_friends_set_name("Charlie");
+	party_make_friends(0, 1);
+	party_make_friends(0, 2);
+	party_make_friends(1, 2);
+	party_pass(10);
+	check(party_friend_id(0, 1, id) && (use(0), p2p_party_invite(id)) == P2P_PARTY_DONE, "handoff: Alpha invites Bravo");
+	check(party_friend_id(0, 2, id) && (use(0), p2p_party_invite(id)) == P2P_PARTY_DONE, "handoff: and Charlie");
+	party_pass(2);
+	party_answer_all(1, 1);
+	party_answer_all(2, 1);
+	party_pass(4);
+	check(party_count_of(2, NULL) == 3, "handoff: a party of three");
+	/* Alpha hosts and closes three games: its follow serials climb */
+	for (round = 0; round < 3; round++)
+	{
+		party_host(0, 0x30 + round, 1);
+		party_host(0, 0x30 + round, 0);
+	}
+	check(machines[2].party.follow_heard >= 4, "handoff: Charlie heard Alpha's follows");
+	/* Alpha goes silent; Bravo leads */
+	party_offline = 0;
+	party_pass(PARTY_TIMEOUT / 500 + 8);
+	party_offline = -1;
+	check(party_leader_of(1) == 1 && party_leader_of(2) == 1, "handoff: Bravo leads on both machines");
+	/* Bravo hosts: Charlie, his friend, is told to follow */
+	party_host(1, 0x80, 1);
+	use(2);
+	check(p2p_party_follow_pending(&follow) && follow.hosting && !strcmp(follow.leader, "Bravo"),
+		"handoff: the new leader's first follow is taken");
+	party_host(1, 0x80, 0);
+	party_reset();
+}
+
 static void test_party_restart(void)
 {
 	char id[P2P_FRIEND_ID_SIZE];
@@ -4791,6 +4859,7 @@ int main(void)
 #endif
 	test_party();
 	test_party_restart();
+	test_party_handoff_follow();
 	test_backup();
 	test_fileshare();
 	test_device_binding(root);

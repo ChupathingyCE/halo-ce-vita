@@ -718,6 +718,24 @@ static void party_leave_now(int tell, const char *why)
 	}
 }
 
+/* the party's leader changed (hand-off, or a successor's roster): each
+leader numbers its own follows from 1, so what was heard of the last one's
+is let go (else the new leader's follows, numbered below the old one's, are
+all dropped as heard: party audit 1.1.3); a leader new here numbers its own
+above anything heard, for a member that did not let go yet */
+static void party_leader_changed(void)
+{
+	unsigned long heard = friends->party.follow_heard > friends->party.follow_done ? friends->party.follow_heard :
+		friends->party.follow_done;
+
+	if (friends->party.follow_serial < heard)
+		friends->party.follow_serial = heard;
+	friends->party.follow_heard = 0;
+	friends->party.follow_done = 0;
+	friends->party.follow_pending = 0;
+	friends->party.follow_result = P2P_PARTY_FOLLOW_NONE;
+}
+
 /* a member gone from the roster (left, removed, timed out); the leader
 gone, the longest-standing member leads (deterministic: every member works
 out the same one) */
@@ -742,8 +760,7 @@ static void party_remove_index(int index, const char *why)
 			party_member_name(&friends->party.members[0], leader, sizeof(leader));
 			party_notice(T("%s leads the party now"), leader);
 		}
-		friends->party.follow_heard = friends->party.follow_done;
-		friends->party.follow_pending = 0;
+		party_leader_changed();
 		/* (this machine leads: its roster out at once) */
 		if (party_leading_now())
 		{
@@ -869,6 +886,13 @@ static void party_roster_apply(const struct message *message, int joining)
 				party_notice(T("%s left the party"), name);
 			}
 		}
+	}
+	/* (a leader other than the one kept: a successor's roster) */
+	if (!joining && friends->party.active && friends->party.leader < friends->party.count &&
+		!p2p_equal(friends->party.members[friends->party.leader].key, message->party_keys[message->party_leader],
+		P2P_KEY_SIZE))
+	{
+		party_leader_changed();
 	}
 	memcpy(friends->party.members, members, sizeof(members));
 	friends->party.count = count;
