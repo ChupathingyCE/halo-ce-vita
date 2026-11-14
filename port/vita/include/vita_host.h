@@ -119,6 +119,9 @@ for the game's Bink movies, from H.264 copies */
 int vita_movie_open(const char *path, unsigned long *width, unsigned long *height);
 /* 1: a frame is waiting; 0: not yet; -1: the movie ended */
 int vita_movie_poll(void);
+/* (port) what went wrong with the movies this run: 0 nothing, 1 a movie file
+not found, 2 a movie that gave no picture (stopped and skipped) */
+int vita_movie_problem(void);
 /* the waiting frame as rows of X8R8G8B8 */
 void vita_movie_copy(void *destination, long pitch, unsigned long width, unsigned long height);
 void vita_movie_close(void);

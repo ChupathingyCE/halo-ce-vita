@@ -110,6 +110,11 @@ the fonts). The left of the list sits in the wide screen's margin (x below 0 of 
 	<!-- (the title large at the right, as the online menu has its logo: the owner's HALO CE VITA
 	logo, main.xml's h3/title, drawn whole into the widget) -->
 	<widget name="online/main/title" left="300" top="318" width="400" height="100" bitmap="online/title"/>
+	<!-- (under the title: what the player's files lack - the PC: Halo MCC not found; the Vita: the movies
+	missing or shown with no picture - as the Halo 3 main menu's h3/main/content_notice; empty otherwise) -->
+	<widget name="online/main/content_notice" type="text" left="300" top="424" width="340" height="34" font="online/font_small" color="#FFC5D0DD" text_x="0" text_y="0">
+		<data input="port h3 content notice"/>
+	</widget>
 
 	<!-- (scene="ring": as the Halo 3 main menu, the ring's own flight behind) -->
 	<widget name="online/main/screen" flags="pass_unhandled_to_focused_child" scene="ring"
@@ -128,6 +133,7 @@ the fonts). The left of the list sits in the wide screen's margin (x below 0 of 
 		<child widget="online/main/start_butn"/>
 		<child widget="online/main/settings"/>
 		<child widget="online/main/title"/>
+		<child widget="online/main/content_notice"/>
 		<child widget="online/lobby/main/players"/>
 		<child widget="online/lobby/main/nameplate"/>
 		<child widget="online/lobby/main/party_plates"/>

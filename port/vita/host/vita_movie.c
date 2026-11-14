@@ -31,6 +31,7 @@ the picture to fit the screen at its display shape.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #ifdef __ARM_NEON
 #include <arm_neon.h>
 #endif
@@ -68,7 +69,24 @@ static struct
 	int held;
 	volatile int shown;
 	unsigned long long opened_us;
+	/* a frame came from the player since the open (vita_movie_poll) */
+	int pictured;
 } movie;
+
+/* (port) what went wrong with the movies this run, for the main menu's
+notice (menu_functions.c, port h3 content notice): 0 nothing, 1 a movie file
+not found, 2 a movie that gave no picture (sound over a black screen: a file
+converted in a form the Vita's player does not show - three players after
+updating, Nov 2026), stopped and skipped. The worst kept */
+static int movie_problem;
+
+int vita_movie_problem(void)
+{
+	return movie_problem;
+}
+
+/* a movie with no picture this long after its open is stopped (skipped) */
+#define MOVIE_NO_PICTURE_US 4000000ull
 
 /* the decoder's frame memory (movie_allocate_frame): how much of it can be
 read from a frame's address on */
@@ -328,6 +346,20 @@ int vita_movie_open(const char *path, unsigned long *width, unsigned long *heigh
 		{
 			snprintf(message, sizeof(message), "movie: %s not found (convert the disc's .bik with ffmpeg: see port/vita/README)", path);
 			vita_host_log(message);
+			/* (said on the main menu only when there is a movies folder: the
+			movies are optional - an install from MCC alone has none) */
+			{
+				char folder[256];
+				char *slash;
+				struct stat status;
+
+				snprintf(folder, sizeof(folder), "%s", path);
+				slash = strrchr(folder, '/');
+				if (slash)
+					*slash = 0;
+				if (slash && movie_problem < 1 && stat(folder, &status) == 0)
+					movie_problem = 1;
+			}
 			return -1;
 		}
 		fclose(file);
@@ -389,6 +421,7 @@ int vita_movie_open(const char *path, unsigned long *width, unsigned long *heigh
 		{
 			movie.frame_valid = 1;
 			movie.frame_pending = 1;
+			movie.pictured = 1;
 		}
 		else
 			sceKernelDelayThread(1000);
@@ -481,7 +514,18 @@ int vita_movie_poll(void)
 	{
 		movie.frame_valid = 1;
 		movie.frame_pending = 1;
+		movie.pictured = 1;
 		return 1;
+	}
+	/* (port) no picture at all yet, seconds after the open: the player
+	plays its sound over a black screen (a file it cannot show); ended
+	here - the game skips it - and said on the main menu */
+	if (!movie.pictured && vita_host_time_us() - movie.opened_us > MOVIE_NO_PICTURE_US)
+	{
+		vita_host_log("movie: no picture 4 s after the open (the file's video is in a form the Vita's player does not "
+			"show: convert the movies again with Setup): stopped, skipped");
+		movie_problem = 2;
+		return -1;
 	}
 	return sceAvPlayerIsActive(movie.player) ? 0 : -1;
 }
