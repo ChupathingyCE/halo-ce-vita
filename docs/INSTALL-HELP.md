@@ -44,8 +44,9 @@ With MCC's files alone (no Xbox `maps` folder) the campaign, multiplayer,
 Forge, the menus and their live background all work. Different from an Xbox
 install:
 
-- The loading screen is plain black: its picture is in the Xbox disc's
-  `default.xbe`, which MCC doesn't have.
+- The loading screen shows a picture of the menus' live background (taken
+  once from your own files the first time the main menu is up): the Xbox
+  loading picture is in the disc's `default.xbe`, which MCC doesn't have.
 - No intro or other movies: they come from the Xbox disc (they are
   optional; the game skips them).
 - Dialogue and music of MCC's maps are silent in 1.1.x (sound effects play).
@@ -76,8 +77,8 @@ on; it isn't in 1.1.x.
 | --- | --- |
 | Black screen with no sound right at the start, after copying MCC's files | MCC's files are in `maps/`: move them to `mcc/halo1/maps/` (see the table) |
 | Stuck on the loading picture, music playing | The shader compiler is missing: run ShaRKF00D once (README, Requirements) |
-| The intro is black but you hear it | The movies were converted in a form the Vita can't show. 1.1.3 skips such a movie and says so on the main menu. Convert them again with Setup, or delete `ux0:data/haloce-vita/movies/` (the movies are optional) |
-| The loading screen is black | No Xbox `default.xbe` (an install from MCC alone). Normal; the game goes on |
+| The intro is black but you hear it | The movies were converted in a form the Vita can't show. 1.1.3 skips such a movie (`halo.log` says so). Convert them again with Setup, or delete `ux0:data/haloce-vita/movies/` (the movies are optional) |
+| The loading screen is black | No Xbox `default.xbe` and no picture of the live background yet: it is taken the first time the main menu's live background is up (ElDewrito menu style) |
 | The online menus don't show up | The Halo PC files are missing; the settings panel's Multiplayer tab (SELECT + D-pad down) says which (README, Halo PC files) |
 
 When you report a problem, send `ux0:data/haloce-vita/halo.log` and, after a
