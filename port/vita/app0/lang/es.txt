@@ -3139,5 +3139,3 @@
 "Friends see the files you share; you send and take variants" = "Tus amigos ven lo que compartes; envías y recibes variantes"
 "Send to a friend" = "Enviar a un amigo"
 "A friend's File Share" = "Archivos de un amigo"
-"The movies are missing (intro and cutscenes):\nrun Setup's movie step again" = "Faltan los vídeos (intro y escenas):\nvuelve a hacer el paso de vídeos de Setup"
-"The movies can't be shown on the Vita (sound only):\nconvert them again with Setup" = "La Vita no puede mostrar los vídeos (solo sonido):\nvuelve a convertirlos con Setup"

@@ -21779,22 +21779,11 @@ void pc_menu_game_data_function_invoke(
 		break;
 	case _input_h3_content_notice:
 	{
-		/* (the Halo 3 and ElDewrito main menus', PC: Halo MCC looked for and
-		not found, port/linux/src/xbox_files.c; the PS Vita: the intro and
-		the other movies not found, or played with no picture - black with
-		their sound, three players after updating - vita_movie.c; empty
-		otherwise) */
+		/* (the Halo 3 main menu's, PC: Halo MCC looked for and not found,
+		port/linux/src/xbox_files.c; empty otherwise and on the PS Vita) */
 		const char *platform_mcc_menu_notice(int short_form);
-		char const *notice = platform_mcc_menu_notice(FALSE);
-#ifdef HALO_VITA
-		int vita_movie_problem(void);
 
-		if (!notice && vita_movie_problem() == 1)
-			notice = T("The movies are missing (intro and cutscenes):\nrun Setup's movie step again");
-		else if (!notice && vita_movie_problem() == 2)
-			notice = T("The movies can't be shown on the Vita (sound only):\nconvert them again with Setup");
-#endif
-		text_show(widget, notice);
+		text_show(widget, platform_mcc_menu_notice(FALSE));
 		break;
 	}
 	case _input_h3_players:
