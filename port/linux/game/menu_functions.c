@@ -21020,7 +21020,7 @@ static struct
 	struct browser_view view1;
 	struct browser_view view2;
 	struct browser_view view3;
-	char said[200];
+	char said[256];
 } cascade;
 
 static char const *const cascade_tab_names[CASCADE_TABS] = { N_("HALO CE") };
@@ -21757,7 +21757,7 @@ static void cascade_update(struct widget_instance *list)
 	struct cascade_kind const *kind = cascade.kind;
 	long index, focused_row = NONE;
 	int groups, count, target, items;
-	char text[160], title[160];
+	char text[160], title[160], focus_text[160] = "";
 
 	if (!kind || list->type != _ui_widget_type_column_list)
 		return;
@@ -21828,7 +21828,10 @@ static void cascade_update(struct widget_instance *list)
 				kind->group_name(shown_index, text, (int)sizeof(text));
 			text_show(child, text);
 			if (index == view->row)
+			{
 				focus = child;
+				snprintf(focus_text, sizeof(focus_text), "%s", text);
+			}
 		}
 		if (focus && focus != list->focused_child)
 			ui_widget_port_give_focus(list, focus);
@@ -21926,10 +21929,11 @@ static void cascade_update(struct widget_instance *list)
 	else
 		cascade_panel_words(screen, NULL, T("Nothing to choose from in this tab."), NULL);
 	{
-		char said[200];
+		char said[256];
 
-		snprintf(said, sizeof(said), "%s: column %d, %s, row %d of %d", kind->log_name, cascade.column,
-			kind->tabs ? cascade_tab_names[cascade.tab] : "-", target + 1, count);
+		/* (the focused row's words too, "(DAMAGED)" and all: what the player sees, for the tests' logs) */
+		snprintf(said, sizeof(said), "%s: column %d, %s, row %d of %d: %s", kind->log_name, cascade.column,
+			kind->tabs ? cascade_tab_names[cascade.tab] : "-", target + 1, count, focus_text);
 		if (strcmp(said, cascade.said))
 		{
 			snprintf(cascade.said, sizeof(cascade.said), "%s", said);
