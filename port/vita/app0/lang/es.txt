@@ -3490,3 +3490,13 @@
 "LIVES" = "VIDAS"
 "HOLD THE ZONE %ld/%d S" = "MANTÉN LA ZONA %ld/%d S"
 "DEFEND THE ZONE: BREACHED %ld/%d S" = "DEFIENDE LA ZONA: INVADIDA %ld/%d S"
+# ---------- 1.1.5: the Firefight lobby, PREPARING FIREFIGHT and the carnage report's result (menu_functions.c,
+# halo3/forge_lobby.xml) - 1.2.0's words
+"SURVIVED" = "SOBREVIVIERON"
+"GAME OVER" = "FIN DEL JUEGO"
+"Firefight" = "Firefight"
+"PREPARING FIREFIGHT" = "PREPARANDO FIREFIGHT"
+"Survive waves of the Covenant together." = "Resiste oleadas del Covenant en equipo."
+"Firefight's own layout." = "Diseño propio de Firefight."
+"Firefight on %s" = "Firefight en %s"
+"Command mode and Firefight build their soldiers, dropships\nand turrets from your Halo CE campaign maps once, and\nkeep them on the memory card for every game after." = "El modo Mando y Firefight crean sus soldados, naves y\ntorretas a partir de tus mapas de la campaña de Halo CE\nuna vez, y los guardan en la tarjeta de memoria\npara todas las partidas siguientes."

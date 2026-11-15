@@ -2,9 +2,9 @@
 <!-- Menu style Halo CE: the Xbox's main menu with the port's rows (classic_patch: the map's list
      itself while the style is Halo CE; Halo 3's main menu is menus/halo3/main.xml). CAMPAIGN,
      MULTIPLAYER and SETTINGS are the game's own rows, as they are; MEDIA (File Share, Friends and
-     the Game Manager together, as ElDewrito's START > MEDIA) and EXTRAS (Forge and Command:
-     classic/modes.xml) under them, the modes last (1.2.0 menu round 3, owner Nov 8; 1.1.4), are
-     words drawn in their look
+     the Game Manager together, as ElDewrito's START > MEDIA) and EXTRAS (Forge, Command and
+     Firefight: classic/modes.xml) under them, the modes last (1.2.0 menu round 3, owner Nov 8;
+     1.1.4, 1.1.5), are words drawn in their look
      (tools/classic_menu_art.py: 256 x 32, frame 0 not focused, 1 focused, as the game's column list
      shows them), in the language chosen (classic/<lang>/, menu_tags.c "{lang}"; in English of the
      game's own letters, menu_words.c), 29 pixels apart as the Xbox's three are 36 -->

@@ -475,6 +475,10 @@ static char const *const port_function_names[] =
 	"port forge start command",
 	"port forge command objective",
 	"port forge command prepare",
+	/* (1.1.5: the Firefight lobby, START FIREFIGHT and PREPARING FIREFIGHT) */
+	"port firefight lobby init",
+	"port forge start firefight",
+	"port forge firefight prepare",
 };
 
 /* the port's game data functions (menu_functions.c), from
