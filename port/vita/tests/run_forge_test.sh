@@ -526,13 +526,13 @@ pick() {
 # (full: Sample Gulch chosen and started; Start, SAVE MAP VARIANT twice:
 # over its file, then as a new one, both failing)
 fullpad="$(pick 3) start:150:2000 down:150:600 down:150:600 a:150:2500 @04-full:0:300 a:150:2500 @05-full-new:0:300"
-# (fileshare: FILE SHARE; down (Sample Gulch), Square (renamed), Triangle,
-# A (deleted); down (damaged.hmv), A (refused), Triangle, A (deleted);
-# right (GAME VARIANTS), left; A on Missing Tag (the Forge lobby), B, B)
-fspad="wait:150:3000 down:150:600 down:150:600 down:150:600 a:150:2500 @00-fileshare:0:300"
+# (fileshare: FILE SHARE - Start > MEDIA > FILE SHARE since 1.1.3 -; down (Sample Gulch), Square
+# (renamed), Triangle, A (deleted); down (damaged.hmv), A (refused), Triangle, A (deleted);
+# right (GAME VARIANTS), left; A on Missing Tag (the Forge lobby), B, B: Start, B: the main menu)
+fspad="wait:150:3000 start:150:2500 down:150:600 a:150:2500 @00-fileshare:0:300"
 fspad="$fspad down:150:700 x:150:2000 @01-renamed:0:300 y:150:1500 @02-delete-asked:0:300 a:150:2000 @03-deleted:0:300"
 fspad="$fspad down:150:700 a:150:1500 @04-damaged-refused:0:300 y:150:1500 a:150:2000 right:150:1200"
-fspad="$fspad @05-game-variants:0:300 left:150:1200 a:150:2500 @06-forge-lobby:0:300 b:150:2000 b:150:2000"
+fspad="$fspad @05-game-variants:0:300 left:150:1200 a:150:2500 @06-forge-lobby:0:300 b:150:2000 b:150:2000 b:150:2000"
 fspad="$fspad @07-main-menu:0:300"
 
 # (edit: START FORGE; a Warthog from VEHICLES, held; Square (its
@@ -921,10 +921,11 @@ fstouch_runs() {
 	local store="$out/fstouch-store"
 	rm -rf "$store"
 	samples "$store"
-	# (FILE SHARE's row; Rename's label; the second row: A, the Forge
-	# lobby; the lobby's Leave; File Share's Back)
-	run fstouch 40 "" "" "wait:150:30000" HALO_MENU_STYLE=halo3 HALO_SAVE_ROOT="$store" "HALO_TEST_TEXT_INPUT=Touched" \
-		"HALO_TEST_TAPS=4000:60,338 8000:220,430 12000:120,128 17000:140,455 22000:395,430"
+	# (Start - FILE SHARE is Start > MEDIA's since 1.1.3 -, then taps: FILE SHARE's row; Rename's
+	# label; the second row: A, the Forge lobby; the lobby's Leave; File Share's Back: Start again,
+	# whose B goes back to the main menu)
+	run fstouch 40 "" "" "wait:150:2500 start:150:21000 b:150:5000" HALO_MENU_STYLE=halo3 HALO_SAVE_ROOT="$store" \
+		"HALO_TEST_TEXT_INPUT=Touched" "HALO_TEST_TAPS=4000:120,128 8000:220,430 12000:120,128 17000:140,455 22000:395,430"
 	find "$store" -type f | sort > "$out/fstouch-files.txt"
 }
 
@@ -978,14 +979,14 @@ round_runs() {
 	ai_run round 45 "$c"
 }
 
-# (mpvariant: MULTIPLAYER; NETWORK (A), down two to OFFLINE (past AD HOC), A; MAP (down two, A),
-# Blood Gulch (down nine, A): its variants, down to MP Gulch, A; START GAME
-# (down, A): split screen's SELECT PROFILE, A joins, A the profile, Start:
+# (mpvariant: MULTIPLAYER; NETWORK (A), down two to OFFLINE (past AD HOC), A; MAP (down one -
+# above GAME TYPE since 1.1.3 -, A: SELECT MAP on Battle Creek), Blood Gulch (down nine, A): its
+# variants in column 2, down to MP Gulch, A; START GAME (down two, past GAME TYPE, A): split screen's SELECT PROFILE, A joins, A the profile, Start:
 # the local game starts at once with the lobby's GAME and MAP, no map or
 # game type list)
-mpvariantpad="wait:150:3000 down:150:700 a wait:150:4000 a:150:2000 down:150:500 down:150:500 a:150:2500 down:150:500 down:150:500 a:150:2500"
+mpvariantpad="wait:150:3000 down:150:700 a wait:150:4000 a:150:2000 down:150:500 down:150:500 a:150:2500 down:150:500 a:150:2500"
 mpvariantpad="$mpvariantpad $(for i in 1 2 3 4 5 6 7 8 9; do printf 'down:150:300 '; done)a:150:2500 @00-variants:0:300"
-mpvariantpad="$mpvariantpad down:150:500 a:150:3000 @01-lobby:0:300 down:150:500 a:150:4000 a:150:2000 a:150:2000"
+mpvariantpad="$mpvariantpad down:150:500 a:150:3000 @01-lobby:0:300 down:150:500 down:150:500 a:150:4000 a:150:2000 a:150:2000"
 mpvariantpad="$mpvariantpad start:150:3000 wait:150:15000 @02-game:0:300"
 
 mpvariant_runs() {
@@ -2765,7 +2766,7 @@ for c in $cases; do
 			fail "variants-save: no gulch_test.hmv in $store"
 		expect variants-load "the picker read the Blood Gulch folder" "menus: 5 map variants of bloodgulch"
 		expect variants-load "MAP, then the map's variants (Halo 3's), the map itself first" \
-			"menus: forge variants: Blood Gulch: the original \\(1 of 4\\)"
+			"menus: cascade: forge maps: column 2, -, row 1 of 4: BLOOD GULCH$"
 		expect variants-load "a damaged file refused by the validator" "forge store: bloodgulch/damaged.hmv refused: its checksum is wrong"
 		expect variants-load "another map's file refused" "forge store: bloodgulch/wrongmap.hmv refused: of another map"
 		expect variants-load "Gulch Test chosen" "menus: forge lobby: Blood Gulch, map variant Gulch Test \(gulch_test.hmv\)"
@@ -2776,8 +2777,8 @@ for c in $cases; do
 		expect variants-missing "skipped and counted, not fatal" \
 			"forge: map variant \"Missing Tag\" applied: 5 placed, 1 skipped \(1 missing tags"
 		expect variants-damaged "the damaged ones not offered (the map and its three good variants)" \
-			"menus: forge variants: Blood Gulch: Sample Gulch \\(4 of 4\\)"
-		expect variants-damaged "B: back to the maps" "menus: forge lobby: Blood Gulch's variants"
+			"menus: cascade: forge maps: column 2, -, row 4 of 4: SAMPLE GULCH$"
+		expect variants-damaged "B: back to the maps" "menus: cascade: back to column 1"
 		expect variants-damaged "START FORGE then plays none" "menus: forge lobby: start levels.test.bloodgulch.bloodgulch$"
 		if grep -aq "forge: map variant .* applied" "$out/variants-damaged/run.log"; then
 			fail "variants-damaged: a variant was applied"
@@ -2826,7 +2827,7 @@ for c in $cases; do
 		windows=$(echo "$lookups" | grep -c .)
 		none=$(echo "$lookups" | grep -cx 0)
 		total=$(echo "$lookups" | awk '{ t += $1 } END { print t + 0 }')
-		grep -aq "ui: screen pc.h3.forge.maps.screen" "$log" || fail "$c: the map picker did not open"
+		grep -aq "ui: screen pc.h3.cascade.screen" "$log" || fail "$c: the map picker did not open"
 		if [ "$windows" -lt 12 ]; then
 			fail "$c: $windows windows of 30 frames counted in the lobby (HALO_TEST_PATH_LOOKUPS)"
 		elif [ "$total" -le 150 ] && [ "$((none * 2))" -ge "$windows" ]; then
@@ -2842,8 +2843,8 @@ for c in $cases; do
 		grep -aq 'forge: map variant "MP Gulch" saved as bloodgulch/mp_gulch.hmv, 2 objects' "$out/mpvariant-save/run.log" &&
 			echo "  ok: $c: MP Gulch saved in Forge (2 objects)" || fail "$c: the map variant was not saved in Forge"
 		expect "$c" "OFFLINE chosen" "menus: h3 mp: network OFFLINE"
-		expect "$c" "MAP: Blood Gulch shows its map variants" "menus: h3 mp: Blood Gulch's map variants \\(1\\)"
-		expect "$c" "the map itself first" "menus: h3 mp variants: Blood Gulch: the original \\(1 of 2\\)"
+		expect "$c" "MAP: Blood Gulch shows its map variants" "menus: cascade: into column 2"
+		expect "$c" "the map itself first" "menus: cascade: mp maps: column 2, -, row 1 of 2: BLOOD GULCH$"
 		expect "$c" "MP Gulch chosen" "menus: h3 mp: map Blood Gulch, map variant MP Gulch \\(mp_gulch.hmv\\)"
 		expect "$c" "the lobby's MAP row" "menus: h3 mp lobby: NETWORK: OFFLINE, GAME: SLAYER, MAP: BLOOD GULCH - MP GULCH"
 		expect "$c" "START GAME asked for it in the local game" "menus: h3 mp: the map variant MP Gulch is played on Blood Gulch \\(the local game\\)"
