@@ -2896,6 +2896,16 @@ boolean custom_edition_cache_tags_loaded(
 	return custom_edition_cache_globals.tags_loaded;
 }
 
+/* whether the menus' map is MCC's own ui.map (Halo PC's menus:
+halo_pc_menus.c) */
+boolean custom_edition_cache_menus_are_mcc_ui(
+	void)
+{
+	struct custom_edition_cache_globals const *globals = &custom_edition_cache_globals;
+
+	return globals->tags_loaded && globals->map_from_mcc && !csstrcmp(globals->map_mcc_stem, "ui");
+}
+
 boolean custom_edition_cache_packs_allowed(
 	unsigned long first_offset)
 {

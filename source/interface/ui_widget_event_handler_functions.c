@@ -3975,7 +3975,13 @@ static boolean pc_function_invoke(
 		*result = pc_function_difficulty_start(widget, event, widget_deleted);
 		return TRUE;
 	}
-	return FALSE;
+	/* (Halo PC's SETTINGS and its screens: port/linux/game/halo_pc_menus.c) */
+	{
+		extern boolean halo_pc_menu_function_invoke(struct widget_instance *widget, struct event_record *event,
+			word function_index, boolean *widget_deleted, boolean *result);
+
+		return halo_pc_menu_function_invoke(widget, event, function_index, widget_deleted, result);
+	}
 }
 #endif
 
