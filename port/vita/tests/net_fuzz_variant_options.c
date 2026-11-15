@@ -86,8 +86,8 @@ static int fuzz_options_in_range(struct game_variant_options const *options)
 	return 1;
 }
 
-static byte fuzz_record[HALO_PORT_NETWORK_GAME_SIZE + 16];
-static byte fuzz_again[HALO_PORT_NETWORK_GAME_SIZE + 16];
+static byte fuzz_record[NETWORK_GAME_RECORD_WIRE_SIZE_MAXIMUM];
+static byte fuzz_again[NETWORK_GAME_RECORD_WIRE_SIZE_MAXIMUM];
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
@@ -175,11 +175,13 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		taken, the record before its further options and its local data
 		again as the client keeps them, the co-op byte's bits 1 and 2
 		dropped; with bit 3 too, of 39's, the same record; with bit 4 of 40's
-		or, with bit 3, 41's) */
+		or, with bit 3, 41's; with bit 5, of 43's or (bit 3) 44's: 64 bytes
+		more after the local data, unread) */
 		if (kind & 4)
 		{
 			long local = HALO_PORT_NETWORK_GAME_LOCAL_DATA_OFFSET;
-			unsigned int version = (kind & 16) ? ((kind & 8) ? 41 : 40) : (kind & 8) ? 39 : 38;
+			unsigned int version = (kind & 32) ? ((kind & 8) ? 44 : 43) :
+				(kind & 16) ? ((kind & 8) ? 41 : 40) : (kind & 8) ? 39 : 38;
 
 			record_size = network_game_record_wire_size(_network_game_record_crossplay, version);
 			memset(fuzz_record, 0, sizeof(fuzz_record));
@@ -205,7 +207,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 					abort();
 				fuzz_record[offsetof(struct network_game, cooperative_flags)] &= 1;
 				if (memcmp(fuzz_again, fuzz_record, (size_t)local) ||
-					memcmp(fuzz_again + local, fuzz_record + local + 16, (size_t)(record_size - 16 - local)))
+					memcmp(fuzz_again + local, fuzz_record + local + 16, (size_t)(HALO_PORT_NETWORK_GAME_SIZE - local)) ||
+					record_size != (version >= 42 ? 13200 : 13136))
 				{
 					abort();
 				}

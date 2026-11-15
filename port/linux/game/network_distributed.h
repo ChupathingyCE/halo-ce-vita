@@ -208,6 +208,11 @@ a longer message is split where a batch is full */
 
 /* ---------- prototypes/NETWORK_DISTRIBUTED.C */
 
+/* the height of a vehicle's up below which its riders leave it on the
+ground: 0 (upside down) but in a crossplay game of OpenCE's 43 or more
+(network_wire_rider_ejection_up) */
+real network_distributed_rider_ejection_up(void);
+
 /* sends a message (its header filled in here) where destination says: the
 unreliable ones gathered into one datagram a machine each tick */
 void distributed_send(void *message, byte type, short count, word size, short destination);

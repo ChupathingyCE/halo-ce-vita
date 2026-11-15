@@ -30,11 +30,15 @@ rules network_wire.h's network_wire_v33_rules ...), not 33 to 37, which no
 release announces. And 39 (Oct 27 2026: OpenCE's since its dedicated
 server, 815d3a0c; 38's rules, docs/opence-net39-spec.md). And 40 and 41
 (Oct 2026: a larger join request, a co-op switch; 39's rules otherwise,
-docs/opence-net41-spec.md). In order, lowest first */
+docs/opence-net41-spec.md). And 43 and 44 (Nov 2026: OpenCE build-344 and
+build-355, ChupathingyCE 0.9.1; 42's and 43's layout, ported from
+ChupathingyCE: network_wire_v42_rules), not 42, which no release announces.
+In order, lowest first */
 static const unsigned short crossplay_accepted_versions[] =
 	{ HALO_PORT_CROSSPLAY_OLDER_NETWORK_VERSION, HALO_PORT_CROSSPLAY_NETWORK_VERSION,
 		HALO_PORT_CROSSPLAY_38_NETWORK_VERSION, HALO_PORT_CROSSPLAY_39_NETWORK_VERSION,
-		HALO_PORT_CROSSPLAY_40_NETWORK_VERSION, HALO_PORT_CROSSPLAY_NEWEST_NETWORK_VERSION };
+		HALO_PORT_CROSSPLAY_40_NETWORK_VERSION, HALO_PORT_CROSSPLAY_41_NETWORK_VERSION,
+		HALO_PORT_CROSSPLAY_43_NETWORK_VERSION, HALO_PORT_CROSSPLAY_NEWEST_NETWORK_VERSION };
 
 /* the game's wire and whether its host is a Vita (the game's threads and
 the p2p thread read them; one writer at a time: the game's as it joins or
@@ -162,8 +166,18 @@ static unsigned int crossplay_rules_locked(unsigned int version, char *reason, i
 		return version;
 	if (row && row->kind == NETVERSION_ROW_JOIN)
 	{
-		if (network_wire_rules_built_in(row->rules))
+		/* (a host of 42 or more lays out every distributed message and its
+		settings otherwise than 41 and older did: played by 43's rules or
+		newer alone, whatever a row says - a table signed for older builds
+		must not take this one into a game it would misread) */
+		if (network_wire_rules_built_in(row->rules) && (version < 42 || row->rules >= 43))
 			return row->rules;
+		if (network_wire_rules_built_in(row->rules))
+		{
+			if (reason && size > 0)
+				snprintf(reason, (size_t)size, "%s", T("needs a newer Halo CE for PS Vita - update to join"));
+			return 0;
+		}
 		/* (a newer build's rules) */
 		if (reason && size > 0)
 			snprintf(reason, (size_t)size, "%s", T("needs a newer Halo CE for PS Vita - update to join"));
@@ -426,13 +440,58 @@ int network_wire_v41_rules(void)
 	return game_crossplay_version() >= 41;
 }
 
-int network_wire_join_request_padding(void)
+int network_wire_v42_rules(void)
+{
+	return game_crossplay_version() >= 42;
+}
+
+int network_wire_v43_rules(void)
+{
+	return game_crossplay_version() >= 43;
+}
+
+int network_wire_join_request_tail(unsigned char *tail, int room)
 {
 	/* (read once each: the p2p thread may be choosing another) */
 	unsigned int announced = crossplay_announced;
+	unsigned int rules = game_crossplay_version();
+	int size;
 
-	return network_wire_crossplay() && (network_wire_v40_rules() || announced >= 40) ?
-		NETWORK_WIRE_V40_JOIN_REQUEST_PADDING : 0;
+	if (!network_wire_crossplay())
+		return 0;
+	/* (by the number the host announces as well as the rules a table gives
+	it: a host of 42 checks the word against its own number) */
+	if (rules >= 42 || announced >= 42)
+		size = NETWORK_WIRE_V42_JOIN_REQUEST_TAIL;
+	else if (rules >= 40 || announced >= 40)
+		size = NETWORK_WIRE_V40_JOIN_REQUEST_PADDING;
+	else
+		return 0;
+	if (!tail || room < size)
+		return -1;
+	memset(tail, 0, (size_t)size);
+	if (size == NETWORK_WIRE_V42_JOIN_REQUEST_TAIL)
+	{
+		unsigned int word = announced ? announced : rules;
+
+		tail[NETWORK_WIRE_V42_JOIN_VERSION_AT] = (unsigned char)(word >> 8);
+		tail[NETWORK_WIRE_V42_JOIN_VERSION_AT + 1] = (unsigned char)word;
+	}
+	return size;
+}
+
+float network_wire_rider_ejection_up(void)
+{
+	/* (ChupathingyCE's NETWORK_RULES_SIDE_EJECTION_UP, 200 thousandths) */
+	return network_wire_v43_rules() ? 0.2f : 0.0f;
+}
+
+int network_wire_join_request_padding(void)
+{
+	unsigned char tail[NETWORK_WIRE_V42_JOIN_REQUEST_TAIL];
+	int size = network_wire_join_request_tail(tail, (int)sizeof(tail));
+
+	return size > 0 ? size : 0;
 }
 
 int network_wire_rejection_is_name_refused(int code)
