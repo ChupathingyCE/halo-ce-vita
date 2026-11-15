@@ -2967,6 +2967,28 @@ static void distributed_apply_predictions(
 }
 
 /* (a client) the host's word on a player's unit */
+/* (a client) the unit the host gives a player taken from any other player
+here that has it first: a unit is one player's, and a player left holding a
+unit given to another kept its handle after the unit was deleted (only the
+unit's own player is detached then), so the HUD read a unit that was gone.
+A host decides which unit is whose, so any host could do this to its
+clients. From ChupathingyCE (995a6cbb8, "Network: a unit given to one player
+is let go by any other", MrMilenko; GPL-3.0-or-later) */
+static void distributed_unit_release_others(
+	long player_index,
+	long unit_index)
+{
+	struct data_iterator iterator;
+	struct player_datum *other;
+
+	data_iterator_new(&iterator, player_data);
+	while ((other = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
+	{
+		if (iterator.datum_index != player_index && other->unit_index == unit_index)
+			network_player_detach_unit(iterator.datum_index);
+	}
+}
+
 static void distributed_handle_unit_state(
 	struct distributed_unit_state const *state)
 {
@@ -3023,6 +3045,7 @@ static void distributed_handle_unit_state(
 	{
 		if (player->unit_index != NONE)
 			network_player_detach_unit(player_index);
+		distributed_unit_release_others(player_index, state->unit_index);
 		network_player_attach_unit(player_index, state->unit_index);
 		/* (a unit of a life this machine missed the end of, no player's
 		now: unit_kill_no_statistics is for players' units only) */
