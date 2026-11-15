@@ -472,6 +472,7 @@ static char const *const port_function_names[] =
 	"port cascade tab next",
 	"port cascade mp maps",
 	"port cascade gametypes",
+	"port h3 mods tab games", "port h3 mods tab mods", "port h3 mods tab next",
 };
 
 /* the port's game data functions (menu_functions.c), from

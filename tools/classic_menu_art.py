@@ -50,6 +50,8 @@ HEADINGS = (('header_lobby_options', 'LOBBY OPTIONS'),
             ('header_customization', 'CUSTOMIZATION'),
             # (classic/fileshare.xml, mods.xml)
             ('header_file_share', 'FILE SHARE'), ('header_mod_manager', 'MOD MANAGER'),
+            # (classic/mods.xml as 1.1.3's GAME MANAGER: GAMES and MODS)
+            ('header_game_manager', 'GAME MANAGER'),
             # (classic/friends.xml)
             ('header_friends', 'FRIENDS'), ('header_party', 'PARTY'),
             ('header_add_friend', 'ADD FRIEND'), ('header_invite_friends', 'INVITE FRIENDS'),
