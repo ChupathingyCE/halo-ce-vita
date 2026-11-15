@@ -276,24 +276,29 @@ GBXMODEL_PART = {"vertex_count": 3, "vertex_offset": 0, "strip_triangle_count": 
 
 def add_gbxmodel(blob, part_options):
     """A gbxmodel of one node and one geometry of one part, whose geometry
-    lies in the synthetic model data (vertices below 0x200, strips after)."""
+    lies in the synthetic model data (vertices below 0x200, strips after).
+    `geometries` and `parts` in the options make that many geometries, each
+    of the same block of that many parts (a crafted map's sharing)."""
     options = dict(GBXMODEL_PART, **part_options)
+    geometry_count, part_count = options.pop("geometries", 1), options.pop("parts", 1)
     model = blob.reserve(0xE8)
     node = blob.reserve(0x9C)
-    geometry = blob.reserve(0x30)
-    part = blob.reserve(0x84)
+    geometry = blob.reserve(0x30 * geometry_count)
+    part = blob.reserve(0x84 * part_count)
     shader = blob.reserve(0x20)
     blob.block(model + 0xB8, 1, node)
-    blob.block(model + 0xD0, 1, geometry)
+    blob.block(model + 0xD0, geometry_count, geometry)
     blob.block(model + 0xDC, 1, shader)
-    blob.block(geometry + 0x24, 1, part)
-    blob.u16(part + 0x44, options["triangle_type"])
-    blob.u32(part + 0x48, options["strip_triangle_count"])
-    blob.u32(part + 0x4C, options["strip_offset"])
-    blob.u16(part + 0x54, options["vertex_type"])
-    blob.u32(part + 0x58, options["vertex_count"])
-    blob.u32(part + 0x64, options["vertex_offset"])
-    blob.bytes[part - blob.base + 0x6B] = options["local_node_count"]
+    for geometry_index in range(geometry_count):
+        blob.block(geometry + geometry_index * 0x30 + 0x24, part_count, part)
+    for each_part in range(part, part + 0x84 * part_count, 0x84):
+        blob.u16(each_part + 0x44, options["triangle_type"])
+        blob.u32(each_part + 0x48, options["strip_triangle_count"])
+        blob.u32(each_part + 0x4C, options["strip_offset"])
+        blob.u16(each_part + 0x54, options["vertex_type"])
+        blob.u32(each_part + 0x58, options["vertex_count"])
+        blob.u32(each_part + 0x64, options["vertex_offset"])
+        blob.bytes[each_part - blob.base + 0x6B] = options["local_node_count"]
     return model
 
 
@@ -1093,6 +1098,68 @@ def test_malformed_structure_bsp_materials_are_rejected(report_tool, tmp_path, c
     returncode, report, _ = converted(report_tool, Map(bsp_material=MALFORMED_BSP_MATERIALS[case]), tmp_path)
     assert returncode == 1
     assert report["load"] == BAD_BSP_GEOMETRY
+
+
+def shared_lightmaps(cache, folder, lightmap_count, lightmaps_at=0x500, materials_at=BSP_MATERIAL_OFFSET,
+                     material_count=1):
+    """`cache` written with its first BSP's lightmaps made `lightmap_count`
+    lightmaps at `lightmaps_at`, each of the same `material_count` materials
+    at `materials_at` (a crafted map's sharing: tool.exe gives every
+    material vertices of its own)."""
+    path = cache.write(folder)
+    data = bytearray(path.read_bytes())
+    bsp = cache.where["bsp"]
+    address = struct.unpack_from("<I", data, bsp)[0] - 0x18
+    struct.pack_into("<iI", data, bsp + 0x18 + 0x104, lightmap_count, address + lightmaps_at)
+    for index in range(lightmap_count):
+        lightmap = bsp + lightmaps_at + index * 0x20
+        struct.pack_into("<h", data, lightmap, 0)
+        struct.pack_into("<iII", data, lightmap + 0x14, material_count, address + materials_at, 0)
+    path.write_bytes(data)
+    return path
+
+
+def test_structure_bsp_materials_may_not_share_more_vertices_than_the_bsp_holds(report_tool, tmp_path):
+    """(after ChupathingyCE af3dd1460) Lightmaps that all name one material
+    passed the check, and the game sized the room for the BSP's compressed
+    vertices from their sum, which wraps on the 32-bit builds (a heap
+    overflow as the vertices are converted): their vertices together must
+    now fit in the BSP. Two that share still load (within it)."""
+    # 3 vertices: 3 * 56 + 3 * 20 = 228 bytes; 18 of them pass 0x1000
+    _, report = report_one(report_tool, shared_lightmaps(Map(bsp_material={}), tmp_path / "two", 2))
+    assert report["load"] == "ok" and report["structure_bsp_materials_checked"] == "2"
+    _, report = report_one(report_tool, shared_lightmaps(Map(bsp_material={}), tmp_path / "many", 18))
+    assert report["load"] == BAD_BSP_GEOMETRY
+
+
+def test_structure_bsp_materials_walked_are_capped(report_tool, tmp_path):
+    """(after ChupathingyCE 892863abc) 4,064 lightmaps of the same 2,048
+    materials (8.3 million, a map no real one comes near) are refused once
+    the walk passes 1,048,576, not walked to the end."""
+    cache = Map(bsp_material={"bitmap_index": -1, "vertex_count": 0, "lightmap_vertex_count": 0},
+                bsp_sizes=(0x100000,))
+    path = shared_lightmaps(cache, tmp_path, 4064, lightmaps_at=0x81000, materials_at=0x1000, material_count=2048)
+    data = bytearray(path.read_bytes())
+    material = bytes(data[cache.where["bsp_material"]:cache.where["bsp_material"] + 0x100])
+    for index in range(2048):
+        offset = cache.where["bsp"] + 0x1000 + index * 0x100
+        data[offset:offset + 0x100] = material
+    path.write_bytes(data)
+    _, report = report_one(report_tool, path)
+    assert report["load"] == BAD_BSP_GEOMETRY
+    assert int(report["structure_bsp_materials_checked"]) == 0x100000
+
+
+def test_tag_elements_walked_are_capped(report_tool, tmp_path):
+    """(after ChupathingyCE 892863abc) A model of 3,000 geometries that all
+    name one block of 3,000 parts (nine million parts walked, each checked)
+    is refused once the walk passes 4,194,304 elements; a model sharing a
+    block of 3 parts among 3 geometries still loads."""
+    returncode, report = report_one(report_tool, Map(model={"geometries": 3, "parts": 3}).write(tmp_path / "few"))
+    assert returncode == 0 and report["load"] == "ok"
+    returncode, report = report_one(report_tool, Map(model={"geometries": 3000, "parts": 3000}).write(tmp_path / "many"))
+    assert returncode == 1
+    assert report["load"] == "a tag block or tag data field lies outside the loaded tags"
 
 
 def test_structure_bsp_lightmaps_outside_the_bsp_are_rejected(report_tool, tmp_path):

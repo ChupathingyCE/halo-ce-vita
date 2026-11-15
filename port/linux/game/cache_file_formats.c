@@ -573,7 +573,22 @@ struct load_state
 	the tag cache only `buffer_bytes` long */
 	int tags_only;
 	uint32_t buffer_bytes;
+	/* the tag elements walked (element_verify): blocks may share elements,
+	so without a limit a small crafted map makes the walk, and the totals
+	the loader makes of what it walked, as large as it likes */
+	uint32_t elements_walked;
 };
+
+/* The most tag elements one map's check walks, and the most materials of
+one structure BSP: far above any real map's (Custom Edition maps walk
+18,000-28,000 elements, MCC's Halo: CE Anniversary maps 15,000-24,000; a
+BSP has a few hundred materials). Blocks and materials may be shared, so
+without these a small crafted map walks for hours, and the totals the
+loader sizes its memory from wrap (custom_edition_geometry.c). After
+ChupathingyCE (892863abc, "Capped the materials a Custom Edition map check
+walks", MrMilenko; GPL-3.0-or-later). */
+#define MAXIMUM_TAG_ELEMENTS_WALKED 0x400000
+#define MAXIMUM_STRUCTURE_BSP_MATERIALS 0x100000
 
 /* ---------- prototypes */
 
@@ -1755,7 +1770,7 @@ static enum cache_file_status element_verify(
 	int field_index;
 
 	/* the layouts nest at most three deep; this also stops runaway input */
-	if (depth > 4)
+	if (depth > 4 || ++state->elements_walked > MAXIMUM_TAG_ELEMENTS_WALKED)
 	{
 		return load_fail(state, _cache_file_status_bad_tag_layout, element_offset);
 	}
@@ -2197,6 +2212,11 @@ static enum cache_file_status structure_bsp_geometry_verify(
 	uint32_t lightmaps_offset;
 	int32_t lightmap_count;
 	int32_t lightmap_index;
+	/* (the materials walked, and their vertices' bytes: each material's
+	own, so all of them within the BSP; materials or vertices shared made
+	the walk, and the room the loader makes for the vertices, unbounded) */
+	uint32_t materials_walked = 0;
+	uint64_t vertex_bytes = 0;
 
 	if (!range_fits(structure_offset, STRUCTURE_BSP_BYTES, size) ||
 		!loaded_block_get(
@@ -2238,7 +2258,8 @@ static enum cache_file_status structure_bsp_geometry_verify(
 			uint32_t vertices_address = read_u32(vertices + TAG_DATA_ADDRESS_OFFSET);
 
 			/* the counts bound the size, which bounds the counts */
-			if (read_s16(material + STRUCTURE_BSP_MATERIAL_VERTEX_TYPE_OFFSET) != VERTEX_TYPE_ENVIRONMENT_UNCOMPRESSED ||
+			if (++materials_walked > MAXIMUM_STRUCTURE_BSP_MATERIALS ||
+				read_s16(material + STRUCTURE_BSP_MATERIAL_VERTEX_TYPE_OFFSET) != VERTEX_TYPE_ENVIRONMENT_UNCOMPRESSED ||
 				vertex_count < 0 ||
 				vertex_count > MAXIMUM_VERTICES_PER_BUFFER ||
 				lightmap_vertex_count != (has_bitmap ? vertex_count : 0) ||
@@ -2247,7 +2268,8 @@ static enum cache_file_status structure_bsp_geometry_verify(
 				(vertices_size &&
 				(vertices_address < address ||
 				!range_fits(vertices_address - address, (uint32_t)vertices_size, size) ||
-				(vertices_address & 3))))
+				(vertices_address & 3))) ||
+				(vertex_bytes += (uint32_t)vertices_size) > size)
 			{
 				return load_fail(state, _cache_file_status_bad_structure_bsp_geometry, address + material_offset);
 			}
@@ -2438,6 +2460,11 @@ static enum cache_file_status mcc_cea_structure_bsp_geometry_verify(
 	uint32_t lightmaps_offset;
 	int32_t lightmap_count;
 	int32_t lightmap_index;
+	/* (as structure_bsp_geometry_verify's: each material's vertices its
+	own, so all of them within the BSP's `vertices_size` bytes, which MCC's
+	maps fill exactly) */
+	uint32_t materials_walked = 0;
+	uint64_t vertex_bytes = 0;
 
 	if (!range_fits(structure_offset, STRUCTURE_BSP_BYTES, size) ||
 		!loaded_block_get(
@@ -2478,7 +2505,8 @@ static enum cache_file_status mcc_cea_structure_bsp_geometry_verify(
 			uint32_t lightmap_vertices_offset = read_u32(material + STRUCTURE_BSP_MATERIAL_LIGHTMAP_VERTICES_OFFSET_OFFSET);
 
 			/* (the counts at most 65535 each: no product below overflows) */
-			if (read_s16(material + STRUCTURE_BSP_MATERIAL_VERTEX_TYPE_OFFSET) != VERTEX_TYPE_ENVIRONMENT_UNCOMPRESSED ||
+			if (++materials_walked > MAXIMUM_STRUCTURE_BSP_MATERIALS ||
+				read_s16(material + STRUCTURE_BSP_MATERIAL_VERTEX_TYPE_OFFSET) != VERTEX_TYPE_ENVIRONMENT_UNCOMPRESSED ||
 				vertex_count < 0 ||
 				vertex_count > MAXIMUM_VERTICES_PER_BUFFER ||
 				lightmap_vertex_count != (has_bitmap ? vertex_count : 0) ||
@@ -2489,7 +2517,9 @@ static enum cache_file_status mcc_cea_structure_bsp_geometry_verify(
 				(vertices_offset & 3))) ||
 				(lightmap_vertex_count &&
 				(!range_fits(lightmap_vertices_offset, (uint32_t)lightmap_vertex_count * STRUCTURE_BSP_LIGHTMAP_VERTEX_BYTES, vertices_size) ||
-				(lightmap_vertices_offset & 3))))
+				(lightmap_vertices_offset & 3))) ||
+				(vertex_bytes += (uint64_t)(uint32_t)vertex_count * STRUCTURE_BSP_ENVIRONMENT_VERTEX_BYTES +
+					(uint64_t)(uint32_t)lightmap_vertex_count * STRUCTURE_BSP_LIGHTMAP_VERTEX_BYTES) > vertices_size)
 			{
 				return load_fail(state, _cache_file_status_bad_structure_bsp_geometry, address + material_offset);
 			}
