@@ -2465,6 +2465,16 @@ void object_inverse_kinematics(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* port: never inlined. Its list of the objects in the clusters is 32 KB in
+the native builds (8 KB on the Xbox: halo_port_capacity.h), and inlined into
+area_of_effect_cause_damage it was on the stack of every step of a chain of
+explosions (damage.c), which nest; called, it is there only while it runs.
+(It returns indices; no value it computes passes through registers that an
+inline copy could keep wider.) After ChupathingyCE (MrMilenko,
+GPL-3.0-or-later): 068ccad9d. */
+__attribute__((noinline))
+#endif
 short objects_in_sphere(
 	unsigned long class_flags,
 	unsigned long type_flags,

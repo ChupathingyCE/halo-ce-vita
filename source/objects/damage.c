@@ -1992,6 +1992,22 @@ void object_cause_damage(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* port: an explosion damages what is around it, an object it destroys can
+make an effect of its own (its destruction's, or its area damage's), and
+that effect is updated as it is made (effect_new), its explosion damaging
+what is around it in turn - all in one call, so a chain of explosions nests
+as deep as it runs. On the Xbox a chain ran out where its effects did (256
+at once: every step of the chain holds one); the native builds have room
+for 2,048 (halo_port_capacity.h), and each step took ~37 KB of stack
+(objects_in_sphere's list of 8,192 objects, inlined into it), so a long
+enough chain - a crafted map's - ran off the end of the stack. A chain stops
+where the Xbox's would have at the latest; no chain the Xbox could make is
+changed. After ChupathingyCE (MrMilenko, GPL-3.0-or-later): 068ccad9d. */
+#define MAXIMUM_AREA_OF_EFFECT_NESTING 256
+static short area_of_effect_nesting = 0;
+#endif
+
 void area_of_effect_cause_damage(
 	struct damage_data *damage,
 	long unused_object_index)
@@ -2007,6 +2023,13 @@ void area_of_effect_cause_damage(
 #endif
 	short object_count;
 
+#ifdef HALO_LINUX
+	if (area_of_effect_nesting >= MAXIMUM_AREA_OF_EFFECT_NESTING)
+	{
+		return;
+	}
+	area_of_effect_nesting++;
+#endif
 	object_count = objects_in_sphere(
 		0,
 		0,
@@ -2029,6 +2052,9 @@ void area_of_effect_cause_damage(
 	}
 
 	breakable_surface_damage_area_of_effect(damage);
+#ifdef HALO_LINUX
+	area_of_effect_nesting--;
+#endif
 	return;
 }
 
