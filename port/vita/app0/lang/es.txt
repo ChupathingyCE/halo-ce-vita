@@ -797,6 +797,7 @@
 "This server does not allow VPN or datacenter connections. Turn off any VPN and try again." = "Este servidor no permite conexiones por VPN ni de centros de datos. Desactiva cualquier VPN y vuelve a intentarlo."
 "This server could not check a Discord link. This game does not use Discord links." = "Este servidor no pudo comprobar un enlace de Discord. Este juego no usa enlaces de Discord."
 "This server has too many players from your address." = "Este servidor tiene demasiados jugadores desde tu dirección."
+"Co-op with this PC host's version is not supported yet. Multiplayer games with it work." = "La cooperativa con la versión de este anfitrión de PC aún no está disponible. Sus partidas multijugador sí funcionan."
 "The host refused your player name. Change it in your profile and try again." = "El anfitrión rechazó tu nombre de jugador. Cámbialo en tu perfil y vuelve a intentarlo."
 "This host is not a PlayStation Vita.\n\nOnline play on the Vita is Vita-only: join a game hosted on another Vita." = "Este anfitrión no es una PlayStation Vita.\n\nEl juego en línea en la Vita es solo entre Vitas: únete a una partida creada en otra Vita."
 "This host is a PlayStation Vita.\n\nOnline play on the Vita is Vita-only: PCs cannot join Vita games." = "Este anfitrión es una PlayStation Vita.\n\nEl juego en línea en la Vita es solo entre Vitas: las PC no pueden unirse a partidas de Vita."

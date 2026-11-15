@@ -200,7 +200,7 @@ network_messages.c) */
 		plain_size = message ? GET_MESSAGE_SIZE(*(message_header *)message) - (long)sizeof(message_header) : 0;
 		if (plain_size > 0 && plain_size <= (long)sizeof(plain))
 			__builtin_memcpy(plain, message + sizeof(message_header), (size_t)plain_size);
-		message = create_network_game_join_request_padded(structure, (short)sizeof(structure), 234);
+		message = create_network_game_join_request_padded(structure, (short)sizeof(structure), NULL, 234);
 		padded_size = message ? GET_MESSAGE_SIZE(*(message_header *)message) - (long)sizeof(message_header) : 0;
 		if (padded_size > 0 && padded_size <= (long)sizeof(padded))
 			__builtin_memcpy(padded, message + sizeof(message_header), (size_t)padded_size);
@@ -216,7 +216,32 @@ network_messages.c) */
 		}
 		__builtin_printf("%s the join request of 40: 346 bytes, the older wires' 112 unchanged (%ld and %ld with the version and type bytes)\n",
 			good ? "PASS" : "FAIL", padded_size, plain_size);
-		good = !create_network_game_join_request_padded(structure, (short)sizeof(structure), 0x7000);
+		/* (42 on: 236 bytes, the host's number big-endian in the last two) */
+		{
+			byte tail[236] = { 0 };
+			long tailed_size;
+
+			tail[234] = 0;
+			tail[235] = 44;
+			message = create_network_game_join_request_padded(structure, (short)sizeof(structure), tail, 236);
+			tailed_size = message ? GET_MESSAGE_SIZE(*(message_header *)message) - (long)sizeof(message_header) : 0;
+			good = tailed_size == plain_size + 236 && tailed_size <= (long)sizeof(padded);
+			if (good)
+			{
+				byte const *bytes = (byte const *)message + sizeof(message_header);
+
+				good = !__builtin_memcmp(plain, bytes, (size_t)plain_size - 1) &&
+					bytes[tailed_size - 1] == plain[plain_size - 1] && bytes[plain_size - 1 + 234] == 0 &&
+					bytes[plain_size - 1 + 235] == 44;
+				for (index = plain_size - 1; good && index < plain_size - 1 + 234; index++)
+					good = bytes[index] == 0;
+			}
+			if (!good)
+				failures++;
+			__builtin_printf("%s the join request of 42 and later: 236 bytes past the structure, the version word 00 2C at 234 (%ld bytes)\n",
+				good ? "PASS" : "FAIL", tailed_size);
+		}
+		good = !create_network_game_join_request_padded(structure, (short)sizeof(structure), NULL, 0x7000);
 		if (!good)
 		{
 			__builtin_printf("FAIL zeros past the buffer not refused\n");

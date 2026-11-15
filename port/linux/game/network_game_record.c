@@ -219,7 +219,13 @@ long network_game_record_wire_size(
 {
 	long size = network_game_record_size(format);
 
-	return size && format == _network_game_record_crossplay && version >= 35 ? size + FURTHER_OPTIONS_SIZE : size;
+	if (!size || format != _network_game_record_crossplay)
+		return size;
+	/* (42 on: 64 bytes more after the local data, ChupathingyCE's
+	NETWORK_RULES_EPOCH_SETTINGS_SIZE, 13,200: unread here, as there) */
+	if (version >= 42)
+		return size + FURTHER_OPTIONS_SIZE + NETWORK_GAME_RECORD_V42_TRAILING_SIZE;
+	return version >= 35 ? size + FURTHER_OPTIONS_SIZE : size;
 }
 
 /* the game type of OpenCE's that a record's further options play, by

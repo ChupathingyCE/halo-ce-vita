@@ -836,12 +836,14 @@ static boolean encode_network_game_message(
 	return data_packet_group_encode_packet(&data_0030aa68.group, message_struct, encoded_message, encoded_message_size, message_type, message_version);
 }
 
-/* trailing_zero_bytes: zeros between the encoded structure and the packet's
-type, its last byte (0 for every message but create_network_game_join_request_padded's) */
+/* trailing_zero_bytes: bytes between the encoded structure and the packet's
+type, its last byte (0 for every message but create_network_game_join_request_padded's):
+trailing's (NULL: zeros) */
 static void *create_network_game_message_with_zeros(
 	enum network_game_message_type message_type,
 	const void *message_struct,
 	short message_struct_size,
+	const void *trailing,
 	short trailing_zero_bytes)
 {
 	/* as large as the packet group lets the encoder write */
@@ -1061,7 +1063,10 @@ static void *create_network_game_message_with_zeros(
 				return NULL;
 			}
 			encoded_message[encoded_size - 1 + trailing_zero_bytes] = encoded_message[encoded_size - 1];
-			csmemset(encoded_message + encoded_size - 1, 0, trailing_zero_bytes);
+			if (trailing)
+				csmemcpy(encoded_message + encoded_size - 1, trailing, trailing_zero_bytes);
+			else
+				csmemset(encoded_message + encoded_size - 1, 0, trailing_zero_bytes);
 			encoded_message_size.value = encoded_size + trailing_zero_bytes;
 		}
 		/* a message header holds lengths up to HALO_PORT_MAXIMUM_NETWORK_MESSAGE_SIZE-1,
@@ -1093,16 +1098,17 @@ void *create_network_game_message(
 	const void *message_struct,
 	short message_struct_size)
 {
-	return create_network_game_message_with_zeros(message_type, message_struct, message_struct_size, 0);
+	return create_network_game_message_with_zeros(message_type, message_struct, message_struct_size, NULL, 0);
 }
 
 void *create_network_game_join_request_padded(
 	const void *message_struct,
 	short message_struct_size,
-	short zero_bytes)
+	const void *tail,
+	short tail_bytes)
 {
 	return create_network_game_message_with_zeros(
-		_message_client_join_game_request, message_struct, message_struct_size, zero_bytes);
+		_message_client_join_game_request, message_struct, message_struct_size, tail, tail_bytes);
 }
 
 boolean decode_network_game_message(

@@ -74,6 +74,11 @@ boolean network_game_record_decode_version(
 	long size,
 	struct network_game *game,
 	char const **why);
+/* the bytes a crossplay record of OpenCE's 42 or more has after its local
+data (13,200 in all), which this build does not read */
+#define NETWORK_GAME_RECORD_V42_TRAILING_SIZE 64
+/* the most bytes a record of any wire has (the client's staging buffer) */
+#define NETWORK_GAME_RECORD_WIRE_SIZE_MAXIMUM (HALO_PORT_NETWORK_GAME_SIZE + 16 + NETWORK_GAME_RECORD_V42_TRAILING_SIZE)
 /* the record's size on the wire from a host of the network version */
 long network_game_record_wire_size(
 	short format,
