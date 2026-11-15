@@ -5,7 +5,8 @@
 #
 #   v1          the whole loop by the controller (HALO_TEST_PAD, Menu style
 #               Halo 3, the Halo PC files): the main menu's FORGE, the Forge
-#               lobby, its map picker (Wizard, then Blood Gulch), START FORGE;
+#               lobby, its map picker (Halo 3's two-column SELECT MAP: Wizard,
+#               then Blood Gulch), START FORGE;
 #               in Blood Gulch the player is the monitor: flies, opens the
 #               object browser (Square), opens VEHICLES, places a Warthog in
 #               its hand, turns and tilts it (rotate mode: L + the right stick),
@@ -488,8 +489,8 @@ touch_check() {
 # ten times (past SAVE MAP VARIANT, UNDO, REDO, SNAP, ALL AI, CLEAR DEAD AI,
 # CLEAR ALL AI, DELETE ALL, NEW ROUND), A (LEAVE FORGE), A (leave))
 v1pad="wait:150:3000 @00-main-menu:0:300 down:150:600 down:150:600 a:150:2500 @01-lobby:0:300"
-v1pad="$v1pad a:150:2000 @02-map-picker:0:300 down:150:700 a:150:1500 @02b-wizard-variants:0:300 a:150:2000"
-v1pad="$v1pad a:150:2000 up:150:700 a:150:1500 a:150:2000"
+v1pad="$v1pad a:150:2000 @02-map-picker:0:300 down:150:700 a:150:2000 @02b-wizard-chosen:0:300"
+v1pad="$v1pad a:150:2000 up:150:700 a:150:2000"
 v1pad="$v1pad @03-lobby-blood-gulch:0:300 down:150:600 down:150:600 a:150:1500 level:150:2500 @04-monitor:0:300"
 v1pad="$v1pad lup:1200:300 a:600:600 @05-flown:0:300 x:150:1500 @06-browser:0:300 a:150:1200"
 v1pad="$v1pad @07-browser-vehicles:0:300 down:150:600 down:150:600 a:150:1500 @08-warthog-held:0:300"
@@ -2859,7 +2860,7 @@ for c in $cases; do
 		grep -aq "ui: screen pc.h3.forge.pause.screen\|menus: the Forge menu for" "$log" && fail "$c: Forge's menu in a multiplayer game" ;;
 	v1)
 		expect "$c" "FORGE opened the Forge lobby" "ui: screen pc.h3.forge.lobby"
-		expect "$c" "the map picker opened" "ui: screen pc.h3.forge.maps.screen"
+		expect "$c" "the map picker opened (Halo 3's two-column SELECT MAP)" "ui: screen pc.h3.cascade.screen"
 		expect "$c" "Wizard chosen" "menus: forge lobby: Wizard"
 		expect "$c" "then Blood Gulch, the lobby's caption" "menus: forge lobby caption: Edit Objects on Blood Gulch"
 		expect "$c" "START FORGE started Blood Gulch" "menus: forge lobby: start levels.test.bloodgulch.bloodgulch"
