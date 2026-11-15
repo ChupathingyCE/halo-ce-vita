@@ -5859,6 +5859,35 @@ static void solo_pause_list_convert(
 	return;
 }
 
+/* (port) The CRC-32 of the tag index and the tag instances, each tag of
+the group `group_tag` taken as of `new_group_tag` (what the conversion
+regroups, custom_edition_cache_tags_regroup): the conversion writes in place
+by the addresses in the tags, and must leave these as they were. */
+static uint32_t tag_index_crc(
+	uint8_t const *tag_cache,
+	uint8_t const *instances,
+	int32_t tag_count,
+	uint32_t group_tag,
+	uint32_t new_group_tag)
+{
+	uint32_t crc = crc32_update(0, tag_cache, TAG_INDEX_BYTES);
+	int32_t tag_index;
+
+	for (tag_index = 0; tag_index < tag_count; tag_index++)
+	{
+		uint8_t instance[TAG_INSTANCE_BYTES];
+
+		memcpy(instance, instances + (uint32_t)tag_index * TAG_INSTANCE_BYTES, TAG_INSTANCE_BYTES);
+		if (read_u32(instance + TAG_INSTANCE_GROUP_OFFSET) == group_tag)
+		{
+			write_u32(instance + TAG_INSTANCE_GROUP_OFFSET, new_group_tag);
+		}
+		crc = crc32_update(crc, instance, TAG_INSTANCE_BYTES);
+	}
+
+	return crc;
+}
+
 enum cache_file_status custom_edition_cache_convert(
 	uint8_t *tag_cache,
 	uint32_t loaded_bytes,
@@ -5869,6 +5898,8 @@ enum cache_file_status custom_edition_cache_convert(
 	uint8_t const *instances;
 	int32_t tag_count;
 	int32_t tag_index;
+	uint32_t index_crc;
+	enum cache_file_status status;
 
 	memset(report, 0, sizeof(*report));
 	report->problem_tag_index = NO_TAG_INDEX;
@@ -5878,6 +5909,15 @@ enum cache_file_status custom_edition_cache_convert(
 	{
 		return _cache_file_status_bad_tag_instances_range;
 	}
+	/* (port) every write below goes where an address in the tags says,
+	within the loaded tags; a crafted map's addresses can name the tag
+	index or the instances themselves, and what the next conversion, the
+	tags' move and their check then read would be what an earlier one
+	wrote. Such a map is refused (after ChupathingyCE, MrMilenko,
+	GPL-3.0-or-later: 81ba69e46, "conversions stay in the tag cache and off
+	the tag index", #1079) */
+	index_crc = tag_index_crc(tag_cache, instances, tag_count, TRANSPARENT_CHICAGO_EXTENDED_GROUP_TAG,
+		TRANSPARENT_CHICAGO_GROUP_TAG);
 	report->behaviours = custom_edition_behaviours_find(map_name, read_u32(tag_cache + TAG_INDEX_CHECKSUM_OFFSET));
 	if (flag_is_set(report->behaviours, _custom_edition_behaviour_disable_bitmap_hud_scale_flags))
 	{
@@ -5987,7 +6027,15 @@ enum cache_file_status custom_edition_cache_convert(
 		TRANSPARENT_CHICAGO_EXTENDED_GROUP_TAG,
 		TRANSPARENT_CHICAGO_GROUP_TAG);
 
-	return scenario_script_nodes_convert(&state, instances, tag_count, report);
+	status = scenario_script_nodes_convert(&state, instances, tag_count, report);
+	if (status == _cache_file_status_ok &&
+		tag_index_crc(tag_cache, instances, tag_count, TRANSPARENT_CHICAGO_EXTENDED_GROUP_TAG,
+			TRANSPARENT_CHICAGO_GROUP_TAG) != index_crc)
+	{
+		status = _cache_file_status_bad_tag_layout;
+	}
+
+	return status;
 }
 
 /* (port) Halo: CE Anniversary caches (mcc_cea_cache_fix) */

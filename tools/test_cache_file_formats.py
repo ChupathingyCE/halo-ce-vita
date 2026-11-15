@@ -1195,6 +1195,21 @@ def test_a_structure_bsp_reference_a_conversion_wrote_over_is_not_read(report_to
     assert report["structure_bsp_reference.0"] == "not checked"
 
 
+def test_conversions_that_write_over_the_tag_index_are_refused(report_tool, tmp_path):
+    """(after ChupathingyCE 81ba69e46, #1079) The conversions write where the
+    tags' addresses say, within the loaded tags; a bitmap whose bitmaps are
+    placed over the tag instances would have the bitmaps' preparation write
+    a tag handle over another tag's group, and the map is refused."""
+    cache = Map()
+    path = cache.write(tmp_path)
+    group = cache.addresses["test\\in map bitmap"]
+    patched(path, cache.where["tag_data"] + (group - BASE) + 0x64, "<I", cache.addresses["instances"] + 0x20)
+    returncode, report = report_one(report_tool, path)
+    assert report["load"] == "ok"
+    assert returncode == 1
+    assert report["convert"] == "a tag block or tag data field lies outside the loaded tags"
+
+
 def test_structure_bsp_lightmaps_outside_the_bsp_are_rejected(report_tool, tmp_path):
     cache = Map(bsp_material={})
     path = patched(cache.write(tmp_path), cache.where["bsp"] + 0x18 + 0x108, "<I", BASE)
