@@ -111,6 +111,7 @@ symbols in this file:
 #include "ai/ai.h"
 #ifdef HALO_LINUX
 boolean command_ai_damage_owner(long owner_object_index);
+#include "bots.h"
 #endif
 #include "cseries/errors.h"
 #include "effects/effects.h"
@@ -1538,6 +1539,17 @@ void object_cause_damage(
 		total_damage *= game_engine_get_damage_multiplier(
 			get_player_index_from_object_or_parents(damage->owner_object_index),
 			get_player_index_from_object_or_parents(object_index));
+#ifdef HALO_LINUX
+		/* port: the offline and the server's bots (port/linux/game/bots.c):
+		a bot's damage to an enemy player and a player's to an enemy bot
+		scaled by the bots' skill, as Halo CE's difficulty scales an
+		enemy's damage to the player and its vitality (Normal: x1) */
+		bots_damage_dealt(
+			damage->owner_player_index != NONE ? damage->owner_player_index :
+				get_player_index_from_object_or_parents(damage->owner_object_index),
+			get_player_index_from_object_or_parents(object_index),
+			&total_damage);
+#endif
 	}
 	/* port: Infection's zombie melee kills a human in one blow, shields
 	and overshield or not */
