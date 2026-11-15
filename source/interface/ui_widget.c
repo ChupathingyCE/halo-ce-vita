@@ -4032,10 +4032,33 @@ static void widget_instance_initialize(
 	}
 	if (definition->background_bitmap.index != NONE)
 	{
-		widget->animation.number_of_sprite_frames = TAG_BLOCK_GET_ELEMENT(
-			&bitmap_group_get(definition->background_bitmap.index)->sequences,
-			0,
-			struct bitmap_group_sequence)->bitmap_count;
+		struct bitmap_group *background = bitmap_group_get(definition->background_bitmap.index);
+
+		/* (port, 1.1.3: a background bitmap with no sequences - a Halo PC bitmap of MCC's
+		files, which the Xbox's ui.map never pairs with a widget - is drawn as its first
+		bitmap with no sprite frames; the original read sequence 0 regardless, and on the
+		Vita that read past an empty block faulted: owner's rc.8 Classic+ MULTIPLAYER crash) */
+		if (background && background->sequences.count > 0 && background->sequences.address)
+		{
+			widget->animation.number_of_sprite_frames = TAG_BLOCK_GET_ELEMENT(
+				&background->sequences,
+				0,
+				struct bitmap_group_sequence)->bitmap_count;
+		}
+		else
+		{
+			void platform_log(char const *format, ...);
+			static long said_tag = NONE;
+
+			widget->animation.number_of_sprite_frames = 0;
+			if (said_tag != tag_index)
+			{
+				said_tag = tag_index;
+				platform_log("ui: widget %s: background bitmap %s has no sequences (no sprite frames)",
+					tag_index != NONE ? tag_get_name(tag_index) : "?",
+					tag_get_name(definition->background_bitmap.index));
+			}
+		}
 	}
 	if (!widget_globals.dont_load_children_recursive)
 	{

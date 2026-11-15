@@ -127,6 +127,11 @@ version's own menus have) */
 /* the Halo 3 set's screens that stand for an Xbox one (main menu, campaign,
 their pickers...) */
 #define MAXIMUM_H3_SCREENS 64
+/* (Classic+ on an MCC-only install) the Xbox screens' widgets the classic set stands in for:
+classic/xbox_screens.xml's cp/xb/<path> for ui\shell\main_menu\<path> */
+#define MAXIMUM_XBOX_SCREEN_WIDGETS 192
+#define XBOX_SCREEN_WIDGET_PREFIX "cp/xb/"
+#define XBOX_SCREEN_TAG_PREFIX "ui\\shell\\main_menu\\"
 /* the Xbox screens' widgets Menu style Halo CE adds rows to (classic_patch=) */
 #define MAXIMUM_CLASSIC_PATCHES 32
 /* (Menu style Online: the menus/online widgets that stand for a Halo 3 set's
@@ -569,6 +574,11 @@ static struct
 	screen for one, as 1.2.0 does, through the classic set's where it has one: menu_tags_screen) */
 	long stub_count;
 	long stub_tags[16];
+	/* (Classic+ on an MCC-only install, rc.9: the map's tags - the stand-ins above and Halo PC's
+	own screens of the Xbox's names - whose definition is the classic set's Xbox screen widget of
+	that name, cp/xb/<path under ui\shell\main_menu>: classic/xbox_screens.xml) */
+	long xbox_count;
+	long xbox_tags[MAXIMUM_XBOX_SCREEN_WIDGETS];
 } menu_tags;
 
 /* the build under way */
@@ -983,6 +993,11 @@ static void *bitmap_build(struct halo_menu_bitmap const *source, long tag_index)
 
 	if (build.failed)
 		return NULL;
+	/* (classic/xbox_screens.xml's pictures are for a Halo PC ui.map - MCC's: frames of its
+	pictures the Xbox's ui.map has not, or has with fewer frames. On the Xbox's, where those
+	screens are never used, none: an empty bitmap, the set added as ever) */
+	if (!build.halo_pc_ui && !strncmp(source->name, XBOX_SCREEN_WIDGET_PREFIX, strlen(XBOX_SCREEN_WIDGET_PREFIX)))
+		return bitmap_group_new(0);
 	if (source->fit)
 	{
 		if (!array_grow((void **)&menu_tags.fit_bitmaps, menu_tags.fit_bitmap_count, sizeof(*menu_tags.fit_bitmaps)))
@@ -1831,6 +1846,49 @@ static char const *const xbox_only_widgets[] =
 	"ui\\shell\\main_menu\\=cancel",
 	"ui\\shell\\main_menu\\=accept",
 };
+
+/* (Classic+ on an MCC-only install) each cp/xb/<path> widget of the set the definition of the
+map's ui\shell\main_menu\<path>, when the map has that tag (a stand-in or Halo PC's own); its
+own name kept for the widgets of the set that the map has not at all, which the set names so */
+static void xbox_screen_widgets_apply(
+	struct cache_file_tag_instance *instances)
+{
+	struct halo_menus const *menus = build.menus;
+	long index;
+	long applied = 0;
+
+	for (index = 0; index < menus->widget_count; index++)
+	{
+		char const *name = menus->widgets[index].name;
+		char path[256];
+		char *character;
+		long target;
+		void *definition;
+
+		if (strncmp(name, XBOX_SCREEN_WIDGET_PREFIX, strlen(XBOX_SCREEN_WIDGET_PREFIX)))
+			continue;
+		snprintf(path, sizeof(path), "%s%s", XBOX_SCREEN_TAG_PREFIX, name + strlen(XBOX_SCREEN_WIDGET_PREFIX));
+		for (character = path; *character; character++)
+		{
+			if (*character == '/')
+				*character = '\\';
+		}
+		target = tag_loaded(UI_WIDGET_DEFINITION_TAG, path);
+		definition = instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(build.widget_tags[index])].base_address;
+		if (target == NONE || target == build.widget_tags[index] || !definition)
+			continue;
+		if (menu_tags.xbox_count == MAXIMUM_XBOX_SCREEN_WIDGETS)
+		{
+			platform_log("menus: too many of the Xbox screens' widgets; %s left as the map has it", path);
+			continue;
+		}
+		instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(target)].base_address = definition;
+		menu_tags.xbox_tags[menu_tags.xbox_count++] = target;
+		applied++;
+	}
+	if (applied)
+		platform_log("menus: Classic+ on Halo PC's ui.map: %ld of the Xbox screens' widgets as the Xbox has them", applied);
+}
 
 static long next_tag(void)
 {
@@ -2771,6 +2829,15 @@ void menu_tags_loaded(
 			goto failed;
 		strncpy(stub->name, strrchr(xbox_only_widgets[index], '\\') + 1, sizeof(stub->name) - 1);
 		stub->type = _widget_type_container;
+		/* (its references none, as widget_build's: zeros are tag 0, the scenario - a screen
+		holding the stand-in, as pc\mp\screen does button_key, read the scenario as the
+		widget's background bitmap, and the Vita faulted on its "sequences", rc.8) */
+		reference_clear(&stub->background_bitmap, BITMAP_GROUP_TAG);
+		reference_clear(&stub->text_label_string_list, UNICODE_STRING_LIST_TAG);
+		reference_clear(&stub->text_font, FONT_TAG);
+		reference_clear(&stub->list_header_bitmap, BITMAP_GROUP_TAG);
+		reference_clear(&stub->list_footer_bitmap, BITMAP_GROUP_TAG);
+		reference_clear(&stub->extended_description_widget, UI_WIDGET_DEFINITION_TAG);
 		instance_set(instances, UI_WIDGET_DEFINITION_TAG, stub_tag, xbox_only_widgets[index], "", stub);
 		/* (named as the Xbox's is, for tag_loaded) */
 		instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(stub_tag)].name = (char *)xbox_only_widgets[index];
@@ -2830,8 +2897,30 @@ void menu_tags_loaded(
 	if (build.failed)
 		goto failed;
 	cache_files_set_tag_instances(instances, build.first_index + total);
+	/* (the classic set's Xbox screen widgets first, cp/xb/...: on an MCC-only install, Classic+, they
+	become the map's tags of their paths before the others are built, so a widget that extends= one
+	of those - profile.xml's rows and list - takes the Xbox's look, not Halo PC's) */
 	for (index = 0; index < widget_count && (!build.failed); index++)
-		instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(build.widget_tags[index])].base_address = widget_build(index);
+	{
+		if (!strncmp(menus->widgets[index].name, XBOX_SCREEN_WIDGET_PREFIX, strlen(XBOX_SCREEN_WIDGET_PREFIX)))
+			instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(build.widget_tags[index])].base_address = widget_build(index);
+	}
+	/* (Classic+ on an MCC-only install, rc.9: the Xbox's screens as Classic+ has them on the Xbox's
+	files - its profile pickers, LOAD LEVEL, CHOOSE DIFFICULTY, the profile's settings pages, split
+	screen's pickers -, which Halo PC's ui.map has not or has as Halo PC's. Each cp/xb/<path> of
+	classic/xbox_screens.xml is laid out as the Xbox's widget of that path, of the player's own
+	pictures, fonts and words (MCC's ui.map has nearly all; the port's own for the rest), and runs
+	the game's own functions; it becomes the definition of the map's tag of that name - a stand-in,
+	or Halo PC's widget -, so every screen and handler that opens it by name gets the Xbox's. Menu
+	style is read as the map loads, as for the stand-ins) */
+	menu_tags.xbox_count = 0;
+	if (!build.failed && !ingame && build.halo_pc_ui && halo_menu_style_classic_plus())
+		xbox_screen_widgets_apply(instances);
+	for (index = 0; index < widget_count && (!build.failed); index++)
+	{
+		if (strncmp(menus->widgets[index].name, XBOX_SCREEN_WIDGET_PREFIX, strlen(XBOX_SCREEN_WIDGET_PREFIX)))
+			instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(build.widget_tags[index])].base_address = widget_build(index);
+	}
 	if (build.failed)
 		goto failed;
 	menu_tags.root_tag = ingame ? NONE : build.widget_tags[widget_named(menus->root)];
@@ -3004,6 +3093,34 @@ static void menu_tags_dump(long tag_index, int depth)
 		(unsigned long)definition->flags, dump_name(&definition->background_bitmap),
 		dump_name(&definition->text_label_string_list), (int)definition->string_list_index,
 		dump_name(&definition->text_font), definition->milliseconds_to_auto_close, definition->auto_close_fade_time);
+	platform_log("menus dump: %*s  more: color %02x%02x%02x%02x align %d text_flags %x offset %d,%d list_flags %lx "
+		"controller %d header %s %d,%d-%d,%d footer %s %d,%d-%d,%d description %s sound - conditionals %ld replaces %ld",
+		depth * 2, "", (int)(definition->text_color.alpha * 255.0f + 0.5f), (int)(definition->text_color.red * 255.0f + 0.5f),
+		(int)(definition->text_color.green * 255.0f + 0.5f), (int)(definition->text_color.blue * 255.0f + 0.5f),
+		(int)definition->justification, (unsigned)definition->text_box_flags, (int)definition->horizontal_offset,
+		(int)definition->vertical_offset, (unsigned long)definition->list_flags, (int)definition->controller_index,
+		dump_name(&definition->list_header_bitmap), (int)definition->list_header_bounds.x0,
+		(int)definition->list_header_bounds.y0, (int)definition->list_header_bounds.x1, (int)definition->list_header_bounds.y1,
+		dump_name(&definition->list_footer_bitmap), (int)definition->list_footer_bounds.x0,
+		(int)definition->list_footer_bounds.y0, (int)definition->list_footer_bounds.x1, (int)definition->list_footer_bounds.y1,
+		dump_name(&definition->extended_description_widget), definition->conditional_widgets.count,
+		definition->search_and_replace_functions.count);
+	for (index = 0; index < definition->conditional_widgets.count; index++)
+	{
+		struct ui_widget_conditional_reference *conditional = TAG_BLOCK_GET_ELEMENT(&definition->conditional_widgets,
+			index, struct ui_widget_conditional_reference);
+
+		platform_log("menus dump: %*s  conditional %s flags %lx", depth * 2, "", dump_name(&conditional->widget_tag),
+			(unsigned long)conditional->flags);
+	}
+	for (index = 0; index < definition->search_and_replace_functions.count; index++)
+	{
+		struct ui_widget_search_and_replace_reference *replace = TAG_BLOCK_GET_ELEMENT(
+			&definition->search_and_replace_functions, index, struct ui_widget_search_and_replace_reference);
+
+		platform_log("menus dump: %*s  replace '%s' function %d", depth * 2, "", replace->search_string,
+			(int)replace->replace_function);
+	}
 	for (index = 0; index < definition->game_data_inputs.count; index++)
 	{
 		struct ui_widget_game_data_input_reference *input = TAG_BLOCK_GET_ELEMENT(&definition->game_data_inputs, index,
@@ -3047,8 +3164,8 @@ static void menu_tags_dump(long tag_index, int depth)
 		struct ui_widget_child_reference *child = TAG_BLOCK_GET_ELEMENT(&definition->child_widgets, index,
 			struct ui_widget_child_reference);
 
-		platform_log("menus dump: %*s  child at %d,%d flags %08lx:", depth * 2, "", (int)child->horizontal_offset,
-			(int)child->vertical_offset, (unsigned long)child->flags);
+		platform_log("menus dump: %*s  child at %d,%d flags %08lx controller %d:", depth * 2, "", (int)child->horizontal_offset,
+			(int)child->vertical_offset, (unsigned long)child->flags, (int)child->custom_controller_index);
 		if (child->widget_tag.index != NONE)
 			menu_tags_dump(child->widget_tag.index, depth + 1);
 	}
@@ -3136,6 +3253,12 @@ static boolean menu_tags_classic_plus_missing(
 
 	if (tag_index == NONE || !menu_tags.stub_count || !halo_menu_style_classic_plus())
 		return FALSE;
+	/* (rc.9: one the classic set has the Xbox's look for, xbox_screen_widgets_apply: that one) */
+	for (index = 0; index < menu_tags.xbox_count; index++)
+	{
+		if (menu_tags.xbox_tags[index] == tag_index)
+			return FALSE;
+	}
 	for (index = 0; index < menu_tags.stub_count; index++)
 	{
 		if (menu_tags.stub_tags[index] == tag_index)

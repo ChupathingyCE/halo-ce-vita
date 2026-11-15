@@ -1,0 +1,687 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Menu style Classic+ on an MCC-only install (rc.9): the Xbox's screens as Classic+ has them on the
+     Xbox's files - CAMPAIGN's (and CO-OP CAMPAIGN's) SELECT PROFILE, LOAD LEVEL and CHOOSE
+     DIFFICULTY, SETTINGS' SELECT PROFILE TO EDIT and the profile's pages (CONTROLLER SETUP, ADVANCED
+     CONTROLS, CHANGE COLOR), SPLIT SCREEN's SELECT PROFILE (start to join), SELECT MAP, SELECT
+     GAMETYPE and its lobby. MCC's ui.map is Halo PC's: it has not the Xbox's widgets for these, or
+     has Halo PC's own (run by Halo PC's functions, which this build has not), but it has nearly all
+     their pictures, fonts and words.
+     Each cp/xb/<path> here is laid out as the Xbox's ui\shell\main_menu\<path> (its place, size,
+     flags, list and children) and runs the game's own functions on its events, as the Xbox's does;
+     the pictures, fonts and words are the player's MCC ui.map's, named by their paths. Where that
+     map has not the Xbox's, the port's own stand in: the Y button, the small A and B, the 3-wide
+     lists' arrows, split screen's quarters and two headings (tools/classic_menu_art.py), and the
+     profile pages' words (the port's, as CUSTOMIZATION's); CONTROLLER SETUP's picture of the Xbox
+     controller is left out. No Bungie picture or text is in this folder.
+     menu_tags.c xbox_screen_widgets_apply makes each the definition of the map's tag of that path
+     when the map has one (a stand-in for an Xbox widget it has not, or Halo PC's), while Menu style
+     is Classic+; those the map has not at all go by their cp/xb names. On the Xbox's files, and in
+     the other styles, none of this is used.
+     (Laid out from the Xbox's widgets with HALO_MENUS_DUMP_TAGS; the profile's settings screen and
+     its list are profile.xml's classic patch, as on the Xbox's files.) -->
+<menus>
+	<!-- the pictures MCC's ui.map has not: the port's own (tools/classic_menu_art.py) -->
+	<bitmap name="cp/xb/y_butn_art">
+		<frame png="classic/y_butn.png" width="32" height="32"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/a_butn_sm">
+		<frame png="classic/a_butn_sm.png" width="32" height="32"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/b_butn_sm">
+		<frame png="classic/b_butn_sm.png" width="32" height="32"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/arrow_big_left">
+		<frame png="classic/arrow_big_left_0.png" width="32" height="256"/>
+		<frame png="classic/arrow_big_left_1.png" width="32" height="256"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/arrow_big_right">
+		<frame png="classic/arrow_big_right_0.png" width="32" height="256"/>
+		<frame png="classic/arrow_big_right_1.png" width="32" height="256"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/split_screen_bkd">
+		<frame png="classic/split_quarter.png" width="256" height="256"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/4way_profile_border">
+		<frame png="classic/split_quarter_border.png" width="256" height="256"/>
+	</bitmap>
+	<bitmap name="cp/xb/header_select_profile_to_edit_art">
+		<frame png="classic/{lang}/header_select_profile_to_edit.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/header_advanced_controls">
+		<frame png="classic/{lang}/header_advanced_controls.png" width="512" height="64"/>
+	</bitmap>
+	<!-- the words MCC's ui.map has not: the port's own (the same as CUSTOMIZATION's, halo3/customize.xml
+	     and menu_functions.c), each list in the order of the game's values it names -->
+	<strings name="cp/xb/text/controller_option_labels">
+		<string text="THUMBSTICK SETTINGS:"/>
+		<string text="BUTTON SETTINGS:"/>
+	</strings>
+	<strings name="cp/xb/text/var_joystick_config">
+		<string text="DEFAULT"/>
+		<string text="SOUTHPAW"/>
+		<string text="LEGACY"/>
+		<string text="LEGACY SOUTHPAW"/>
+	</strings>
+	<strings name="cp/xb/text/var_button_config">
+		<string text="DEFAULT"/>
+		<string text="SOUTHPAW"/>
+		<string text="JUMPY"/>
+		<string text="BOXER"/>
+		<string text="GREEN THUMB"/>
+	</strings>
+	<strings name="cp/xb/text/advanced_controller_labels">
+		<string text="INVERT THUMBSTICK:"/>
+		<string text="LOOK SENSITIVITY:"/>
+		<string text="CONTROLLER VIBRATION:"/>
+		<string text="INVERT FLIGHT CONTROL:"/>
+		<string text="AUTO-CENTER:"/>
+	</strings>
+	<strings name="cp/xb/text/var_invert_joystick">
+		<string text="YES"/>
+		<string text="NO"/>
+	</strings>
+	<strings name="cp/xb/text/var_vibration">
+		<string text="YES"/>
+		<string text="NO"/>
+	</strings>
+	<strings name="cp/xb/text/var_flight_stick_controls">
+		<string text="YES"/>
+		<string text="NO"/>
+	</strings>
+	<strings name="cp/xb/text/var_auto_center">
+		<string text="YES"/>
+		<string text="NO"/>
+	</strings>
+	<strings name="cp/xb/text/var_look_sensitivity">
+		<string text="1"/>
+		<string text="2"/>
+		<string text="3"/>
+		<string text="4"/>
+		<string text="5"/>
+		<string text="6"/>
+		<string text="7"/>
+		<string text="8"/>
+		<string text="9"/>
+		<string text="10"/>
+	</strings>
+	<strings name="cp/xb/text/cap_advanced_controller_strings">
+		<string text="Push up to look down, and down to look up."/>
+		<string text="Push up to look up, and down to look down."/>
+		<string text="Turning: 1, the slowest."/>
+		<string text="Turning: 2."/>
+		<string text="Turning: 3, the usual speed."/>
+		<string text="Turning: 4."/>
+		<string text="Turning: 5."/>
+		<string text="Turning: 6."/>
+		<string text="Turning: 7."/>
+		<string text="Turning: 8."/>
+		<string text="Turning: 9."/>
+		<string text="Turning: 10, the fastest."/>
+		<string text="The controller shakes when you are hit\n(a controller that can: the PS Vita cannot)."/>
+		<string text="The controller does not shake."/>
+		<string text="Push up to dive in the Banshee and the other\naircraft, as with a flight stick."/>
+		<string text="Push up to climb in the Banshee and the other\naircraft."/>
+		<string text="The view levels itself as you move."/>
+		<string text="The view stays where you put it as you move."/>
+	</strings>
+	<strings name="cp/xb/text/profile_edit_options">
+		<string text="CHANGE NAME"/>
+		<string text="CONTROLLER SETUP"/>
+		<string text="ADVANCED SETUP"/>
+		<string text="CHANGE COLOR"/>
+		<string text="SAVE CHANGES"/>
+	</strings>
+	<strings name="cp/xb/text/profile_edit_descriptions">
+		<string text="Type a new name for\nthis profile.\n\nCurrent Profile:"/>
+		<string text="Choose what the thumbsticks and\nbuttons do for this profile.\n\nCurrent Profile:"/>
+		<string text="Change how the controller\nbehaves for this profile.\n\nCurrent Profile:"/>
+		<string text="Pick the color this profile wears\nin free-for-all games.\n\nCurrent Profile:"/>
+		<string text="Keep these changes and go back\nto the previous screen.\n\nCurrent Profile:"/>
+	</strings>
+	<!-- (the Xbox's pictures for these rows, and CONTROLLER SETUP's Xbox controller, are not in MCC's
+	     files: Halo PC's own pictures of its profile rows, from the player's ui.map - its keyboard for
+	     CHANGE NAME, its gamepad for CONTROLLER SETUP and ADVANCED SETUP, its three Spartans for CHANGE
+	     COLOR, its keyboard, gamepad and mouse for SAVE CHANGES) -->
+	<bitmap name="cp/xb/art/profile_options">
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="0"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="7"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="1"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/pc_gamepad">
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+	</bitmap>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/profile_edit_extended_desc_pic" left="288" top="85" width="279" height="202" controller="1" bitmap="cp/xb/art/profile_options"/>
+	<strings name="cp/xb/text/press_start_to_join">
+		<string text="Press %a-button to Join"/>
+		<string text="Choose a Profile\n\nPress %a-button to select"/>
+		<string text="Profile Selected\n\nPress %a-button when all\nplayers have\nselected profiles"/>
+	</strings>
+	<widget name="cp/xb/load_campaign_player_profile" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child">
+		<on event="y" run="new campaign chosen" open="ui\shell\main_menu\new_campaign_creating_profile"/>
+		<child widget="cp/xb/player_profiles_select/solo_game_player_profile_select_screen"/>
+		<child widget="cp/xb/y_butn" x="78" y="414"/>
+		<child widget="cp/xb/=create_new" x="100" y="414"/>
+	</widget>
+	<widget name="cp/xb/player_profiles_select/solo_game_player_profile_select_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<on event="created" run="sp reset controller choices"/>
+		<on event="a" run="sp set p1 controller choice"/>
+		<on event="start" run="sp set p1 controller choice"/>
+		<on event="a" run="3wide plyr prof set for game" open="ui\shell\main_menu\solo_level_select\solo_level_select_screen" branch="true"/>
+		<on event="start" run="3wide plyr prof set for game" open="ui\shell\main_menu\solo_level_select\solo_level_select_screen" branch="true"/>
+		<conditional widget="cp/xb/player_profiles_select/empty_profile_selected_text" if_failed="true"/>
+		<child widget="cp/xb/player_profiles_select/player_profile_select_list"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\header_select_profile"/>
+		<child widget="cp/xb/button_key"/>
+	</widget>
+	<widget name="cp/xb/player_profiles_select/player_profile_select_list" type="spinner" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child left_right_tabs_items" color="#00000000" list_flags="items_in_code" header_bitmap="cp/xb/art/arrow_big_left" header_bounds="174 50 344 68" footer_bitmap="cp/xb/art/arrow_big_right" footer_bounds="174 575 344 610">
+		<data input="3wide player profile list update"/>
+		<on event="created" run="player profile list initialize"/>
+		<on event="deleted" run="player profile list dispose"/>
+		<child widget="cp/xb/player_profiles_select/player_profile_left_item"/>
+		<child widget="cp/xb/player_profiles_select/player_profile_center_item"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\player_profile_right_item"/>
+	</widget>
+	<widget name="cp/xb/player_profiles_select/player_profile_left_item" type="container" left="72" top="75" width="165" height="330" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/player_profiles_select/player_profile_left_name" x="81" y="83"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\4way_profile_select\qtr_screen_profile_color_pic" x="104" y="82"/>
+		<child widget="cp/xb/player_profiles_select/player_profile_left_data" x="82" y="242"/>
+	</widget>
+	<widget name="cp/xb/player_profiles_select/player_profile_left_name" type="text" left="0" top="0" width="147" height="22" font="ui\large_ui" color="#FF2896FF" align="center" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_color_pic" type="container" left="18" top="22" width="112" height="136" bitmap="ui\shell\bitmaps\colors_sm" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/player_profile_left_data" type="container" left="0" top="0" width="150" height="155" controller="1">
+		<child widget="ui\shell\main_menu\player_profiles_select\empty_profile_slot_text"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\current_level_label" x="0" y="89"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\current_level" x="6" y="111"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\skill_level_label" x="0" y="44"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\skill_level" x="6" y="65"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\joystick_controls_label"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\joystick_controls" x="6" y="21"/>
+	</widget>
+	<widget name="cp/xb/player_profiles_select/empty_profile_slot_text" type="text" left="0" top="0" width="150" height="200" string_list="ui\shell\main_menu\player_profiles_select\profile_description_labels" string_index="4" font="ui\small_ui" color="#FF2896FF" align="center" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/current_level_label" type="text" left="0" top="0" width="150" height="25" string_list="ui\shell\main_menu\player_profiles_select\profile_description_labels" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/current_level" type="text" left="0" top="0" width="150" height="50" string_list="ui\shell\main_menu\map_list" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/skill_level_label" type="text" left="0" top="0" width="150" height="25" string_list="ui\shell\main_menu\player_profiles_select\profile_description_labels" string_index="1" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/skill_level" type="text" left="0" top="0" width="150" height="25" string_list="ui\shell\main_menu\player_profiles_select\difficulty_names" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/joystick_controls_label" type="text" left="0" top="0" width="150" height="25" string_list="ui\shell\main_menu\player_profiles_select\profile_description_labels" string_index="2" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/joystick_controls" type="text" left="0" top="0" width="150" height="25" string_list="ui\shell\main_menu\player_profiles_select\joystick_set_defaults_descriptions" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/player_profile_center_item" type="container" left="239" top="75" width="163" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/player_profiles_select/player_profile_center_name" x="248" y="83"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\4way_profile_select\qtr_screen_profile_color_pic" x="271" y="82"/>
+		<child widget="cp/xb/player_profiles_select/player_profile_center_data" x="249" y="242"/>
+	</widget>
+	<widget name="cp/xb/player_profiles_select/player_profile_center_name" type="text" left="0" top="0" width="147" height="22" string_index="1" font="ui\large_ui" color="#FF2896FF" align="center" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/player_profile_center_data" type="container" left="0" top="0" width="150" height="155" controller="1">
+		<child widget="ui\shell\main_menu\player_profiles_select\empty_profile_slot_text"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\current_level_label" x="0" y="89"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\current_level" x="6" y="111"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\skill_level_label" x="0" y="44"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\skill_level" x="6" y="65"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\joystick_controls_label"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\joystick_controls" x="6" y="21"/>
+	</widget>
+	<widget name="cp/xb/player_profiles_select/player_profile_right_item" type="container" left="406" top="75" width="162" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="ui\shell\main_menu\player_profiles_select\player_profile_right_name" x="415" y="83"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\4way_profile_select\qtr_screen_profile_color_pic" x="438" y="82"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\player_profile_right_data" x="416" y="242"/>
+	</widget>
+	<widget name="cp/xb/player_profiles_select/player_profile_right_name" type="text" left="0" top="0" width="147" height="22" string_index="2" font="ui\large_ui" color="#FF2896FF" align="center" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/player_profile_right_data" type="container" left="0" top="0" width="150" height="155" controller="1">
+		<child widget="ui\shell\main_menu\player_profiles_select\empty_profile_slot_text"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\current_level_label" x="0" y="89"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\current_level" x="6" y="111"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\skill_level_label" x="0" y="44"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\skill_level" x="6" y="65"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\joystick_controls_label"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\joystick_controls" x="6" y="21"/>
+	</widget>
+	<widget name="cp/xb/player_profiles_select/header_select_profile" type="container" left="35" top="11" width="342" height="59" bitmap="ui\shell\main_menu\player_profiles_select\header_select_profile" controller="1"/>
+	<widget name="cp/xb/button_key" type="container" left="371" top="414" width="206" height="26" controller="1">
+		<child widget="ui\shell\main_menu\b_butn" x="371" y="414"/>
+		<child widget="ui\shell\main_menu\=back" x="392" y="414"/>
+		<child widget="ui\shell\main_menu\a_butn" x="471" y="414"/>
+		<child widget="cp/xb/=accept" x="492" y="414"/>
+	</widget>
+	<widget name="cp/xb/=accept" type="text" left="0" top="0" width="95" height="22" string_list="ui\shell\main_menu\button_key" string_index="1" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/y_butn" type="container" left="0" top="0" width="20" height="25" bitmap="cp/xb/y_butn_art" controller="1"/>
+	<widget name="cp/xb/=create_new" type="text" left="0" top="0" width="150" height="22" string_list="ui\shell\main_menu\button_key" string_index="7" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/solo_level_select/solo_level_select_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<child widget="cp/xb/solo_level_select/level_select_list"/>
+		<child widget="ui\shell\main_menu\solo_level_select\header_replay_level"/>
+		<child widget="cp/xb/button_key"/>
+	</widget>
+	<widget name="cp/xb/solo_level_select/level_select_list" type="spinner" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child left_right_tabs_items" color="#00000000" list_flags="items_in_code" header_bitmap="cp/xb/art/arrow_big_left" header_bounds="174 50 344 68" footer_bitmap="cp/xb/art/arrow_big_right" footer_bounds="174 575 344 610">
+		<data input="solo level select update"/>
+		<on event="created" run="initialize sp level list solo"/>
+		<on event="deleted" run="dispose sp level list"/>
+		<on event="a" run="solo level set map" open="ui\shell\main_menu\difficulty_select\difficulty_select_list_screen"/>
+		<on event="start" run="solo level set map" open="ui\shell\main_menu\difficulty_select\difficulty_select_list_screen"/>
+		<child widget="cp/xb/solo_level_select/replay_level_left_item"/>
+		<child widget="cp/xb/solo_level_select/replay_level_center_item"/>
+		<child widget="ui\shell\main_menu\solo_level_select\replay_level_right_item"/>
+	</widget>
+	<widget name="cp/xb/solo_level_select/replay_level_left_item" type="container" left="72" top="75" width="165" height="330" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/solo_level_select/replay_level_left_name"/>
+		<child widget="cp/xb/solo_level_select/replay_level_left_pic"/>
+		<child widget="cp/xb/solo_level_select/replay_level_left_data"/>
+		<child widget="ui\shell\main_menu\solo_level_select\difficulty_indicator" x="82" y="343"/>
+		<child widget="ui\shell\main_menu\solo_level_select\difficulty_indicator" x="132" y="343"/>
+		<child widget="ui\shell\main_menu\solo_level_select\difficulty_indicator" x="182" y="343"/>
+	</widget>
+	<widget name="cp/xb/solo_level_select/replay_level_left_name" type="text" left="83" top="204" width="144" height="43" string_list="ui\shell\main_menu\map_list" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/solo_level_select/replay_level_left_pic" type="container" left="85" top="87" width="140" height="114" bitmap="ui\shell\bitmaps\sp_levels" controller="1"/>
+	<widget name="cp/xb/solo_level_select/replay_level_left_data" type="text" left="83" top="258" width="144" height="136" string_list="ui\shell\main_menu\solo_level_select\map_data" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/solo_level_select/difficulty_indicator" type="container" left="0" top="0" width="44" height="48" bitmap="ui\shell\main_menu\difficulty_select\difficulty_options_small" controller="1"/>
+	<widget name="cp/xb/solo_level_select/replay_level_center_item" type="container" left="239" top="75" width="163" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/solo_level_select/replay_level_center_name"/>
+		<child widget="cp/xb/solo_level_select/replay_level_center_pic"/>
+		<child widget="cp/xb/solo_level_select/replay_level_center_data"/>
+		<child widget="ui\shell\main_menu\solo_level_select\difficulty_indicator" x="249" y="343"/>
+		<child widget="ui\shell\main_menu\solo_level_select\difficulty_indicator" x="299" y="343"/>
+		<child widget="ui\shell\main_menu\solo_level_select\difficulty_indicator" x="349" y="343"/>
+	</widget>
+	<widget name="cp/xb/solo_level_select/replay_level_center_name" type="text" left="250" top="204" width="145" height="43" string_list="ui\shell\main_menu\map_list" string_index="1" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/solo_level_select/replay_level_center_pic" type="container" left="252" top="87" width="140" height="114" bitmap="ui\shell\bitmaps\sp_levels" controller="1"/>
+	<widget name="cp/xb/solo_level_select/replay_level_center_data" type="text" left="250" top="258" width="145" height="136" string_list="ui\shell\main_menu\solo_level_select\map_data" string_index="1" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/solo_level_select/replay_level_right_item" type="container" left="406" top="75" width="162" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="ui\shell\main_menu\solo_level_select\replay_level_right_name"/>
+		<child widget="ui\shell\main_menu\solo_level_select\replay_level_right_pic"/>
+		<child widget="ui\shell\main_menu\solo_level_select\replay_level_right_data"/>
+		<child widget="ui\shell\main_menu\solo_level_select\difficulty_indicator" x="416" y="343"/>
+		<child widget="ui\shell\main_menu\solo_level_select\difficulty_indicator" x="466" y="343"/>
+		<child widget="ui\shell\main_menu\solo_level_select\difficulty_indicator" x="516" y="343"/>
+	</widget>
+	<widget name="cp/xb/solo_level_select/replay_level_right_name" type="text" left="417" top="204" width="146" height="43" string_list="ui\shell\main_menu\map_list" string_index="2" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/solo_level_select/replay_level_right_pic" type="container" left="419" top="87" width="140" height="114" bitmap="ui\shell\bitmaps\sp_levels" controller="1"/>
+	<widget name="cp/xb/solo_level_select/replay_level_right_data" type="text" left="417" top="258" width="146" height="136" string_list="ui\shell\main_menu\solo_level_select\map_data" string_index="2" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/solo_level_select/header_replay_level" type="container" left="35" top="11" width="306" height="59" bitmap="ui\shell\main_menu\solo_level_select\header_load_level" controller="1"/>
+	<widget name="cp/xb/difficulty_select/difficulty_select_list_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<data input="warn if diff will nuke saved game"/>
+		<child widget="ui\shell\main_menu\difficulty_select\difficulty_select_list"/>
+		<child widget="ui\shell\main_menu\difficulty_select\warning_message" x="65" y="215"/>
+		<child widget="ui\shell\main_menu\difficulty_select\header_choose_difficulty"/>
+		<child widget="cp/xb/button_key"/>
+	</widget>
+	<widget name="cp/xb/difficulty_select/difficulty_select_list" type="column_list" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child up_down_tabs_items" color="#00000000" description="ui\shell\main_menu\difficulty_select\difficulty_ext_desc">
+		<data input="difficulty menu update desc"/>
+		<on event="created" run="difficulty menu init"/>
+		<on event="a" run="set difficulty"/>
+		<on event="start" run="set difficulty"/>
+		<on event="a" run="main menu switch to solo game"/>
+		<on event="start" run="main menu switch to solo game"/>
+		<child widget="ui\shell\main_menu\difficulty_select\kindergarten_difficulty_item"/>
+		<child widget="ui\shell\main_menu\difficulty_select\normal_difficulty_item"/>
+		<child widget="ui\shell\main_menu\difficulty_select\hard_difficulty_item"/>
+		<child widget="ui\shell\main_menu\difficulty_select\impossible_difficulty_item"/>
+	</widget>
+	<widget name="cp/xb/difficulty_select/kindergarten_difficulty_item" type="text" left="51" top="78" width="232" height="32" bitmap="ui\shell\bitmaps\list_item_bkd_top" string_list="ui\shell\main_menu\difficulty_select\difficulty_options" font="ui\large_ui" color="#FF0080FF" text_x="13" text_y="5" controller="1"/>
+	<widget name="cp/xb/difficulty_select/normal_difficulty_item" type="text" left="51" top="111" width="232" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" string_list="ui\shell\main_menu\difficulty_select\difficulty_options" string_index="1" font="ui\large_ui" color="#FF0080FF" text_x="13" text_y="5" controller="1"/>
+	<widget name="cp/xb/difficulty_select/hard_difficulty_item" type="text" left="51" top="144" width="232" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" string_list="ui\shell\main_menu\difficulty_select\difficulty_options" string_index="2" font="ui\large_ui" color="#FF0080FF" text_x="13" text_y="5" controller="1"/>
+	<widget name="cp/xb/difficulty_select/impossible_difficulty_item" type="text" left="51" top="177" width="232" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" string_list="ui\shell\main_menu\difficulty_select\difficulty_options" string_index="3" font="ui\large_ui" color="#FF0080FF" text_x="13" text_y="5" controller="1"/>
+	<widget name="cp/xb/difficulty_select/header_choose_difficulty" type="container" left="35" top="11" width="390" height="59" bitmap="ui\shell\main_menu\difficulty_select\header_choose_difficulty" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_select_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<on event="a" run="player profile begin editing" open="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\player_profile_edit_screen" branch="true"/>
+		<on event="start" run="player profile begin editing" open="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\player_profile_edit_screen" branch="true"/>
+		<on event="x" run="request del player profile" open="ui\shell\error\confirm_delete_profile_modal_fullscreen"/>
+		<on event="y" run="create&amp;edit player profile" open="cp/xb/settings_select/player_setup/create_and_edit_player_profile_screen"/>
+		<conditional widget="cp/xb/player_profiles_select/empty_profile_selected_create_new_option" if_failed="true"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profiles_list"/>
+		<child widget="cp/xb/settings_select/player_setup/header_select_profile_to_edit"/>
+		<child widget="cp/xb/button_key"/>
+		<child widget="ui\shell\main_menu\x_butn" x="250" y="414"/>
+		<child widget="cp/xb/=delete" x="272" y="414"/>
+		<child widget="cp/xb/y_butn" x="78" y="414"/>
+		<child widget="cp/xb/=create_new" x="100" y="414"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profiles_list" type="spinner" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child left_right_tabs_items" color="#00000000" list_flags="items_in_code" header_bitmap="cp/xb/art/arrow_big_left" header_bounds="174 50 344 68" footer_bitmap="cp/xb/art/arrow_big_right" footer_bounds="174 575 344 610">
+		<data input="3wide player profile list update"/>
+		<on event="created" run="player profile list initialize"/>
+		<on event="deleted" run="player profile list dispose"/>
+		<child widget="cp/xb/player_profiles_select/player_profile_left_item"/>
+		<child widget="cp/xb/player_profiles_select/player_profile_center_item"/>
+		<child widget="ui\shell\main_menu\player_profiles_select\player_profile_right_item"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/header_select_profile_to_edit" type="container" left="29" top="11" width="512" height="64" bitmap="cp/xb/header_select_profile_to_edit_art" controller="1"/>
+	<widget name="cp/xb/=delete" type="text" left="0" top="0" width="150" height="22" string_list="ui\shell\main_menu\button_key" string_index="3" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/player_profile_edit_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<on event="created" run="close if not editing profile"/>
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\header_profile_settings"/>
+		<child widget="cp/xb/=cancel" x="368" y="414"/>
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_edit_select_list"/>
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_label" x="432" y="353"/>
+		<child widget="ui\shell\main_menu\b_butn" x="346" y="414"/>
+		<child widget="ui\shell\main_menu\a_butn" x="471" y="414"/>
+		<child widget="cp/xb/=accept" x="492" y="414"/>
+		<child widget="ui\shell\main_menu\blueline" x="64" y="220"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/header_profile_settings" type="container" left="35" top="11" width="455" height="59" bitmap="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\header_edit_profile_settings" controller="1"/>
+	<widget name="cp/xb/=cancel" type="text" left="0" top="0" width="100" height="22" string_list="ui\shell\main_menu\button_key" string_index="5" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/profile_edit_select_list" type="column_list" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child up_down_tabs_items" color="#00000000" description="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_edit_extended_description">
+		<data input="plyr prof edit select menu upd8"/>
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\name_profile_item"/>
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controller_setup_profile_item"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls_profile_item"/>
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_profile_item"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/save_changes_profile_item" x="0" y="22"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/name_profile_item" type="text" left="51" top="78" width="232" height="32" bitmap="ui\shell\bitmaps\list_item_bkd_top" string_list="cp/xb/text/profile_edit_options" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5">
+		<on event="a" run="player profile change name" open="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\name_edit\profile_name_screen"/>
+		<on event="start" run="player profile change name" open="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\name_edit\profile_name_screen"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_setup_profile_item" type="text" left="51" top="111" width="232" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" string_list="cp/xb/text/profile_edit_options" string_index="1" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5">
+		<on event="a" open="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/controller_options_screen"/>
+		<on event="start" open="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/controller_options_screen"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls_profile_item" type="text" left="51" top="144" width="232" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" string_list="cp/xb/text/profile_edit_options" string_index="2" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5">
+		<on event="a" open="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/advanced_controls_screen"/>
+		<on event="start" open="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/advanced_controls_screen"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_profile_item" type="text" left="51" top="177" width="232" height="33" bitmap="ui\shell\bitmaps\list_item_bkd" string_list="cp/xb/text/profile_edit_options" string_index="3" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5">
+		<on event="a" open="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\color_select_screen"/>
+		<on event="start" open="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\color_select_screen"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/save_changes_profile_item" type="text" left="51" top="211" width="232" height="33" bitmap="ui\shell\bitmaps\list_item_bkd" string_list="cp/xb/text/profile_edit_options" string_index="4" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5">
+		<on event="a" run="player profile save changes" open="ui\shell\error\warning_saving_file_screen"/>
+		<on event="start" run="player profile save changes" open="ui\shell\error\warning_saving_file_screen"/>
+	</widget>
+	<widget name="cp/xb/blueline" type="container" left="0" top="0" width="192" height="2" bitmap="ui\shell\bitmaps\blue" controller="1"/>
+	<widget name="cp/xb/gametype_select/gametype_select_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<on event="created" run="net server defer start"/>
+		<child widget="cp/xb/gametype_select/gametype_select_list"/>
+		<child widget="ui\shell\main_menu\gametype_select\header_select_gametype"/>
+		<child widget="cp/xb/button_key"/>
+	</widget>
+	<widget name="cp/xb/gametype_select/gametype_select_list" type="spinner" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child left_right_tabs_items" color="#00000000" list_flags="items_in_code" header_bitmap="cp/xb/art/arrow_big_left" header_bounds="174 50 344 68" footer_bitmap="cp/xb/art/arrow_big_right" footer_bounds="174 575 344 610">
+		<data input="mp profile list update"/>
+		<on event="created" run="mp profiles list initialize"/>
+		<on event="deleted" run="mp profiles list dispose"/>
+		<child widget="cp/xb/gametype_select/gametype_left_item"/>
+		<child widget="cp/xb/gametype_select/gametype_center_item"/>
+		<child widget="ui\shell\main_menu\gametype_select\gametype_right_item"/>
+	</widget>
+	<widget name="cp/xb/gametype_select/gametype_left_item" type="container" left="72" top="75" width="165" height="330" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/gametype_select/gametype_left_name"/>
+		<child widget="cp/xb/gametype_select/gametype_left_pic"/>
+		<child widget="cp/xb/gametype_select/gametype_left_data"/>
+		<child widget="ui\shell\main_menu\gametype_select\locked_gametype_icon" x="89" y="182"/>
+	</widget>
+	<widget name="cp/xb/gametype_select/gametype_left_name" type="text" left="83" top="204" width="144" height="43" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/gametype_select/gametype_left_pic" type="container" left="85" top="87" width="140" height="114" bitmap="ui\shell\bitmaps\game_type_grafix" controller="1"/>
+	<widget name="cp/xb/gametype_select/gametype_left_data" type="text" left="83" top="258" width="144" height="136" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/gametype_select/locked_gametype_icon" type="container" left="0" top="0" width="16" height="16" bitmap="ui\shell\bitmaps\locked_gametype" controller="1"/>
+	<widget name="cp/xb/gametype_select/gametype_center_item" type="container" left="239" top="75" width="163" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/gametype_select/gametype_center_name"/>
+		<child widget="cp/xb/gametype_select/gametype_center_pic"/>
+		<child widget="cp/xb/gametype_select/gametype_center_data"/>
+		<child widget="ui\shell\main_menu\gametype_select\locked_gametype_icon" x="256" y="182"/>
+	</widget>
+	<widget name="cp/xb/gametype_select/gametype_center_name" type="text" left="250" top="204" width="145" height="43" string_index="1" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/gametype_select/gametype_center_pic" type="container" left="252" top="87" width="140" height="114" bitmap="ui\shell\bitmaps\game_type_grafix" controller="1"/>
+	<widget name="cp/xb/gametype_select/gametype_center_data" type="text" left="250" top="258" width="145" height="136" string_index="1" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/gametype_select/gametype_right_item" type="container" left="406" top="75" width="162" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="ui\shell\main_menu\gametype_select\gametype_right_name"/>
+		<child widget="ui\shell\main_menu\gametype_select\gametype_right_pic"/>
+		<child widget="ui\shell\main_menu\gametype_select\gametype_right_data"/>
+		<child widget="ui\shell\main_menu\gametype_select\locked_gametype_icon" x="423" y="182"/>
+	</widget>
+	<widget name="cp/xb/gametype_select/gametype_right_name" type="text" left="417" top="204" width="146" height="43" string_index="2" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/gametype_select/gametype_right_pic" type="container" left="419" top="87" width="140" height="114" bitmap="ui\shell\bitmaps\game_type_grafix" controller="1"/>
+	<widget name="cp/xb/gametype_select/gametype_right_data" type="text" left="417" top="258" width="146" height="136" string_index="2" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/gametype_select/header_select_gametype" type="container" left="35" top="11" width="371" height="59" bitmap="ui\shell\main_menu\gametype_select\header_select_gametype" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/pregame/local_machine_status" type="container" left="0" top="0" width="215" height="322" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\main_menu\multiplayer_type_select\split_screen\pregame\pregame_field" controller="1">
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\local_machine_name" x="7" y="5"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\xbox_graphic" x="49" y="29"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\split_screen\pregame\local_player_data" x="13" y="90" controller="1"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\local_player_data" x="13" y="138" controller="2"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\local_player_data" x="13" y="186" controller="3"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\local_player_data" x="13" y="234" controller="4"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/4way_start2join_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/4way_start2join"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/header_select_profile"/>
+		<child widget="cp/xb/button_key"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/4way_start2join" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child no_focused_child pass_unhandled_to_all_children">
+		<on event="created" run="clear multiplayer player joins"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_start2join" x="70" y="76" controller="1"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_start2join" x="328" y="76" controller="2"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_start2join" x="70" y="242" controller="3"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_start2join" x="328" y="242" controller="4"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_start2join" type="container" left="0" top="0" width="255" height="165" flags="pass_unhandled_to_focused_child nifty_fx" bitmap="cp/xb/art/split_screen_bkd" controller="1">
+		<on event="start" run="join controller to mp game" replace="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_select"/>
+		<on event="a" run="join controller to mp game" replace="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_select"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/press_start_to_join" x="54" y="20"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/press_start_to_join_controller"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/press_start_to_join" type="text" left="0" top="0" width="254" height="60" string_list="cp/xb/text/press_start_to_join" font="ui\large_ui" color="#FF0080FF" text_flags="flashing" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/press_start_to_join_controller" type="container" left="96" top="80" width="63" height="64" flags="flash_bitmap" bitmap="ui\shell\bitmaps\controller_graphix" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/header_select_profile" type="container" left="35" top="11" width="333" height="59" bitmap="ui\shell\main_menu\player_profiles_select\header_select_profile" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/empty_profile_selected_text" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child no_history">
+		<on event="a" run="new campaign chosen" open="ui\shell\main_menu\new_campaign_creating_profile"/>
+		<on event="start" run="new campaign chosen" open="ui\shell\main_menu\new_campaign_creating_profile"/>
+		<child widget="ui\shell\error\confirm_empty_profile"/>
+	</widget>
+	<widget name="cp/xb/ui/shell/error/confirm_empty_profile" type="container" left="0" top="0" width="640" height="480" bitmap="ui\shell\bitmaps\semi_transparent_grey" controller="1">
+		<child widget="ui\shell\error\confirm_empty_player_text_box" x="192" y="176"/>
+		<child widget="cp/xb/ui/shell/error/confirm_buttons" x="0" y="16"/>
+		<child widget="ui\shell\error\header_attention" x="201" y="180"/>
+	</widget>
+	<widget name="cp/xb/ui/shell/error/confirm_empty_player_text_box" type="text" left="0" top="0" width="239" height="159" bitmap="ui\shell\bitmaps\alert_bkd" string_list="ui\shell\main_menu\player_profiles_select\empty_profile_selected" font="ui\large_ui" color="#FF2896FF" text_x="9" text_y="36" controller="1"/>
+	<widget name="cp/xb/ui/shell/error/confirm_buttons" type="container" left="0" top="0" width="640" height="480" controller="1">
+		<child widget="cp/xb/a_butn_sm" x="356" y="294"/>
+		<child widget="cp/xb/=accept_sm" x="371" y="294"/>
+		<child widget="cp/xb/b_butn_sm" x="268" y="294"/>
+		<child widget="cp/xb/=cancel_sm" x="284" y="294"/>
+	</widget>
+	<widget name="cp/xb/a_butn_sm" type="container" left="0" top="0" width="16" height="20" bitmap="cp/xb/art/a_butn_sm" controller="1"/>
+	<widget name="cp/xb/=accept_sm" type="text" left="0" top="0" width="95" height="22" string_list="ui\shell\main_menu\button_key" string_index="9" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/b_butn_sm" type="container" left="0" top="0" width="16" height="20" bitmap="cp/xb/art/b_butn_sm" controller="1"/>
+	<widget name="cp/xb/=cancel_sm" type="text" left="0" top="0" width="63" height="20" string_list="ui\shell\main_menu\button_key" string_index="5" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/ui/shell/error/header_attention" type="text" left="0" top="0" width="150" height="20" string_list="ui\shell\error\error_headers" string_index="4" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/player_profiles_select/empty_profile_selected_create_new_option" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child no_history">
+		<on event="a" run="create&amp;edit player profile" open="cp/xb/settings_select/player_setup/create_and_edit_player_profile_screen"/>
+		<on event="start" run="create&amp;edit player profile" open="cp/xb/settings_select/player_setup/create_and_edit_player_profile_screen"/>
+		<child widget="ui\shell\error\confirm_empty_profile"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/advanced_controls_help" type="text" left="68" top="321" width="482" height="79" string_list="cp/xb/text/cap_advanced_controller_strings" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/controller_help" type="container" left="192" top="165" width="279" height="202" bitmap="cp/xb/art/pc_gamepad" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_select" type="container" left="0" top="0" width="254" height="164" flags="pass_unhandled_to_focused_child nifty_fx" bitmap="cp/xb/art/4way_profile_border">
+		<on event="a" run="1wide plyr prof set for game" replace="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_selected"/>
+		<on event="start" run="1wide plyr prof set for game" replace="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_selected"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_color_pic"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_desc"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_spinner"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_color_pic" type="container" left="18" top="22" width="112" height="136" bitmap="ui\shell\bitmaps\colors_sm" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_desc" type="text" left="98" top="45" width="147" height="111" string_list="cp/xb/text/press_start_to_join" string_index="1" font="ui\small_ui" color="#FF2896FF" text_flags="flashing" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_spinner" type="spinner" left="47" top="2" width="160" height="24" flags="pass_unhandled_to_focused_child left_right_tabs_items" font="ui\large_ui" color="#FF2896FF" align="center" list_flags="items_in_code" controller="1" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="8 40 20 46" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="8 208 20 214">
+		<data input="player profile small menu update"/>
+		<on event="created" run="player profile list initialize"/>
+		<on event="deleted" run="player profile list dispose"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_selected" type="container" left="0" top="0" width="254" height="164" flags="pass_unhandled_to_focused_child nifty_fx" bitmap="cp/xb/art/4way_profile_border">
+		<on event="a" open="ui\shell\main_menu\multiplayer_type_select\split_screen\splitscreen_map_select_wrapper"/>
+		<on event="start" open="ui\shell\main_menu\multiplayer_type_select\split_screen\splitscreen_map_select_wrapper"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_color_pic_selected"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_selected_text"/>
+		<child widget="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_selected_name"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_color_pic_selected" type="container" left="18" top="22" width="112" height="136" bitmap="ui\shell\bitmaps\colors_sm" controller="1">
+		<data input="get active plyr profile color"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_selected_text" type="text" left="98" top="45" width="147" height="111" string_list="cp/xb/text/press_start_to_join" string_index="2" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_selected_name" type="text" left="47" top="2" width="160" height="24" font="ui\large_ui" color="#FFFFFFFF" align="center" list_flags="items_in_code" controller="1" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="8 40 20 46" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="8 208 20 214">
+		<data input="get active plyr profile name"/>
+	</widget>
+	<widget name="cp/xb/difficulty_select/difficulty_ext_desc" type="container" left="275" top="78" width="320" height="322" bitmap="ui\shell\bitmaps\list_field" controller="1">
+		<child widget="ui\shell\main_menu\difficulty_select\difficulty_options" x="333" y="88"/>
+		<child widget="ui\shell\main_menu\difficulty_select\difficulty_extended_description"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/profile_edit_extended_desc_text" type="text" left="294" top="290" width="296" height="110" string_list="cp/xb/text/profile_edit_descriptions" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/controller_options_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/header_profile_controller_setting"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/controller_options_menu"/>
+		<child widget="cp/xb/button_key_options"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/header_profile_controller_setting" type="container" left="35" top="11" width="395" height="59" bitmap="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\controller_edit\header_profile_controller_setting" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/controller_options_menu" type="column_list" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child up_down_tabs_children" color="#00000000" description="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/controller_help">
+		<data input="game settings lists pic update"/>
+		<on event="created" run="plyr prf init cntl settings"/>
+		<on event="a" run="plyr prf save cntl settings" back="true"/>
+		<on event="start" run="plyr prf save cntl settings" back="true"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/op_joystick_config" x="54" y="73"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/op_button_config" x="54" y="103"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/op_joystick_config" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/joystick_config_label"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/joystick_config_spinner" x="290" y="1"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/joystick_config_label" type="text" left="0" top="0" width="300" height="22" string_list="cp/xb/text/controller_option_labels" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/joystick_config_spinner" type="spinner" left="3" top="2" width="197" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" string_list="cp/xb/text/var_joystick_config" font="ui\large_ui" color="#FF2896FF" align="center" list_flags="items_from_strings" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="7 -6 19 0" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="7 200 19 206"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/op_button_config" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/button_config_label"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/button_config_spinner" x="315" y="1"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/button_config_label" type="text" left="0" top="0" width="300" height="22" string_list="cp/xb/text/controller_option_labels" string_index="1" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/button_config_spinner" type="spinner" left="0" top="2" width="142" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" string_list="cp/xb/text/var_button_config" font="ui\large_ui" color="#FF2896FF" align="center" text_y="4" list_flags="items_from_strings" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="7 -9 19 -3" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="7 142 19 148"/>
+	<widget name="cp/xb/button_key_options" type="container" left="250" top="414" width="327" height="26" controller="1">
+		<child widget="ui\shell\main_menu\b_butn" x="346" y="414"/>
+		<child widget="cp/xb/=cancel" x="368" y="414"/>
+		<child widget="ui\shell\main_menu\a_butn" x="471" y="414"/>
+		<child widget="cp/xb/=accept_new" x="492" y="414"/>
+	</widget>
+	<widget name="cp/xb/=accept_new" type="text" left="0" top="0" width="160" height="22" string_list="ui\shell\main_menu\button_key" string_index="14" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/advanced_controls_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/advanced_controls_menu"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/header_advanced_controls"/>
+		<child widget="cp/xb/button_key_options"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/advanced_controls_menu" type="column_list" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child up_down_tabs_children" color="#00000000" description="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/advanced_controls_help">
+		<data input="game settings lists text update"/>
+		<on event="created" run="plyr prf init adv cntl set"/>
+		<on event="a" run="plyr prf save adv cntl set" back="true"/>
+		<on event="start" run="plyr prf save adv cntl set" back="true"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_invert_joystick" x="54" y="73"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_controller_sensitivity" x="54" y="103"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_controller_vibration" x="54" y="133"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_flight_stick_controls" x="54" y="163"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_auto_center" x="54" y="193"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_invert_joystick" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/invert_joystick_label"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/invert_joystick_spinner" x="366" y="1"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/invert_joystick_label" type="text" left="0" top="0" width="300" height="22" string_list="cp/xb/text/advanced_controller_labels" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/invert_joystick_spinner" type="spinner" left="2" top="2" width="46" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" string_list="cp/xb/text/var_invert_joystick" font="ui\large_ui" color="#FF2896FF" align="center" list_flags="items_from_strings" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="7 -6 19 0" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="7 48 19 54"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_controller_sensitivity" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/controller_sensitivity_label"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/controller_sensitivity_spinner" x="373" y="1"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/controller_sensitivity_label" type="text" left="0" top="0" width="300" height="22" string_list="cp/xb/text/advanced_controller_labels" string_index="1" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/controller_sensitivity_spinner" type="spinner" left="3" top="2" width="33" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" string_list="cp/xb/text/var_look_sensitivity" font="ui\large_ui" color="#FF2896FF" align="center" text_y="4" list_flags="items_from_strings" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="7 -6 19 0" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="7 36 19 40"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_controller_vibration" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/controller_vibration_label"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/controller_vibration_spinner" x="366" y="1"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/controller_vibration_label" type="text" left="0" top="0" width="300" height="22" string_list="cp/xb/text/advanced_controller_labels" string_index="2" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/controller_vibration_spinner" type="spinner" left="2" top="2" width="46" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" string_list="cp/xb/text/var_vibration" font="ui\large_ui" color="#FF2896FF" align="center" list_flags="items_from_strings" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="7 -6 19 0" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="7 48 19 54"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_flight_stick_controls" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/flight_controls_label"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/flight_controls_spinner" x="366" y="1"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/flight_controls_label" type="text" left="0" top="0" width="320" height="22" string_list="cp/xb/text/advanced_controller_labels" string_index="3" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/flight_controls_spinner" type="spinner" left="2" top="2" width="46" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" string_list="cp/xb/text/var_flight_stick_controls" font="ui\large_ui" color="#FF2896FF" align="center" text_y="4" list_flags="items_from_strings" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="7 -6 19 0" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="7 48 19 54"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/op_auto_center" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/auto_center_label"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/auto_center_spinner" x="366" y="1"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/auto_center_label" type="text" left="0" top="0" width="320" height="22" string_list="cp/xb/text/advanced_controller_labels" string_index="4" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/auto_center_spinner" type="spinner" left="2" top="2" width="46" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" string_list="cp/xb/text/var_auto_center" font="ui\large_ui" color="#FF2896FF" align="center" text_y="4" list_flags="items_from_strings" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="7 -6 19 0" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="7 48 19 54"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/header_advanced_controls" type="container" left="29" top="11" width="512" height="64" bitmap="cp/xb/art/header_advanced_controls" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_select_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<on event="a" run="color picker select color" back="true"/>
+		<on event="start" run="color picker select color" back="true"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_select_list"/>
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\header_profile_color"/>
+		<child widget="cp/xb/button_key_options"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_select_list" type="spinner" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child left_right_tabs_items" color="#00000000" list_flags="items_in_code" header_bitmap="cp/xb/art/arrow_big_left" header_bounds="174 50 344 68" footer_bitmap="cp/xb/art/arrow_big_right" footer_bounds="174 575 344 610">
+		<data input="color picker update"/>
+		<on event="created" run="color picker menu initialize"/>
+		<on event="deleted" run="color picker menu dispose"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_left_item"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_center_item"/>
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\color_right_item"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_left_item" type="container" left="72" top="75" width="165" height="330" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_left_name" x="81" y="85"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_left_pic" x="87" y="106"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_left_name" type="text" left="0" top="0" width="147" height="22" string_list="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" font="ui\large_ui" color="#FF2896FF" align="center" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_left_pic" type="container" left="0" top="0" width="143" height="294" bitmap="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\player_color_marine_large" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_center_item" type="container" left="239" top="75" width="163" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_center_name" x="248" y="85"/>
+		<child widget="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_center_pic" x="254" y="106"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_center_name" type="text" left="0" top="0" width="147" height="22" string_list="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" string_index="1" font="ui\large_ui" color="#FF2896FF" align="center" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_center_pic" type="container" left="0" top="0" width="143" height="294" bitmap="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\player_color_marine_large" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_right_item" type="container" left="406" top="75" width="162" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\color_right_name" x="415" y="85"/>
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\color_right_pic" x="421" y="106"/>
+	</widget>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_right_name" type="text" left="0" top="0" width="147" height="22" string_list="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\colors_list" string_index="2" font="ui\large_ui" color="#FF2896FF" align="center" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/color_right_pic" type="container" left="0" top="0" width="143" height="294" bitmap="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\player_color_marine_large" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/color_edit/header_profile_color" type="container" left="35" top="11" width="404" height="59" bitmap="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\color_edit\header_profile_color" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/create_and_edit_player_profile_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child">
+		<child widget="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\player_profile_edit_screen"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_select_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child pause_game" bitmap="ui\shell\bitmaps\gradient">
+		<on event="created" run="net server defer start"/>
+		<child widget="cp/xb/multiplayer_type_select/mp_map_select/mp_map_select_list"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\mp_map_select\header_select_map"/>
+		<child widget="cp/xb/button_key"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_select_list" type="spinner" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child left_right_tabs_items" color="#00000000" list_flags="items_in_code" header_bitmap="cp/xb/art/arrow_big_left" header_bounds="174 50 344 68" footer_bitmap="cp/xb/art/arrow_big_right" footer_bounds="174 575 344 610">
+		<data input="mp level select update"/>
+		<on event="created" run="mp level list initialize"/>
+		<on event="deleted" run="mp level list dispose"/>
+		<child widget="cp/xb/multiplayer_type_select/mp_map_select/mp_map_left_item"/>
+		<child widget="cp/xb/multiplayer_type_select/mp_map_select/mp_map_center_item"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\mp_map_select\mp_map_right_item"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_left_item" type="container" left="72" top="75" width="165" height="330" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/multiplayer_type_select/mp_map_select/mp_map_left_name"/>
+		<child widget="cp/xb/multiplayer_type_select/mp_map_select/mp_map_left_pic"/>
+		<child widget="cp/xb/multiplayer_type_select/mp_map_select/mp_map_left_data"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_left_name" type="text" left="83" top="204" width="144" height="43" string_list="ui\shell\main_menu\mp_map_list" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_left_pic" type="container" left="85" top="87" width="140" height="114" bitmap="ui\shell\bitmaps\mp_map_grafix" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_left_data" type="text" left="83" top="258" width="144" height="136" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_center_item" type="container" left="239" top="75" width="163" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="cp/xb/multiplayer_type_select/mp_map_select/mp_map_center_name"/>
+		<child widget="cp/xb/multiplayer_type_select/mp_map_select/mp_map_center_pic"/>
+		<child widget="cp/xb/multiplayer_type_select/mp_map_select/mp_map_center_data"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_center_name" type="text" left="250" top="204" width="145" height="43" string_list="ui\shell\main_menu\mp_map_list" string_index="1" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_center_pic" type="container" left="252" top="87" width="140" height="114" bitmap="ui\shell\bitmaps\mp_map_grafix" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_center_data" type="text" left="250" top="258" width="145" height="136" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data" string_index="1" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_right_item" type="container" left="406" top="75" width="162" height="326" bitmap="ui\shell\bitmaps\spinner_list_3_wide_item_background" controller="1">
+		<child widget="ui\shell\main_menu\multiplayer_type_select\mp_map_select\mp_map_right_name"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\mp_map_select\mp_map_right_pic"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\mp_map_select\mp_map_right_data"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_right_name" type="text" left="417" top="204" width="146" height="43" string_list="ui\shell\main_menu\mp_map_list" string_index="2" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_right_pic" type="container" left="419" top="87" width="140" height="114" bitmap="ui\shell\bitmaps\mp_map_grafix" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/mp_map_right_data" type="text" left="417" top="258" width="146" height="136" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data" string_index="2" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/mp_map_select/header_select_map" type="container" left="35" top="11" width="306" height="59" bitmap="ui\shell\main_menu\multiplayer_type_select\mp_map_select\header_select_map" controller="1"/>
+</menus>
