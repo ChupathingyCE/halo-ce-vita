@@ -6787,8 +6787,29 @@ forge|forge3|forgemp|forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeo
 	. "$here/netns_forge_cases.sh"
 	forge_case
 	;;
+command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|h3command)
+	# network Command (port/linux/game/command.c's command_net.inc): the
+	# host's Command game on its LAN, the joiners joining it by the System
+	# Link search (netns_command_cases.sh)
+	forge_lan_machine() { # NAME_VARIABLE ADDRESS: a machine on the host's LAN
+		holder
+		local machine=$held number=${2##*.}
+		in_ns "$host_router" ip link add "l${number}_host" type veth peer name "m${number}_host"
+		in_ns "$host_router" ip link set "m${number}_host" netns "$machine"
+		in_ns "$host_router" ip link set "l${number}_host" master b_host
+		in_ns "$host_router" ip link set "l${number}_host" up
+		in_ns "$machine" ip link set lo up
+		in_ns "$machine" ip addr add "$2/24" broadcast 192.168.1.255 dev "m${number}_host"
+		in_ns "$machine" ip link set "m${number}_host" up
+		in_ns "$machine" ip route add default via 192.168.1.1
+		eval "$1=$machine"
+	}
+	forge_lan_machine lan 192.168.1.3
+	. "$here/netns_command_cases.sh"
+	command_case
+	;;
 *)
-	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b" >&2
+	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b|command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|h3command" >&2
 	exit 2
 	;;
 esac

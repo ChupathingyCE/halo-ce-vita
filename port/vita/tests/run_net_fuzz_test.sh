@@ -25,6 +25,10 @@
 #              palette and lobby messages as a client takes them, the replay
 #              window, the rate limits, and a layout sent in pieces read
 #              through the map variant validator (forge_files.c)
+#   command    network Command's messages (port/linux/game/command_net_protocol.c):
+#              a client's requests as the host takes them, the host's state
+#              entries (the game, squads, territories, notices) as a client
+#              takes them, the replay window, the rate limit
 #   chat       the in-game chat's lines and settings as the host and a client
 #              parse them (OpenCE's kinds 87-89), the text cleaned, links
 #              found and the slur filter's mask (port/linux/game/
@@ -48,7 +52,7 @@
 #                        (clang's i386 runtime, its COMDAT groups taken out
 #                        when it does not link as it is); what it finds goes
 #                        to NET_FUZZ_OUT (default a folder under TMPDIR)
-#   NET_FUZZ_TARGETS     the targets (default all eleven)
+#   NET_FUZZ_TARGETS     the targets (default all twelve)
 #   NET_FUZZ_DEDICATED=1 builds them as the dedicated server's code
 #                        (HALO_DEDICATED_SERVER, HALO_NET_AS_VITA: its limits
 #                        on a peer's packets and an address's peers, its
@@ -64,7 +68,7 @@ out=${TMPDIR:-/tmp}/net_fuzz_test.$$
 test_out_begin "$out"
 clang=${CLANG:-$(sed -n 's/^linux_cc = //p' "$root/build.ninja" | head -1)}
 [ -n "$clang" ] || clang=clang
-targets=${NET_FUZZ_TARGETS:-"p2p signal messages map_share variant_options crossplay_maps lobby actor_table forge chat netversions"}
+targets=${NET_FUZZ_TARGETS:-"p2p signal messages map_share variant_options crossplay_maps lobby actor_table forge command chat netversions"}
 seconds=${NET_FUZZ_SECONDS:-0}
 mkdir -p "$out"
 cd "$root"
@@ -134,6 +138,7 @@ for target in $targets; do
 		port/linux/game/network_game_record.c" ;;
 	actor_table) flags=$platform_flags; sources="port/vita/tests/net_fuzz_actor_table.c port/linux/game/network_actor_table.c" ;;
 	forge) flags=$platform_flags; sources="port/vita/tests/net_fuzz_forge.c" ;;
+	command) flags=$platform_flags; sources="port/vita/tests/net_fuzz_command.c" ;;
 	chat) flags=$platform_flags; sources="port/vita/tests/net_fuzz_chat.c" ;;
 	netversions) flags=$platform_flags; sources="port/vita/tests/net_fuzz_netversions.c port/linux/src/netversion_table.c
 		port/linux/src/p2p_crypto.c $monocypher" ;;
