@@ -2089,6 +2089,23 @@ at the target in each, and what hits at a point within its reach of where
 the host had the player since it was fired; and area damage or not as the
 game deals it, an explosion's direction and scale from the epicenter to the
 target. */
+/* whether a hit report stamped at the host's tick `stamp` is taken at the
+host's tick `now`: no later than now, nor older than `maximum_age`, the age
+measured without wrapping (a stamp far below zero, which no tick of the game
+has, made `now - stamp` overflow into a small or negative age, taken). From
+ChupathingyCE (bb065b422, "Hit reports: refuse a stamp from before the game
+began", MrMilenko; GPL-3.0-or-later) */
+static boolean distributed_report_stamp_taken(
+	long now,
+	long stamp,
+	long maximum_age)
+{
+	if (stamp == NONE || stamp > now)
+		return FALSE;
+	/* (stamp <= now: their difference, unsigned, is exact) */
+	return (unsigned long)now - (unsigned long)stamp <= (unsigned long)maximum_age;
+}
+
 static short distributed_report_valid(
 	long machine_index,
 	struct distributed_hit_report const *report,
@@ -2148,8 +2165,8 @@ static short distributed_report_valid(
 	if (report->host_time != NONE && report->host_time > now)
 		return _anticheat_hit_forged;
 	/* (none: made before the client heard the host, at a game's start) */
-	if (report->host_time == NONE || now - report->host_time > REPORT_MAXIMUM_AGE_TICKS)
-		return _anticheat_hit_refused;
+	if (!distributed_report_stamp_taken(now, report->host_time, REPORT_MAXIMUM_AGE_TICKS))
+		return report->host_time != NONE && report->host_time < 0 ? _anticheat_hit_forged : _anticheat_hit_refused;
 	ticks = MIN(now - report->host_time + TARGET_HISTORY_SLACK_TICKS, TARGET_HISTORY_TICKS - 1);
 	/* damage that player could deal, and how they deal it (one of a grenade
 	the host did not see thrown: a poor link's; of a weapon not held in
