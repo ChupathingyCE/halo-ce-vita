@@ -330,6 +330,9 @@ Fourth core helpers is All async and the system allows it) */
 int vita_host_fourth_core_join(const char *role, int level);
 #endif
 void platform_log(const char *format, ...);
+/* (xbox_files.c) this thread's writes give the memory card way to the other
+threads' reads */
+void platform_file_quiet_thread_begin(void);
 
 #define GAME_STATE_WRITE_PIECE (256 * 1024)
 
@@ -340,6 +343,9 @@ static struct
 	boolean unavailable;
 	boolean write_pending;
 	boolean writing;
+	/* (port, Nov 15 2026) a newer checkpoint taken while this one was
+	being written: the write starts over from it */
+	volatile boolean restart;
 	pthread_mutex_t lock;
 	halo_cond_t changed;
 	pthread_t thread;
@@ -372,6 +378,10 @@ static void *game_state_writer_thread(
 	the memory card's time already) */
 	vita_host_fourth_core_join("checkpoint writer", 2);
 #endif
+	/* (port, Nov 15 2026: the card's other calls first - the textures and
+	sounds a frame waits for, which queued behind each piece of this write:
+	the Maw's reactor stutter, xbox_files.c's io_quiet_thread) */
+	platform_file_quiet_thread_begin();
 	for (;;)
 	{
 		OVERLAPPED overlapped;
@@ -395,7 +405,8 @@ static void *game_state_writer_thread(
 		{
 			long offset;
 
-			for (offset = 0; written && offset < xbox_game_state_globals.buffer_size; offset += GAME_STATE_WRITE_PIECE)
+			for (offset = 0; written && !game_state_writer.restart && offset < xbox_game_state_globals.buffer_size;
+				offset += GAME_STATE_WRITE_PIECE)
 			{
 				long piece = xbox_game_state_globals.buffer_size - offset;
 
@@ -411,12 +422,18 @@ static void *game_state_writer_thread(
 		}
 		if (!written)
 			platform_log("game state: couldn't write the checkpoint to the saved game file (#%d)", (int)GetLastError());
+		else if (game_state_writer.restart)
+		{
+			/* (a newer checkpoint is in the copy: its write follows,
+			write_pending) */
+		}
 		else if (game_state_writer.writes++ < 4)
 			platform_log("game state: checkpoint written to the saved game file in %.1f ms (in the background)",
 				game_state_writer_ms(&started));
 
 		pthread_mutex_lock(&game_state_writer.lock);
 		game_state_writer.writing = FALSE;
+		game_state_writer.restart = FALSE;
 		halo_cond_broadcast(&game_state_writer.changed);
 		pthread_mutex_unlock(&game_state_writer.lock);
 	}
@@ -671,7 +688,19 @@ boolean game_state_write_to_file(
 		game_state_writer.taker = pthread_self();
 		game_state_writer.taker_known = TRUE;
 #endif
-		game_state_writer_wait();
+		/* (port, Nov 15 2026: no wait for the last checkpoint's write - on
+		a slow memory card its 16 MB took seconds, and a checkpoint soon
+		after another - The Maw's reactor takes them a second apart: its
+		save_loop's and enc5_1's certain_save - held the game thread until
+		it was done, 7.9 s in the harness at a slow card's write speed. The
+		write in progress stops between pieces and starts over from this
+		copy, so the file is the newest checkpoint whole once the writer is
+		done, as before; what reads or closes the file still waits for it,
+		game_state_writer_wait) */
+		pthread_mutex_lock(&game_state_writer.lock);
+		if (game_state_writer.writing)
+			game_state_writer.restart = TRUE;
+		pthread_mutex_unlock(&game_state_writer.lock);
 		memcpy(game_state_writer.snapshot, xbox_game_state_globals.buffer, xbox_game_state_globals.buffer_size);
 		if (checkpoints_logged++ < 64)
 			platform_log("game state: checkpoint taken in %.1f ms", game_state_writer_ms(&started));
