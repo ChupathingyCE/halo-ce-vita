@@ -564,6 +564,11 @@ static struct
 	long classic_set_from[MAXIMUM_ONLINE_SCREENS];
 	long classic_set_to[MAXIMUM_ONLINE_SCREENS];
 	boolean classic_set_said[MAXIMUM_ONLINE_SCREENS];
+	/* (an MCC-only install: the Xbox screens its ui.map - Halo PC's - has not, each an empty
+	widget under the Xbox's name, xbox_only_widgets; Menu style Classic+ opens the Halo 3 set's
+	screen for one, as 1.2.0 does, through the classic set's where it has one: menu_tags_screen) */
+	long stub_count;
+	long stub_tags[16];
 } menu_tags;
 
 /* the build under way */
@@ -584,6 +589,8 @@ static struct
 	boolean failed;
 	/* a level's map (the in-game set) */
 	boolean ingame;
+	/* a Halo PC ui.map (MCC's): the Xbox's screens it has not stand in (a child's halo_pc=) */
+	boolean halo_pc_ui;
 } build;
 
 /* ---------- private code */
@@ -1694,8 +1701,10 @@ static void *widget_build(long widget_index)
 		for (count = 0, child = source->first_child; children && child != HALO_MENU_NONE; child = menus->children[child].next)
 		{
 			struct halo_menu_child const *entry = &menus->children[child];
+			/* (halo_pc=: its widget on a Halo PC ui.map, the slot keeping the Xbox's child's name) */
 			long tag_index = entry->nested != HALO_MENU_NONE ? build.widget_tags[entry->nested] :
-				tag_named(UI_WIDGET_DEFINITION_TAG, entry->widget, entry->file, entry->line);
+				tag_named(UI_WIDGET_DEFINITION_TAG, build.halo_pc_ui && entry->halo_pc ? entry->halo_pc : entry->widget,
+					entry->file, entry->line);
 			char const *name = entry->nested != HALO_MENU_NONE ? menus->widgets[entry->nested].name : entry->widget;
 			char const *child_leaf = strrchr(name, '/') ? strrchr(name, '/') + 1 : name;
 
@@ -2670,6 +2679,7 @@ void menu_tags_loaded(
 	menu_tags.root_tag = menu_tags.xbox_root_tag = NONE;
 	menu_tags.classic_count = 0;
 	menu_tags.classic_applied = 0;
+	menu_tags.stub_count = 0;
 	/* (until they are added: the Xbox's menus) */
 	if (!ingame)
 		halo_pc_menus_state = -1;
@@ -2717,16 +2727,19 @@ void menu_tags_loaded(
 		stub_wanted[index] = tag_loaded(UI_WIDGET_DEFINITION_TAG, xbox_only_widgets[index]) == NONE ? TRUE : FALSE;
 	for (index = 0; !ingame && index < NUMBEROF(xbox_only_widgets); index++)
 		stub_count += stub_wanted[index];
-	/* (an MCC-only install, Halo CE's styles: Halo PC's own menus as before the stand-ins, 1.1.3 -
-	the set's Classic screens lean on the Xbox's screens, which a Halo PC ui.map has not; the
-	Online and Halo 3 styles replace them. Menu style is read here, when the map loads) */
-	if (stub_count && !halo_menu_style_halo3())
+	/* (an MCC-only install, Menu style Classic: Halo PC's own menus as before the stand-ins, 1.1.3 -
+	the Xbox's screens as they shipped, which a Halo PC ui.map has not. Classic+ (rc.8) has the set:
+	its main menu rows on the map's list, and the Halo 3 set's screens - with Classic+'s own where
+	it has them - for the Xbox screens the map lacks, menu_tags_screen; the Online and Halo 3 styles
+	replace them. Menu style is read here, when the map loads) */
+	if (stub_count && !halo_menu_style_halo3() && !halo_menu_style_classic_plus())
 	{
-		platform_log("menus: this ui.map is Halo PC's (no Xbox screens) and Menu style is Halo CE's: "
-			"the game's own menus; Online or Halo 3 style adds OpenCE's screens (restart after changing it)");
+		platform_log("menus: this ui.map is Halo PC's (no Xbox screens) and Menu style is Classic: "
+			"the game's own menus; Classic+, Online or Halo 3 style adds OpenCE's screens (restart after changing it)");
 		goto failed;
 	}
 	total += stub_count;
+	build.halo_pc_ui = stub_count != 0;
 	instances = build.failed ? NULL : instances_grow(total, &build.first_index, &build.first_salt);
 	if (!instances)
 		goto failed;
@@ -2751,6 +2764,8 @@ void menu_tags_loaded(
 		if (!stub_wanted[index])
 			continue;
 		stub_tag = next_tag();
+		if (menu_tags.stub_count < (long)NUMBEROF(menu_tags.stub_tags))
+			menu_tags.stub_tags[menu_tags.stub_count++] = stub_tag;
 		stub = allocate(sizeof(*stub));
 		if (!stub)
 			goto failed;
@@ -3112,6 +3127,25 @@ static long menu_tags_online(
 	return tag_index;
 }
 
+/* (Menu style Classic+) whether the screen is an Xbox one this ui.map has not (an MCC-only
+install's, Halo PC's: menu_tags_loaded's empty widget under its name) */
+static boolean menu_tags_classic_plus_missing(
+	long tag_index)
+{
+	long index;
+
+	if (tag_index == NONE || !menu_tags.stub_count || !halo_menu_style_classic_plus())
+		return FALSE;
+	for (index = 0; index < menu_tags.stub_count; index++)
+	{
+		if (menu_tags.stub_tags[index] == tag_index)
+			return TRUE;
+	}
+	/* (and Halo PC's LOAD LEVEL, which the profile picker opens: Halo PC's list, run by Halo PC's
+	functions, which this build has not) */
+	return tag_index == tag_loaded(UI_WIDGET_DEFINITION_TAG, "ui\\shell\\main_menu\\solo_level_select\\solo_level_select_screen");
+}
+
 /* (ui_widget_load_by_name_or_tag) a screen the game opens: ours in place of
 the Xbox's Multiplayer screen (the Halo PC pictures and text read the first
 time), and those menu_functions.c's flows replace; else the tag itself */
@@ -3149,8 +3183,11 @@ long menu_tags_screen(
 	}
 	/* (Menu style Halo 3: the Halo 3 set's screen for the Xbox's, its
 	pictures read the first time, as the Multiplayer screen's; read again
-	each time, a change in the settings panel takes at the next screen) */
-	if (halo_menu_style_halo3())
+	each time, a change in the settings panel takes at the next screen.
+	Classic+ on an MCC-only install: the same for an Xbox screen its ui.map
+	has not - the profile pickers, the game's lobby, the start-to-join
+	screens -, the classic set's screens in it where it has them, rc.8) */
+	if (halo_menu_style_halo3() || menu_tags_classic_plus_missing(tag_index))
 	{
 		long index;
 		/* (a network game's SELECT PROFILE, a profile chosen before this
@@ -3206,8 +3243,11 @@ long menu_tags_screen(
 		for it, when it has one - the game's lobby after a game hosted) */
 		long replaced = pc_menu_functions_screen(tag_index);
 
-		if (replaced != tag_index && replaced != NONE && halo_menu_style_halo3())
+		if (replaced != tag_index && replaced != NONE &&
+			(halo_menu_style_halo3() || menu_tags_classic_plus_missing(replaced)))
+		{
 			return menu_tags_screen(replaced);
+		}
 		return menu_tags_online(replaced);
 	}
 	return menu_tags_online(tag_index);
