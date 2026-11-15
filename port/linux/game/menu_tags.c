@@ -2771,6 +2771,15 @@ void menu_tags_loaded(
 			goto failed;
 		strncpy(stub->name, strrchr(xbox_only_widgets[index], '\\') + 1, sizeof(stub->name) - 1);
 		stub->type = _widget_type_container;
+		/* (its references none, as widget_build's: zeros are tag 0, the scenario - a screen
+		holding the stand-in, as pc\mp\screen does button_key, read the scenario as the
+		widget's background bitmap, and the Vita faulted on its "sequences", rc.8) */
+		reference_clear(&stub->background_bitmap, BITMAP_GROUP_TAG);
+		reference_clear(&stub->text_label_string_list, UNICODE_STRING_LIST_TAG);
+		reference_clear(&stub->text_font, FONT_TAG);
+		reference_clear(&stub->list_header_bitmap, BITMAP_GROUP_TAG);
+		reference_clear(&stub->list_footer_bitmap, BITMAP_GROUP_TAG);
+		reference_clear(&stub->extended_description_widget, UI_WIDGET_DEFINITION_TAG);
 		instance_set(instances, UI_WIDGET_DEFINITION_TAG, stub_tag, xbox_only_widgets[index], "", stub);
 		/* (named as the Xbox's is, for tag_loaded) */
 		instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(stub_tag)].name = (char *)xbox_only_widgets[index];
