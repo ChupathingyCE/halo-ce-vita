@@ -3922,6 +3922,11 @@ static uint32_t adpcm_halved_bytes(
 	return blocks * block_bytes;
 }
 
+/* the source MCC's own maps' sounds come from (custom_edition_cache_convert_mcc_sounds):
+set only while one of MCC's own maps, or a scene pack built from one, is
+converted */
+static struct mcc_sound_source const *mcc_sound_source_current;
+
 /* Gives every permutation of the sound at `sound_offset` (tag `handle`)
 the state the game expects of one it has not played: its tag is its own
 (sounds.map holds the handles of whatever map it was built with), with no
@@ -4001,6 +4006,15 @@ static void sound_prepare(
 			write_u32(permutation + SOUND_PERMUTATION_CACHE_BASE_ADDRESS_OFFSET, 0);
 			write_u32(permutation + SOUND_PERMUTATION_CACHE_TAG_INDEX_OFFSET, handle);
 			write_u32(permutation + SOUND_PERMUTATION_RUNTIME_TAG_INDEX_OFFSET, handle);
+			if (!mcc_sound_source_current)
+			{
+				/* (port: the flag of a stream of MCC's CELT banks is
+				mcc_sound_map's alone, never a map's own) */
+				uint8_t *samples = permutation + SOUND_PERMUTATION_SAMPLES_OFFSET;
+
+				write_u32(samples + TAG_DATA_FLAGS_OFFSET,
+					read_u32(samples + TAG_DATA_FLAGS_OFFSET) & ~CUSTOM_EDITION_SAMPLES_MCC_CELT_FLAG);
+			}
 			if (ogg_vorbis)
 			{
 				if (permutation_compression != SOUND_COMPRESSION_OGG_VORBIS)
@@ -4052,10 +4066,14 @@ static void sound_prepare(
 					halved_permutations++;
 				}
 			}
-			else if (CUSTOM_EDITION_PERMUTATION_IS_MCC_CELT((uint16_t)permutation_compression))
+			else if (CUSTOM_EDITION_PERMUTATION_IS_MCC_CELT((uint16_t)permutation_compression) && mcc_sound_source_current)
 			{
 				/* (port: a stream of one of MCC's CELT banks, its sizes given
-				by mcc_sound_map, made Xbox ADPCM as it loads) */
+				by mcc_sound_map, made Xbox ADPCM as it loads - only on one of
+				MCC's own maps or a scene pack built from one, the conversion
+				pointed at MCC's bank: any other map, a downloaded one too,
+				that says so of its own sounds has them silent, never read
+				from the player's MCC banks) */
 			}
 			else
 			{
@@ -4093,9 +4111,6 @@ static void sound_prepare(
 }
 
 /* ---------- MCC's sounds (port) */
-
-/* the source MCC's own maps' sounds come from (custom_edition_cache_convert_mcc_sounds) */
-static struct mcc_sound_source const *mcc_sound_source_current;
 
 void custom_edition_cache_convert_mcc_sounds(struct mcc_sound_source const *source)
 {

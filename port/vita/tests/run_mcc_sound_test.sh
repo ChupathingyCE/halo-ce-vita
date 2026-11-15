@@ -34,6 +34,10 @@
 #      damaged   the list with another version, and the bank cut short (copies of
 #                the first bytes in the test's folder): the sounds are silent, said, no
 #                assertion
+#      foreign   a Custom Edition map (extinction, HALO_TEST_CE_MAPS, with Halo PC's
+#                maps, HALO_TEST_CE_RESOURCES) whose sound claims to be streams of
+#                MCC's CELT banks (ce_celt_claim_map.py): played, it must never be
+#                read from the player's bank (only MCC's own maps and scene packs)
 #   HALO_TEST_VITA  the harness (default build/linux/halo)   HALO_TEST_DATA  the Xbox maps
 #   HALO_TEST_MCC_ROOT  MCC's halo1 folder                  HALO_TEST_OUT   where the logs go
 #   run_mcc_sound_test.sh [unit|fuzz|audit|harness]   (default all)
@@ -235,6 +239,51 @@ open(p, 'wb').write(d)" "$out/damaged_content/halo1/sound/pc/lst/sounds_adpcm.ls
 			fail "damaged_list: the list of another version was not refused, said ($out/damaged_list)"
 		else
 			echo "damaged_list: refused: version 2"
+		fi
+
+		# foreign: a Custom Edition map (a download, say) whose sound says its
+		# permutations are streams of MCC's CELT banks must not read them (1.1.3
+		# audit, LOW-1): only MCC's own maps and scene packs built from them may
+		ce_maps=${HALO_TEST_CE_MAPS:-$root/../custom-maps-dl}
+		resources=${HALO_TEST_CE_RESOURCES:-$mcc/maps/custom_edition}
+		foreign_tag='sound\sfx\weapons\gunfire_sounds\fire2'
+		if [ ! -e "$ce_maps/extinction.map" ] || [ ! -e "$resources/sounds.map" ]; then
+			echo "SKIP (foreign): no extinction.map in $ce_maps (HALO_TEST_CE_MAPS) or Halo PC's maps in $resources (HALO_TEST_CE_RESOURCES)"
+		else
+			dir="$out/foreign"
+			rm -rf "$dir"
+			mkdir -p "$dir/data/maps" "$dir/save"
+			for file in "$(cd "$data" && pwd)"/maps/*.map; do
+				ln -sfn "$file" "$dir/data/maps/"
+			done
+			for name in bitmaps sounds loc; do
+				ln -sfn "$(cd "$resources" && pwd)/$name.map" "$dir/data/maps/$name.map"
+			done
+			if ! python3 -I "$here/ce_celt_claim_map.py" "$ce_maps/extinction.map" "$dir/data/maps/extinction.map" "$foreign_tag" > /dev/null; then
+				fail "foreign: the map could not be made"
+			else
+				(cd "$dir" && exec unshare -rn sh -c 'ip link set lo up 2> /dev/null; exec "$@"' sh \
+					env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=offscreen HALO_DATA_ROOT="$dir/data" \
+					HALO_SAVE_ROOT="$dir/save" HALO_NO_VSYNC=1 HALO_FRAME_CAP=30 HALO_EXIT_AFTER=45 \
+					HALO_FULLSCREEN=0 HALO_HIDDEN_WINDOW=1 HALO_TICK_THREAD=1 HALO_UPDATE_AUTO=false HALO_NET_ONLINE=false \
+					HALO_CUSTOM_EDITION=1 HALO_CONTENT_ROOT="$out/mcc" HALO_OGG_TRACE=1 HALO_SOUND_CACHE_PREFILL=0 \
+					"HALO_TEST_COMMANDS=M240:map_name levels\\test\\extinction\\extinction;L300:@sound $foreign_tag;L330:@sound $foreign_tag;L420:@menu;" \
+					timeout -k 5 165 "$binary" > "$dir/run.log" 2>&1)
+				code=$?
+				if [ "$code" != 0 ]; then
+					fail "foreign: the harness exited with $code ($dir/run.log)"
+				elif ! grep -aq "test command: sound .*fire2 played" "$dir/run.log"; then
+					fail "foreign: the map's sound was never asked for ($dir/run.log)"
+				elif grep -a "celt sound: " "$dir/run.log" | grep -aqF "of $foreign_tag:"; then
+					grep -a "celt sound: " "$dir/run.log" | head -2 | sed 's/^/  /'
+					fail "foreign: a Custom Edition map's sound was read from MCC's CELT bank ($dir/run.log)"
+				elif cat "$dir/run.log" "$dir/data/debug.txt" 2>/dev/null | grep -av "render assertion skipped" |
+					grep -aqE "ASSERT|assertion|EXCEPTION|halt_and_catch_fire"; then
+					fail "foreign: an assertion or exception ($dir)"
+				else
+					echo "foreign: a Custom Edition map's sound that says it is MCC's CELT is silent, never read from the bank"
+				fi
+			fi
 		fi
 	fi
 	;;
