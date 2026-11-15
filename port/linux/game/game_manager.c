@@ -30,6 +30,9 @@ void platform_translate_path(const char *xbox_path, char *host_path, unsigned lo
 void platform_log(char const *format, ...);
 const char *cache_files_map_directory(void);
 int halo_content_library_found(void);
+void *platform_read_file_in_parent_folder(const char *xbox_directory, const char *name, long maximum_size,
+	long *size, char *host_path, unsigned long host_path_size);
+void platform_read_file_free(void *bytes);
 
 /* the checks' thread's stack (game_manager_scan; 1.2.0's 3fc33030a) */
 #define GAME_MANAGER_STACK_BYTES (128 * 1024)
@@ -167,6 +170,34 @@ static int count_files(char const *xbox_folder, char const *extension)
 	return count;
 }
 
+/* the disc's default.xbe where the loading screen looks for it (progress_bar.c): the data root (d:\default.xbe, its
+first bytes into `program`: their count, -1 when not there), else the folder holding the maps folder or the one above
+the data root (only whether it is there: 4, "XBEH" put in `program`) */
+static int read_program(unsigned char *program)
+{
+	static char const *const folders[] = { "d:\\maps", "d:\\" };
+	int got = read_start("d:\\default.xbe", program, 4);
+	int index;
+
+	for (index = 0; got < 0 && index < (int)(sizeof(folders) / sizeof(folders[0])); index++)
+	{
+		char path[1024];
+		long size = 0;
+		unsigned long long bytes;
+		/* (a maximum of one byte: nothing read, only its path found) */
+		void *read = platform_read_file_in_parent_folder(folders[index], "default.xbe", 1, &size, path, sizeof(path));
+
+		if (read)
+			platform_read_file_free(read);
+		if (path[0] && file_size_of(path, &bytes) && bytes > 4)
+		{
+			memcpy(program, "XBEH", 4);
+			got = 4;
+		}
+	}
+	return got;
+}
+
 static int pc_file_index(char const *stem)
 {
 	int index;
@@ -290,7 +321,7 @@ static void *worker(void *unused)
 	/* the disc's executable (the loading screen's picture and hum: the Xbox install's), the movies (the PS Vita's MP4s
 	in movies, else the PC's Bink files) */
 	{
-		int got = read_start("d:\\default.xbe", program, sizeof(program));
+		int got = read_program(program);
 		int movies = count_files("d:\\movies", ".mp4");
 
 		if (!movies)

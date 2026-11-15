@@ -54,6 +54,11 @@
 #      b30        mods\mcc_b30 started by the console from that menu, played
 #      campaign   CAMPAIGN, a new profile, the difficulty, with no Xbox map:
 #                 MCC's a10 starts (mods\mcc_a10)
+#      mccgames   (1.1.3) no Xbox file, Classic+: MEDIA > GAME MANAGER's GAMES
+#                 tab says Halo CE installed from MCC's files alone (its maps
+#                 counted, its PC files the custom_edition ones), nothing wrong
+#      bothgames  (1.1.3) the Xbox's maps and MCC's, Halo 3: START > MEDIA >
+#                 GAME MANAGER says both, each one's maps counted
 #
 # 4. auto: the PC finding the player's MCC by itself (paths.content "auto"),
 #    HOME a folder of the test's with a made-up Steam: its libraryfolders.vdf
@@ -397,6 +402,34 @@ PY
 			fail "mcconline: no picture drawn ($out/mcconline)"
 		else
 			echo "mcconline: MCC's ui.map alone, Menu style Online: the screens added, the Online main menu up"
+		fi
+
+		# mccgames / bothgames (1.1.3): GAME MANAGER's GAMES tab - where Halo CE was installed from, its
+		# maps counted and checked (game_manager.c), Triangle its details. Classic+: down three to MEDIA,
+		# down two to GAME MANAGER; Halo 3: Select (START), down three to GAME MANAGER
+		mrun mccgames 32 no HALO_MENU_STYLE=classic \
+			"HALO_TEST_PAD=wait:150:5000 down:150:600 down:150:600 down:150:600 a wait:150:2500 down:150:600 down:150:600 a wait:150:5000 y wait:150:2500 b wait:150:2000"
+		log=$(menu_log mccgames)
+		if ! grep -aq "ui: screen pc.ce.mods.screen" "$log"; then
+			fail "mccgames: Classic+'s MEDIA > GAME MANAGER did not open ($out/mccgames)"
+		elif ! grep -aqE "game manager: checked: Halo CE [1-9][0-9]* maps \(Xbox 0, MCC [1-9][0-9]*\), sources 2, 0 issues, PC files 7" "$log"; then
+			fail "mccgames: GAMES did not say Halo CE from MCC's files alone, all good ($out/mccgames)"
+		elif ! grep -aq "ui: screen pc.ce.mods.details" "$log"; then
+			fail "mccgames: Triangle did not open the game's details ($out/mccgames)"
+		else
+			echo "mccgames: MCC's files alone, Classic+: GAME MANAGER says Halo CE from MCC's files, good"
+		fi
+		mrun bothgames 32 yes HALO_MENU_STYLE=halo3 \
+			"HALO_TEST_PAD=wait:150:6000 back:150:2500 down:150:600 down:150:600 down:150:600 a wait:150:5000 y wait:150:2500 b wait:150:2000"
+		log=$(menu_log bothgames)
+		if ! grep -aq "ui: screen pc.h3.mods.screen" "$log"; then
+			fail "bothgames: START > MEDIA > GAME MANAGER did not open ($out/bothgames)"
+		elif ! grep -aqE "game manager: checked: Halo CE [1-9][0-9]* maps \(Xbox [1-9][0-9]*, MCC [1-9][0-9]*\), sources 3, " "$log"; then
+			fail "bothgames: GAMES did not say Halo CE from both the Xbox's files and MCC's ($out/bothgames)"
+		elif ! grep -aq "ui: screen pc.h3.mods.details" "$log"; then
+			fail "bothgames: Triangle did not open the game's details ($out/bothgames)"
+		else
+			echo "bothgames: the Xbox's files and MCC's, Halo 3: GAME MANAGER says both"
 		fi
 
 		# b30: started from that menu (the console's map_name, as the menus' tests start a level)
