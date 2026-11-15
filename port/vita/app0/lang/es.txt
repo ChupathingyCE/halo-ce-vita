@@ -3459,7 +3459,8 @@
 "Command's own layout, or a Blood Gulch layout you saved or got" = "La disposición de Mando, o una de Blood Gulch guardada o recibida"
 "Command plays on Blood Gulch: it is not in the maps folder" = "Mando se juega en Blood Gulch: no está en la carpeta de mapas"
 
-# ---------- 1.1.5: FIREFIGHT (forge.c's forge_modes.inc: its HUD, banners and carnage report) - 1.2.0's words
+# ---------- 1.1.5: FIREFIGHT (forge.c's forge_modes.inc: its HUD, banners and carnage report; the Firefight lobby and
+# PREPARING FIREFIGHT, menu_functions.c; halo3/forge_lobby.xml) - 1.2.0's words
 "WAVES" = "OLEADAS"
 "BONUS" = "BONIFICACIÓN"
 "Time's up" = "Se acabó el tiempo"
@@ -3490,8 +3491,6 @@
 "LIVES" = "VIDAS"
 "HOLD THE ZONE %ld/%d S" = "MANTÉN LA ZONA %ld/%d S"
 "DEFEND THE ZONE: BREACHED %ld/%d S" = "DEFIENDE LA ZONA: INVADIDA %ld/%d S"
-# ---------- 1.1.5: the Firefight lobby, PREPARING FIREFIGHT and the carnage report's result (menu_functions.c,
-# halo3/forge_lobby.xml) - 1.2.0's words
 "SURVIVED" = "SOBREVIVIERON"
 "GAME OVER" = "FIN DEL JUEGO"
 "Firefight" = "Firefight"
@@ -3500,3 +3499,11 @@
 "Firefight's own layout." = "Diseño propio de Firefight."
 "Firefight on %s" = "Firefight en %s"
 "Command mode and Firefight build their soldiers, dropships\nand turrets from your Halo CE campaign maps once, and\nkeep them on the memory card for every game after." = "El modo Mando y Firefight crean sus soldados, naves y\ntorretas a partir de tus mapas de la campaña de Halo CE\nuna vez, y los guardan en la tarjeta de memoria\npara todas las partidas siguientes."
+# (1.1.5: the settings panel's Firefight page - Game > Firefight, Menu style Halo CE -: vita_settings.c)
+"Survive waves of the Covenant together" = "Resiste oleadas del Covenant en equipo"
+"Blood Gulch, Battle Creek, Hang 'Em High: each has a Firefight layout" = "Blood Gulch, Battle Creek, Hang 'Em High: cada uno trae su diseño"
+"Firefight's own layout, or one of this map you saved or got" = "El diseño de Firefight, o uno de este mapa guardado o recibido"
+"Co-op against the Covenant's waves on this map (local)" = "Cooperativo contra las oleadas del Covenant en este mapa (local)"
+"Firefight's own" = "El de Firefight"
+"Start Firefight" = "Empezar Firefight"
+"None of Firefight's maps is in the maps folder" = "Ningún mapa de Firefight está en la carpeta de mapas"

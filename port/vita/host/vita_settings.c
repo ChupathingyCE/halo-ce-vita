@@ -363,6 +363,9 @@ enum
 	/* (1.1.4, Game's Command, Menu style Halo CE: Command mode's layout,
 	objective, AI commander, Start Command - port/linux/game/command.c) */
 	PAGE_COMMAND,
+	/* (1.1.5, Game's Firefight, Menu style Halo CE: Firefight's map, its
+	layout, Start Firefight - port/linux/game/forge_modes.inc) */
+	PAGE_FIREFIGHT,
 	PAGE_COUNT
 };
 
@@ -400,6 +403,7 @@ static const struct
 	{ "Send to a friend", TAB_GAME },
 	{ "A friend's File Share", TAB_GAME },
 	{ "Command", TAB_GAME },
+	{ "Firefight", TAB_GAME },
 };
 /* the headings over a tab's rows, as Halo Online's settings have them
 (HUD, Interface...): each above the row it names, when that row is shown */
@@ -674,6 +678,8 @@ static struct setting settings[] = {
 	/* (1.1.4: Command mode for the original menus - the Halo 3 and ElDewrito
 	main menus have COMMAND, Classic+ its EXTRAS -, at the menus) */
 	PAGE_ROW("Command", "Lead squads in battle on Blood Gulch", TAB_GAME, PAGE_COMMAND),
+	/* (1.1.5: Firefight for the original menus, at the menus) */
+	PAGE_ROW("Firefight", "Survive waves of the Covenant together", TAB_GAME, PAGE_FIREFIGHT),
 	/* (File Share with friends, for the original menus: p2p_fileshare.h) */
 	PAGE_ROW("Share with friends", "Share your variants, send one, a friend's File Share", PAGE_FORGE,
 		PAGE_FSFRIENDS),
@@ -1552,6 +1558,8 @@ int forge_panel_map_count(void);
 const char *forge_panel_map_name(int map_index);
 const char *forge_panel_map_short(int map_index);
 int forge_panel_map_available(int map_index);
+/* (1.1.5) whether a map has a built-in Firefight layout (forge_modes.inc) */
+int forge_panel_map_firefight(int map_index);
 /* the Forge game's placed characters alive and dead (FALSE: no Forge game
 is played), and its dead or all of them cleared, at its next update */
 int forge_panel_ai_counts(int *alive, int *dead);
@@ -1606,6 +1614,13 @@ enum
 	FORGE_LINE_COMMAND_OBJECTIVE,
 	FORGE_LINE_COMMAND_AI,
 	FORGE_LINE_START_COMMAND,
+	/* (1.1.5, at the menus, its own page PAGE_FIREFIGHT: Firefight - its map,
+	one with a built-in layout of its own, its layout - the map's own, or a
+	map variant of it -, Start Firefight -, the Firefight lobby's rows for
+	Menu style Halo CE: a local game) */
+	FORGE_LINE_FIREFIGHT_MAP,
+	FORGE_LINE_FIREFIGHT_LAYOUT,
+	FORGE_LINE_START_FIREFIGHT,
 	/* (while a Forge game is played) */
 	FORGE_LINE_CLEAR_DEAD,
 	FORGE_LINE_CLEAR_ALL,
@@ -1900,7 +1915,7 @@ static int setting_shown(const struct setting *setting)
 	/* (Command: Menu style Classic's - the Halo 3 and ElDewrito main menus
 	have COMMAND, Classic+ its EXTRAS -, at the menus - a game played has its
 	own rows) */
-	if (setting->action == ACTION_PAGE && setting->opens == PAGE_COMMAND)
+	if (setting->action == ACTION_PAGE && (setting->opens == PAGE_COMMAND || setting->opens == PAGE_FIREFIGHT))
 		return original_style() && !forge_panel_ai_counts(NULL, NULL);
 	/* (the Halo 3 menus' report: with Menu style Halo 3) */
 	if (setting->variable && (!strcmp(setting->variable, "HALO_CARNAGE_REPORT") ||
@@ -3800,6 +3815,70 @@ static const struct forge_store_entry *command_map_variant(int number, int *coun
 	return found;
 }
 
+/* (the Firefight page) the map chosen (forge.c's index; -1 none with a
+built-in layout in the maps folder) and its layout (0: the map's own, else
+the nth of its map variants that can be played) */
+static int firefight_map = -1, firefight_variant;
+
+static const struct forge_store_entry *firefight_map_variant(int number, int *count)
+{
+	const struct forge_store_entry *found = NULL;
+	int index, seen = 0;
+
+	for (index = 0; index < forge_entry_count; index++)
+		if (firefight_map >= 0 && !forge_entries[index].damaged &&
+			!strcmp(forge_entries[index].map_name, forge_panel_map_short(firefight_map)) && ++seen == number)
+			found = &forge_entries[index];
+	if (count)
+		*count = seen;
+	return found;
+}
+
+/* the Firefight maps: those with a built-in layout that are in the maps
+folder - the one chosen kept while it is, else Blood Gulch or the first -;
+the next one after map (step 1 or -1), or map itself with no other */
+static int firefight_map_next(int map, int step)
+{
+	int count = forge_panel_map_count();
+	int index, tries;
+
+	for (tries = 1, index = map; tries <= count; tries++)
+	{
+		index = ((map < 0 ? 0 : map) + step * tries + count * tries) % count;
+		if (forge_panel_map_available(index) && forge_panel_map_firefight(index))
+			return index;
+	}
+	return map;
+}
+
+static void firefight_scan(void)
+{
+	int index, count = forge_panel_map_count();
+
+	if (firefight_map < 0 || firefight_map >= count || !forge_panel_map_available(firefight_map) ||
+		!forge_panel_map_firefight(firefight_map))
+	{
+		firefight_map = -1;
+		for (index = 0; index < count; index++)
+		{
+			if (forge_panel_map_available(index) && forge_panel_map_firefight(index) &&
+				(firefight_map < 0 || !strcmp(forge_panel_map_short(index), "bloodgulch")))
+			{
+				firefight_map = index;
+			}
+		}
+		firefight_variant = 0;
+	}
+	if (firefight_variant > 0)
+	{
+		int layouts = 0;
+
+		firefight_map_variant(0, &layouts);
+		if (firefight_variant > layouts)
+			firefight_variant = 0;
+	}
+}
+
 /* a map's name by its short name (bloodgulch: Blood Gulch) */
 static const char *forge_map_title(const char *short_name)
 {
@@ -3869,8 +3948,25 @@ static void forge_start_mode(int mode)
 		halo_forge_request_network = 0;
 		snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s", variant ? variant->file_name : "");
 	}
+	/* (Firefight, its own page: a local game of the page's map, with a
+	built-in layout of its own, and its layout - the map's own, or a map
+	variant's) */
+	if (mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT)
+	{
+		firefight_scan();
+		if (firefight_map < 0)
+		{
+			set_notice("%s", T("None of Firefight's maps is in the maps folder"));
+			return;
+		}
+		variant = firefight_variant ? firefight_map_variant(firefight_variant, NULL) : NULL;
+		halo_forge_request_map = firefight_map;
+		halo_forge_request_network = 0;
+		snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s", variant ? variant->file_name : "");
+	}
 	__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_FORGE, __ATOMIC_RELEASE);
 	vita_host_log(mode == HALO_FORGE_REQUEST_MODE_COMMAND ? "settings: Command asked for (settings panel)" :
+		mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT ? "settings: Firefight asked for (settings panel)" :
 		"settings: Forge asked for (settings panel)");
 	close_panel();
 }
@@ -4659,6 +4755,16 @@ static int page_lines(struct line *lines)
 			lines[count++].index = command_lines[index];
 		}
 	}
+	if (page == PAGE_FIREFIGHT)
+	{
+		static const int firefight_lines[] = { FORGE_LINE_FIREFIGHT_MAP, FORGE_LINE_FIREFIGHT_LAYOUT, FORGE_LINE_START_FIREFIGHT };
+
+		for (index = 0; index < (int)(sizeof(firefight_lines) / sizeof(firefight_lines[0])); index++)
+		{
+			lines[count].type = LINE_FORGE;
+			lines[count++].index = firefight_lines[index];
+		}
+	}
 	if (page == PAGE_FORGE)
 	{
 		int playing = forge_panel_ai_counts(NULL, NULL);
@@ -4670,9 +4776,10 @@ static int page_lines(struct line *lines)
 			{
 				continue;
 			}
-			/* (Command's rows: its own page, PAGE_COMMAND) */
+			/* (Command's rows: its own page, PAGE_COMMAND; Firefight's: PAGE_FIREFIGHT) */
 			if (index == FORGE_LINE_COMMAND_LAYOUT || index == FORGE_LINE_COMMAND_OBJECTIVE || index == FORGE_LINE_COMMAND_AI ||
-				index == FORGE_LINE_START_COMMAND)
+				index == FORGE_LINE_START_COMMAND || index == FORGE_LINE_FIREFIGHT_MAP || index == FORGE_LINE_FIREFIGHT_LAYOUT ||
+				index == FORGE_LINE_START_FIREFIGHT)
 			{
 				continue;
 			}
@@ -5122,6 +5229,9 @@ static void help_line(char *text, int size, const struct line *line)
 			line->index == FORGE_LINE_COMMAND_OBJECTIVE ? T("Command: what wins - territories, the flag, or both") :
 			line->index == FORGE_LINE_COMMAND_AI ? T("Command: how well the AI commander plays the other side") :
 			line->index == FORGE_LINE_START_COMMAND ? T("Command your squads from above on Blood Gulch (local)") :
+			line->index == FORGE_LINE_FIREFIGHT_MAP ? T("Blood Gulch, Battle Creek, Hang 'Em High: each has a Firefight layout") :
+			line->index == FORGE_LINE_FIREFIGHT_LAYOUT ? T("Firefight's own layout, or one of this map you saved or got") :
+			line->index == FORGE_LINE_START_FIREFIGHT ? T("Co-op against the Covenant's waves on this map (local)") :
 			line->index == FORGE_LINE_NUDGE ? T("Each nudge's move: hold L, click the right stick, flick") :
 			T("A local game: you fly as the monitor and place objects"));
 	else if (line && line->type == LINE_VARIANT)
@@ -5258,7 +5368,8 @@ static void footer_line(char *text, int size, const struct line *line)
 	else if (line && line->type == LINE_VARIANT)
 		middle = T("Square: delete   ");
 	else if (line && line->type == LINE_FORGE)
-		middle = line->index == FORGE_LINE_START || line->index == FORGE_LINE_START_COMMAND || line->index == FORGE_LINE_CLEAR_DEAD ||
+		middle = line->index == FORGE_LINE_START || line->index == FORGE_LINE_START_COMMAND ||
+			line->index == FORGE_LINE_START_FIREFIGHT || line->index == FORGE_LINE_CLEAR_DEAD ||
 			line->index == FORGE_LINE_CLEAR_ALL ? T("Cross: select   ") :
 			line->index == FORGE_LINE_DELETE_GROUP ? T("Left/right: kind   Cross: delete   ") : T("Left/right: change   ");
 	else if (line && line->type == LINE_MOD)
@@ -5574,6 +5685,30 @@ static int list_text(char *text, int size, const struct line *lines, int count, 
 					T(command_ai_level_names[command_ai_level_index() & 3]));
 			else if (line->index == FORGE_LINE_START_COMMAND)
 				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02  >", T("Start Command"));
+			else if (line->index == FORGE_LINE_FIREFIGHT_MAP)
+			{
+				firefight_scan();
+				if (firefight_map < 0)
+					length += snprintf(text + length, (size_t)(size - length), "\n%s\x02  %s", T("Map"), T("None"));
+				else
+				{
+					int more = firefight_map_next(firefight_map, 1) != firefight_map;
+
+					length += snprintf(text + length, (size_t)(size - length), "\n%s\x02%c %s%s", T("Map"), more ? '<' : ' ',
+						T(forge_panel_map_name(firefight_map)), more ? " >" : "");
+				}
+			}
+			else if (line->index == FORGE_LINE_FIREFIGHT_LAYOUT)
+			{
+				int layouts = 0;
+				const struct forge_store_entry *layout = firefight_variant ? firefight_map_variant(firefight_variant, &layouts) : NULL;
+
+				firefight_map_variant(0, &layouts);
+				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02%c %.24s %c", T("Layout"),
+					firefight_variant > 0 ? '<' : ' ', layout ? layout->title : T("Firefight's own"), firefight_variant < layouts ? '>' : ' ');
+			}
+			else if (line->index == FORGE_LINE_START_FIREFIGHT)
+				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02  >", T("Start Firefight"));
 			else
 				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02  >", T("Start Forge"));
 		}
@@ -6994,8 +7129,10 @@ static void act(const struct setting *setting)
 		page = setting->opens;
 		if (page == PAGE_MAPS)
 			maps_scan();
-		if (page == PAGE_FORGE || page == PAGE_COMMAND)
+		if (page == PAGE_FORGE || page == PAGE_COMMAND || page == PAGE_FIREFIGHT)
 			forge_scan();
+		if (page == PAGE_FIREFIGHT)
+			firefight_scan();
 		if (page == PAGE_FSFRIENDS)
 			fs_scan();
 		/* (the game looks: the page says so until it answers) */
@@ -8499,12 +8636,14 @@ int vita_settings_input(const struct vita_host_pad *pad)
 					forge_panel_magnets_set(!forge_panel_magnets());
 				else if (line->index == FORGE_LINE_NUDGE && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
 					forge_panel_nudge_step(step);
-				else if (line->index == FORGE_LINE_START || line->index == FORGE_LINE_START_COMMAND)
+				else if (line->index == FORGE_LINE_START || line->index == FORGE_LINE_START_COMMAND ||
+					line->index == FORGE_LINE_START_FIREFIGHT)
 				{
 					if (pressed & (VITA_BUTTON_CROSS | VITA_BUTTON_RIGHT))
 					{
 						notice[0] = 0;
 						forge_start_mode(line->index == FORGE_LINE_START_COMMAND ? HALO_FORGE_REQUEST_MODE_COMMAND :
+							line->index == FORGE_LINE_START_FIREFIGHT ? HALO_FORGE_REQUEST_MODE_FIREFIGHT :
 							HALO_FORGE_REQUEST_MODE_FORGE);
 						if (!panel_open)
 							return 1;
@@ -8525,6 +8664,25 @@ int vita_settings_input(const struct vita_host_pad *pad)
 					command_map_variant(0, &layouts);
 					if (command_variant + step >= 0 && command_variant + step <= layouts)
 						command_variant += step;
+				}
+				/* (Firefight's map: the next with a built-in layout; its layout) */
+				else if (line->index == FORGE_LINE_FIREFIGHT_MAP && firefight_map >= 0 && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
+				{
+					int next = firefight_map_next(firefight_map, step);
+
+					if (next != firefight_map)
+					{
+						firefight_map = next;
+						firefight_variant = 0;
+					}
+				}
+				else if (line->index == FORGE_LINE_FIREFIGHT_LAYOUT && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
+				{
+					int layouts = 0;
+
+					firefight_map_variant(0, &layouts);
+					if (firefight_variant + step >= 0 && firefight_variant + step <= layouts)
+						firefight_variant += step;
 				}
 				else if (line->index == FORGE_LINE_MAP && forge_map >= 0 && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
 				{
