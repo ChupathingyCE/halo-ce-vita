@@ -20,6 +20,7 @@ every machine shows the host's numbers, and nothing a client counts itself.
 #include "player_cosmetics.h"
 #include "carnage_report.h"
 #include "command.h"
+#include "forge.h"
 #include "../src/lang.h"
 
 #include <stdio.h>
@@ -179,6 +180,10 @@ char const *carnage_report_objective_name(long type, int index)
 	case CARNAGE_REPORT_TYPE_COMMAND:
 		/* (flags scored; seconds of the objective territories held) */
 		return index == 0 ? N_("CAPTURES") : index == 1 ? N_("TERRITORY") : NULL;
+	case CARNAGE_REPORT_TYPE_FIREFIGHT:
+		/* (the waves cleared; the bonus rounds' points - Firefight round 3:
+		no bosses) */
+		return index == 0 ? N_("WAVES") : index == 1 ? N_("BONUS") : NULL;
 	}
 	return NULL;
 }
@@ -213,7 +218,10 @@ boolean carnage_report_read(struct carnage_report *report)
 	boolean read = carnage_report_read_ranked(report, FALSE);
 
 	if (read)
+	{
 		command_carnage_report(report, FALSE);
+		forge_modes_carnage_report(report, FALSE);
+	}
 	return read;
 }
 
@@ -222,7 +230,10 @@ boolean carnage_report_read_in_game(struct carnage_report *report)
 	boolean read = carnage_report_read_ranked(report, TRUE);
 
 	if (read)
+	{
 		command_carnage_report(report, TRUE);
+		forge_modes_carnage_report(report, TRUE);
+	}
 	return read;
 }
 

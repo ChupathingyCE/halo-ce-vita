@@ -450,6 +450,17 @@ static char const *const forge_category_log_names[NUMBER_OF_FORGE_CATEGORIES] =
 };
 /* the OBJECTIVES category's game modes' items' names, after its game type
 objects (forge.h's order) */
+/* the OBJECTIVES browser's game modes' items, in its order (Firefight round
+3, the owner Nov 5: "Firefight didn't really have bosses, it had bonus
+rounds" - the BOSS item's place the BONUS ROUND's; the boss marker stays
+Warzone's, a layout's own still read, drawn, edited and saved, for its
+later game type; 1.1.5: no boundary or lobby camera - Ark Editor's) */
+static short const forge_mode_marker_browser[] =
+{
+	_forge_mode_marker_ai_zone, _forge_mode_marker_bonus_round, _forge_mode_marker_base, _forge_mode_marker_core,
+	_forge_mode_marker_drop_point, _forge_mode_marker_ff_objective,
+};
+#define FORGE_MODE_MARKER_BROWSER_ITEMS ((short)NUMBEROF(forge_mode_marker_browser))
 static char const *const forge_mode_marker_names[NUMBER_OF_FORGE_MODE_MARKERS] =
 {
 	N_("AI Spawn Zone"), N_("Boss"), N_("Base"), N_("Core"), N_("Drop Point"), N_("Firefight Objective"), N_("Bonus Round"),
@@ -1124,6 +1135,13 @@ static short forge_mode_markers_capture(struct forge_file_layout *layout);
 static void forge_mode_markers_from_layout(struct forge_file_layout const *layout);
 static short forge_mode_markers_of_kind(short kind);
 static short forge_mode_markers_count(void);
+/* (forge_modes.inc) */
+static boolean forge_modes_running(void);
+static boolean forge_modes_asked(void);
+static void forge_modes_update(void);
+static void forge_modes_draw(short local_player_index);
+static void forge_modes_map_loaded(char const *scenario_name, boolean forge_game);
+static boolean forge_modes_command(char const *rest);
 static void forge_mode_marker_color(struct forge_spawn const *spawn, real *red, real *green, real *blue);
 static real forge_mode_marker_radius(struct forge_spawn const *spawn);
 static void forge_spawn_grounded(real_point3d *position);
@@ -5225,10 +5243,14 @@ void forge_variant_build(
 	/* (a Command game is named the mode's: the carnage report's title,
 	command.c) */
 	static wchar_t const command_name[] = L"Command";
+	/* (a FIREFIGHT game its: forge_modes.inc) */
+	static wchar_t const firefight_name[] = L"Firefight";
 
 	build_game_variant_slayer(variant);
 	csmemset(variant->human_readable_game_description, 0, sizeof(variant->human_readable_game_description));
-	if (command_game_asked())
+	if (forge_modes_asked())
+		csmemcpy(variant->human_readable_game_description, firefight_name, sizeof(firefight_name));
+	else if (command_game_asked())
 		csmemcpy(variant->human_readable_game_description, command_name, sizeof(command_name));
 	else
 		csmemcpy(variant->human_readable_game_description, name, sizeof(name));
@@ -5419,6 +5441,14 @@ int forge_panel_map_available(
 	int map_index)
 {
 	return map_index >= 0 && map_index < forge_map_count() && forge_map_available((short)map_index) ? 1 : 0;
+}
+
+/* (the settings panel's Firefight page) whether a map has a built-in
+Firefight layout of its own (forge_modes.inc) */
+int forge_panel_map_firefight(
+	int map_index)
+{
+	return map_index >= 0 && map_index < forge_map_count() && forge_modes_builtin_of(forge_map_short((short)map_index)) != NONE ? 1 : 0;
 }
 
 char const *forge_map_short(
@@ -5924,6 +5954,8 @@ void forge_map_loaded(
 		forge_packs_load();
 	/* (and a Command game's: its map built out - command.c) */
 	command_map_loaded(scenario_name, forge_globals.game_active);
+	/* (and a FIREFIGHT game's: forge_modes.inc) */
+	forge_modes_map_loaded(scenario_name, forge_globals.game_active);
 	forge_net_monitor_pack_want();
 	/* (a network Forge game's host keeps its request between games: its
 	lobby's next START FORGE plays it again) */
@@ -5988,7 +6020,8 @@ short forge_category_item_count(
 	/* (SPAWNING: the respawn point and the initial spawn; TELEPORTERS: the
 	sender and the receiver; in a Forge game) */
 	if (forge_marker_category_first(category) != NONE)
-		return forge_globals.game_active && !forge_globals.playing ? forge_marker_category_count(category) : 0;
+		return forge_globals.game_active && !forge_globals.playing ? (short)(forge_marker_category_count(category) +
+			(category == _forge_category_objectives ? FORGE_MODE_MARKER_BROWSER_ITEMS : 0)) : 0;
 	forge_palette_ready();
 	return forge_globals.palette_counts[category];
 }
@@ -6002,6 +6035,16 @@ boolean forge_category_item(
 
 	if (item_index < 0 || item_index >= forge_category_item_count(category))
 		return FALSE;
+	/* (OBJECTIVES' game modes' markers, after its game type objects) */
+	if (category == _forge_category_objectives && item_index >= forge_marker_category_count(category))
+	{
+		short kind = forge_mode_marker_browser[item_index - forge_marker_category_count(category)];
+
+		csmemset(item, 0, sizeof(*item));
+		snprintf(item->name, sizeof(item->name), "%s", T(forge_mode_marker_names[kind - FIRST_FORGE_MODE_MARKER]));
+		item->placed = forge_mode_markers_of_kind(kind);
+		return TRUE;
+	}
 	if (forge_marker_category_first(category) != NONE)
 	{
 		short kind = (short)(forge_marker_category_first(category) + item_index);
@@ -6025,7 +6068,9 @@ void forge_browser_choose(
 {
 	if (item_index < 0 || item_index >= forge_category_item_count(category))
 		return;
-	forge_globals.browser_choice = forge_marker_category_first(category) != NONE ?
+	forge_globals.browser_choice = category == _forge_category_objectives && item_index >= forge_marker_category_count(category) ?
+		(short)(FORGE_BROWSER_SPAWN_CHOICE + forge_mode_marker_browser[item_index - forge_marker_category_count(category)]) :
+		forge_marker_category_first(category) != NONE ?
 		(short)(FORGE_BROWSER_SPAWN_CHOICE + forge_marker_category_first(category) + item_index) :
 		(short)(forge_globals.palette_first[category] + item_index);
 	forge_globals.browser_chosen = TRUE;
@@ -6284,6 +6329,8 @@ void forge_update(
 	forge_session_update();
 	/* (the layout's teleporters the engine's flags, before the tick) */
 	forge_netgame_update();
+	/* (FIREFIGHT's game: forge_modes.inc) */
+	forge_modes_update();
 	forge_game_playing = forge_globals.active || (forge_globals.game_active && !forge_globals.playing);
 	/* (a map variant played: the layout kept and given to joiners, nothing
 	of Forge's asked for or shown - no monitor, menu, save, AI or round
@@ -6505,7 +6552,7 @@ void forge_update(
 		/* (command mode runs: the combo leaves a unit dropped into, never
 		the monitor - port/linux/game/command.c -; the Forge menu's MONITOR
 		waits for command mode to end, which it asks too) */
-		if (command_active())
+		if (command_active() || forge_modes_running())
 			;
 		else if ((toggle_pressed && !menu_open) || forge_globals.toggle_requested)
 		{
@@ -6541,7 +6588,7 @@ void forge_update(
 
 		forge_globals.browser_chosen = FALSE;
 		if (forge_globals.held_marker_id && ((choice >= 0 && choice < forge_globals.palette_count) ||
-			(choice >= FORGE_BROWSER_SPAWN_CHOICE && choice < FORGE_BROWSER_SPAWN_CHOICE + NUMBER_OF_FORGE_MARKER_KINDS)))
+			(choice >= FORGE_BROWSER_SPAWN_CHOICE && choice < FORGE_BROWSER_SPAWN_CHOICE + FORGE_MODE_MARKER_KINDS_END)))
 		{
 			forge_marker_drop();
 		}
@@ -6553,11 +6600,14 @@ void forge_update(
 		}
 		/* (SPAWNING, TELEPORTERS: a player spawn point, a teleporter, held as
 		its marker) */
-		else if (choice >= FORGE_BROWSER_SPAWN_CHOICE && choice < FORGE_BROWSER_SPAWN_CHOICE + NUMBER_OF_FORGE_MARKER_KINDS)
+		else if (choice >= FORGE_BROWSER_SPAWN_CHOICE && choice < FORGE_BROWSER_SPAWN_CHOICE + FORGE_MODE_MARKER_KINDS_END)
 		{
 			if (object_try_and_get(forge_globals.held_object_index))
 				forge_drop();
-			forge_spawn_choose((short)(choice - FORGE_BROWSER_SPAWN_CHOICE));
+			if (choice >= FORGE_BROWSER_SPAWN_CHOICE + FIRST_FORGE_MODE_MARKER)
+				forge_mode_marker_choose((short)(choice - FORGE_BROWSER_SPAWN_CHOICE));
+			else
+				forge_spawn_choose((short)(choice - FORGE_BROWSER_SPAWN_CHOICE));
 		}
 	}
 	if (!menu_open)
@@ -6758,6 +6808,8 @@ void forge_draw(
 	short label_height;
 	short crosshair_height;
 
+	/* (a FIREFIGHT game's HUD: forge_modes.inc) */
+	forge_modes_draw(local_player_index);
 	/* (the Spartan's in a network Forge game: the other monitors' names
 	alone, over their balls) */
 	if ((!forge_globals.active && !(forge_globals.game_active && !forge_globals.playing &&
@@ -7239,6 +7291,10 @@ boolean forge_command(
 		forge_netgame_log();
 		return TRUE;
 	}
+	/* (forge_modes.inc, the monitor's or the Spartan's) "mode
+	firefight|where|clear|die" */
+	if (!strcmp(word, "mode"))
+		return forge_modes_command(rest);
 	if (!forge_globals.active && strcmp(word, "where") && strcmp(word, "markers") && strcmp(word, "spawns"))
 	{
 		platform_log("forge: %s: not in monitor mode (\"forge on\")", word);
@@ -7848,4 +7904,7 @@ boolean forge_command(
 #include "forge_precision.inc"
 #include "forge_touch.inc"
 #include "forge_mode_markers.inc"
+/* (the host clock: vita_host.c) */
+unsigned long long vita_host_time_us(void);
+#include "forge_modes.inc"
 

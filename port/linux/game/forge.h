@@ -593,6 +593,31 @@ reached, no time limit, "Forge"), as forge_game_start plays it */
 void forge_variant_build(
 	struct game_variant *variant);
 
+/* (the Forge lobby's START FIREFIGHT, the settings panel's Start Firefight)
+the next Forge game a game mode's (FORGE_MODE_REQUEST_*: forge_modes.inc),
+or none */
+enum
+{
+	FORGE_MODE_REQUEST_NONE = 0,
+	FORGE_MODE_REQUEST_FIREFIGHT,
+};
+void forge_modes_game_request(
+	short mode);
+
+/* (the Firefight lobby's maps) a map's built-in Firefight layout (Firefight
+round 3: its short name, "bloodgulch"), NONE when it has none */
+short forge_modes_builtin_of(
+	char const *map);
+
+/* (carnage_report.c, after each read) a FIREFIGHT game's report over the
+game's rows: the team's score, its waves and its bonus rounds' points,
+each player's own;
+FALSE (the report as it was) when the last game was none */
+struct carnage_report;
+boolean forge_modes_carnage_report(
+	struct carnage_report *report,
+	boolean in_game);
+
 /* (the Forge lobby's live game, the settings panel, the network test) the
 game this machine hosts is a Forge game of the map at map_path, with that
 map variant of it (NULL, "" for none): joiners are asked to play it, and
