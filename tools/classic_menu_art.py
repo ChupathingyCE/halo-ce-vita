@@ -20,6 +20,12 @@ tools/fonts/OFL.txt). The same bytes each run.
   capitals 23 pixels high); header_friends, header_party, header_add_friend,
   header_invite_friends the same for FRIENDS, PARTY, ADD FRIEND and INVITE
   FRIENDS (classic/friends.xml).
+- For an MCC-only install, whose ui.map (Halo PC's) has not these of the
+  Xbox's (classic/xbox_screens.xml): y_butn.png, a_butn_sm.png,
+  b_butn_sm.png, the button key's Y and the small A and B in the look of the
+  game's A, B and X (a coloured disc, a pale rim, the letter);
+  arrow_big_<side>_<0|1>.png, the 3-wide lists' arrows; split_quarter.png
+  and split_quarter_border.png, split screen's START TO JOIN quarters.
 - In English (en/) and in each language of port/vita/app0/lang (es/), the
   words its file gives them; menu_tags.c picks the language's ({lang}).
 
@@ -55,7 +61,12 @@ HEADINGS = (('header_lobby_options', 'LOBBY OPTIONS'),
             # (classic/fileshare_friends.xml: File Share with friends)
             ('header_sharing', 'SHARING'), ('header_send_to_a_friend', 'SEND TO A FRIEND'),
             # (classic/modes.xml: the main menu's MEDIA)
-            ('header_media', 'MEDIA'))
+            ('header_media', 'MEDIA'),
+            )
+# (classic/xbox_screens.xml: an Xbox screen's heading an MCC-only install's ui.map has not, at the
+# size of the Xbox's own headings - capitals about 20 high, 18 a letter)
+XBOX_HEADINGS = (('header_select_profile_to_edit', 'SELECT PROFILE TO EDIT'),
+                 ('header_advanced_controls', 'ADVANCED CONTROLS'))
 
 # (the widget it is drawn into, fit="widget": 226 x 229; the PNG a power of
 # two, so drawn at that scale and stretched back by the game)
@@ -147,16 +158,101 @@ def main_row(text, focused):
     return image
 
 
-def heading(text):
+def heading(text, cap=23, per_letter=23):
     """a screen's heading: 512 x 64, blue capitals 23 high from the 33rd row,
-    35 pixels in, as the Multiplayer screens' headings"""
+    35 pixels in, as the Multiplayer screens' headings (cap and per_letter:
+    the Xbox screens' own headings' size, smaller, for those that stand for
+    one: XBOX_HEADINGS)"""
     width, height = 512, 64
-    mask, margin = word_mask(text, 23, 23, width - 40)
+    mask, margin = word_mask(text, cap, per_letter, width - 40)
     image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     shape = Image.new('L', (width, height), 0)
     shape.paste(mask, (35, 33 - margin))
     image.paste(Image.new('RGBA', (width, height), (40, 150, 255, 255)), (0, 0), shape)
     return image
+
+
+# (the button key's discs: lit colour, shaded colour, rim)
+BUTTONS = {'y': ((250, 205, 70), (150, 92, 8), (255, 238, 190)),
+           'a': ((90, 200, 90), (10, 100, 20), (200, 240, 200)),
+           'b': ((240, 70, 60), (140, 10, 10), (250, 200, 195))}
+
+
+def button(letter, small=False):
+    """a button of the button key (classic/xbox_screens.xml: an MCC-only install's ui.map has not
+    the Xbox's Y, nor its small A and B): 32 x 32, drawn 1:1 into its widget (20 x 25, the small
+    ones 16 x 20) - a disc a little taller than wide, lit from the top left, a pale rim, the white
+    letter; the port's own drawing"""
+    lit, shade, rim = BUTTONS[letter]
+    scale = 8
+    size = 32 * scale
+    image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    box = (1 * scale, 3 * scale, 19 * scale, 23 * scale) if not small else (1 * scale, 2 * scale, 15 * scale, 18 * scale)
+    disc = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    pixels = disc.load()
+    cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+    rx, ry = (box[2] - box[0]) / 2, (box[3] - box[1]) / 2
+    for y in range(box[1], box[3]):
+        for x in range(box[0], box[2]):
+            # (light from the top left: bright gold to a deep amber)
+            t = max(0.0, min(1.0, ((x - box[0]) / (2 * rx) * 0.4 + (y - box[1]) / (2 * ry) * 0.8)))
+            colour = tuple(round(a + (b - a) * t) for a, b in zip(lit, shade))
+            pixels[x, y] = colour + (255,)
+    mask = Image.new('L', (size, size), 0)
+    ImageDraw.Draw(mask).ellipse(box, fill=255)
+    image.paste(disc, (0, 0), mask)
+    draw = ImageDraw.Draw(image)
+    draw.ellipse(box, outline=rim + (255,), width=round((1.1 if small else 1.4) * scale))
+    font = ImageFont.truetype(FONT, round((12 if small else 15) * scale))
+    bounds = draw.textbbox((0, 0), letter.upper(), font=font)
+    draw.text((cx - (bounds[0] + bounds[2]) / 2, cy - (bounds[1] + bounds[3]) / 2), letter.upper(), font=font,
+              fill=(255, 255, 255, 255))
+    return image.resize((32, 32), Image.LANCZOS)
+
+
+def big_arrow(right, lit):
+    """a 3-wide list's arrow at its side (32 x 256, drawn into 18 x 170): a tall thin wedge of
+    see-through blue with a brighter edge, pointing out; frame 1 lit"""
+    scale = 4
+    width, height = 32 * scale, 256 * scale
+    image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    tip, back = (2 * scale, 30 * scale) if not right else (30 * scale, 2 * scale)
+    points = [(back, 4 * scale), (tip, height // 2), (back, height - 4 * scale)]
+    alpha = 150 if lit else 90
+    draw.polygon(points, fill=(40, 120, 220, alpha))
+    draw.line(points, fill=(90, 170, 255, 230 if lit else 170), width=2 * scale)
+    return image.resize((32, 256), Image.LANCZOS)
+
+
+def quarter_panel():
+    """split screen's START TO JOIN quarter (256 x 256, its widget 255 x 165): dark see-through
+    blue, lighter at the top, in a light blue rounded frame"""
+    scale = 4
+    panel = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
+    pixels = panel.load()
+    for y in range(165):
+        colour = tuple(round(a + (b - a) * (y / 165)) for a, b in zip((18, 44, 82), (8, 22, 46)))
+        for x in range(255):
+            pixels[x, y] = colour + (150,)
+    mask = Image.new('L', (256 * scale, 256 * scale), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((1 * scale, 1 * scale, 253 * scale, 163 * scale), radius=8 * scale, fill=255)
+    image = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
+    image.paste(panel, (0, 0), mask.resize((256, 256), Image.LANCZOS))
+    frame = Image.new('RGBA', (256 * scale, 256 * scale), (0, 0, 0, 0))
+    ImageDraw.Draw(frame).rounded_rectangle((1 * scale, 1 * scale, 253 * scale, 163 * scale), radius=8 * scale,
+                                            outline=(60, 150, 240, 230), width=2 * scale)
+    return Image.alpha_composite(image, frame.resize((256, 256), Image.LANCZOS))
+
+
+def quarter_border():
+    """the border of a quarter a player has joined (256 x 256, its widget 254 x 164): a light blue
+    rounded frame"""
+    scale = 4
+    image = Image.new('RGBA', (256 * scale, 256 * scale), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rounded_rectangle((1 * scale, 1 * scale, 253 * scale, 163 * scale), radius=8 * scale,
+                                            outline=(80, 170, 255, 255), width=2 * scale)
+    return image.resize((256, 256), Image.LANCZOS)
 
 
 def translations(code):
@@ -173,6 +269,14 @@ def translations(code):
 def main():
     folder = sys.argv[1] if len(sys.argv) > 1 else 'port/vita/app0/menus/classic'
     pausebox().save(os.path.join(folder, 'pausebox.png'), optimize=True)
+    button('y').save(os.path.join(folder, 'y_butn.png'), optimize=True)
+    button('a', True).save(os.path.join(folder, 'a_butn_sm.png'), optimize=True)
+    button('b', True).save(os.path.join(folder, 'b_butn_sm.png'), optimize=True)
+    for side in ('left', 'right'):
+        for lit in (0, 1):
+            big_arrow(side == 'right', lit).save(os.path.join(folder, 'arrow_big_%s_%d.png' % (side, lit)), optimize=True)
+    quarter_panel().save(os.path.join(folder, 'split_quarter.png'), optimize=True)
+    quarter_border().save(os.path.join(folder, 'split_quarter_border.png'), optimize=True)
     languages = {'en': {}}
     for name in sorted(os.listdir(LANG)):
         if name.endswith('.txt'):
@@ -186,6 +290,9 @@ def main():
                                              optimize=True)
         for name, english in HEADINGS:
             heading(words.get(english, english)).save(os.path.join(folder, code, name + '.png'), optimize=True)
+        for name, english in XBOX_HEADINGS:
+            heading(words.get(english, english), 20, 18).save(os.path.join(folder, code, name + '.png'),
+                                                              optimize=True)
 
 
 if __name__ == '__main__':
