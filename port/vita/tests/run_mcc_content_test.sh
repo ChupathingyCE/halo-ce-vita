@@ -39,12 +39,13 @@
 #                 campaign still starts the Xbox's a10; with "xbox" and no
 #                 Xbox ui.map the menus' map is missing, not MCC's
 #      mccmenu    no Xbox file at all, Menu style Classic: MCC's ui.map is the
-#                 menus' map (menu_tags_loaded after it), Halo PC's own six rows
-#                 each reached and named (CAMPAIGN, MULTIPLAYER, PROFILES,
-#                 SETTINGS, CREDITS, QUIT), a picture drawn; SETTINGS (one
-#                 of Halo PC's own functions) says the menu is not supported
-#                 with MCC's menu file yet, logs the function, and the menu
-#                 goes on, no assertion
+#                 menus' map (menu_tags_loaded after it), Halo PC's own rows:
+#                 CAMPAIGN, CREDITS and QUIT reached, MULTIPLAYER and PROFILES
+#                 greyed and passed over; SETTINGS (Halo PC's function 137)
+#                 edits a profile (made, none yet), its MOUSE, AUDIO and VIDEO
+#                 SETUP open, their OK sets this build's settings, which
+#                 stay after a restart (mccmenu2); its rows with no equivalent
+#                 greyed (halo_pc_menus.c), no assertion
 #      mcccplus   no Xbox file, Menu style Classic+ (after campaign, with its
 #                 profile): Classic+'s rows on MCC's main menu (CAMPAIGN
 #                 MULTIPLAYER SETTINGS MEDIA FORGE) and every screen behind
@@ -328,34 +329,61 @@ PY
 			echo "xboxonly: paths.menu_source=xbox: MCC's ui.map not read"
 		fi
 
-		# mccmenu: no Xbox file; the six rows, the handler message
-		# (A on each row and B back: CAMPAIGN, MULTIPLAYER and PROFILES open a screen,
-		# SETTINGS one of Halo PC's own functions, which fails, with the menu as it was; CREDITS
-		# and QUIT open theirs)
-		# (Menu style Classic, "original": Halo PC's own menus; Classic+ has its own, mcccplus)
-		mrun mccmenu 60 no HALO_MENU_STYLE=original \
-			"HALO_TEST_PAD=wait:150:3000 a wait:150:3500 b wait:150:2500 down:150:700 a wait:150:3500 b wait:150:2500 down:150:700 a wait:150:3500 b wait:150:2500 down:150:700 a wait:150:3500 down:150:700 a wait:150:3500 b wait:150:2500 down:150:700 a wait:150:3000 b wait:150:2500"
+		# mccmenu: no Xbox file, Menu style Classic ("original": Halo PC's own menus; Classic+
+		# has its own, mcccplus). The main menu's six rows: MULTIPLAYER and PROFILES greyed and
+		# passed over (Halo PC's network games and its profile list: port/linux/game/
+		# halo_pc_menus.c), CAMPAIGN, CREDITS and QUIT open theirs; SETTINGS (Halo PC's own
+		# function 137) makes a profile (none yet) and opens EDIT PROFILE SETTINGS, whose
+		# CONTROLS SETUP, GAMEPADS, NETWORK SETUP and CHANGE COLOR are greyed; MOUSE SETUP,
+		# AUDIO SETUP and VIDEO SETUP open, AUDIO's MASTER VOLUME a step down with OK, MOUSE's
+		# sensitivity a step up and invert with OK. mccmenu2, a restart on the same files:
+		# AUDIO SETUP and MOUSE SETUP open with those values.
+		pad="wait:150:3000 a:150:3500 b:150:2500 down:150:700 a:150:4000"
+		pad="$pad down:150:700 down:150:700 a:150:3000 left:150:700 down:150:600 down:150:600 down:150:600 right:150:600 a:150:3000"
+		pad="$pad up:150:600 a:150:3000 right:150:600 down:150:600 right:150:600 down:150:600 right:150:600 a:150:3000"
+		pad="$pad down:150:600 down:150:600 a:150:3000 right:150:700 b:150:2500 b:150:2500"
+		pad="$pad down:150:700 a:150:3500 b:150:2500 down:150:700 a:150:3000 b:150:2500"
+		mrun mccmenu 75 no HALO_MENU_STYLE=original HALO_TEST_CONFIG="$out/mccmenu_config.toml" "HALO_TEST_PAD=$pad"
 		log=$(menu_log mccmenu)
 		debug=$(menu_debug mccmenu)
 		missing=
-		for row in load_camp multiplayer profile settings credits quit_game; do
+		for row in load_camp settings credits quit_game; do
 			grep -aq "ui: handler of ui.shell.main_menu.main_menu_item_$row: event 0" "$log" || missing="$missing $row"
+		done
+		for row in main_menu_item_multiplayer main_menu_item_profile controller_setup_profile_item gamepads_profile_item \
+			network_settings_profile_item color_profile_item; do
+			grep -aq "menus: Halo PC's $row greyed: " "$log" || missing="$missing $row(greyed)"
+		done
+		for screen in player_profile_edit_screen mouse_settings.mouse_settings_screen \
+			audio_settings.audio_settings_screen video_settings.video_settings_screen; do
+			grep -aq "ui: screen ui.shell.main_menu.settings_select.player_setup.player_profile_edit.$screen" "$log" ||
+				missing="$missing $screen"
 		done
 		if ! grep -aq "menus: the menu map is MCC's halo1.maps.ui.map (no Xbox ui.map in the maps folder)" "$debug" ||
 			! grep -aq "custom edition: loading 'd:.mcc.halo1.maps.ui.map'" "$debug" ||
 			! grep -aq "ui: screen ui.shell.main_menu.main_menu" "$log"; then
 			fail "mccmenu: MCC's ui.map was not the menus' with no Xbox file ($out/mccmenu)"
 		elif [ -n "$missing" ]; then
-			fail "mccmenu: main menu rows not reached:$missing ($out/mccmenu)"
-		elif grep -aq "MCC's menu file: This menu isn't supported with MCC's menu file yet" "$log" ||
-			! grep -aq "menus: MCC's ui.map: widget 'ui.shell.main_menu.main_menu_item_settings' ran function [0-9]*, one of Halo PC's own" "$debug"; then
-			fail "mccmenu: SETTINGS' missing function not logged, or a message box shown for it ($out/mccmenu)"
-		elif [ "$(grep -ac "ui: screen ui.shell.main_menu.main_menu$" "$log")" -lt 3 ]; then
-			fail "mccmenu: the menu did not go on after the unsupported entry ($out/mccmenu)"
+			fail "mccmenu: rows, greyed rows or SETTINGS' screens not reached:$missing ($out/mccmenu)"
+		elif grep -aq "ran function 137, one of Halo PC's own\|MCC's menu file: This menu isn't supported" "$debug" "$log" ||
+			! grep -aq "menus: Halo PC's SETTINGS: editing profile" "$log" ||
+			grep -aq "ui: handler of ui.shell.main_menu.main_menu_item_\(multiplayer\|profile\): event 0" "$log"; then
+			fail "mccmenu: SETTINGS did not edit a profile, or a greyed row was pressed ($out/mccmenu)"
+		elif ! grep -aq "menus: Halo PC's AUDIO SETUP: set master 9, music 10, effects 10" "$log" ||
+			! grep -aq "menus: Halo PC's MOUSE SETUP: set sensitivity 6, invert yes" "$log"; then
+			fail "mccmenu: AUDIO SETUP's or MOUSE SETUP's OK did not set the settings ($out/mccmenu)"
 		elif ! picture_drawn "$out/mccmenu"; then
 			fail "mccmenu: no picture drawn ($out/mccmenu)"
 		else
-			echo "mccmenu: MCC's ui.map alone: the six rows reached (CAMPAIGN MULTIPLAYER PROFILES SETTINGS CREDITS QUIT), SETTINGS' missing function logged (no message box), the menu goes on"
+			mrun mccmenu2 25 no HALO_MENU_STYLE=original HALO_TEST_CONFIG="$out/mccmenu_config.toml" \
+				"HALO_TEST_PAD=wait:150:3000 down:150:700 a:150:3500 down:150:700 down:150:700 a:150:3000 b:150:2500 up:150:700 a:150:3000 b:150:2500"
+			log=$(menu_log mccmenu2)
+			if ! grep -aq "menus: Halo PC's AUDIO SETUP: master 9, music 10, effects 10" "$log" ||
+				! grep -aq "menus: Halo PC's MOUSE SETUP: sensitivity 6, invert yes" "$log"; then
+				fail "mccmenu2: AUDIO SETUP's or MOUSE SETUP's settings did not stay after a restart ($out/mccmenu2)"
+			else
+				echo "mccmenu: MCC's ui.map alone, Menu style Classic: CAMPAIGN CREDITS QUIT reached, MULTIPLAYER PROFILES greyed; SETTINGS edits a profile, MOUSE AUDIO VIDEO open, their OK sets the settings, which stay after a restart"
+			fi
 		fi
 
 		# mcconline: no Xbox file, Menu style Online (ElDewrito): the set of screens is added

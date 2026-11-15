@@ -1,7 +1,7 @@
 /*
 HALO_PC_MENUS.C
 
-Halo PC's own menu functions, for Menu style Classic on MCC's ui.map (the
+Halo PC's own menu functions, for Menu style Classic ("original") on MCC's ui.map (the
 menus' map when there is no Xbox ui.map: custom_edition_cache.c). Halo PC's
 widgets run event handler functions numbered past the Xbox's 102 (Invader's
 ui_widget_definition names them); ui_widget_event_handler_functions.c maps
@@ -41,6 +41,7 @@ before (custom_edition_cache_menu_handler_failed logs it).
 #include "interface/ui_widget.h"
 #include "interface/player_ui.h"
 #include "saved games/player_profile.h"
+#include "saved games/saved_game_files.h"
 #include "tag_files/tag_groups.h"
 #include "../src/port_config.h"
 
@@ -50,6 +51,7 @@ before (custom_edition_cache_menu_handler_failed logs it).
 
 void platform_log(char const *format, ...);
 boolean custom_edition_cache_menus_are_mcc_ui(void);
+int halo_menu_style_original(void);
 void ui_widget_port_spinner_text(struct widget_instance *spinner, wchar_t const *text);
 extern int (*halo_test_setting_hook)(const char *variable, const char *value);
 extern volatile unsigned long halo_settings_generation;
@@ -262,6 +264,24 @@ static struct
 	long pending[NUMBER_OF_ROWS];
 } pc_menus;
 
+/* Halo PC's own menus: MCC's ui.map, Menu style Classic (not Classic+,
+whose screens there are the Xbox's: classic/xbox_screens.xml); the style
+read again as the settings change */
+static boolean halo_pc_menus_active(void)
+{
+	static unsigned long generation_seen = (unsigned long)-1;
+	static boolean original;
+
+	if (!custom_edition_cache_menus_are_mcc_ui())
+		return FALSE;
+	if (generation_seen != halo_settings_generation)
+	{
+		generation_seen = halo_settings_generation;
+		original = halo_menu_style_original() != 0;
+	}
+	return original;
+}
+
 static char const *tag_leaf(long tag_index)
 {
 	char const *name = tag_index != NONE ? tag_get_name(tag_index) : NULL;
@@ -466,8 +486,8 @@ static void look_set(long sensitivity, boolean invert)
 /* ---------- the functions */
 
 /* (137, SETTINGS) Halo PC's current profile edited: the one played with,
-else the one last used, else the first there is; none: the handler fails
-(nothing opens) */
+else the one last used, else the first there is; none: a new one (Halo PC
+makes one as it first starts) */
 static boolean profile_set_edit_begin(void)
 {
 	long profile_index = player_ui_get_active_player_profile_index(0);
@@ -487,8 +507,20 @@ static boolean profile_set_edit_begin(void)
 		player_ui_end_editing_profile();
 	if (profile_index == NONE)
 	{
-		platform_log("menus: Halo PC's SETTINGS: no profile to edit");
-		return FALSE;
+		/* (none yet: one made, as Halo PC makes its first profile, with the
+		first free untitled name, and played with) */
+		wchar_t name[128];
+		struct player_profile profile;
+
+		saved_game_file_get_useable_untitled_profile_name(name);
+		name[11] = 0;
+		profile_index = player_profile_new(0, name);
+		if (profile_index != NONE && player_profile_get(profile_index, &profile))
+			player_ui_set_active_player_profile(0, profile_index, &profile);
+		platform_log("menus: Halo PC's SETTINGS: no profile yet: %s", profile_index != NONE ? "one made" :
+			"none could be made");
+		if (profile_index == NONE)
+			return FALSE;
 	}
 	player_ui_begin_editing_profile(profile_index);
 	platform_log("menus: Halo PC's SETTINGS: editing profile %08lx%s", (unsigned long)profile_index,
@@ -581,7 +613,7 @@ boolean halo_pc_menu_function_invoke(
 
 	(void)event;
 	(void)widget_deleted;
-	if (!custom_edition_cache_menus_are_mcc_ui() || !widget)
+	if (!halo_pc_menus_active() || !widget)
 		return FALSE;
 	pending_reset();
 	*result = TRUE;
@@ -704,7 +736,7 @@ boolean halo_pc_menu_row_greyed(struct widget_instance const *widget)
 {
 	short entry;
 
-	if (!custom_edition_cache_menus_are_mcc_ui())
+	if (!halo_pc_menus_active())
 		return FALSE;
 	entry = widget_entry(widget);
 	return entry != NONE && pc_rows[entry].row == _row_greyed;
@@ -715,7 +747,7 @@ void halo_pc_menu_render(
 {
 	short entry, row;
 
-	if (!custom_edition_cache_menus_are_mcc_ui() || (entry = widget_entry(widget)) == NONE)
+	if (!halo_pc_menus_active() || (entry = widget_entry(widget)) == NONE)
 		return;
 	pending_reset();
 	row = pc_rows[entry].row;
