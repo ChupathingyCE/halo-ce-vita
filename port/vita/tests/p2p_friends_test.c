@@ -2315,6 +2315,166 @@ static void test_party_handoff_follow(void)
 	party_reset();
 }
 
+/* (party audit 1.1.3, F4) a follow whose join its host refused: the member
+told, the party told - the leader sees why the member stayed behind; an
+outcome of a join that is not the follow's is not the party's */
+static void test_party_follow_refused(void)
+{
+	char id[P2P_FRIEND_ID_SIZE];
+	struct p2p_party_member members[P2P_PARTY_MAXIMUM];
+	struct p2p_party_follow follow;
+	int count, index;
+
+	party_reset();
+	use(0);
+	p2p_friends_set_name("Alpha");
+	use(1);
+	p2p_friends_set_name("Bravo");
+	use(2);
+	p2p_friends_set_name("Charlie");
+	party_make_friends(0, 1);
+	party_make_friends(0, 2);
+	party_pass(10);
+	check(party_friend_id(0, 1, id) && (use(0), p2p_party_invite(id)) == P2P_PARTY_DONE, "refused: Alpha invites Bravo");
+	check(party_friend_id(0, 2, id) && (use(0), p2p_party_invite(id)) == P2P_PARTY_DONE, "refused: and Charlie");
+	party_pass(2);
+	party_answer_all(1, 1);
+	party_answer_all(2, 1);
+	party_pass(4);
+	check(party_count_of(0, NULL) == 3, "refused: a party of three");
+	party_host(0, 0x40, 1);
+	use(1);
+	check(p2p_party_follow_pending(&follow), "refused: Bravo told to follow");
+	join_count = 0;
+	check(p2p_party_follow_join(follow.serial) == P2P_PARTY_FOLLOW_JOINING && join_count == 1, "refused: Bravo joins");
+	/* the host refuses Bravo: the game filled meanwhile */
+	p2p_party_follow_join_outcome(P2P_PARTY_FOLLOW_FULL);
+	use(1);
+	party_follow_join_update();
+	check(machines[1].party.follow_result == P2P_PARTY_FOLLOW_FULL &&
+		party_notices_with(1, "Couldn't follow the leader: the game is full") == 1, "refused: Bravo told why");
+	party_pass(4);
+	count = party_count_of(0, members);
+	for (index = 0; index < count; index++)
+		if (strstr(members[index].name, "Bravo"))
+			break;
+	check(index < count && strstr(members[index].note, "the game is full"), "refused: the leader sees why Bravo stayed behind");
+	/* (one outcome, said once; another one later, of no follow, not taken) */
+	p2p_party_follow_join_outcome(P2P_PARTY_FOLLOW_PASSWORD);
+	use(1);
+	party_follow_join_update();
+	check(machines[1].party.follow_result == P2P_PARTY_FOLLOW_FULL &&
+		party_notices_with(1, "Couldn't follow the leader") == 1, "refused: a later join's refusal is not the follow's");
+	/* Charlie follows and gets in: there; a refusal once he has been out of
+	the leader's game a while is not the follow's */
+	use(2);
+	check(p2p_party_follow_pending(&follow), "refused: Charlie told to follow");
+	join_count = 0;
+	check(p2p_party_follow_join(follow.serial) == P2P_PARTY_FOLLOW_JOINING, "refused: Charlie joins");
+	hosts[2].joined = 1;
+	memcpy(hosts[2].joined_hash, hosts[0].key_hash, P2P_KEY_HASH_SIZE);
+	memcpy(hosts[2].joined_token, hosts[0].token, P2P_TOKEN_SIZE);
+	use(2);
+	p2p_friends_set_game(1, 0, NULL, 0);
+	party_pass(2);
+	check(machines[2].party.follow_result == P2P_PARTY_FOLLOW_THERE, "refused: Charlie in the leader's game: there");
+	/* (a map he cannot have, as the game is left: the follow's) */
+	use(2);
+	p2p_friends_set_game(-1, 0, NULL, 0);
+	hosts[2].joined = 0;
+	p2p_party_follow_join_outcome(P2P_PARTY_FOLLOW_NO_MAP);
+	use(2);
+	party_follow_join_update();
+	check(machines[2].party.follow_result == P2P_PARTY_FOLLOW_NO_MAP &&
+		party_notices_with(2, "the map is missing here") == 1, "refused: the leader's map not had here: told");
+	party_pass(4);
+	count = party_count_of(0, members);
+	for (index = 0; index < count; index++)
+		if (strstr(members[index].name, "Charlie"))
+			break;
+	check(index < count && strstr(members[index].note, "the map is missing here"), "refused: the leader sees it");
+	/* (an outcome out of range: nothing) */
+	p2p_party_follow_join_outcome(P2P_PARTY_FOLLOW_COUNT);
+	p2p_party_follow_join_outcome(-1);
+	p2p_party_follow_join_outcome(P2P_PARTY_FOLLOW_WAITING);
+	check(party_join_outcome == 0, "refused: no outcome but a refusal or there is kept");
+	party_host(0, 0x40, 0);
+	party_reset();
+}
+
+/* (party audit F7) a friend says yes after the party filled: the leader
+and the friend both told (the friend by its own wait: no message says it) */
+static void test_party_accept_full(void)
+{
+	char id[P2P_FRIEND_ID_SIZE];
+	int index;
+
+	party_reset();
+	use(0);
+	p2p_friends_set_name("Alpha");
+	use(1);
+	p2p_friends_set_name("Bravo");
+	party_make_friends(0, 1);
+	party_pass(10);
+	check(party_friend_id(0, 1, id) && (use(0), p2p_party_invite(id)) == P2P_PARTY_DONE, "full: Alpha invites Bravo");
+	party_pass(2);
+	/* (the party fills before Bravo answers) */
+	use(0);
+	for (index = friends->party.count; index < P2P_PARTY_MAXIMUM; index++)
+	{
+		memset(&friends->party.members[index], 0, sizeof(friends->party.members[index]));
+		posix_random_bytes(friends->party.members[index].key, P2P_KEY_SIZE);
+		friends->party.members[index].heard_time = clock_now;
+	}
+	friends->party.count = P2P_PARTY_MAXIMUM;
+	check(party_answer_all(1, 1) == 1, "full: Bravo says yes");
+	party_pass(2);
+	check(party_notices_with(0, "Bravo said yes, but the party is full") == 1, "full: the leader told in the party chat");
+	use(1);
+	check(!friends->party.active && party_notices_with(1, "hasn't taken you in") == 0, "full: Bravo not in it, nothing said yet");
+	party_pass(PARTY_ACCEPT_UNANSWERED / 500 + 4);
+	check(party_notices_with(1, "Alpha's party hasn't taken you in: it may be full") == 1, "full: Bravo told after a while");
+	party_pass(20);
+	check(party_notices_with(1, "hasn't taken you in") == 1, "full: said once");
+	party_reset();
+}
+
+/* (party audit F6) the Halo 3 scoreboard's party mark: by the card's key;
+by name only for a member in a game whose card no machine shows */
+static void test_party_scoreboard_mark(void)
+{
+	char id[P2P_FRIEND_ID_SIZE];
+
+	party_reset();
+	use(0);
+	p2p_friends_set_name("Alpha");
+	use(1);
+	p2p_friends_set_name("Bravo");
+	party_make_friends(0, 1);
+	party_pass(10);
+	check(party_friend_id(0, 1, id) && (use(0), p2p_party_invite(id)) == P2P_PARTY_DONE, "mark: Alpha invites Bravo");
+	party_pass(2);
+	party_answer_all(1, 1);
+	party_pass(4);
+	use(0);
+	p2p_friends_set_game(0, 1, NULL, 0);
+	party_pass(2);
+	use(0);
+	check(!p2p_party_player_member(2, "Bravo"), "mark: Bravo not in a game: a player named Bravo not marked");
+	use(1);
+	p2p_friends_set_game(1, 0, NULL, 0);
+	party_pass(42);
+	use(0);
+	check(p2p_party_player_member(2, "Bravo"), "mark: Bravo in a game, no card yet: marked by name");
+	/* Bravo's card shown by machine 1: a player who took his name, on machine
+	2 with no card, is not marked */
+	friends->machines[1].has_card = 1;
+	memcpy(friends->machines[1].key, machines[1].key, P2P_KEY_SIZE);
+	check(p2p_party_player_member(1, "anyone") && !p2p_party_player_member(2, "Bravo"),
+		"mark: by the card once it is in; a namesake without one not marked");
+	party_reset();
+}
+
 /* (party audit 1.1.3) a friend's party message from a run of theirs older
 than the one last seen (a replay a broker kept): dropped, even once its
 sender's replay slot is gone */
@@ -4908,6 +5068,9 @@ int main(void)
 	test_party_restart();
 	test_party_handoff_follow();
 	test_party_old_run();
+	test_party_follow_refused();
+	test_party_accept_full();
+	test_party_scoreboard_mark();
 	test_backup();
 	test_fileshare();
 	test_device_binding(root);

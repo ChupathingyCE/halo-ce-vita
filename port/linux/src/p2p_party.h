@@ -190,6 +190,11 @@ an invite's join): the outcome (P2P_PARTY_FOLLOW_*) */
 int p2p_party_follow_join(unsigned long serial);
 /* what came of it, told to the party (P2P_PARTY_FOLLOW_*) */
 void p2p_party_follow_result(unsigned long serial, int result);
+/* (the game's side, any thread: friends_game.c) what became of the join this
+machine made last - refused by its host (P2P_PARTY_FOLLOW_PASSWORD to
+_FAILED, why), or not reached; told to the party when it was the follow's
+join, as the follow's outcome (a leader on 1.1.2 reads it as it reads any) */
+void p2p_party_follow_join_outcome(int result);
 const char *p2p_party_follow_text(int result);
 
 /* (the leader, before joining another's game) nonzero, and the warning,

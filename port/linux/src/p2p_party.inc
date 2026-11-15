@@ -75,6 +75,8 @@ enum
 	PARTY_INVITE_INTERVAL = 10000,
 	PARTY_INVITE_HEARD_INTERVAL = 5000,
 	PARTY_FOLLOW_LIFETIME = 600000,
+	/* an invite accepted with no roster this long: said (party_update) */
+	PARTY_ACCEPT_UNANSWERED = 20000,
 	/* the leader in a game no member reaches (system link, a game being
 	closed): said once it has lasted this long, never for the moment the
 	game's client outlives the hosted game it closed (insider.21: members
@@ -199,6 +201,13 @@ static void party_chat_add(const unsigned char *key, const char *name, const cha
 	line->notice = notice;
 	(void)name;
 }
+
+/* (p2p_party_follow_join_outcome) the outcome of the last join, set by the
+game's thread or the internet play's, taken at the next pass: a lock of its
+own that takes no other (0: none) */
+static pthread_mutex_t party_join_outcome_lock = PTHREAD_MUTEX_INITIALIZER;
+static int party_join_outcome;
+static void party_follow_join_update(void);
 
 /* the party's word in the chat (a member joined, left, leads) and the log */
 static void party_notice(const char *format, ...)
@@ -966,9 +975,16 @@ static void party_answer_heard(struct friend_record *record, const struct messag
 		party_notice(T("%s said no to the party"), record->name);
 		return;
 	}
-	if (friends->party.count >= P2P_PARTY_MAXIMUM || party_member_by_key(record->key))
+	if (party_member_by_key(record->key))
 	{
-		platform_log("party: %s said yes, but the party is full", record->name);
+		platform_log("party: %s said yes, a member already", record->name);
+		return;
+	}
+	/* (said in the chat, not only the log: party audit F7. The friend is
+	told by its own wait, party_update: no message of 1.1.3's says it) */
+	if (friends->party.count >= P2P_PARTY_MAXIMUM)
+	{
+		party_notice(T("%s said yes, but the party is full"), record->name);
 		return;
 	}
 	memset(&friends->party.members[friends->party.count], 0, sizeof(friends->party.members[0]));
@@ -1559,6 +1575,22 @@ static void party_update(void)
 #ifndef HALO_RELEASE
 	party_test_steps();
 #endif
+	/* (an invite accepted and no roster for a while: the party filled
+	meanwhile, or its leader left - the leader sends nothing that says so,
+	and the friend was left with no word until the invite went: party audit
+	F7. Said once; a roster that comes later still takes this machine in) */
+	for (index = 0; index < friends->party_invite_count; index++)
+	{
+		struct party_invite_record *invite = &friends->party_invites[index];
+
+		if (invite->accepted && !invite->unanswered_said && elapsed(invite->time, PARTY_ACCEPT_UNANSWERED))
+		{
+			const struct friend_record *from = find_friend(invite->key);
+
+			invite->unanswered_said = 1;
+			party_notice(T("%s's party hasn't taken you in: it may be full"), from ? from->name : "");
+		}
+	}
 	/* old invites go (heard, and sent) */
 	for (index = friends->party_invite_count - 1; index >= 0; index--)
 		if (elapsed(friends->party_invites[index].time, PARTY_INVITE_LIFETIME))
@@ -1574,6 +1606,7 @@ static void party_update(void)
 				sizeof(friends->party.sent[0]) * (size_t)(friends->party.sent_count - index - 1));
 			friends->party.sent_count--;
 		}
+	party_follow_join_update();
 	if (friends->appear_offline)
 		return;
 	/* (a member) the game this machine is in, joined (p2p_party_host_left_quiet) */
@@ -2256,6 +2289,16 @@ void p2p_party_follow_result(unsigned long serial, int result)
 	pthread_mutex_lock(&friends_lock);
 	if (friends->party.active && (serial == friends->party.follow_done || serial == friends->party.follow_heard))
 	{
+		/* (a join made: what comes of it is the follow's, a while; an
+		outcome of an earlier join is not) */
+		if (result == P2P_PARTY_FOLLOW_JOINING)
+		{
+			friends->party.follow_join_time = now_stamp();
+			friends->party.follow_there_time = 0;
+			pthread_mutex_lock(&party_join_outcome_lock);
+			party_join_outcome = 0;
+			pthread_mutex_unlock(&party_join_outcome_lock);
+		}
 		if (result != friends->party.follow_result)
 		{
 			friends->party.follow_result = result;
@@ -2273,6 +2316,57 @@ void p2p_party_follow_result(unsigned long serial, int result)
 	pthread_mutex_unlock(&friends_lock);
 }
 
+void p2p_party_follow_join_outcome(int result)
+{
+	if (result != P2P_PARTY_FOLLOW_THERE && (result < P2P_PARTY_FOLLOW_PASSWORD || result > P2P_PARTY_FOLLOW_FAILED))
+		return;
+	pthread_mutex_lock(&party_join_outcome_lock);
+	party_join_outcome = result;
+	pthread_mutex_unlock(&party_join_outcome_lock);
+}
+
+/* (a member, each pass) the follow's join: there once this machine is in the
+leader's game; refused or not reached, told to the party - a member that
+just stayed behind with the game's error was never seen by the leader
+(party audit F4). Only the follow's: made within the follow's life, and,
+once in a game, while that game is the leader's. */
+static void party_follow_join_update(void)
+{
+	int outcome, in_leaders_game;
+
+	pthread_mutex_lock(&party_join_outcome_lock);
+	outcome = party_join_outcome;
+	party_join_outcome = 0;
+	pthread_mutex_unlock(&party_join_outcome_lock);
+	if (!friends->party.active || party_leading_now() ||
+		(friends->party.follow_result != P2P_PARTY_FOLLOW_JOINING &&
+		friends->party.follow_result != P2P_PARTY_FOLLOW_THERE) ||
+		!friends->party.follow_join_time || elapsed(friends->party.follow_join_time, PARTY_FOLLOW_LIFETIME))
+	{
+		return;
+	}
+	in_leaders_game = friends->host.joined && friends->in_game && !friends->game_hosting &&
+		p2p_equal(friends->host.joined_hash, friends->party.follow_message.game.invite_hash, P2P_KEY_HASH_SIZE);
+	if (in_leaders_game)
+		friends->party.follow_there_time = now_stamp();
+	if (outcome >= P2P_PARTY_FOLLOW_PASSWORD &&
+		(friends->party.follow_result == P2P_PARTY_FOLLOW_JOINING ||
+		(friends->party.follow_there_time && !elapsed(friends->party.follow_there_time, 10000))))
+	{
+		friends->party.follow_result = outcome;
+		friends->party.follow_join_time = 0;
+		friends->party.follow_there_time = 0;
+		friends->party.status_due = 1;
+		party_notice(T("Couldn't follow the leader: %s"), p2p_party_follow_text(outcome));
+		return;
+	}
+	if (friends->party.follow_result == P2P_PARTY_FOLLOW_JOINING && in_leaders_game)
+	{
+		friends->party.follow_result = P2P_PARTY_FOLLOW_THERE;
+		friends->party.status_due = 1;
+	}
+}
+
 const char *p2p_party_follow_text(int result)
 {
 	switch (result)
@@ -2288,7 +2382,7 @@ const char *p2p_party_follow_text(int result)
 	case P2P_PARTY_FOLLOW_FULL:
 		return T("the game is full");
 	case P2P_PARTY_FOLLOW_NO_MAP:
-		return T("the map is missing (map downloads off)");
+		return T("the map is missing here");
 	case P2P_PARTY_FOLLOW_VERSION:
 		return T("another version of the game");
 	case P2P_PARTY_FOLLOW_UNREACHABLE:
@@ -2412,6 +2506,18 @@ unsigned long p2p_party_chat_newest(void)
 	return newest;
 }
 
+/* whether a machine of the game this one is in has shown the member's
+card (friends_lock held) */
+static int party_member_card_shown(const struct party_member *member)
+{
+	int index;
+
+	for (index = 0; friends->in_game && index < CARD_MACHINES; index++)
+		if (friends->machines[index].has_card && p2p_equal(friends->machines[index].key, member->key, P2P_KEY_SIZE))
+			return 1;
+	return 0;
+}
+
 int p2p_party_player_member(int machine, const char *name)
 {
 	int found = 0, index;
@@ -2434,8 +2540,16 @@ int p2p_party_player_member(int machine, const char *name)
 				continue;
 			if (record && record->has_card)
 				found = p2p_equal(member->key, record->key, P2P_KEY_SIZE);
-			else if (name && name[0] && member->name[0])
+			/* (by name only for a member in a game whose card no machine of
+			this one has shown: another player who took a member's name is
+			not marked once that member's card is in, nor while the member
+			is not in a game at all - party audit F6) */
+			else if (name && name[0] && member->name[0] &&
+				(member->status_flags & (PARTY_STATUS_IN_GAME | PARTY_STATUS_HOSTING)) &&
+				!party_member_card_shown(member))
+			{
 				found = !strncmp(member->name, name, 11) && (strlen(member->name) <= 11 || strlen(name) >= 11);
+			}
 		}
 	}
 	pthread_mutex_unlock(&friends_lock);

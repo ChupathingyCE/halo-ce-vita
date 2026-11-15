@@ -3044,6 +3044,12 @@ void network_game_client_rejected_by_game(
 		rejection_code,
 		reason);
 #ifdef HALO_LINUX
+	/* port: a party's follow refused: the party told why (friends_game.c) */
+	{
+		void friends_game_join_refused(int rejection_code);
+
+		friends_game_join_refused(rejection_code);
+	}
 	/* port: a full game says so in words (the game's own error, below, is
 	the one for a closed game) */
 	if (rejection_code == _rejection_code_game_is_full)

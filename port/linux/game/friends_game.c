@@ -55,6 +55,7 @@ WITH CODE (the menus' join, not the network test's).
 #include "tag_files/tag_groups.h"
 #include "input/input.h"
 #include "networking/network_server_manager.h"
+#include "networking/network_game_protocol.h"
 #include "halo_port_limits.h"
 
 #include "../src/p2p_friends.h"
@@ -518,6 +519,40 @@ static void friends_game_join_test(boolean main_menu_loaded)
 #else
 	(void)main_menu_loaded;
 #endif
+}
+
+/* (network_client_manager.c) a join its host refused, and why: to a party's
+follow, the follow's outcome (p2p_party_follow_join_outcome: the party
+told only when it was the follow's join) */
+void friends_game_join_refused(int rejection_code)
+{
+	int result;
+
+	switch (rejection_code)
+	{
+	case _rejection_code_version_too_old:
+	case _rejection_code_version_too_new:
+	case _rejection_code_vitas_only:
+		result = P2P_PARTY_FOLLOW_VERSION;
+		break;
+	case _rejection_code_bad_password:
+		result = P2P_PARTY_FOLLOW_PASSWORD;
+		break;
+	case _rejection_code_game_is_full:
+		result = P2P_PARTY_FOLLOW_FULL;
+		break;
+	default:
+		result = P2P_PARTY_FOLLOW_FAILED;
+		break;
+	}
+	p2p_party_follow_join_outcome(result);
+}
+
+/* (map_share.c) a join left because its map could not be had here (another
+copy of it - MCC's or the Xbox's -, no download): the follow's outcome */
+void friends_game_join_map_refused(void)
+{
+	p2p_party_follow_join_outcome(P2P_PARTY_FOLLOW_NO_MAP);
 }
 
 /* the leader's follow: joined at the menus (out of any game), the map looked
