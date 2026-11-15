@@ -542,6 +542,17 @@ void player_profile_delete(
 	return;
 }
 
+/* port: a profile as a file holds it, its name ended within it (a file
+whose checksum is right may come from anyone - the checksum is no secret -
+and a name with all twelve characters set ran on into the fields after it
+wherever it was read as text). From ChupathingyCE (965ad5017, "Profiles and
+game types: a loaded name ends within it", MrMilenko; GPL-3.0-or-later) */
+static void player_profile_loaded(
+	struct player_profile *profile)
+{
+	profile->player_name[MAXIMUM_PLAYER_PROFILE_NAME_LENGTH-1] = 0;
+}
+
 boolean player_profile_get_from_path(
 	char *full_path,
 	struct player_profile *profile)
@@ -563,6 +574,7 @@ boolean player_profile_get_from_path(
 			if (!csmemcmp(&checksum, block+sizeof(struct player_profile), sizeof(checksum)))
 			{
 				csmemcpy(profile, block, sizeof(struct player_profile));
+				player_profile_loaded(profile);
 				succeeded = TRUE;
 			}
 			else
@@ -1047,6 +1059,7 @@ static boolean player_profile_read(
 					if (!csmemcmp(&checksum, block+sizeof(struct player_profile), sizeof(checksum)))
 					{
 						csmemcpy(profile, block, sizeof(struct player_profile));
+						player_profile_loaded(profile);
 #ifdef HALO_LINUX
 						{
 							byte color_plus_one, visor;
