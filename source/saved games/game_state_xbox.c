@@ -333,6 +333,37 @@ void platform_log(const char *format, ...);
 
 #define GAME_STATE_WRITE_PIECE (256 * 1024)
 
+/* (port, test) HALO_TEST_CHECKPOINT_NO_MEMORY=1 (PC builds only): no
+memory for the checkpoint copy nor for any game-state-sized image beside
+the game state, as on a Vita whose user RAM ran out (the copy given back,
+game_state_checkpoint_copy_release, and no 16 MB left for a read beside
+the game state). The harness's HALO_HEAP_LIMIT_KB starves the renderer
+too; this fails only these allocations. */
+static boolean game_state_test_no_memory(
+	void)
+{
+#ifndef HALO_VITA
+	static int no_memory = -1;
+
+	if (no_memory < 0)
+	{
+		const char *setting = getenv("HALO_TEST_CHECKPOINT_NO_MEMORY");
+
+		no_memory = setting && *setting && *setting != '0';
+	}
+	return no_memory != 0;
+#else
+	return FALSE;
+#endif
+}
+
+/* an image of the game state's size, beside it */
+static void *game_state_image_allocate(
+	long size)
+{
+	return game_state_test_no_memory() ? NULL : malloc(size);
+}
+
 static struct
 {
 	void *snapshot;
@@ -444,7 +475,7 @@ static boolean game_state_writer_ready(
 		game_state_writer.snapshot_block = block;
 	}
 #else
-	game_state_writer.snapshot = malloc(xbox_game_state_globals.buffer_size);
+	game_state_writer.snapshot = game_state_image_allocate(xbox_game_state_globals.buffer_size);
 #endif
 	if (!game_state_writer.snapshot)
 	{
@@ -746,7 +777,8 @@ boolean game_state_read_from_file(
 	(game_state_image_accept): into the checkpoint copy when there is one
 	(not valid: above), so that no more memory is needed */
 #ifdef HALO_LINUX
-	image = game_state_writer.snapshot ? game_state_writer.snapshot : malloc(xbox_game_state_globals.buffer_size);
+	image = game_state_writer.snapshot ? game_state_writer.snapshot :
+		game_state_image_allocate(xbox_game_state_globals.buffer_size);
 #else
 	image = malloc(xbox_game_state_globals.buffer_size);
 #endif
@@ -1262,7 +1294,11 @@ void game_state_read_from_persistent_storage(
 	if (file != INVALID_HANDLE_VALUE)
 	{
 		/* port: read beside the game state, and taken once checked */
+#ifdef HALO_LINUX
+		void *image = game_state_image_allocate(buffer_size);
+#else
 		void *image = malloc(buffer_size);
+#endif
 
 		if (!image ||
 			SetFilePointer(file, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER ||
