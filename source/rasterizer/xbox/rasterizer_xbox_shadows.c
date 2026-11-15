@@ -290,6 +290,21 @@ boolean _rasterizer_environment_shadow_begin(
 		147,
 		global_d3d_device);
 
+#ifdef HALO_LINUX
+	/* port: the caller (render_objects.c) sizes the shadow's volume by this
+	radius whether or not the pass is drawn, and a pass is not drawn for a
+	target other than the primary one - a mirror's (a shader_environment's
+	dynamic mirror) - where the radius was left as whatever was on the
+	stack, which the structure's shadow walk then took (a crash). Given the
+	object's either way; a skipped pass still draws nothing. After
+	ChupathingyCE (MrMilenko, GPL-3.0-or-later; f8454795a, from chester's
+	GulchCE). */
+	if (shadow_volume_bounding_radius)
+	{
+		*shadow_volume_bounding_radius = object_bounding_radius;
+	}
+#endif
+
 	if (global_window_parameters.rasterizer_target ==
 			_rasterizer_target_render_primary &&
 		rasterizer_debug_options.draw_environment_shadows)
