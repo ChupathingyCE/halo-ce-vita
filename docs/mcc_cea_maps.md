@@ -81,9 +81,13 @@ ux0:data/haloce-vita/mcc/
     sound/pc/
       sounds_adpcm.fsb              the sound effects (88 MB): needed for them
       lst/sounds_adpcm.lst.bin      which sounds they are (45 KB): needed for them
+      sounds_dialogs.fsb, sounds_music.fsb, sounds_stream.fsb,
+      sounds_debug.fsb              the dialogue, music, streamed and
+                                    Anniversary-only sounds (CELT, 1.5 GB):
+                                    each optional, its sounds silent without it
       lst/sounds_dialogs.lst.bin, sounds_music.lst.bin,
       lst/sounds_stream.lst.bin, sounds_debug.lst.bin
-                                    (186 KB; only to count what is still silent)
+                                    (186 KB): which sounds are in each CELT bank
 ```
 
 The rest of `halo1/sound/`, `prebuild/` and the other games' folders are
@@ -155,7 +159,7 @@ Halo CE's maps are listed under names that are the folder's alone:
   in the classic campaign list after the ten levels as "The Pillar of
   Autumn (MCC)" ..., and in the Halo 3 campaign lobby each mission is
   MCC's where the folder has it, else the Xbox's ("MCC files, on this PS
-  Vita alone. Sound effects only for now." under Ready). Every mission is open (they keep
+  Vita alone." under Ready). Every mission is open (they keep
   no profile progress). Won, a level goes on to MCC's next one. Played
   alone, offline; co-op is not hosted for them.
 - the multiplayer maps as `mcc_bloodgulch` ... (level
