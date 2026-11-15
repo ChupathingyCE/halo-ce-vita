@@ -4648,7 +4648,7 @@ class InstallerWindow:
                       "Leave it empty if the game is already on the Vita.", pady=(0, px(2)))
             self.link("Download it from the releases page", RELEASES_URL)
         self.ttk.Frame(self.body, height=px(6)).pack()
-        self.field("Folder for the files on their way to the Vita (about 2.5 GB):", self.out, pady=(0, 2),
+        self.field("Folder for the files on their way to the Vita (about 2.5 GB, 3.1 GB with MCC):", self.out, pady=(0, 2),
                    browse=lambda: self.browse_folder(self.out))
 
     def destination_pc(self):

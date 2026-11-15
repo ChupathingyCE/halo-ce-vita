@@ -49,7 +49,9 @@ enum
 /* Opens the sound effects' bank and the lists; `combined_offset` is where
 the bank starts in the combined offset space and `bank_bytes` its size (the
 file the sounds slot has open). FALSE, `source` empty, with `reason` (a
-sentence, may be NULL) when the bank or its list is not there or not whole. */
+sentence, may be NULL) when the bank or its list is not there or not whole.
+One user at a time: TRUE holds the MCC sounds until mcc_sound_close (on
+the same thread), another thread's open waits for it. */
 boolean mcc_sound_open(
 	struct mcc_sound_source *source,
 	uint32_t combined_offset,

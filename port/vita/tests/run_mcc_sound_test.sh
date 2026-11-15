@@ -10,6 +10,12 @@
 # 2. fuzz    mcc_sound_fuzz.c: MCC_FUZZ_ITERATIONS (default 100000) changed
 #            banks and lists from a fixed seed; with MCC_FUZZ_SECONDS=n also n
 #            seconds of libFuzzer (clang), what it finds in MCC_FUZZ_OUT
+#    celtfuzz celt_fuzz.c (1.1.3 audit): MCC's FMOD CELT streams decoded and made
+#            Xbox ADPCM as the sound cache does (h2_sound_codec.c, fsb_celt.c,
+#            libcelt) on changed chunks, CELT_FUZZ_SECONDS (default 60) of
+#            libFuzzer under ASan and UBSan (clang; SKIP without), seeded from
+#            the player's own sounds_dialogs.fsb and sounds_music.fsb when there
+#            (celt_fuzz_seeds.py); what it finds in CELT_FUZZ_OUT
 # 3. audit   mcc_sound_audit.c on the player's own sound folder (HALO_TEST_MCC_ROOT,
 #            default Steam's; SKIP without one): every bank and list parses, the
 #            lists name only streams the banks have, the ADPCM bank is covered once
@@ -34,9 +40,13 @@
 #      damaged   the list with another version, and the bank cut short (copies of
 #                the first bytes in the test's folder): the sounds are silent, said, no
 #                assertion
+#      foreign   a Custom Edition map (extinction, HALO_TEST_CE_MAPS, with Halo PC's
+#                maps, HALO_TEST_CE_RESOURCES) whose sound claims to be streams of
+#                MCC's CELT banks (ce_celt_claim_map.py): played, it must never be
+#                read from the player's bank (only MCC's own maps and scene packs)
 #   HALO_TEST_VITA  the harness (default build/linux/halo)   HALO_TEST_DATA  the Xbox maps
 #   HALO_TEST_MCC_ROOT  MCC's halo1 folder                  HALO_TEST_OUT   where the logs go
-#   run_mcc_sound_test.sh [unit|fuzz|audit|harness]   (default all)
+#   run_mcc_sound_test.sh [unit|fuzz|celtfuzz|audit|harness]   (default all)
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
@@ -49,7 +59,7 @@ test_out_begin "$out"
 mkdir -p "$out"
 status=0
 fail() { echo "FAIL: $1"; status=1; }
-parts=${*:-unit fuzz audit harness}
+parts=${*:-unit fuzz celtfuzz audit harness}
 cc=${CC:-gcc}
 sanitize="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
 echo 'int main(void){return 0;}' | $cc $sanitize -x c - -o "$out/probe" 2>/dev/null || sanitize=
@@ -85,6 +95,50 @@ esac
 
 have_mcc=0
 [ -r "$mcc/sound/pc/sounds_adpcm.fsb" ] && [ -r "$mcc/maps/bitmaps.map" ] && have_mcc=1
+
+case " $parts " in *" celtfuzz "*)
+	# libcelt's files with celt_port.h each, as tools/linux_build.py builds them
+	celt="$root/port/third_party/celt"
+	fuzz_seconds=${CELT_FUZZ_SECONDS:-60}
+	if ! command -v clang > /dev/null 2>&1 ||
+		! echo 'int LLVMFuzzerTestOneInput(const unsigned char *d, unsigned long n){(void)d;(void)n;return 0;}' |
+			clang -fsanitize=fuzzer -x c - -o "$out/celt_probe" 2> /dev/null; then
+		echo "SKIP (celtfuzz): no clang with libFuzzer"
+	else
+		# (rate.c's own "-1 << n" in the mode's setup, libcelt's, benign: not a finding)
+		celt_flags="-g -O1 -fsanitize=fuzzer-no-link,address,undefined -fno-sanitize=shift -fno-sanitize-recover=undefined"
+		mkdir -p "$out/celt_obj"
+		objects=
+		while read -r source; do
+			[ -n "$source" ] || continue
+			object="$out/celt_obj/$(basename "$source" .c).o"
+			clang $celt_flags -std=gnu11 -w -I"$celt/libcelt" -include "$celt/celt_port.h" -c "$celt/$source" -o "$object" ||
+				fail "celtfuzz: libcelt's $source did not build"
+			objects="$objects $object"
+		done < "$celt/sources.txt"
+		if clang -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize=shift -fno-sanitize-recover=undefined \
+			-D_GNU_SOURCE -I"$src" "$here/celt_fuzz.c" "$src/h2_sound_codec.c" "$src/fsb_celt.c" "$src/xbox_adpcm_encoder.c" \
+			$objects -lm -o "$out/celt_fuzz"; then
+			fuzz_out=${CELT_FUZZ_OUT:-$out/celt_fuzz_findings}
+			mkdir -p "$fuzz_out/corpus"
+			if [ -r "$mcc/sound/pc/sounds_dialogs.fsb" ]; then
+				echo "celtfuzz: $(python3 -I "$here/celt_fuzz_seeds.py" "$mcc/sound/pc" "$fuzz_out/corpus") seeds from MCC's CELT banks"
+			else
+				echo "celtfuzz: no MCC CELT bank at $mcc/sound/pc (HALO_TEST_MCC_ROOT): no seeds, the fuzzer's own"
+			fi
+			if "$out/celt_fuzz" -max_total_time="$fuzz_seconds" -max_len=8192 -artifact_prefix="$fuzz_out/" "$fuzz_out/corpus" \
+				> "$out/celt_fuzz.log" 2>&1; then
+				echo "celtfuzz: $(grep -a "^Done" "$out/celt_fuzz.log" | tail -1), no crash, no UB"
+			else
+				tail -20 "$out/celt_fuzz.log"
+				fail "celtfuzz: libFuzzer found something (see $fuzz_out, $out/celt_fuzz.log)"
+			fi
+		else
+			fail "celtfuzz: celt_fuzz did not build"
+		fi
+	fi
+	;;
+esac
 
 case " $parts " in *" audit "*)
 	if [ $have_mcc = 0 ]; then
@@ -235,6 +289,51 @@ open(p, 'wb').write(d)" "$out/damaged_content/halo1/sound/pc/lst/sounds_adpcm.ls
 			fail "damaged_list: the list of another version was not refused, said ($out/damaged_list)"
 		else
 			echo "damaged_list: refused: version 2"
+		fi
+
+		# foreign: a Custom Edition map (a download, say) whose sound says its
+		# permutations are streams of MCC's CELT banks must not read them (1.1.3
+		# audit, LOW-1): only MCC's own maps and scene packs built from them may
+		ce_maps=${HALO_TEST_CE_MAPS:-$root/../custom-maps-dl}
+		resources=${HALO_TEST_CE_RESOURCES:-$mcc/maps/custom_edition}
+		foreign_tag='sound\sfx\weapons\gunfire_sounds\fire2'
+		if [ ! -e "$ce_maps/extinction.map" ] || [ ! -e "$resources/sounds.map" ]; then
+			echo "SKIP (foreign): no extinction.map in $ce_maps (HALO_TEST_CE_MAPS) or Halo PC's maps in $resources (HALO_TEST_CE_RESOURCES)"
+		else
+			dir="$out/foreign"
+			rm -rf "$dir"
+			mkdir -p "$dir/data/maps" "$dir/save"
+			for file in "$(cd "$data" && pwd)"/maps/*.map; do
+				ln -sfn "$file" "$dir/data/maps/"
+			done
+			for name in bitmaps sounds loc; do
+				ln -sfn "$(cd "$resources" && pwd)/$name.map" "$dir/data/maps/$name.map"
+			done
+			if ! python3 -I "$here/ce_celt_claim_map.py" "$ce_maps/extinction.map" "$dir/data/maps/extinction.map" "$foreign_tag" > /dev/null; then
+				fail "foreign: the map could not be made"
+			else
+				(cd "$dir" && exec unshare -rn sh -c 'ip link set lo up 2> /dev/null; exec "$@"' sh \
+					env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=offscreen HALO_DATA_ROOT="$dir/data" \
+					HALO_SAVE_ROOT="$dir/save" HALO_NO_VSYNC=1 HALO_FRAME_CAP=30 HALO_EXIT_AFTER=45 \
+					HALO_FULLSCREEN=0 HALO_HIDDEN_WINDOW=1 HALO_TICK_THREAD=1 HALO_UPDATE_AUTO=false HALO_NET_ONLINE=false \
+					HALO_CUSTOM_EDITION=1 HALO_CONTENT_ROOT="$out/mcc" HALO_OGG_TRACE=1 HALO_SOUND_CACHE_PREFILL=0 \
+					"HALO_TEST_COMMANDS=M240:map_name levels\\test\\extinction\\extinction;L300:@sound $foreign_tag;L330:@sound $foreign_tag;L420:@menu;" \
+					timeout -k 5 165 "$binary" > "$dir/run.log" 2>&1)
+				code=$?
+				if [ "$code" != 0 ]; then
+					fail "foreign: the harness exited with $code ($dir/run.log)"
+				elif ! grep -aq "test command: sound .*fire2 played" "$dir/run.log"; then
+					fail "foreign: the map's sound was never asked for ($dir/run.log)"
+				elif grep -a "celt sound: " "$dir/run.log" | grep -aqF "of $foreign_tag:"; then
+					grep -a "celt sound: " "$dir/run.log" | head -2 | sed 's/^/  /'
+					fail "foreign: a Custom Edition map's sound was read from MCC's CELT bank ($dir/run.log)"
+				elif cat "$dir/run.log" "$dir/data/debug.txt" 2>/dev/null | grep -av "render assertion skipped" |
+					grep -aqE "ASSERT|assertion|EXCEPTION|halt_and_catch_fire"; then
+					fail "foreign: an assertion or exception ($dir)"
+				else
+					echo "foreign: a Custom Edition map's sound that says it is MCC's CELT is silent, never read from the bank"
+				fi
+			fi
 		fi
 	fi
 	;;

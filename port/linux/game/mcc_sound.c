@@ -77,6 +77,16 @@ static struct
 	boolean tried[NUMBER_OF_MCC_SOUND_BANKS];
 } mcc_sound_readers = { PTHREAD_MUTEX_INITIALIZER };
 
+/* the lists and tables above (mcc_sound_globals) and the conversion's
+source (custom_edition_cache_convert_mcc_sounds) are one user's at a time:
+held from mcc_sound_open to mcc_sound_close, so the map loader (game
+thread) and the scene pack builder (its worker) wait for each other
+rather than one freeing the other's tables - today they never overlap
+(scene_packs_unloaded joins the worker before the next map's tags load),
+so it costs nothing (1.1.3 audit, LOW-3) */
+static pthread_mutex_t mcc_sound_session_lock = PTHREAD_MUTEX_INITIALIZER;
+static boolean mcc_sound_session_held;
+
 /* ---------- private code */
 
 static int file_read(void *context, uint64_t offset, uint32_t size, void *buffer)
@@ -268,7 +278,7 @@ char const *mcc_sound_bank_name(int bank)
 	return bank >= 0 && bank < NUMBER_OF_MCC_SOUND_BANKS ? bank_files[bank] : "?";
 }
 
-void mcc_sound_close(void)
+static void globals_free(void)
 {
 	int bank;
 
@@ -284,13 +294,23 @@ void mcc_sound_close(void)
 	memset(&mcc_sound_globals, 0, sizeof(mcc_sound_globals));
 }
 
+void mcc_sound_close(void)
+{
+	globals_free();
+	if (mcc_sound_session_held)
+	{
+		mcc_sound_session_held = FALSE;
+		pthread_mutex_unlock(&mcc_sound_session_lock);
+	}
+}
+
 static void reason_set(char *reason, long reason_size, char const *format, char const *detail)
 {
 	if (reason && reason_size > 0)
 		snprintf(reason, (size_t)reason_size, format, detail);
 }
 
-boolean mcc_sound_open(
+static boolean session_open(
 	struct mcc_sound_source *source,
 	uint32_t combined_offset,
 	uint32_t bank_bytes,
@@ -320,13 +340,13 @@ boolean mcc_sound_open(
 	if (!fsb5_open(file_read, adpcm->file, bank_bytes, 1, &adpcm->fsb, detail, sizeof(detail)))
 	{
 		reason_set(reason, reason_size, "sounds_adpcm.fsb: %s", detail);
-		mcc_sound_close();
+		globals_free();
 		return FALSE;
 	}
 	if (adpcm->fsb.format != _fsb5_format_ima_adpcm)
 	{
 		reason_set(reason, reason_size, "sounds_adpcm.fsb: %s", "not IMA ADPCM");
-		mcc_sound_close();
+		globals_free();
 		return FALSE;
 	}
 	adpcm->opened = TRUE;
@@ -334,14 +354,14 @@ boolean mcc_sound_open(
 	if (!bytes)
 	{
 		reason_set(reason, reason_size, "%s is not in MCC's sound folder", MCC_SOUND_ADPCM_LIST);
-		mcc_sound_close();
+		globals_free();
 		return FALSE;
 	}
 	if (!mcc_sound_list_parse(bytes, size, &adpcm->list, detail, sizeof(detail)))
 	{
 		free(bytes);
 		reason_set(reason, reason_size, "sounds_adpcm.lst.bin: %s", detail);
-		mcc_sound_close();
+		globals_free();
 		return FALSE;
 	}
 	free(bytes);
@@ -369,6 +389,22 @@ boolean mcc_sound_open(
 	source->combined_offset = combined_offset;
 	source->bank_bytes = bank_bytes;
 	return TRUE;
+}
+
+boolean mcc_sound_open(
+	struct mcc_sound_source *source,
+	uint32_t combined_offset,
+	uint32_t bank_bytes,
+	char *reason,
+	long reason_size)
+{
+	pthread_mutex_lock(&mcc_sound_session_lock);
+	mcc_sound_session_held = TRUE;
+	if (session_open(source, combined_offset, bank_bytes, reason, reason_size))
+		return TRUE;
+	mcc_sound_session_held = FALSE;
+	pthread_mutex_unlock(&mcc_sound_session_lock);
+	return FALSE;
 }
 
 void mcc_sound_log(struct custom_edition_conversion_report const *report)
