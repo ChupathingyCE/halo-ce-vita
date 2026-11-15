@@ -12,8 +12,22 @@ import struct
 import sys
 
 
+def clean(index, name):
+    """An allocation's name as the game gave it; one whose name is not printable text (a name
+    pointer into memory nobody set: a run's own bytes, different every run) is named by its
+    place in the list instead, so two runs still compare."""
+    try:
+        text = name.decode("ascii")
+    except UnicodeDecodeError:
+        text = None
+    if text is None or not text or not all(" " <= c <= "~" for c in text):
+        return "<allocation %d, no printable name>" % index
+    return text
+
+
 def load(path):
-    names = [line.rsplit(" ", 1)[0] for line in open(path + ".names")]
+    with open(path + ".names", "rb") as lines:
+        names = [clean(index, line.rstrip(b"\r\n").rsplit(b" ", 1)[0]) for index, line in enumerate(lines)]
     raw = open(path + ".alloc", "rb").read()
     record = 4 + 8 * len(names)
     ticks = {}
