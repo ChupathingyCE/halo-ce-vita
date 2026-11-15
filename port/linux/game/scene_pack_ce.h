@@ -69,6 +69,17 @@ unsigned char *scene_pack_ce_tags(
 	struct scene_pack_ce *ce,
 	unsigned long *size);
 
+/* (port) the room of its tags' buffer past the tags loaded - the tag
+cache's free room the build has as its scratch, or the block it took for
+them - size bytes of it from offset (from the tags' start, at or past their
+end), or NULL if it has not that much: where a backdrop's structure bsp is
+read, as the game reads one into the tag cache past a map's tags (it lives
+as long as the tags; nothing is freed) */
+unsigned char *scene_pack_ce_tags_room(
+	struct scene_pack_ce *ce,
+	unsigned long offset,
+	unsigned long size);
+
 /* the name a tag of it goes by in a pack: its own, or one made for it when
 it has none (a protected map's are "<protected>") */
 char const *scene_pack_ce_tag_name(

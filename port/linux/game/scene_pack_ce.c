@@ -830,6 +830,16 @@ unsigned char *scene_pack_ce_tags(
 	return ce->tags;
 }
 
+unsigned char *scene_pack_ce_tags_room(
+	struct scene_pack_ce *ce,
+	unsigned long offset,
+	unsigned long size)
+{
+	if (!ce || !ce->tags || offset < ce->loaded_bytes || offset > ce->tags_room || size > ce->tags_room - offset)
+		return NULL;
+	return ce->tags + offset;
+}
+
 /* the converted tags' bytes at a (moved) address, if they are loaded */
 static unsigned char *ce_at(struct scene_pack_ce const *ce, unsigned long address, unsigned long size)
 {

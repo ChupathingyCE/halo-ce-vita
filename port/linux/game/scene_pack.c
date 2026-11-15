@@ -1840,6 +1840,17 @@ static unsigned long blob_alloc(struct build_state *state, unsigned long size)
 		if (capacity > SCENE_PACK_MAXIMUM_TAG_BYTES)
 			capacity = SCENE_PACK_MAXIMUM_TAG_BYTES;
 		grown = in_place ? scene_pack_big_grow(state->blob, state->blob_capacity, capacity) : NULL;
+		/* (refused the megabyte: a quarter of one past what it needs, its
+		last block's room no larger than it must be - an MCC a30 backdrop's
+		9.1 MB of tags in 9.25 MB, not 10) */
+		if (!grown && in_place && ((end + 256 * 1024 + 0xFFFFUL) & ~0xFFFFUL) < capacity)
+		{
+			unsigned long smaller = (end + 256 * 1024 + 0xFFFFUL) & ~0xFFFFUL;
+
+			grown = scene_pack_big_grow(state->blob, state->blob_capacity, smaller);
+			if (grown)
+				capacity = smaller;
+		}
 		if (grown)
 		{
 			/* (the same block, longer, its bytes at its new start) */
@@ -3446,9 +3457,10 @@ static void backdrop_prepare(struct build_state *state, unsigned char *bsp, unsi
 the recipe holds, read as the game reads it and moved past the source's tag
 data (where source_at finds a backdrop's bsp), then prepared as an Xbox
 map's; FALSE (and the build failed) if it cannot be. *bytes (*size bytes,
-*big: scene_pack_big_alloc's, else the C heap's) is the caller's to free */
+*big: scene_pack_big_alloc's, else the C heap's) is the caller's to free,
+unless *borrowed: the tags' own room past them, let go with them */
 static boolean backdrop_custom_edition(struct build_state *state, unsigned char **bytes, unsigned long *bytes_size,
-	boolean *big)
+	boolean *big, boolean *borrowed)
 {
 	struct scene_pack_recipe const *recipe = state->recipe;
 	unsigned char *scenario, *references = NULL;
@@ -3459,6 +3471,7 @@ static boolean backdrop_custom_edition(struct build_state *state, unsigned char 
 	*bytes = NULL;
 	*bytes_size = 0;
 	*big = FALSE;
+	*borrowed = FALSE;
 	for (root = 0; root < recipe->root_count && recipe->roots[root].group_tag != 'sbsp'; root++)
 		;
 	scenario = backdrop_scenario(state, &scenario_index);
@@ -3486,9 +3499,19 @@ static boolean backdrop_custom_edition(struct build_state *state, unsigned char 
 			build_fail(state, "the source map's structure bsp is not where a bsp is%s", NULL);
 			return FALSE;
 		}
-		/* (on the C heap when it has the room with plenty over, else in the
-		memory window, as an Xbox map's: scene_pack_build_many) */
-		*bytes = scene_pack_heap_room && scene_pack_heap_room(size) ? malloc(size) : NULL;
+		/* (in the tags' buffer past them, at the address it is moved to, as
+		the game reads a bsp into the tag cache past a map's tags: the tag
+		cache's free room the worker builds in has a30's 10.5 MB of tags and
+		some 9 MB over, and the memory window then the pack's blob alone -
+		rc.7, an MCC-only Vita: its 4.4 MB and the blob's 10 MB were more
+		than the window's 15 MB with the Halo PC pictures read, "no memory
+		for the pack". Else on the C heap when it has the room with plenty
+		over, else in the memory window, as an Xbox map's:
+		scene_pack_build_many) */
+		*bytes = scene_pack_ce_tags_room(state->custom_edition, address - state->source_address, size);
+		*borrowed = *bytes != NULL;
+		if (!*bytes)
+			*bytes = scene_pack_heap_room && scene_pack_heap_room(size) ? malloc(size) : NULL;
 		if (!*bytes && scene_pack_big_alloc)
 		{
 			*bytes = scene_pack_big_alloc(size);
@@ -4166,6 +4189,7 @@ static boolean scene_pack_build_custom_edition(
 	unsigned char *backdrop_bsp = NULL;
 	unsigned long backdrop_bsp_size = 0;
 	boolean backdrop_bsp_big = FALSE;
+	boolean backdrop_bsp_borrowed = FALSE;
 	struct build_state state;
 	unsigned char pack_header[SCENE_PACK_HEADER_SIZE];
 	unsigned long long started = vita_host_time_us();
@@ -4203,7 +4227,7 @@ static boolean scene_pack_build_custom_edition(
 	read and made this build's (backdrop_custom_edition) */
 	state.bsp_tag = state.scenario_tag = NONE;
 	if (!state.failed && recipe->backdrop)
-		backdrop_custom_edition(&state, &backdrop_bsp, &backdrop_bsp_size, &backdrop_bsp_big);
+		backdrop_custom_edition(&state, &backdrop_bsp, &backdrop_bsp_size, &backdrop_bsp_big, &backdrop_bsp_borrowed);
 	if (!state.failed)
 	{
 		for (index = 0; index < 0x8000; index++)
@@ -4288,7 +4312,11 @@ static boolean scene_pack_build_custom_edition(
 	/* (its tags were the source's buffer, which closing it let go) */
 	state.tags = NULL;
 	state.bsp = NULL;
-	if (backdrop_bsp && backdrop_bsp_big)
+	if (backdrop_bsp_borrowed)
+	{
+		/* (the tags' room: let go with them, above) */
+	}
+	else if (backdrop_bsp && backdrop_bsp_big)
 		scene_pack_big_free(backdrop_bsp, backdrop_bsp_size);
 	else if (backdrop_bsp)
 		free(backdrop_bsp);

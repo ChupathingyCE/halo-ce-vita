@@ -813,6 +813,24 @@ static boolean pack_window_room(unsigned long more)
 and the least the window had free in one piece meanwhile - said at the
 build's end (packs_prepare) */
 static unsigned long pack_window_held, pack_window_held_most, pack_window_free_least;
+/* (the same build's) the C heap's free bytes when it began and the least
+seen at its window blocks' changes - said with them */
+static unsigned long pack_heap_free_first, pack_heap_free_least;
+
+static unsigned long pack_heap_free(void)
+{
+	unsigned long in_use, capacity;
+
+	platform_heap_usage(&in_use, &capacity);
+	return capacity > in_use ? capacity - in_use : 0;
+}
+
+static void pack_window_begin(void)
+{
+	pack_window_held = pack_window_held_most = 0;
+	pack_window_free_least = platform_contiguous_largest_free();
+	pack_heap_free_first = pack_heap_free_least = pack_heap_free();
+}
 
 static unsigned long pack_window_rounded(unsigned long size)
 {
@@ -826,6 +844,7 @@ static void pack_window_note(long change)
 	pack_window_held += (unsigned long)change;
 	pack_window_held_most = MAX(pack_window_held_most, pack_window_held);
 	pack_window_free_least = MIN(pack_window_free_least, largest);
+	pack_heap_free_least = MIN(pack_heap_free_least, pack_heap_free());
 }
 
 /* (scene_pack_heap_room) whether the C heap has size bytes and 8 MB over:
@@ -935,23 +954,32 @@ static void packs_prepare(struct scene_pack_slot **slots, short count, unsigned 
 			scene_pack_big_alloc = pack_window_alloc;
 			scene_pack_big_free = pack_window_free;
 			scene_pack_big_grow = pack_window_grow;
-			scene_pack_big_only = FALSE;
+			/* (the menus' backdrop made of MCC's own a30: its blob in the
+			window only, never the C heap - a 10 MB blob there leaves the
+			renderer and the system's libraries too little - and its
+			structure bsp in its tags' room, else on the C heap with plenty
+			over, as an Xbox map's below) */
+			scene_pack_big_only = slot->recipe->backdrop;
+			scene_pack_heap_room = slot->recipe->backdrop ? pack_heap_room : NULL;
 			scene_pack_scratch_alloc = pack_window_alloc;
 			scene_pack_scratch_free = pack_window_free;
-			pack_window_held = pack_window_held_most = 0;
-			pack_window_free_least = platform_contiguous_largest_free();
+			pack_window_begin();
 			built = scene_pack_build(slot->recipe, recipe_directory(slot->recipe), slot->path, scratch, scratch_size,
 				&scene_packs.cancel, &scene_packs_build_results[0]);
 			if (pack_window_held_most)
 			{
 				platform_log("scene packs: %s's build: %lu KB of the memory window at most at once, %lu KB of it free "
-					"in one piece at the least", slot->name, pack_window_held_most / 1024, pack_window_free_least / 1024);
+					"in one piece at the least; C heap %lu KB free as it began, %lu KB at the least", slot->name,
+					pack_window_held_most / 1024, pack_window_free_least / 1024, pack_heap_free_first / 1024,
+					pack_heap_free_least / 1024);
 			}
 			scene_pack_scratch_alloc = NULL;
 			scene_pack_scratch_free = NULL;
 			scene_pack_big_alloc = NULL;
 			scene_pack_big_free = NULL;
 			scene_pack_big_grow = NULL;
+			scene_pack_big_only = FALSE;
+			scene_pack_heap_room = NULL;
 			state_set(slot, pack_built(slot, &scene_packs_build_results[0], built, 0) ? _scene_pack_state_ready :
 				_scene_pack_state_failed);
 			if (only_first)
@@ -1009,14 +1037,15 @@ the menus' backdrop loaded beside the menus takes 8.7 MB of it - read into
 the memory window, not the C heap) */
 		scene_pack_scratch_alloc = pack_window_alloc;
 		scene_pack_scratch_free = pack_window_free;
-		pack_window_held = pack_window_held_most = 0;
-		pack_window_free_least = platform_contiguous_largest_free();
+		pack_window_begin();
 		built = scene_pack_build_many(recipes, group_count, map, recipe_directory(recipes[0]), paths, scratch, scratch_size,
 			&scene_packs.cancel, scene_packs_build_results);
 		if (pack_window_held_most)
 		{
 			platform_log("scene packs: %s's build: %lu KB of the memory window at most at once, %lu KB of it free in one "
-				"piece at the least", group[0]->name, pack_window_held_most / 1024, pack_window_free_least / 1024);
+				"piece at the least; C heap %lu KB free as it began, %lu KB at the least", group[0]->name,
+				pack_window_held_most / 1024, pack_window_free_least / 1024, pack_heap_free_first / 1024,
+				pack_heap_free_least / 1024);
 		}
 		scene_pack_scratch_alloc = NULL;
 		scene_pack_scratch_free = NULL;
