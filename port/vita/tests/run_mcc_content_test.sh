@@ -344,15 +344,15 @@ PY
 			fail "mccmenu: MCC's ui.map was not the menus' with no Xbox file ($out/mccmenu)"
 		elif [ -n "$missing" ]; then
 			fail "mccmenu: main menu rows not reached:$missing ($out/mccmenu)"
-		elif ! grep -aq "MCC's menu file: This menu isn't supported with MCC's menu file yet" "$log" ||
+		elif grep -aq "MCC's menu file: This menu isn't supported with MCC's menu file yet" "$log" ||
 			! grep -aq "menus: MCC's ui.map: widget 'ui.shell.main_menu.main_menu_item_settings' ran function [0-9]*, one of Halo PC's own" "$debug"; then
-			fail "mccmenu: SETTINGS did not say it is not supported with MCC's menu file ($out/mccmenu)"
+			fail "mccmenu: SETTINGS' missing function not logged, or a message box shown for it ($out/mccmenu)"
 		elif [ "$(grep -ac "ui: screen ui.shell.main_menu.main_menu$" "$log")" -lt 3 ]; then
 			fail "mccmenu: the menu did not go on after the unsupported entry ($out/mccmenu)"
 		elif ! picture_drawn "$out/mccmenu"; then
 			fail "mccmenu: no picture drawn ($out/mccmenu)"
 		else
-			echo "mccmenu: MCC's ui.map alone: the six rows reached (CAMPAIGN MULTIPLAYER PROFILES SETTINGS CREDITS QUIT), SETTINGS says it is not supported yet, the menu goes on"
+			echo "mccmenu: MCC's ui.map alone: the six rows reached (CAMPAIGN MULTIPLAYER PROFILES SETTINGS CREDITS QUIT), SETTINGS' missing function logged (no message box), the menu goes on"
 		fi
 
 		# mcccplus: no Xbox file, Menu style Classic+ (rc.8): its rows and the screens they open,

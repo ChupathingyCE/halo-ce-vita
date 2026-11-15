@@ -2688,14 +2688,13 @@ Halo PC's own are numbered from here */
 /* (ui_widget.c) A handler of a menu widget ran a function that failed:
 with MCC's own ui.map as the menus' map, one of Halo PC's own functions (a
 number past the Xbox's, which this build has no mapping for yet) cancels the
-action as an Xbox function that fails does, and the player is told once in a
-while that the menu is not supported with MCC's menu file yet, the missing
-function logged once for each widget */
+action as an Xbox function that fails does, the missing function logged once
+for each widget (no message box: our own screens drawn over Halo PC's, as the
+Halo 3 style's mission picker, ran one at every column change - owner rc.8) */
 void custom_edition_cache_menu_handler_failed(
 	long definition_tag_index,
 	long function_index)
 {
-	void platform_show_message(char const *title, char const *message);
 	struct custom_edition_cache_globals *globals = &custom_edition_cache_globals;
 	static struct
 	{
@@ -2703,8 +2702,6 @@ void custom_edition_cache_menu_handler_failed(
 		long function_index;
 	} logged[64];
 	static long logged_count;
-	static unsigned long shown_at;
-	unsigned long now = system_milliseconds();
 	char const *name;
 	long index;
 
@@ -2733,12 +2730,6 @@ void custom_edition_cache_menu_handler_failed(
 			logged[logged_count++].function_index = function_index;
 		}
 	}
-	if (function_index >= MENU_XBOX_FUNCTION_COUNT && (!shown_at || now - shown_at > 1500))
-	{
-		shown_at = now ? now : 1;
-		platform_show_message(T("MCC's menu file"), T("This menu isn't supported with MCC's menu file yet."));
-	}
-
 	return;
 }
 
