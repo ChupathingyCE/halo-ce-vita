@@ -346,7 +346,15 @@ void *halo_custom_edition_memory_alloc(unsigned long bytes)
 				pthread_mutex_unlock(&arena_lock);
 				copy_released = game_state_checkpoint_copy_release();
 				pthread_mutex_lock(&arena_lock);
-				if ((copy_released || heap_only == 2) && !custom_edition_memory_blocks[index].address)
+				/* (the slot looked for again: another thread may have taken
+				this one while the lock was let go for the release) */
+				if (custom_edition_memory_blocks[index].address)
+				{
+					for (index = 0; index < CUSTOM_EDITION_MEMORY_BLOCKS && custom_edition_memory_blocks[index].address;
+						index++)
+						;
+				}
+				if ((copy_released || heap_only == 2) && index < CUSTOM_EDITION_MEMORY_BLOCKS)
 				{
 					uid = -1;
 					result = vita_host_block_alloc("halo_custom_edition_data", bytes, &uid);
@@ -356,7 +364,7 @@ void *halo_custom_edition_memory_alloc(unsigned long bytes)
 			}
 #endif
 		}
-		if (result)
+		if (result && index < CUSTOM_EDITION_MEMORY_BLOCKS)
 		{
 			custom_edition_memory_blocks[index].address = result;
 			custom_edition_memory_blocks[index].bytes = bytes;
