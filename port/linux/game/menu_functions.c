@@ -152,6 +152,10 @@ for a gamepad); a test build's HALO_TEST_TEXT_INPUT answers in its place,
 
 #include "../../vita/include/vita_version.h"
 #include "player_cosmetics.h"
+#ifdef HALO_STEAM_DOWNLOAD
+#include "../../steamdl/steam_job.h"
+#include "../../steamdl/steam_plan.h"
+#endif
 
 /* the platform layer's */
 void platform_log(char const *format, ...);
@@ -497,6 +501,9 @@ enum
 	_function_h3_mods_tab_games,
 	_function_h3_mods_tab_mods,
 	_function_h3_mods_tab_next,
+	/* (GAME MANAGER's DOWNLOAD FROM STEAM: halo3/steam.xml) */
+	_function_h3_steam_row,
+	_function_h3_steam_back,
 };
 
 /* in port_game_data_input_names' order */
@@ -585,6 +592,7 @@ enum
 	_input_start,
 	_input_sound,
 	_input_cascade,
+	_input_h3_steam,
 };
 
 /* what a line of typing is for */
@@ -2864,6 +2872,8 @@ real menu_functions_fade_alpha(void)
 
 /* (interface.c's full-screen overlays, last: over the 3D and the menus)
 the fade's black */
+static void h3_steam_qr_draw(void);
+
 void menu_functions_fade_draw(void)
 {
 	void draw_quad(rectangle2d *rectangle, pixel32 color);
@@ -2875,6 +2885,8 @@ void menu_functions_fade_draw(void)
 	rectangle2d bounds;
 	unsigned long level;
 
+	/* (DOWNLOAD FROM STEAM's QR, over the menus, under the fade) */
+	h3_steam_qr_draw();
 	if (alpha <= 0.f)
 		return;
 	level = (unsigned long)(alpha * 255.f + 0.5f);
@@ -12264,6 +12276,23 @@ static void h3_gm_update(struct widget_instance *list)
 			continue;
 		if (child == list->focused_child && index < NUMBER_OF_GAME_MANAGER_GAMES)
 			focused = index;
+#ifdef HALO_STEAM_DOWNLOAD
+		/* (the row after the games: DOWNLOAD FROM STEAM, Cross opens it) */
+		if (index == NUMBER_OF_GAME_MANAGER_GAMES)
+		{
+			widget_instance_set_visibility_recursive(child, TRUE);
+			child->disabled = FALSE;
+			row_column(child, "row_name", T("DOWNLOAD FROM STEAM"));
+			row_column(child, "row_kind", T("Your own MCC files"));
+			row_column(child, "row_size", "");
+			row_column(child, "row_state", "");
+			child->animation.current_frame_index = child == list->focused_child ? 1 : 0;
+			if (child == list->focused_child)
+				focused = index;
+			index++;
+			continue;
+		}
+#endif
 		if (index >= NUMBER_OF_GAME_MANAGER_GAMES)
 		{
 			widget_instance_set_visibility_recursive(child, FALSE);
@@ -12298,7 +12327,7 @@ static void h3_gm_update(struct widget_instance *list)
 		{
 			if (strncmp(child->name, "row_", 4))
 				continue;
-			if (at < NUMBER_OF_GAME_MANAGER_GAMES && child == list->focused_child)
+			if (at <= NUMBER_OF_GAME_MANAGER_GAMES && child == list->focused_child)
 				on_a_game = TRUE;
 			if (at == h3_mods.game)
 				wanted = child;
@@ -12306,6 +12335,24 @@ static void h3_gm_update(struct widget_instance *list)
 		}
 		if (!on_a_game && wanted)
 			ui_widget_port_give_focus(list, wanted);
+	}
+	if (focused == NUMBER_OF_GAME_MANAGER_GAMES)
+	{
+		/* (DOWNLOAD FROM STEAM focused: its line, Cross to open it) */
+		static char const *const hints[] = { "a_butn", "toggle", "y_butn", "details_label", "x_butn", "delete_label" };
+
+		text_show(named(screen, "detail_modes"), T("Halo CE from your own Steam account, with the Steam app's QR code."));
+		text_show(named(screen, "detail_check"), "");
+		text_show(named(screen, "detail_needs"), "");
+		text_show(named(screen, "detail_source"), "");
+		for (hint_index = 0; hint_index < (int)NUMBEROF(hints); hint_index++)
+		{
+			if ((hint = named(screen, hints[hint_index])) != NULL)
+				widget_instance_set_visibility_recursive(hint, hint_index < 2);
+		}
+		text_show(named(screen, "toggle"), T("Open"));
+		text_show(named(screen, "mods_message"), "");
+		return;
 	}
 	h3_mods.game = (short)focused;
 	game_manager_get((int)focused, &game);
@@ -12505,23 +12552,261 @@ static struct halo_mod_entry const *h3_mods_row_entry(struct widget_instance *wi
 	return h3_mods_chosen();
 }
 
-/* (port h3 mods toggle: a row's Cross) off or on */
-static void h3_mods_toggle(struct widget_instance *widget)
+/* ---- GAME MANAGER's DOWNLOAD FROM STEAM (halo3/steam.xml; port/steamdl/steam_job.c, docs/steam_download_security.md):
+the player's own Halo CE files from their Steam account. First the notice and the rows (the sound banks on or off, then
+the sign-in), then the QR the Steam app scans (drawn over the panel, h3_steam_qr_draw), then the progress, then the end.
+Circle cancels a download (it is kept: the next one resumes) and leaves once it has signed out. 1.1.x's: Halo CE alone
+(1.2.0's offers Halo 2 too) */
+static struct
+{
+	int games;
+	/* the screen last updated (the QR is drawn only while it is up) */
+	unsigned long updated;
+	char message[200];
+} h3_steam = { 3 };
+
+#ifdef HALO_STEAM_DOWNLOAD
+/* the download and card sizes of the choice, from MCC's manifests (976733, 976734, Nov 2026), in MB: the maps, the PC
+files, sounds_adpcm.fsb and the lists; the CELT banks (the dialogue 330, the music 957, the streams 159, debug 95) */
+static void h3_steam_sizes(int games, int *download_mb, int *card_mb)
+{
+	*download_mb = ((games & STEAM_GAME_HALO_CE) ? 470 : 0) + ((games & STEAM_GAME_HALO_CE_BANKS) ? 1500 : 0);
+	*card_mb = ((games & STEAM_GAME_HALO_CE) ? 1510 : 0) + ((games & STEAM_GAME_HALO_CE_BANKS) ? 1540 : 0);
+}
+
+static boolean h3_steam_running(int phase)
+{
+	return phase != STEAM_JOB_IDLE && phase != STEAM_JOB_DONE && phase != STEAM_JOB_FAILED && phase != STEAM_JOB_CANCELLED;
+}
+#endif
+
+static void h3_steam_update(struct widget_instance *list)
+{
+#ifdef HALO_STEAM_DOWNLOAD
+	struct widget_instance *screen = screen_of(list);
+	struct widget_instance *child, *found;
+	struct steam_job_view view;
+	char text[1400], line[256];
+	int index = 0, download_mb, card_mb;
+	boolean choosing;
+
+	h3_steam.updated = system_milliseconds();
+	steam_job_view(&view);
+	choosing = view.phase == STEAM_JOB_IDLE;
+	text[0] = 0;
+	switch (view.phase)
+	{
+	case STEAM_JOB_IDLE:
+	{
+		char date[32];
+
+		if (steam_job_marker_check(date, sizeof(date)))
+		{
+			snprintf(line, sizeof(line), T("A Steam sign-in from %s was not signed out. In the Steam app, remove \"Halo CE Vita (PS Vita)\" from Authorized devices."), date);
+			snprintf(text, sizeof(text), "%s\n\n", line);
+		}
+		h3_steam_sizes(h3_steam.games, &download_mb, &card_mb);
+		snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s\n\n", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code, downloads only your own Halo: The Master Chief Collection files, then signs out. Valve may stop it working at any time. No password is asked for or kept."));
+		snprintf(line, sizeof(line), T("About %.1f GB to download, %.1f GB on the memory card. The Vita stays awake and the PS button is locked until it ends."),
+			download_mb / 1000.0, card_mb / 1000.0);
+		strncat(text, line, sizeof(text) - strlen(text) - 1);
+		if (h3_steam.message[0])
+		{
+			strncat(text, "\n\n", sizeof(text) - strlen(text) - 1);
+			strncat(text, h3_steam.message, sizeof(text) - strlen(text) - 1);
+		}
+		break;
+	}
+	case STEAM_JOB_CONNECTING:
+		snprintf(text, sizeof(text), "%s", view.attempts > 1 ? T("The Steam session was lost. Connecting again: a new code to scan follows.") : T("Connecting to Steam..."));
+		break;
+	case STEAM_JOB_QR:
+		snprintf(text, sizeof(text), "%s", T("On your phone, open the Steam app, then Steam Guard, and scan this code.\n\nApprove only if you started this on your Vita just now.\n\nThe Vita never sees your password."));
+		break;
+	case STEAM_JOB_PREPARING:
+		snprintf(text, sizeof(text), "%s", T("Signed in. Getting Halo CE ready..."));
+		break;
+	case STEAM_JOB_DOWNLOADING:
+	case STEAM_JOB_PAUSED:
+		snprintf(text, sizeof(text), T("Halo CE, part %d of %d\n%.1f of %.1f MB"), view.depot_index + 1, view.depot_count,
+			view.done_kb / 1024.0, view.total_kb / 1024.0);
+		if (view.phase == STEAM_JOB_PAUSED)
+			snprintf(line, sizeof(line), "\n%s", T("Paused: the battery is low. Plug in the charger."));
+		else if (view.rate_kb && view.seconds_left >= 0)
+			snprintf(line, sizeof(line), T("\n%.1f MB/s, about %d min left"), view.rate_kb / 1024.0, (view.seconds_left + 59) / 60);
+		else
+			line[0] = 0;
+		strncat(text, line, sizeof(text) - strlen(text) - 1);
+		snprintf(line, sizeof(line), "\n%s\n\n%s", view.file, T("Circle stops it: what is in stays, and the next download resumes."));
+		strncat(text, line, sizeof(text) - strlen(text) - 1);
+		break;
+	case STEAM_JOB_ENDING:
+		snprintf(text, sizeof(text), "%s", T("Stopping and signing out of Steam..."));
+		break;
+	case STEAM_JOB_DONE:
+		snprintf(text, sizeof(text), T("Done: %u files downloaded, %u already there. Signed out of Steam."), view.files_done, view.files_already);
+		break;
+	case STEAM_JOB_FAILED:
+	case STEAM_JOB_CANCELLED:
+		snprintf(text, sizeof(text), "%s\n%s\n\n%s", view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The download stopped:"),
+			view.phase == STEAM_JOB_CANCELLED ? "" : view.error, view.revoked ? T("Signed out of Steam. What is in stays: download again to resume.") :
+			T("If \"Halo CE Vita (PS Vita)\" is in the Steam app's Authorized devices, remove it. What is in stays: download again to resume."));
+		break;
+	}
+	if ((found = named(screen, "steam_text")) != NULL)
+	{
+		widget_instance_set_visibility_recursive(found, view.phase != STEAM_JOB_QR);
+		h3_dialog_text_wrapped(found, view.phase != STEAM_JOB_QR ? text : "");
+	}
+	if ((found = named(screen, "qr_text")) != NULL)
+	{
+		widget_instance_set_visibility_recursive(found, view.phase == STEAM_JOB_QR);
+		h3_dialog_text_wrapped(found, view.phase == STEAM_JOB_QR ? text : "");
+	}
+	for (child = list->child; child; child = child->next, index++)
+	{
+		widget_instance_set_visibility_recursive(child, choosing);
+		child->disabled = !choosing;
+		if (index == 0)
+			snprintf(line, sizeof(line), "%s: %s", T("MCC's dialogue, music and stream banks (1.5 GB)"), (h3_steam.games & STEAM_GAME_HALO_CE_BANKS) ? T("ON") : T("OFF"));
+		else
+			snprintf(line, sizeof(line), "%s", T("SIGN IN WITH THE STEAM APP"));
+		h3_capitals(line);
+		text_show(child, line);
+		child->animation.current_frame_index = child == list->focused_child ? 1 : 0;
+	}
+	if ((found = named(screen, "a_butn")) != NULL)
+		widget_instance_set_visibility_recursive(found, choosing);
+	if ((found = named(screen, "select")) != NULL)
+		widget_instance_set_visibility_recursive(found, choosing);
+	text_show(named(screen, "back"), h3_steam_running(view.phase) ? T("Cancel") : T("Back"));
+#else
+	(void)list;
+#endif
+}
+
+/* (port h3 steam row: Cross) the sound banks on or off, or the sign-in begun */
+static boolean h3_steam_row(struct widget_instance *widget)
+{
+#ifdef HALO_STEAM_DOWNLOAD
+	long row = h3_child_index(widget);
+	int started;
+
+	h3_steam.message[0] = 0;
+	if (row == 0)
+	{
+		h3_steam.games ^= STEAM_GAME_HALO_CE_BANKS;
+		platform_log("menus: steam: sound banks %s", (h3_steam.games & STEAM_GAME_HALO_CE_BANKS) ? "on" : "off");
+		return TRUE;
+	}
+	if (row != 1)
+		return FALSE;
+	started = steam_job_start_games(h3_steam.games);
+	if (started < 0)
+		snprintf(h3_steam.message, sizeof(h3_steam.message), "%s", T("Charge the Vita to 30 percent or plug in the charger first."));
+	platform_log("menus: steam: sign-in %s (games %d)", started > 0 ? "begun" : started < 0 ? "refused (battery)" : "already running",
+		h3_steam.games);
+	return started > 0;
+#else
+	(void)widget;
+	return FALSE;
+#endif
+}
+
+/* (port h3 steam back: Circle) a download cancelled (the screen stays while it signs out), else the screen left */
+static boolean h3_steam_back(void)
+{
+#ifdef HALO_STEAM_DOWNLOAD
+	struct steam_job_view view;
+
+	steam_job_view(&view);
+	if (h3_steam_running(view.phase))
+	{
+		steam_job_cancel();
+		return FALSE;
+	}
+	steam_job_forget();
+#endif
+	h3_steam.message[0] = 0;
+	return TRUE;
+}
+
+/* (menu_functions_fade_draw, over the menus) the QR the Steam app scans: dark modules on a white square with its
+quiet zone, in the panel's right half, each run of a row's dark modules one quad */
+static void h3_steam_qr_draw(void)
+{
+#ifdef HALO_STEAM_DOWNLOAD
+	void draw_quad(rectangle2d *rectangle, pixel32 color);
+	struct steam_job_view view;
+	rectangle2d bounds;
+	int module, x, y, left, top, area = 210;
+
+	if (!h3_steam.updated || system_milliseconds() - h3_steam.updated > 250)
+		return;
+	steam_job_view(&view);
+	if (view.phase != STEAM_JOB_QR || view.qr_size <= 0)
+		return;
+	module = area / (view.qr_size + 8);
+	left = 372 + (area - module * (view.qr_size + 8)) / 2;
+	top = 88;
+	bounds.x0 = (short)left;
+	bounds.y0 = (short)top;
+	bounds.x1 = (short)(left + module * (view.qr_size + 8));
+	bounds.y1 = (short)(top + module * (view.qr_size + 8));
+	draw_quad(&bounds, (pixel32)0xFFFFFFFF);
+	for (y = 0; y < view.qr_size; y++)
+	{
+		for (x = 0; x < view.qr_size; x++)
+		{
+			int run = x;
+
+			if (!view.qr[y * view.qr_size + x])
+				continue;
+			while (run + 1 < view.qr_size && view.qr[y * view.qr_size + run + 1])
+				run++;
+			bounds.x0 = (short)(left + (x + 4) * module);
+			bounds.y0 = (short)(top + (y + 4) * module);
+			bounds.x1 = (short)(left + (run + 5) * module);
+			bounds.y1 = (short)(top + (y + 5) * module);
+			draw_quad(&bounds, (pixel32)0xFF000000);
+			x = run;
+		}
+	}
+	memset(view.qr, 0, sizeof(view.qr));
+#endif
+}
+
+/* (port h3 mods toggle: a row's Cross) off or on; TRUE opens the row's screen (GAMES' DOWNLOAD FROM STEAM alone) */
+static boolean h3_mods_toggle(struct widget_instance *widget)
 {
 	struct halo_mod_entry const *entry = h3_mods.tab == 0 ? NULL : h3_mods_row_entry(widget);
 	short index;
 
+	/* (the GAMES tab's row after the games: DOWNLOAD FROM STEAM opens, mods.xml's open=) */
+	if (h3_mods.tab == 0)
+	{
+#ifdef HALO_STEAM_DOWNLOAD
+		if (h3_child_index(widget) == NUMBER_OF_GAME_MANAGER_GAMES)
+		{
+			platform_log("menus: game manager: DOWNLOAD FROM STEAM");
+			return TRUE;
+		}
+#endif
+		return FALSE;
+	}
 	if (!entry)
-		return;
+		return FALSE;
 	h3_mods_choose(entry);
 	index = mod_manager_find(entry->file, entry->kind);
 	if (!mod_manager_set_enabled(index, !entry->enabled))
 	{
 		h3_mods_message(T("This one can't be turned off here"));
-		return;
+		return FALSE;
 	}
 	entry = mod_manager_entry(index);
 	platform_log("menus: h3 mods: %s turned %s", entry->file, entry->enabled ? "on" : "off");
+	/* (nothing opens from a mod's row) */
+	return FALSE;
 }
 
 /* (port h3 mods details: the details' facts) */
@@ -23027,8 +23312,7 @@ boolean pc_menu_event_function_invoke(
 		h3_mods_initialize();
 		return TRUE;
 	case _function_h3_mods_toggle:
-		h3_mods_toggle(widget);
-		return TRUE;
+		return h3_mods_toggle(widget);
 	case _function_h3_mods_details:
 		/* (the details open for an entry; with none, nothing - GAMES: the game's, once its check is done) */
 		if (h3_mods.tab == 0)
@@ -23307,6 +23591,10 @@ boolean pc_menu_event_function_invoke(
 		h3_mods.tab = (short)(1 - h3_mods.tab);
 		platform_log("menus: game manager: the %s tab", h3_mods.tab ? "MODS" : "GAMES");
 		return TRUE;
+	case _function_h3_steam_row:
+		return h3_steam_row(widget);
+	case _function_h3_steam_back:
+		return h3_steam_back();
 	case _function_online_exit:
 		platform_log("menus: online EXIT: the game closes");
 		exit(EXIT_SUCCESS);
@@ -23381,6 +23669,10 @@ void pc_menu_game_data_function_invoke(
 		break;
 	case _input_cascade:
 		cascade_update(widget);
+		break;
+	case _input_h3_steam:
+		if (widget->type == _ui_widget_type_column_list)
+			h3_steam_update(widget);
 		break;
 	case _input_forge_maps:
 		h3_forge_maps_update(widget);

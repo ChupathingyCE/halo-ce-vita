@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DOWNLOAD FROM STEAM (GAME MANAGER's GAMES tab, its last row): the player's own Halo CE files from their Steam
+account, downloaded on the Vita (port/steamdl, docs/steam_download_security.md). Halo 3's dialog, as GAME MANAGER's
+details: the title, the rule, the text, the rows, the buttons in the strip at the foot. First the notice (unofficial,
+the player's own account, what is downloaded and the room it takes) and the sound banks on or off, then
+the QR for the Steam app (drawn over the panel's right side: menu_functions.c h3_steam_qr_draw), then the progress
+(the game, MB, the rate, the time left), then the end (signed out of Steam). Circle cancels a download (it resumes
+next time) and leaves. The text and the rows are menu_functions.c's (port h3 steam). -->
+<menus>
+	<strings name="h3/steam_text">
+		<string text="DOWNLOAD FROM STEAM"/>
+		<string text="Select"/>
+	</strings>
+
+	<widget name="h3/steam/title" type="text" left="52" top="46" width="536" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/steam_text" string_index="0"/>
+	<widget name="h3/steam/steam_text" type="text" left="52" top="84" width="536" height="200" font="h3/font_small" color="#FFCFD9E3"/>
+	<widget name="h3/steam/qr_text" type="text" left="52" top="84" width="300" height="320" font="h3/font_small" color="#FFCFD9E3"/>
+	<widget name="h3/steam/row_1" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 steam row"/>
+	</widget>
+	<widget name="h3/steam/row_2" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 steam row"/>
+	</widget>
+	<widget name="h3/steam/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<data input="port h3 steam"/>
+		<child widget="h3/steam/row_1" y="0"/>
+		<child widget="h3/steam/row_2" y="22"/>
+	</widget>
+	<widget name="h3/steam/a_butn" left="52" top="422" width="16" height="16" bitmap="h3/glyph_cross"/>
+	<widget name="h3/steam/select" type="text" left="72" top="421" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/steam_text" string_index="1"/>
+	<widget name="h3/steam/b_butn" left="150" top="422" width="16" height="16" bitmap="h3/glyph_circle"/>
+	<widget name="h3/steam/back" type="text" left="170" top="421" width="200" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/steam/screen" flags="pass_unhandled_to_focused_child">
+		<on event="b back" run="port h3 steam back" back="true"/>
+		<child widget="h3/main/haze"/>
+		<child widget="h3/pick/panel"/>
+		<child widget="h3/steam/title"/>
+		<child widget="h3/pick/rule"/>
+		<child widget="h3/steam/steam_text"/>
+		<child widget="h3/steam/qr_text"/>
+		<child widget="h3/pick/strip"/>
+		<child widget="h3/steam/a_butn"/>
+		<child widget="h3/steam/select"/>
+		<child widget="h3/steam/b_butn"/>
+		<child widget="h3/steam/back"/>
+		<child widget="h3/steam/list" x="52" y="350"/>
+	</widget>
+</menus>

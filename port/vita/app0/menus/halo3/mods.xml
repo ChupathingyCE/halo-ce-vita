@@ -49,70 +49,70 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 	<widget name="h3/mods/row_size" type="text" left="420" top="0" width="80" height="20" align="right" font="h3/font_small" color="#FFC5D0DD" text_y="3"/>
 	<widget name="h3/mods/row_state" type="text" left="512" top="0" width="84" height="20" font="h3/font_item" color="#FFAABED6" text_y="2"/>
 	<widget name="h3/mods/row_1" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>
 		<child widget="h3/mods/row_state"/>
 	</widget>
 	<widget name="h3/mods/row_2" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>
 		<child widget="h3/mods/row_state"/>
 	</widget>
 	<widget name="h3/mods/row_3" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>
 		<child widget="h3/mods/row_state"/>
 	</widget>
 	<widget name="h3/mods/row_4" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>
 		<child widget="h3/mods/row_state"/>
 	</widget>
 	<widget name="h3/mods/row_5" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>
 		<child widget="h3/mods/row_state"/>
 	</widget>
 	<widget name="h3/mods/row_6" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>
 		<child widget="h3/mods/row_state"/>
 	</widget>
 	<widget name="h3/mods/row_7" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>
 		<child widget="h3/mods/row_state"/>
 	</widget>
 	<widget name="h3/mods/row_8" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>
 		<child widget="h3/mods/row_state"/>
 	</widget>
 	<widget name="h3/mods/row_9" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>
 		<child widget="h3/mods/row_state"/>
 	</widget>
 	<widget name="h3/mods/row_10" width="600" height="20" bitmap="h3/row">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="h3/mods/row_name"/>
 		<child widget="h3/mods/row_kind"/>
 		<child widget="h3/mods/row_size"/>

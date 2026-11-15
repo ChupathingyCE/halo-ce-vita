@@ -148,6 +148,22 @@ parser.add_argument(
     "fault (a crash) on the Vita",
 )
 parser.add_argument(
+    "--steam-download",
+    action="store_true",
+    help="build the Steam download (port/steamdl; docs/steam_download_security.md): GAME MANAGER's DOWNLOAD FROM STEAM "
+    "row and screen (HALO_STEAM_DOWNLOAD). Off by default in 1.1.x: a prototype, never in a build testers get "
+    "unannounced",
+)
+parser.add_argument(
+    "--steam-test-ca",
+    metavar="PEM",
+    type=Path,
+    help="TEST builds only, never a release: the Steam download (port/steamdl) takes a test server from env.txt "
+    "(HALO_STEAM_TEST_CM, HALO_STEAM_TEST_CDN, HALO_STEAM_TEST_ROOT) and this certificate authority's PEM is built in "
+    "beside the real ones (port/vita/tests/run_steam_download_test.sh's fake server; the dev Vita's run); implies "
+    "--steam-download",
+)
+parser.add_argument(
     "--vita-update-test-sources",
     action="store_true",
     help="TEST builds only, never a release: the Vita build takes HALO_UPDATE_URL and HALO_UPDATE_DOWNLOAD_BASE "
@@ -267,6 +283,10 @@ sln.port_pgo = args.pgo
 sln.port_pgo_profile = args.pgo_profile
 sln.vita_aligned = args.vita_aligned
 sln.vita_update_test_sources = args.vita_update_test_sources
+sln.steam_download = args.steam_download or args.steam_test_ca is not None
+sln.steam_test_ca = args.steam_test_ca
+if args.steam_test_ca and args.release:
+    sys.exit("configure.py: --steam-test-ca is for test builds")
 sln.vita_update_key = args.vita_update_key
 sln.vita_version = args.vita_version
 sln.testers_test_key = args.testers_test_key

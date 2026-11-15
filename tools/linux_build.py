@@ -398,6 +398,37 @@ def _quote(path: Any) -> str:
     return f'"{text}"' if " " in text else text
 
 
+# the Steam download (configure.py --steam-download; port/steamdl, docs/steam_download_security.md) and its decoders
+# (LZMA SDK's LzmaDec, public domain; zstd's decompressor, BSD; libdeflate, MIT) and QR maker (qrcodegen, MIT)
+STEAMDL_DIR = Path("port/steamdl")
+LZMA_DIR = Path("port/third_party/lzma")
+ZSTD_DIR = Path("port/third_party/zstd")
+QRCODEGEN_DIR = Path("port/third_party/qrcodegen")
+LIBDEFLATE_DIR = Path("port/third_party/libdeflate")
+LIBDEFLATE_SOURCES = ("lib/utils.c", "lib/deflate_decompress.c", "lib/zlib_decompress.c", "lib/adler32.c",
+                      "lib/x86/cpu_features.c", "lib/arm/cpu_features.c")
+
+
+def steam_download(sln: Any) -> bool:
+    return bool(getattr(sln, "steam_download", False))
+
+
+def steam_test_flags(sln: Any) -> List[str]:
+    """configure.py --steam-test-ca (TEST builds only): the download takes a test server from the environment
+    (env.txt on the Vita) and the PEM's authority is built in beside the real ones (posix_https.c's
+    POSIX_HTTPS_TEST_ROOTS, a header written here); none otherwise"""
+    pem = getattr(sln, "steam_test_ca", None)
+    if not pem:
+        return []
+    lines = Path(pem).read_text().strip().splitlines()
+    header = Path(sln.build_dir) / "gen" / "steam_test_roots.h"
+    header.parent.mkdir(parents=True, exist_ok=True)
+    text = "static const char posix_https_test_roots_pem[] =\n" + "".join('\t"%s\\n"\n' % line for line in lines) + ";\n"
+    if not header.is_file() or header.read_text() != text:
+        header.write_text(text)
+    return ["-DHALO_STEAM_TEST=1", f'-DPOSIX_HTTPS_TEST_ROOTS=\\"{header.resolve()}\\"']
+
+
 def generate_linux_build(n: Writer, sln: Any) -> None:
     if not PORT_CONFIG.is_file():
         # a checkout without the port (or a test fixture): nothing to emit
@@ -474,6 +505,8 @@ def generate_linux_build(n: Writer, sln: Any) -> None:
 
     abi = " ".join(LINUX_ABI_FLAGS + [march_flag(sln)] + (["-DHALO_RELEASE"] if getattr(sln, "port_release", False) else [])
                    + (["-DHALO_NET_AS_VITA=1"] if getattr(sln, "linux_net_vita", False) else [])
+                   # (configure.py --steam-download: GAME MANAGER's DOWNLOAD FROM STEAM, menu_functions.c; port/steamdl)
+                   + (["-DHALO_STEAM_DOWNLOAD=1"] if steam_download(sln) else [])
                    # (configure.py --vita-version: the PC build says the
                    # version the Vita's does)
                    + version_defines(sln))
@@ -588,7 +621,9 @@ def generate_linux_build(n: Writer, sln: Any) -> None:
                 continue
             if gxm_null and source.name == "sdl_platform.c":
                 add_object(source, gxm_null_cflags)
-            elif source.name in ("posix_update.c", "posix_https.c"):
+            elif source.name == "posix_https.c":
+                add_object(source, " ".join([posix_cflags, mbedtls_include, *steam_test_flags(sln)]), posix=True)
+            elif source.name == "posix_update.c":
                 add_object(source, f"{posix_cflags} {mbedtls_include}", posix=True)
             elif source.name == "posix_upnp.c":
                 add_object(source, f"{posix_cflags} -I{MINIUPNPC_DIR / 'include'} -DMINIUPNP_STATICLIB", posix=True)
@@ -608,6 +643,19 @@ def generate_linux_build(n: Writer, sln: Any) -> None:
             add_object(source, " ".join(POSIX_FLAGS + [march_flag(sln), mbedtls_include,
                                                        f"-I{MBEDTLS_DIR / 'library'}", "-fno-builtin-wcslen",
                                                        "-w"]), posix=True)
+        # the Steam download (port/steamdl), with the host's ABI as posix_https.c, whose TLS stream it uses, and
+        # its LZMA (public domain), zstd (BSD) and libdeflate (MIT) decoders and QR maker (MIT)
+        if steam_download(sln):
+            steam_flags = " ".join([posix_cflags, mbedtls_include, f"-I{STEAMDL_DIR}", f"-I{LIBDEFLATE_DIR}",
+                                    f"-I{LZMA_DIR}", f"-I{ZSTD_DIR}", f"-I{QRCODEGEN_DIR}", *steam_test_flags(sln)])
+            for source in sorted(STEAMDL_DIR.glob("*.c")):
+                add_object(source, steam_flags, posix=True)
+            add_object(LZMA_DIR / "LzmaDec.c", " ".join(POSIX_FLAGS + [march_flag(sln), "-O2", "-w"]), posix=True)
+            add_object(ZSTD_DIR / "zstddeclib.c", " ".join(POSIX_FLAGS + [march_flag(sln), "-O2", "-DZSTD_DISABLE_ASM",
+                                                                           "-w"]), posix=True)
+            add_object(QRCODEGEN_DIR / "qrcodegen.c", " ".join(POSIX_FLAGS + [march_flag(sln), "-O2", "-w"]), posix=True)
+            for name in LIBDEFLATE_SOURCES:
+                add_object(LIBDEFLATE_DIR / name, " ".join(POSIX_FLAGS + [march_flag(sln), "-O2", "-w"]), posix=True)
         # internet play's UPnP (port/third_party/miniupnpc), with the host's
         # ABI as posix_upnp.c, which uses it
         for source in miniupnpc_sources():

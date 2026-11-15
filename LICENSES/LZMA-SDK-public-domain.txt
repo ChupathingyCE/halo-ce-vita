@@ -1,0 +1,9 @@
+LZMA SDK decoder (port/third_party/lzma): LzmaDec.c, LzmaDec.h, 7zTypes.h,
+Precomp.h, Compiler.h, 7zWindows.h, from 7-Zip 24.09 (https://github.com/ip7z/7zip).
+
+Each of these files states in its header:
+
+    Igor Pavlov : Public domain
+
+7-Zip's DOC/License.txt: "Some files are "public domain" files, if "public
+domain" status is stated in source file."

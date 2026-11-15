@@ -473,6 +473,8 @@ static char const *const port_function_names[] =
 	"port cascade mp maps",
 	"port cascade gametypes",
 	"port h3 mods tab games", "port h3 mods tab mods", "port h3 mods tab next",
+	/* (1.1.3/1.1.4: GAME MANAGER's DOWNLOAD FROM STEAM, halo3/steam.xml) */
+	"port h3 steam row", "port h3 steam back",
 };
 
 /* the port's game data functions (menu_functions.c), from
@@ -513,6 +515,7 @@ static char const *const port_game_data_input_names[] =
 	"port start",
 	"port sound",
 	"port cascade",
+	"port h3 steam",
 };
 
 static struct
