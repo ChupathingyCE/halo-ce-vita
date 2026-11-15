@@ -994,6 +994,11 @@ static void *bitmap_build(struct halo_menu_bitmap const *source, long tag_index)
 
 	if (build.failed)
 		return NULL;
+	/* (classic/xbox_screens.xml's pictures are for a Halo PC ui.map - MCC's: frames of its
+	pictures the Xbox's ui.map has not, or has with fewer frames. On the Xbox's, where those
+	screens are never used, none: an empty bitmap, the set added as ever) */
+	if (!build.halo_pc_ui && !strncmp(source->name, XBOX_SCREEN_WIDGET_PREFIX, strlen(XBOX_SCREEN_WIDGET_PREFIX)))
+		return bitmap_group_new(0);
 	if (source->fit)
 	{
 		if (!array_grow((void **)&menu_tags.fit_bitmaps, menu_tags.fit_bitmap_count, sizeof(*menu_tags.fit_bitmaps)))

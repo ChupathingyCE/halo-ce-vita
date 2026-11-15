@@ -53,27 +53,27 @@
 	<!-- the words MCC's ui.map has not: the port's own (the same as CUSTOMIZATION's, halo3/customize.xml
 	     and menu_functions.c), each list in the order of the game's values it names -->
 	<strings name="cp/xb/text/controller_option_labels">
-		<string text="STICK LAYOUT:"/>
-		<string text="BUTTON LAYOUT:"/>
+		<string text="THUMBSTICK SETTINGS:"/>
+		<string text="BUTTON SETTINGS:"/>
 	</strings>
 	<strings name="cp/xb/text/var_joystick_config">
-		<string text="STANDARD"/>
+		<string text="DEFAULT"/>
 		<string text="SOUTHPAW"/>
 		<string text="LEGACY"/>
 		<string text="LEGACY SOUTHPAW"/>
 	</strings>
 	<strings name="cp/xb/text/var_button_config">
-		<string text="STANDARD"/>
-		<string text="SWAP FIRE/GRENADE"/>
-		<string text="SWAP JUMP/GRENADE"/>
-		<string text="SWAP MELEE/GRENADE"/>
-		<string text="SWAP MELEE/ZOOM"/>
+		<string text="DEFAULT"/>
+		<string text="SOUTHPAW"/>
+		<string text="JUMPY"/>
+		<string text="BOXER"/>
+		<string text="GREEN THUMB"/>
 	</strings>
 	<strings name="cp/xb/text/advanced_controller_labels">
-		<string text="INVERT LOOK:"/>
+		<string text="INVERT THUMBSTICK:"/>
 		<string text="LOOK SENSITIVITY:"/>
-		<string text="VIBRATION:"/>
-		<string text="INVERT FLIGHT:"/>
+		<string text="CONTROLLER VIBRATION:"/>
+		<string text="INVERT FLIGHT CONTROL:"/>
 		<string text="AUTO-CENTER:"/>
 	</strings>
 	<strings name="cp/xb/text/var_invert_joystick">
@@ -132,19 +132,39 @@
 		<string text="SAVE CHANGES"/>
 	</strings>
 	<strings name="cp/xb/text/profile_edit_descriptions">
-		<string text="Type a new name for this profile.\n\nCurrent Profile:"/>
-		<string text="Pick what the sticks and buttons\ndo for this profile.\n\nCurrent Profile:"/>
-		<string text="Look sensitivity, inverted look\nand the rest for this profile.\n\nCurrent Profile:"/>
-		<string text="Pick this profile's color in\nfree-for-all games.\n\nCurrent Profile:"/>
-		<string text="Keep the changes and go back.\n\nCurrent Profile:"/>
+		<string text="Type a new name for\nthis profile.\n\nCurrent Profile:"/>
+		<string text="Choose what the thumbsticks and\nbuttons do for this profile.\n\nCurrent Profile:"/>
+		<string text="Change how the controller\nbehaves for this profile.\n\nCurrent Profile:"/>
+		<string text="Pick the color this profile wears\nin free-for-all games.\n\nCurrent Profile:"/>
+		<string text="Keep these changes and go back\nto the previous screen.\n\nCurrent Profile:"/>
 	</strings>
-	<!-- (the Xbox's pictures for these rows are not in MCC's files - Halo PC's picture of this name is
-	     of its own rows: none) -->
-	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/profile_edit_extended_desc_pic" left="288" top="85" width="279" height="202" controller="1"/>
+	<!-- (the Xbox's pictures for these rows, and CONTROLLER SETUP's Xbox controller, are not in MCC's
+	     files: Halo PC's own pictures of its profile rows, from the player's ui.map - its keyboard for
+	     CHANGE NAME, its gamepad for CONTROLLER SETUP and ADVANCED SETUP, its three Spartans for CHANGE
+	     COLOR, its keyboard, gamepad and mouse for SAVE CHANGES) -->
+	<bitmap name="cp/xb/art/profile_options">
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="0"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="7"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="1"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/pc_gamepad">
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+		<frame map="ui\shell\main_menu\settings_select\player_setup\player_profile_edit\profile_options" index="2"/>
+	</bitmap>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/profile_edit_extended_desc_pic" left="288" top="85" width="279" height="202" controller="1" bitmap="cp/xb/art/profile_options"/>
 	<strings name="cp/xb/text/press_start_to_join">
-		<string text="Press %a-button to join"/>
-		<string text="Pick a profile\n\nPress %a-button to choose it"/>
-		<string text="Profile chosen\n\nPress %a-button once every\nplayer has chosen one"/>
+		<string text="Press %a-button to Join"/>
+		<string text="Choose a Profile\n\nPress %a-button to select"/>
+		<string text="Profile Selected\n\nPress %a-button when all\nplayers have\nselected profiles"/>
 	</strings>
 	<widget name="cp/xb/load_campaign_player_profile" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child">
 		<on event="y" run="new campaign chosen" open="ui\shell\main_menu\new_campaign_creating_profile"/>
@@ -474,7 +494,7 @@
 		<child widget="ui\shell\error\confirm_empty_profile"/>
 	</widget>
 	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/advanced_controls/advanced_controls_help" type="text" left="68" top="321" width="482" height="79" string_list="cp/xb/text/cap_advanced_controller_strings" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
-	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/controller_help" type="container" left="76" top="140" width="512" height="260" bitmap="none" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
+	<widget name="cp/xb/settings_select/player_setup/player_profile_edit/controller_edit/controller_help" type="container" left="192" top="165" width="279" height="202" bitmap="cp/xb/art/pc_gamepad" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
 	<widget name="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_select" type="container" left="0" top="0" width="254" height="164" flags="pass_unhandled_to_focused_child nifty_fx" bitmap="cp/xb/art/4way_profile_border">
 		<on event="a" run="1wide plyr prof set for game" replace="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_selected"/>
 		<on event="start" run="1wide plyr prof set for game" replace="cp/xb/multiplayer_type_select/split_screen/4way_profile_select/qtr_screen_profile_selected"/>

@@ -219,11 +219,10 @@ def big_arrow(right, lit):
     width, height = 32 * scale, 256 * scale
     image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    tip, back = (2 * scale, 30 * scale) if not right else (30 * scale, 2 * scale)
+    tip, back = (4 * scale, 30 * scale) if not right else (28 * scale, 2 * scale)
     points = [(back, 4 * scale), (tip, height // 2), (back, height - 4 * scale)]
-    alpha = 150 if lit else 90
-    draw.polygon(points, fill=(40, 120, 220, alpha))
-    draw.line(points, fill=(90, 170, 255, 230 if lit else 170), width=2 * scale)
+    draw.polygon(points, fill=(40, 120, 220, 120 if lit else 70))
+    draw.line(points + [points[0]], fill=(90, 170, 255, 200 if lit else 120), width=round(1.5 * scale))
     return image.resize((32, 256), Image.LANCZOS)
 
 
