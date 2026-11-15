@@ -523,8 +523,10 @@ static const struct config_setting config_settings[] =
 		"or the most bots (1 to 15). The Vita's settings panel (Multiplayer,\n"
 		"Online bots) and the Halo 3 lobby's GAME OPTIONS set it." },
 	{ "bots.skill", _config_string, "\"normal\"", "HALO_BOT_SKILL", _environment_value, _platform_all,
-		"How well the bots play: \"easy\", \"normal\", \"heroic\" or \"legendary\"\n"
-		"(how soon they react, how well they aim, how far they see)." },
+		"How well the bots play: \"easy\", \"normal\", \"heroic\" or \"legendary\",\n"
+		"scaled as Halo CE's difficulty scales its AI (the level's difficulty\n"
+		"table): how soon they react, how well they aim and fire, their grenades\n"
+		"and blows, their damage to players and how much players' damage hurts them." },
 	{ "bots.teams", _config_string, "\"even\"", "HALO_BOT_TEAMS", _environment_value, _platform_all,
 		"In team games: \"even\" puts the bots on both teams, evening them with\n"
 		"the players; \"against\" puts them all on the team the players are not on." },
