@@ -82,6 +82,11 @@ ChupathingyCE (af3dd1460, "the room count stops at the tag cache's size",
 MrMilenko; GPL-3.0-or-later) */
 #define MAXIMUM_GEOMETRY_PARTS 0x100000L
 #define MAXIMUM_GEOMETRY_ELEMENTS 0x4000000L
+/* (port) a part's vertices (16-bit strip indices) and strip triangles: no
+more than its load allows (cache_file_formats.c gbxmodel_part_check: at
+most 65,535 vertices, its strip within the model data) */
+#define MAXIMUM_PART_VERTICES 0xFFFFL
+#define MAXIMUM_PART_STRIP_TRIANGLES 0x1000000L
 
 /* ---------- structures */
 
@@ -411,9 +416,14 @@ static boolean custom_edition_model_count(
 				part_index,
 				struct custom_edition_model_part);
 
+			/* (each part's counts within what the load allowed,
+			cache_file_formats.c gbxmodel_part_check: the tags were written
+			in place since, and the schemas' check, tag_validate.c, does not
+			look at these, so that no room below is sized past 32 bits) */
 			if (totals->part_count >= MAXIMUM_GEOMETRY_PARTS ||
-				part->vertex_count < 0 || part->vertex_count > MAXIMUM_GEOMETRY_ELEMENTS - totals->vertex_count ||
-				part->strip_triangle_count < 0 ||
+				part->vertex_count < 1 || part->vertex_count > MAXIMUM_PART_VERTICES ||
+				part->strip_triangle_count < 1 || part->strip_triangle_count > MAXIMUM_PART_STRIP_TRIANGLES ||
+				part->vertex_count > MAXIMUM_GEOMETRY_ELEMENTS - totals->vertex_count ||
 				part->strip_triangle_count > MAXIMUM_GEOMETRY_ELEMENTS - 2 - totals->strip_index_count)
 			{
 				error(_error_silent, "custom edition: the models have more parts or vertices than any map (at '%s'); refusing it", name);
@@ -552,7 +562,13 @@ static void model_data_plan_read(
 	struct model_data_prefetch *prefetch = &reader->prefetch;
 	unsigned long model_data_bytes = reader->report->model_data_bytes;
 
-	if (offset >= stream->start && offset + size <= stream->start + stream->length)
+	/* (as model_data_stream_read: nothing past the model data) */
+	if (offset > model_data_bytes || size > model_data_bytes - offset)
+	{
+		return;
+	}
+	if (offset >= stream->start && offset - stream->start <= stream->length &&
+		size <= stream->length - (offset - stream->start))
 	{
 		return;
 	}
@@ -653,7 +669,14 @@ static void const *model_data_stream_read(
 {
 	unsigned long model_data_bytes = reader->report->model_data_bytes;
 
-	if (offset >= stream->start && offset + size <= stream->start + stream->length)
+	/* (port: what a part names, within the model data, whatever was written
+	over its fields since the load checked them - no sum below wraps) */
+	if (offset > model_data_bytes || size > model_data_bytes - offset)
+	{
+		return NULL;
+	}
+	if (offset >= stream->start && offset - stream->start <= stream->length &&
+		size <= stream->length - (offset - stream->start))
 	{
 		return stream->buffer + (offset - stream->start);
 	}
