@@ -30,6 +30,7 @@ built alone, without lang.c) */
 #include "../src/lang.h"
 #include "../src/ogg_sound.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
