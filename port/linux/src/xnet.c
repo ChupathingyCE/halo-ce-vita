@@ -54,6 +54,10 @@ alone peers reach.
 #include <stdlib.h>
 #include <string.h>
 
+/* (source/networking/network_game_globals.c) whether the game hosted here
+is its own players' alone, from before its server's sockets are made */
+unsigned char network_game_port_hosting_local(void);
+
 /* ---------- address settings */
 
 /* Winsock's, which the SDK headers here leave out */
@@ -548,6 +552,23 @@ int WSAAPI halo_ws_bind(SOCKET socket, const struct sockaddr *address, int addre
 		local.sin_addr.s_addr = override;
 		address = (const struct sockaddr *)&local;
 	}
+#ifndef HALO_VITA
+	/* a socket asked to listen on every interface while the game hosted
+	here is its own players' alone (split screen, bots: nobody else can
+	join it, network_game_port_hosting_local): on this machine alone, so its
+	ports are not opened to the network; its own client joins it at
+	127.0.0.1 as ever. network.address, when set, still wins (above). From
+	ChupathingyCE (1d14dd7ae, #1234, MrMilenko; GPL-3.0-or-later). (Not the
+	Vita's yet: its loopback binds are untried on hardware) */
+	else if (address && address->sa_family == AF_INET && address_length >= (int)sizeof(local) &&
+		((const struct sockaddr_in *)address)->sin_addr.s_addr == INADDR_ANY &&
+		network_game_port_hosting_local())
+	{
+		memcpy(&local, address, sizeof(local));
+		local.sin_addr.s_addr = loopback_address();
+		address = (const struct sockaddr *)&local;
+	}
+#endif
 	/* (a dedicated server's game ports: sv_game_port's here for the game's
 	5150 and 5151) */
 	if (p2p_game_ports_moved() && address && address->sa_family == AF_INET && address_length >= (int)sizeof(local))
