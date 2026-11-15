@@ -373,11 +373,24 @@ static void test_search(void)
 	CHECK(!mcc_paths_maps_folder_is_mcc(path, found));
 	file_make("xboxmaps/ui.map", 13, NULL);
 	CHECK(mcc_paths_maps_folder_is_mcc(path, found) && ends_with(found, "/xboxmaps/ui.map"));
+	/* (the first map with the Xbox disc's header ends the look: one file read
+	at each start of an Xbox install, 1.1.3 audit; a ui.map that is neither,
+	or none, goes on to the stock maps) */
 	file_make("xboxmaps/ui.map", 5, NULL);
 	file_make("xboxmaps/a10.map", 13, NULL);
+	CHECK(!mcc_paths_maps_folder_is_mcc(path, found));
+	file_make("xboxmaps/bloodgulch.map", 0, "not a map");
+	file_make("xboxmaps/ui.map", 7, NULL);
 	CHECK(mcc_paths_maps_folder_is_mcc(path, NULL));
+	file_make("xboxmaps/ui.map", 0, "not a map");
 	snprintf(path, sizeof(path), "%s/xboxmaps/", search_top);
 	CHECK(mcc_paths_maps_folder_is_mcc(path, found) && ends_with(found, "/xboxmaps/a10.map"));
+	snprintf(path, sizeof(path), "%s/xboxmaps/ui.map", search_top);
+	CHECK(remove(path) == 0);
+	snprintf(path, sizeof(path), "%s/xboxmaps", search_top);
+	CHECK(mcc_paths_maps_folder_is_mcc(path, found) && ends_with(found, "/xboxmaps/a10.map"));
+	file_make("xboxmaps/bloodgulch.map", 5, NULL);
+	CHECK(!mcc_paths_maps_folder_is_mcc(path, found));
 	CHECK(!mcc_paths_maps_folder_is_mcc("", found) && !mcc_paths_maps_folder_is_mcc(NULL, found));
 
 	/* (the temporary folder, this test's alone) */
