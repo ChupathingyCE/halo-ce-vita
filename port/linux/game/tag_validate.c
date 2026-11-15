@@ -396,6 +396,22 @@ static boolean region_contains(
 		size <= validation->region_size - offset;
 }
 
+/* (port) whether elements of `size` bytes can be at `address`: on a word
+when their size is whole words, else on a halfword when it is whole
+halfwords, as the game's tools lay every block and tag out. The game reads
+them through its structures, and the Vita's processor faults on a
+misaligned doubleword, multiple or floating-point load (LDRD, LDM, VLDR),
+which the compiler makes of adjacent fields: a map's misaligned block
+would stop the game. */
+static boolean aligned_for(
+	void const *address,
+	unsigned long size)
+{
+	unsigned long alignment = (size & 3) == 0 ? 4 : (size & 1) == 0 ? 2 : 1;
+
+	return ((unsigned long)address & (alignment - 1)) == 0;
+}
+
 /* marks size bytes at address (in the tag cache, as the region is) as a
 tag's: FALSE if any of them already were */
 static boolean claim(
@@ -701,7 +717,8 @@ static void validate_block_extent(
 	}
 	if (block->count &&
 		((unsigned long)block->count > validation->region_size / (unsigned long)definition->size ||
-			!region_contains(validation, block->address, (unsigned long)block->count * definition->size)))
+			!region_contains(validation, block->address, (unsigned long)block->count * definition->size) ||
+			!aligned_for(block->address, definition->size)))
 	{
 		tag_validate_refuse(validation, "has %ld elements of %ld bytes at %08lx, outside the tags",
 			block->count, definition->size, (unsigned long)block->address);
@@ -775,7 +792,8 @@ static void validate_data_extent(
 		return;
 	}
 	if (data->size &&
-		(!region_contains(validation, data->address, data->size) || !claim(data->address, data->size)))
+		(!region_contains(validation, data->address, data->size) || !aligned_for(data->address, data->size) ||
+			!claim(data->address, data->size)))
 	{
 		tag_validate_refuse(validation, "has %ld bytes at %08lx, outside the tags or overlapping another's",
 			data->size, (unsigned long)data->address);
@@ -1362,6 +1380,7 @@ static boolean validate_tag_table(
 		}
 		if (group && group->definition &&
 			(!region_contains(validation, instance->base_address, group->definition->size) ||
+				!aligned_for(instance->base_address, group->definition->size) ||
 				!claim(instance->base_address, group->definition->size)))
 		{
 			tag_validate_refuse(validation, "has its data at %08lx, outside the tags or overlapping another's",
@@ -1424,7 +1443,8 @@ static boolean validate_tags_in(
 	if (tag_data_size < (long)sizeof(*header) || tag_data_size > TAG_CACHE_SIZE ||
 		header->signature != TAG_HEADER_SIGNATURE ||
 		header->tag_count <= 0 || header->tag_count > UNSIGNED_SHORT_MAX ||
-		!region_contains(&validation, header->instances, header->tag_count * sizeof(struct tag_validate_instance)))
+		!region_contains(&validation, header->instances, header->tag_count * sizeof(struct tag_validate_instance)) ||
+		!aligned_for(header->instances, sizeof(struct tag_validate_instance)))
 	{
 		tag_validate_refuse(&validation, "has a damaged tag header");
 		return FALSE;
@@ -1469,6 +1489,7 @@ static boolean validate_custom_edition_tags_in(
 		header->signature != TAG_HEADER_SIGNATURE ||
 		header->tag_count <= 0 || header->tag_count > UNSIGNED_SHORT_MAX ||
 		!region_contains(&validation, header->instances, header->tag_count * sizeof(struct tag_validate_instance)) ||
+		!aligned_for(header->instances, sizeof(struct tag_validate_instance)) ||
 		!claim(header, sizeof(*header)) ||
 		!claim(header->instances, header->tag_count * sizeof(struct tag_validate_instance)))
 	{
@@ -1517,6 +1538,7 @@ static boolean validate_structure_bsp_in(
 	if (group && group->definition)
 	{
 		if (!region_contains(&validation, bsp_header->base_address, group->definition->size) ||
+			!aligned_for(bsp_header->base_address, group->definition->size) ||
 			!claim(bsp_header->base_address, group->definition->size))
 		{
 			tag_validate_refuse(&validation, "has its structure bsp at %08lx, outside it",
