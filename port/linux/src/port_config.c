@@ -1975,6 +1975,14 @@ int config_write_real(const char *name, double value)
 	return config_write_value(name, _config_real, text, text);
 }
 
+int config_write_integer(const char *name, long value)
+{
+	char text[32];
+
+	snprintf(text, sizeof(text), "%ld", value);
+	return config_write_value(name, _config_integer, text, text);
+}
+
 /* a setting's default as text (a string's without its quotes), 1 if the
 setting exists */
 int config_default_text_of(const char *name, char *text, size_t size)
