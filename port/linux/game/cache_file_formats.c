@@ -2402,6 +2402,13 @@ static enum cache_file_status structure_bsps_verify(
 		{
 			return status;
 		}
+		/* (port: as checked, the only place and bytes the game reads it
+		from: custom_edition_cache_structure_bsp_checked) */
+		state->report->mcc_cea_structure_bsps[bsp_index].file_offset = (uint32_t)file_offset;
+		state->report->mcc_cea_structure_bsps[bsp_index].size = (uint32_t)size;
+		state->report->mcc_cea_structure_bsps[bsp_index].linked_address = bsp_address;
+		state->report->mcc_cea_structure_bsps[bsp_index].vertices_offset = 0;
+		state->report->mcc_cea_structure_bsps[bsp_index].vertices_size = 0;
 		if ((uint32_t)size > state->report->largest_structure_bsp_bytes)
 		{
 			state->report->largest_structure_bsp_bytes = (uint32_t)size;
@@ -6749,6 +6756,28 @@ void custom_edition_cache_tags_moved(
 	uint32_t address)
 {
 	tag_cache_address = address;
+}
+
+struct mcc_cea_structure_bsp const *custom_edition_cache_structure_bsp_checked(
+	struct custom_edition_load_report const *report,
+	uint32_t file_offset,
+	uint32_t size)
+{
+	int32_t bsp_index;
+
+	for (bsp_index = 0;
+		bsp_index < report->structure_bsp_count && bsp_index < CACHE_FILE_MAXIMUM_STRUCTURE_BSPS;
+		bsp_index++)
+	{
+		struct mcc_cea_structure_bsp const *bsp = &report->mcc_cea_structure_bsps[bsp_index];
+
+		if (bsp->size && bsp->file_offset == file_offset && bsp->size == size)
+		{
+			return bsp;
+		}
+	}
+
+	return NULL;
 }
 
 uint32_t custom_edition_cache_linked_address(

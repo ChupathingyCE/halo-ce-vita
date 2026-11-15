@@ -967,6 +967,20 @@ static int custom_edition_check(struct memory_file *map, struct custom_edition_r
 				refused = 1;
 			continue;
 		}
+		/* (port: as the game reads one, only as its load checked it -
+		custom_edition_cache_structure_bsp_reference_checked) */
+		{
+			struct mcc_cea_structure_bsp const *checked = custom_edition_cache_structure_bsp_checked(&report,
+				(uint32_t)reference->file_offset, (uint32_t)reference->file_size);
+
+			if (!checked || address != checked->linked_address)
+			{
+				if (!quiet)
+					printf("%s: its structure bsp %ld is not one its load checked\n", name, index);
+				refused = 1;
+				break;
+			}
+		}
 		if (reference->file_offset < CACHE_FILE_HEADER_SIZE || reference->file_size < 0x18 ||
 			(unsigned long)reference->file_offset > report.identity.file_length ||
 			(unsigned long)reference->file_size > report.identity.file_length - (unsigned long)reference->file_offset ||

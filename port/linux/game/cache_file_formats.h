@@ -370,7 +370,12 @@ struct custom_edition_load_report
 	uint32_t tag_data_crc;
 	/* (port) a Halo: CE Anniversary cache's structure BSPs
 	(structure_bsp_count of them), and where they are all loaded (the
-	header checksum is not taken: MCC's covers other bytes) */
+	header checksum is not taken: MCC's covers other bytes). A Custom
+	Edition cache's are recorded here too, as they were checked (each
+	linked_address the place its reference loads it, no vertices in the
+	file): the game reads a structure BSP only where one of these says
+	(custom_edition_cache_structure_bsp_checked), whatever the reference in
+	the tags says by then */
 	uint32_t mcc_cea_structure_bsp_address;
 	struct mcc_cea_structure_bsp mcc_cea_structure_bsps[CACHE_FILE_MAXIMUM_STRUCTURE_BSPS];
 };
@@ -727,6 +732,20 @@ then translate them from there. The next custom_edition_cache_load starts
 from CUSTOM_EDITION_TAG_CACHE_ADDRESS again. */
 void custom_edition_cache_tags_moved(
 	uint32_t address);
+/* (port) The structure BSP the load of the cache `report` describes checked
+at `file_offset` of `size` bytes (struct mcc_cea_structure_bsp), or NULL
+when it checked none there. A structure BSP is read only where its load
+checked it: the scenario's reference to it lies in tags that the
+conversions and the tags' check (tag_validate.c) write in place after the
+load, so by the time the game reads the BSP it may name other bytes, or
+another place, than were checked. After ChupathingyCE (MrMilenko,
+GPL-3.0-or-later): 7a898133f, "the BSP loads only from the reference that
+was checked" (#1069). */
+struct mcc_cea_structure_bsp const *custom_edition_cache_structure_bsp_checked(
+	struct custom_edition_load_report const *report,
+	uint32_t file_offset,
+	uint32_t size);
+
 /* the address the tags of the last cache loaded are linked to:
 CUSTOM_EDITION_TAG_CACHE_ADDRESS, or a Halo: CE Anniversary cache's
 MCC_CEA_TAG_CACHE_ADDRESS, for the units that move the pointers */

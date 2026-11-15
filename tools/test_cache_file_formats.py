@@ -1162,6 +1162,39 @@ def test_tag_elements_walked_are_capped(report_tool, tmp_path):
     assert report["load"] == "a tag block or tag data field lies outside the loaded tags"
 
 
+def test_the_structure_bsps_checked_are_the_ones_read(report_tool, tmp_path):
+    """(after ChupathingyCE 7a898133f, #1069) Each structure BSP the load
+    checked is recorded - its range of the file and the place it loads -
+    and the game reads a BSP only as one of those
+    (custom_edition_cache_structure_bsp_checked), as it already did for
+    Halo: CE Anniversary maps."""
+    cache = Map(bsp_sizes=(0x1000, 0x3000))
+    returncode, report = report_one(report_tool, cache.write(tmp_path))
+    assert returncode == 0 and report["convert"] == "ok"
+    assert report["structure_bsp_checked.0"] == f"{hex(HEADER_BYTES)}+0x1000 at {BASE + TAG_CACHE_BYTES - 0x1000:#010x}"
+    assert report["structure_bsp_checked.1"] == \
+        f"{hex(HEADER_BYTES + 0x1000)}+0x3000 at {BASE + TAG_CACHE_BYTES - 0x3000:#010x}"
+    assert report["structure_bsp_reference.0"] == "as checked"
+    assert report["structure_bsp_reference.1"] == "as checked"
+
+
+def test_a_structure_bsp_reference_a_conversion_wrote_over_is_not_read(report_tool, tmp_path):
+    """The scenario's references lie in the tags, which the conversions write
+    in place by the addresses the tags hold after the load checked the
+    BSPs: a shader whose tag is placed over the first reference has its type
+    written into that BSP's size. The game must not read the BSP the
+    reference names now, only the one checked."""
+    cache = Map(shaders=[("senv", {})])
+    path = cache.write(tmp_path)
+    shader = cache.tag_indices["test\\shader 0"]
+    reference = cache.addresses["test\\scenario"] + 0x5B0
+    patched(path, cache.where["instances"] + shader * 0x20 + 0x14, "<I", reference + 4 - 0x24)
+    returncode, report = report_one(report_tool, path)
+    assert report["load"] == "ok" and report["convert"] == "ok"
+    assert report["structure_bsp_checked.0"] == f"{hex(HEADER_BYTES)}+0x1000 at {BASE + TAG_CACHE_BYTES - 0x1000:#010x}"
+    assert report["structure_bsp_reference.0"] == "not checked"
+
+
 def test_structure_bsp_lightmaps_outside_the_bsp_are_rejected(report_tool, tmp_path):
     cache = Map(bsp_material={})
     path = patched(cache.write(tmp_path), cache.where["bsp"] + 0x18 + 0x108, "<I", BASE)

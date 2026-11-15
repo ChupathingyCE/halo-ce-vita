@@ -240,6 +240,15 @@ boolean custom_edition_cache_hud_mcc_canvas(
 (cache_file_tag_cache_contains); NULL and 0 when none is loaded. */
 void *custom_edition_cache_tag_cache(
 	unsigned long *size);
+/* (port) Whether a structure BSP of `size` bytes at `file_offset` of the
+map, read to `base_address`, is one the map's load checked, there
+(cache_file_formats.c custom_edition_cache_structure_bsp_checked): asked
+before it is read, since its reference lies in tags written in place since
+the load. FALSE (and logged) for anything else, which is then not read. */
+boolean custom_edition_cache_structure_bsp_reference_checked(
+	long file_offset,
+	long size,
+	void const *base_address);
 /* A structure BSP of the loaded map was just read to `structure_bsp` from
 `file_offset`: its pointers are moved there too when the tags were
 (custom_edition_cache.c); (port) a Halo: CE Anniversary map's from where the

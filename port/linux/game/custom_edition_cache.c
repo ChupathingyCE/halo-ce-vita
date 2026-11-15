@@ -2493,10 +2493,12 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 			(unsigned long)report.mcc_cea_structure_bsp_address);
 		globals->mcc_cea = TRUE;
 		tag_validate_structure_vertices_in_file(TRUE);
-		globals->mcc_cea_structure_bsp_count = report.structure_bsp_count;
-		globals->mcc_cea_structure_bsp_address = report.mcc_cea_structure_bsp_address;
-		csmemcpy(globals->mcc_cea_structure_bsps, report.mcc_cea_structure_bsps, sizeof(globals->mcc_cea_structure_bsps));
 	}
+	/* (port) its structure BSPs as the load checked them, any map's: the
+	only ones read (custom_edition_cache_structure_bsp_reference_checked) */
+	globals->mcc_cea_structure_bsp_count = report.structure_bsp_count;
+	globals->mcc_cea_structure_bsp_address = report.mcc_cea_structure_bsp_address;
+	csmemcpy(globals->mcc_cea_structure_bsps, report.mcc_cea_structure_bsps, sizeof(globals->mcc_cea_structure_bsps));
 	if (!custom_edition_cache_tags_convert(tag_cache, tag_cache_bytes, &report))
 	{
 		error(_error_silent, "custom edition: cannot run '%s'", path);
@@ -3033,6 +3035,42 @@ void custom_edition_cache_structure_bsp_moved(
 	}
 
 	return;
+}
+
+boolean custom_edition_cache_structure_bsp_reference_checked(
+	long file_offset,
+	long size,
+	void const *base_address)
+{
+	struct custom_edition_cache_globals *globals = &custom_edition_cache_globals;
+	int32_t bsp_index;
+
+	if (!globals->tags_loaded)
+	{
+		return FALSE;
+	}
+	for (bsp_index = 0;
+		bsp_index < globals->mcc_cea_structure_bsp_count && bsp_index < CACHE_FILE_MAXIMUM_STRUCTURE_BSPS;
+		bsp_index++)
+	{
+		struct mcc_cea_structure_bsp const *bsp = &globals->mcc_cea_structure_bsps[bsp_index];
+		/* (where the game has the tags: a Custom Edition map's BSP where
+		its reference loaded it, a Halo: CE Anniversary map's in the room
+		after the tags, where the load moved its reference) */
+		uint32_t place = globals->mcc_cea ? globals->mcc_cea_structure_bsp_address : bsp->linked_address;
+
+		if (bsp->size &&
+			bsp->file_offset == (uint32_t)file_offset &&
+			bsp->size == (uint32_t)size &&
+			(uintptr_t)base_address == (uintptr_t)globals->tag_cache + (place - custom_edition_cache_linked_address()))
+		{
+			return TRUE;
+		}
+	}
+	error(_error_silent, "custom edition: a structure BSP of 0x%lX bytes at 0x%08lX, read to %p, is not one the map was checked with",
+		(unsigned long)size, (unsigned long)file_offset, base_address);
+
+	return FALSE;
 }
 
 boolean custom_edition_cache_structure_bsp_vertices(
