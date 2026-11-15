@@ -55,6 +55,7 @@ correct.
 
 #include "scene_pack.h"
 #include "scene_pack_ce.h"
+#include "cache_file_formats.h"
 #include "scene_pack_blocks.h"
 #include "tag_schema.h"
 #include "tag_relocate.h"
@@ -1222,7 +1223,9 @@ boolean scene_pack_recipe_mcc_fallback(
 	{
 		char version[24];
 
-		snprintf(version, sizeof(version), "mcc%s", scene_pack_custom_edition_builder_version());
+		/* (".celt": MCC's dialogue and music in the packs, made from its CELT
+		banks - packs built before without them are built again) */
+		snprintf(version, sizeof(version), "mcc%s.celt", scene_pack_custom_edition_builder_version());
 		recipe->hash = fnv_bytes(recipe->hash, version, strlen(version) + 1);
 	}
 	return TRUE;
@@ -4170,6 +4173,17 @@ static void build_items_place(struct build_state *state)
 		unsigned long size_at = item->location + (item->bitmap ? offsetof(struct bitmap_data, pixels_size) :
 			offsetof(struct sound_permutation, samples));
 
+		/* (port: a stream of one of MCC's CELT banks is the bank's, not the
+		pack's: scene_pack_ce_permutation_write) */
+		if (!item->bitmap)
+		{
+			short compression;
+
+			memcpy(&compression, state->blob + item->location + offsetof(struct sound_permutation, compression),
+				sizeof(compression));
+			if (CUSTOM_EDITION_PERMUTATION_IS_MCC_CELT((unsigned short)compression))
+				continue;
+		}
 		if (read_u32(state->blob + size_at))
 			write_u32(state->blob + at, SCENE_PACK_FILE_BASE + read_u32(state->blob + at));
 		else
@@ -5120,7 +5134,9 @@ static void rebase_visit(void *context, struct tag_schema_field const *field, un
 	{
 		struct tag_data *data = (struct tag_data *)address;
 
-		if (data->size > 0)
+		/* (port: not a stream of MCC's CELT banks, the bank's own place:
+		scene_pack_ce_permutation_write) */
+		if (data->size > 0 && !(data->pad & CUSTOM_EDITION_SAMPLES_MCC_CELT_FLAG))
 			data->file_offset += rebase->file_delta;
 		return;
 	}

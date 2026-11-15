@@ -973,6 +973,8 @@ shader compiler's heap, and the Ogg Vorbis decoder's),
 [Tremor](https://gitlab.xiph.org/xiph/tremor) and
 [libogg](https://gitlab.xiph.org/xiph/ogg) by Xiph.Org (Halo Custom
 Edition maps' Ogg Vorbis sounds),
+[CELT](https://github.com/mumble-voip/celt-0.11.0) 0.11 by Xiph.Org, CSIRO
+and contributors (BSD: the dialogue and music of MCC's Halo CE maps),
 [Expat](https://libexpat.github.io) (the PC menus' files),
 [Mbed TLS](https://github.com/Mbed-TLS/mbedtls),
 [miniupnpc](https://github.com/miniupnp/miniupnp),

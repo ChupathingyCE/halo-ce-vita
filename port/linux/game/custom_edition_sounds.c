@@ -142,6 +142,9 @@ as silence.
 #include "cache_file_formats.h"
 #include "../src/ogg_sound.h"
 #include "../src/xbox_adpcm_encoder.h"
+#include "../src/h2_sound_codec.h"
+#include "../src/fsb_celt.h"
+#include "mcc_sound.h"
 #include "../src/port_config.h"
 
 #include <pthread.h>
@@ -268,7 +271,11 @@ enum transcoding
 	_transcoding_pcm,
 	/* (a 44 kHz mono sound's, made 22 kHz: CUSTOM_EDITION_PERMUTATION_*_HALVED) */
 	_transcoding_pcm_halved,
-	_transcoding_adpcm_halved
+	_transcoding_adpcm_halved,
+	/* (a sound of one of MCC's CELT banks, mcc_sound.h: its stream in the
+	bank's file, FMOD's CELT made Xbox ADPCM at the sound's rate and
+	channels - CUSTOM_EDITION_PERMUTATION_MCC_CELT) */
+	_transcoding_mcc_celt
 };
 
 struct waiting_sound
@@ -297,6 +304,8 @@ struct waiting_sound
 	long link_index;
 	long link_count;
 	boolean stream_link;
+	/* an MCC CELT permutation's bank (MCC_SOUND_BANK_*; 0 for any other) */
+	uint32_t celt_bank;
 };
 
 /* a permutation's entry in the sound cache file (the description above) */
@@ -314,9 +323,11 @@ struct sound_cache_entry
 	uint32_t source_crc;
 	uint32_t adpcm_crc;
 	/* (for the logs and the background) the permutation, and whether it
-	did not decode (not tried again) */
+	did not decode (not tried again); how it is made (Ogg Vorbis, or an MCC
+	CELT bank's: its bank in the format's top byte) */
 	struct sound_permutation const *permutation;
 	boolean failed;
+	enum transcoding transcoding;
 };
 
 enum sound_cache_state
@@ -383,6 +394,10 @@ static struct
 
 	/* the memory block (MEMORY_BLOCK_BYTES, and the table's) */
 	byte *memory;
+	/* (MCC's CELT streams: the codec's working memory, celt_work_get, and
+	the permutations made since the map came) */
+	byte *celt_work;
+	unsigned long celt_decoded_count;
 
 	/* the chains (custom_edition_sounds_map_loaded), in a memory block of
 	their own: the stream decoders' working memory (OGG_SOUND_WORKING_BYTES
@@ -510,6 +525,11 @@ ADPCM here */
 static enum transcoding permutation_transcoding(
 	struct sound_permutation const *permutation)
 {
+	/* (a stream of MCC's CELT banks, flagged so: of one of MCC's own maps,
+	or of a scene pack built from one, in a game on any map - the tag check
+	took it as the bank's) */
+	if (CUSTOM_EDITION_PERMUTATION_IS_MCC_CELT((unsigned short)permutation->compression))
+		return (permutation->samples.pad & CUSTOM_EDITION_SAMPLES_MCC_CELT_FLAG) ? _transcoding_mcc_celt : _transcoding_none;
 	if (!custom_edition_cache_tags_loaded())
 		return _transcoding_none;
 	if (permutation->compression == SOUND_PERMUTATION_COMPRESSION_OGG_VORBIS)
@@ -586,6 +606,9 @@ static uint32_t permutation_whole_bytes(
 
 	if (transcoding == _transcoding_ogg_vorbis)
 		return permutation->sample_buffer_size == SOUND_BUFFER_UNPLAYABLE ? 0 : (uint32_t)permutation->sample_buffer_size;
+	/* (an MCC CELT one's, the loader's: cache_file_formats.c, mcc_sound_map) */
+	if (transcoding == _transcoding_mcc_celt)
+		return (uint32_t)permutation->sample_buffer_size;
 	if (transcoding == _transcoding_none || !permutation->sample_buffer_size || !size)
 		return 0;
 	if (transcoding == _transcoding_adpcm_halved)
@@ -697,7 +720,9 @@ static boolean stream_crc_finish(struct decoding *decoding)
 
 		if (size > PCM_READ_BYTES)
 			size = PCM_READ_BYTES;
-		if (!decoding_continues(decoding) || !map_read(sound->file_offset + decoding->source_crc_bytes, size, pcm_piece))
+		if (!decoding_continues(decoding) || !(sound->transcoding == _transcoding_mcc_celt ?
+			mcc_sound_celt_read((int)sound->celt_bank, (uint32_t)sound->file_offset + decoding->source_crc_bytes, size, pcm_piece) :
+			map_read(sound->file_offset + decoding->source_crc_bytes, size, pcm_piece)))
 			return FALSE;
 		decoding->source_crc = cache_file_crc32_update(decoding->source_crc, pcm_piece, size);
 		decoding->source_crc_bytes += size;
@@ -1005,13 +1030,15 @@ static long entry_find(struct waiting_sound const *sound)
 	long low = 0;
 	long high = custom_edition_sounds_globals.entry_count;
 
-	if (!custom_edition_sounds_globals.entries || sound->transcoding != _transcoding_ogg_vorbis)
+	if (!custom_edition_sounds_globals.entries ||
+		(sound->transcoding != _transcoding_ogg_vorbis && sound->transcoding != _transcoding_mcc_celt))
 		return NONE;
 	while (low < high)
 	{
 		long middle = low + (high - low) / 2;
 		int order = entry_compare((uint32_t)sound->file_offset, sound->file_bytes, sound->destination_bytes,
-			(uint32_t)sound->channels | (uint32_t)sound->rate << 8, &custom_edition_sounds_globals.entries[middle]);
+			(uint32_t)sound->channels | (uint32_t)sound->rate << 8 | sound->celt_bank << 24,
+			&custom_edition_sounds_globals.entries[middle]);
 
 		if (!order)
 			return middle;
@@ -1057,6 +1084,7 @@ static void sound_decode_report(
 
 	boolean pcm = sound->transcoding == _transcoding_pcm || sound->transcoding == _transcoding_pcm_halved;
 	boolean adpcm = sound->transcoding == _transcoding_adpcm_halved;
+	boolean celt = sound->transcoding == _transcoding_mcc_celt;
 
 	if (trace_enabled())
 	{
@@ -1076,7 +1104,7 @@ static void sound_decode_report(
 		}
 		platform_log("%s sound%s: %.32s of %s: %s, %lu frames %d ch %ld Hz%s (+%lu silent%s), rms %.0f peak %d, "
 			"%.2f ms, %lu KB working, adpcm %lu bytes at %p%s",
-			pcm ? "pcm" : adpcm ? "adpcm" : "ogg", background ? " (background)" : "", sound->permutation->name,
+			celt ? "celt" : pcm ? "pcm" : adpcm ? "adpcm" : "ogg", background ? " (background)" : "", sound->permutation->name,
 			tag_get_name((long)sound->permutation->unknown3),
 			ogg_sound_status_describe(result->status), (unsigned long)result->frames_decoded,
 			result->stream_channels, result->stream_rate, result->halved ? " halved" : "",
@@ -1095,7 +1123,7 @@ static void sound_decode_report(
 			failure_reported[index] = TRUE;
 			/* (platform_log: error() is the game thread's) */
 			platform_log("custom edition: %s sound of %s (%.32s) does not decode: %s; it is silent",
-				pcm ? "a 16-bit PCM" : adpcm ? "a 44 kHz Xbox ADPCM" : "an Ogg Vorbis", tag_get_name((long)sound->permutation->unknown3),
+				celt ? "an MCC CELT" : pcm ? "a 16-bit PCM" : adpcm ? "a 44 kHz Xbox ADPCM" : "an Ogg Vorbis", tag_get_name((long)sound->permutation->unknown3),
 				sound->permutation->name, ogg_sound_status_describe(result->status));
 		}
 	}
@@ -1388,6 +1416,135 @@ static byte *stream_decoder(struct waiting_sound const *sound)
 	return custom_edition_sounds_globals.stream_working[chosen];
 }
 
+/* (the codec's reads of an MCC CELT stream, from its bank's file: its
+CRC-32 taken on the way when they follow what was read) stops once the
+decoding is not to go on */
+static int celt_codec_read(void *context, uint32_t offset, uint32_t size, void *buffer)
+{
+	struct decoding *decoding = (struct decoding *)context;
+	struct waiting_sound const *sound = decoding->sound;
+
+	decode_slowdown_pace();
+	if (!decoding_continues(decoding))
+	{
+		decoding->interrupted = TRUE;
+		return 0;
+	}
+	if (offset > sound->file_bytes || size > sound->file_bytes - offset ||
+		!mcc_sound_celt_read((int)sound->celt_bank, (uint32_t)sound->file_offset + offset, size, buffer))
+	{
+		return 0;
+	}
+	if (offset == decoding->source_crc_bytes)
+	{
+		decoding->source_crc = cache_file_crc32_update(decoding->source_crc, buffer, size);
+		decoding->source_crc_bytes += size;
+	}
+	return 1;
+}
+
+/* the decoding thread's working memory for MCC's CELT streams (the codec's,
+h2_sound_codec.h), taken the first time, given back with the map; NULL
+when there is no room */
+static byte *celt_work_get(unsigned long *bytes)
+{
+	*bytes = (unsigned long)h2_sound_codec_work_bytes();
+	if (!custom_edition_sounds_globals.celt_work)
+		custom_edition_sounds_globals.celt_work = (byte *)halo_custom_edition_memory_alloc(*bytes + 16);
+	return custom_edition_sounds_globals.celt_work ?
+		(byte *)(((uintptr_t)custom_edition_sounds_globals.celt_work + 15) & ~(uintptr_t)15) : NULL;
+}
+
+/* an MCC CELT permutation made Xbox ADPCM (h2_sound_codec.c, fsb_celt.c),
+into its block and the sound cache file as an Ogg Vorbis one is: read from
+the file when the entry holds it, else made; a link of a chain from its
+first frame */
+static void celt_decode(struct decoding *decoding)
+{
+	struct waiting_sound *sound = decoding->sound;
+	struct h2_sound_codec_chunk chunk;
+	struct h2_sound_codec_stream stream;
+	struct h2_sound_codec_result made;
+	struct ogg_sound_result result;
+	unsigned long long started = vita_host_time_us();
+	unsigned long long took;
+	unsigned long work_bytes = 0;
+	byte *work;
+	enum h2_sound_codec_status status;
+
+	if (!decoding->background && sound_read_cached(decoding))
+		return;
+	work = celt_work_get(&work_bytes);
+	decoding->source_crc = 0;
+	decoding->source_crc_bytes = 0;
+	decoding->writing = decoding_writes(sound);
+	decoding->data_offset = custom_edition_sounds_globals.data_end;
+	decoding->adpcm_crc = 0;
+	memset(&made, 0, sizeof(made));
+	chunk.offset = 0;
+	chunk.bytes = sound->file_bytes;
+	memset(&stream, 0, sizeof(stream));
+	stream.kind = H2_SOUND_CODEC_KIND_FSB_CELT;
+	stream.channels = sound->channels;
+	stream.rate = FSB_CELT_RATE;
+	/* (as many frames as the block holds: the encoder stops it) */
+	stream.frames = 0x7FFFFFFFu;
+	stream.chunk_count = 1;
+	stream.chunks = &chunk;
+	/* (a link: from its first frame, at the stream's rate - 44100 Hz, twice
+	or once the sound's) */
+	stream.first_frame = sound->rate > 0 ? (uint32_t)((uint64_t)sound->first_frame * FSB_CELT_RATE / (uint64_t)sound->rate) : 0;
+	if (work)
+	{
+		status = h2_sound_codec_transcode_from(&stream, celt_codec_read, decoding, work, work_bytes, sound->rate, sound->channels,
+			staging, sizeof(staging), sound->destination_bytes, 0, decoding_sink, decoding, &made);
+	}
+	else
+	{
+		/* (no working memory: the block is silence) */
+		struct xbox_adpcm_encoder encoder;
+
+		decoding->writing = FALSE;
+		xbox_adpcm_encoder_begin_sink(&encoder, staging, sizeof(staging), sound->destination_bytes, sound->channels,
+			decoding_sink, decoding);
+		xbox_adpcm_encoder_finish(&encoder);
+		status = _h2_sound_codec_bad_arguments;
+	}
+	took = vita_host_time_us() - started;
+	memset(&result, 0, sizeof(result));
+	result.status = status == _h2_sound_codec_ok ? _ogg_sound_ok :
+		status == _h2_sound_codec_read_failed ? _ogg_sound_read_failed :
+		status == _h2_sound_codec_unsupported ? _ogg_sound_unsupported_format :
+		status == _h2_sound_codec_bad_arguments ? (work ? _ogg_sound_bad_arguments : _ogg_sound_out_of_memory) : _ogg_sound_not_vorbis;
+	result.stream_channels = sound->channels;
+	result.stream_rate = FSB_CELT_RATE;
+	result.frames_decoded = made.frames_decoded;
+	result.frames_padded = made.frames_padded;
+	result.stopped = made.stopped;
+	result.sum_of_squares = made.sum_of_squares;
+	result.peak = made.peak;
+	if (decoding->background)
+	{
+		custom_edition_sounds_globals.background_count++;
+		custom_edition_sounds_globals.background_microseconds += took;
+	}
+	else
+	{
+		custom_edition_sounds_globals.decoded_count++;
+		custom_edition_sounds_globals.decoded_microseconds += took;
+		custom_edition_sounds_globals.celt_decoded_count++;
+	}
+	/* (kept when it decoded whole; one that does not decode is not tried
+	again in the background) */
+	if (status == _h2_sound_codec_ok && !made.stopped && !decoding->interrupted)
+		decoding_keep(decoding);
+	else if (status != _h2_sound_codec_ok && !made.stopped && !decoding->interrupted && sound->entry != NONE &&
+		!custom_edition_sounds_globals.stopping)
+		custom_edition_sounds_globals.entries[sound->entry].failed = TRUE;
+	if (!decoding->background || (status == _h2_sound_codec_ok && !decoding->interrupted))
+		sound_decode_report(sound, &result, took, decoding);
+}
+
 /* an Ogg Vorbis permutation made Xbox ADPCM, into its block (while it is
 the decoding's) and into the sound cache file when its entry is empty: read
 from the file when the entry holds it, else decoded */
@@ -1403,6 +1560,11 @@ static void sound_decode(struct decoding *decoding)
 		custom_edition_sounds_globals.link_decoded_count++;
 	/* (HALO_OGG_DECODE_SLOWDOWN: the time from here to the first piece) */
 	decode_slowdown_piece_started = started;
+	if (sound->transcoding == _transcoding_mcc_celt)
+	{
+		celt_decode(decoding);
+		return;
+	}
 	if (sound->transcoding != _transcoding_ogg_vorbis)
 	{
 		pcm_encode(decoding);
@@ -1536,12 +1698,13 @@ static boolean background_next(struct waiting_sound *sound)
 			continue;
 		}
 		memset(sound, 0, sizeof(*sound));
-		sound->transcoding = _transcoding_ogg_vorbis;
+		sound->transcoding = entry->transcoding;
 		sound->file_offset = entry->source_offset;
 		sound->file_bytes = entry->source_bytes;
 		sound->destination_bytes = entry->adpcm_bytes;
 		sound->channels = (int)(entry->format & 0xFF);
-		sound->rate = (long)(entry->format >> 8);
+		sound->rate = (long)(entry->format >> 8 & 0xFFFF);
+		sound->celt_bank = entry->format >> 24;
 		sound->entry = index;
 		sound->permutation = entry->permutation;
 		/* (the file full: no more) */
@@ -1786,7 +1949,10 @@ static void sound_cache_map_loaded(
 					struct sound_permutation const *permutation =
 						TAG_BLOCK_GET_ELEMENT(&pitch_range->permutations, permutation_index, struct sound_permutation);
 
-					if (permutation->compression != SOUND_PERMUTATION_COMPRESSION_OGG_VORBIS ||
+					/* (and MCC's CELT ones, their bank in the format's top byte) */
+					boolean celt = CUSTOM_EDITION_PERMUTATION_IS_MCC_CELT((unsigned short)permutation->compression);
+
+					if ((permutation->compression != SOUND_PERMUTATION_COMPRESSION_OGG_VORBIS && !celt) ||
 						!permutation->sample_buffer_size || permutation->sample_buffer_size > OGG_SOUND_MAXIMUM_ADPCM_BYTES ||
 						permutation->samples.size <= 0 || permutation->samples.file_offset < 0 ||
 						(long)permutation->unknown3 != tag_index)
@@ -1799,9 +1965,11 @@ static void sound_cache_map_loaded(
 						entries[count].source_bytes = (uint32_t)permutation->samples.size;
 						entries[count].adpcm_bytes = (uint32_t)permutation->sample_buffer_size;
 						entries[count].format = (definition->encoding == 1 ? 2U : 1U) |
-							(uint32_t)(definition->sample_rate == 1 ? 44100 : 22050) << 8;
+							(uint32_t)(definition->sample_rate == 1 ? 44100 : 22050) << 8 |
+							(celt ? (uint32_t)CUSTOM_EDITION_PERMUTATION_MCC_CELT_BANK(permutation->compression) << 24 : 0);
 						entries[count].data_offset = 0;
 						entries[count].failed = FALSE;
+						entries[count].transcoding = celt ? _transcoding_mcc_celt : _transcoding_ogg_vorbis;
 						entries[count].permutation = permutation;
 					}
 					count++;
@@ -2265,6 +2433,8 @@ boolean custom_edition_sound_load(
 		sound->link = chain_link(permutation, &sound->first_frame);
 		sound->link_index = sound->link ? custom_edition_sounds_globals.chain_link_indices[chain_index(permutation)] : 0;
 		sound->link_count = sound->link ? custom_edition_sounds_globals.chain_link_counts[chain_index(permutation)] : 0;
+		sound->celt_bank = transcoding == _transcoding_mcc_celt ?
+			(uint32_t)CUSTOM_EDITION_PERMUTATION_MCC_CELT_BANK(permutation->compression) : 0;
 		sound->stream_link = sound->link && transcoding == _transcoding_ogg_vorbis;
 		/* (a link has no entry in the sound cache file: its ADPCM is a piece
 		of a long sound's, made as it loads) */
@@ -2342,6 +2512,17 @@ void custom_edition_sounds_stop(
 	{
 		halo_custom_edition_memory_free(custom_edition_sounds_globals.memory);
 		custom_edition_sounds_globals.memory = NULL;
+	}
+	if (custom_edition_sounds_globals.celt_work)
+	{
+		halo_custom_edition_memory_free(custom_edition_sounds_globals.celt_work);
+		custom_edition_sounds_globals.celt_work = NULL;
+	}
+	if (custom_edition_sounds_globals.celt_decoded_count)
+	{
+		platform_log("celt sound: %lu permutations of MCC's CELT banks made Xbox ADPCM with the map",
+			custom_edition_sounds_globals.celt_decoded_count);
+		custom_edition_sounds_globals.celt_decoded_count = 0;
 	}
 	/* (the tags that named the chains go with the map) */
 	if (custom_edition_sounds_globals.chain_memory)

@@ -559,7 +559,7 @@ struct scene_pack_ce *scene_pack_ce_open(
 	struct cache_file_identity identity;
 	struct custom_edition_load_report *report = NULL;
 	struct custom_edition_conversion_report *conversion = NULL;
-	struct tag_validate_file_range ranges[3];
+	struct tag_validate_file_range ranges[4];
 	enum cache_file_status status;
 	char path[512];
 	unsigned long room;
@@ -749,9 +749,13 @@ struct scene_pack_ce *scene_pack_ce_open(
 	ranges[1].size = ce->resources[_resource_map_bitmaps].size;
 	ranges[2].offset = COMBINED_SOUNDS_OFFSET;
 	ranges[2].size = ce->resources[_resource_map_sounds].size;
+	/* (port) MCC's own map: its sounds of MCC's CELT banks (mcc_sound.h) */
+	ranges[3].offset = TAG_VALIDATE_MCC_CELT_STREAMS;
+	ranges[3].size = 0x7FFFFFFFUL;
 	if (cancel && *cancel)
 		goto stopped;
-	if (!tag_validate_custom_edition_tags_isolated(ce->tags, (long)ce->loaded_bytes, ce->tags_room, ranges, 3, identity.name,
+	if (!tag_validate_custom_edition_tags_isolated(ce->tags, (long)ce->loaded_bytes, ce->tags_room, ranges, ce->mcc ? 4 : 3,
+		identity.name,
 		&corrections))
 	{
 		snprintf(why, (size_t)why_size, "%s.map failed the tag check", map_name);
@@ -2161,6 +2165,26 @@ boolean scene_pack_ce_permutation_write(
 	{
 		permutation.samples.size = 0;
 		permutation.samples.file_offset = 0;
+		memcpy(permutation_bytes, &permutation, sizeof(permutation));
+		return TRUE;
+	}
+	if (CUSTOM_EDITION_PERMUTATION_IS_MCC_CELT((unsigned short)compression))
+	{
+		/* (port) MCC's dialogue, music and streamed sounds (mcc_sound.h):
+		kept as the stream of the CELT bank it is - its place in the bank's
+		file, its flag, its Xbox ADPCM's size, cut to what the sound cache
+		holds - and made Xbox ADPCM as it loads (custom_edition_sounds.c), as
+		the map's own are: nothing in the pack's data (decoding them here took
+		29 s of the PC for a30's marines; the tag check takes the stream as the
+		bank's: tag_validate.c) */
+		unsigned long block_bytes = (unsigned long)OGG_SOUND_ADPCM_BLOCK_BYTES * (unsigned long)channels;
+
+		if (permutation.sample_buffer_size > OGG_SOUND_MAXIMUM_ADPCM_BYTES)
+		{
+			permutation.sample_buffer_size = OGG_SOUND_MAXIMUM_ADPCM_BYTES / block_bytes * block_bytes;
+			ce->permutations_truncated++;
+		}
+		ce->permutations_transcoded++;
 		memcpy(permutation_bytes, &permutation, sizeof(permutation));
 		return TRUE;
 	}

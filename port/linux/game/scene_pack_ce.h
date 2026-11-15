@@ -22,6 +22,7 @@ that comes of it is an Xbox pack: the game loads and checks it as any
 #include "scene_pack.h"
 
 #include <stdio.h>
+#include <stdint.h>
 
 struct scene_pack_recipe;
 struct scene_pack_ce;

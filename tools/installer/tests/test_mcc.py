@@ -118,8 +118,9 @@ def test_install_mcc_files(tmp_path):
         ["mcc/halo1/maps/bitmaps.map", "mcc/halo1/maps/ui.map"] +
         ["mcc/halo1/maps/custom_edition/%s" % name for name, _ in hcv.PC_RESOURCE_MAPS] +
         ["mcc/halo1/sound/pc/sounds_adpcm.fsb"] +
+        ["mcc/halo1/sound/pc/%s" % name for name, _ in hcv.MCC_SOUND_CELT_BANKS] +
         ["mcc/halo1/sound/pc/lst/%s" % name for name in hcv.MCC_SOUND_LISTS])
-    # exactly what the game reads: not the other banks, not the other games, nothing in maps/
+    # exactly what the game reads: not the other languages' banks, not the other games, nothing in maps/
     assert relative_files(out) == expected
     for relative in expected:
         assert (out / relative).read_bytes() == files[relative[len("mcc/"):]]

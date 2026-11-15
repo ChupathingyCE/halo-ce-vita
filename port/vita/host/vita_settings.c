@@ -4537,7 +4537,7 @@ static int page_lines(struct line *lines)
 		{
 			snprintf(lines[count++].text, sizeof(lines[0].text), T("Content: %.30s"), maps_content_folder);
 			lines[count].type = LINE_INFO;
-			snprintf(lines[count++].text, sizeof(lines[0].text), T("Halo CE: %d MCC maps (no sound yet)"), maps_content_halo1);
+			snprintf(lines[count++].text, sizeof(lines[0].text), T("Halo CE: %d MCC maps"), maps_content_halo1);
 		}
 		else
 		{

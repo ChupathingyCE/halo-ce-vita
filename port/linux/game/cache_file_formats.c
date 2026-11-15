@@ -4052,6 +4052,11 @@ static void sound_prepare(
 					halved_permutations++;
 				}
 			}
+			else if (CUSTOM_EDITION_PERMUTATION_IS_MCC_CELT((uint16_t)permutation_compression))
+			{
+				/* (port: a stream of one of MCC's CELT banks, its sizes given
+				by mcc_sound_map, made Xbox ADPCM as it loads) */
+			}
 			else
 			{
 				decodable = 0;
@@ -4168,6 +4173,317 @@ static int mcc_sound_name_matches(
 	return 1;
 }
 
+/* whether a CELT bank's stream named `stream_name` (the permutation's own
+name: "A10_010_CryoTech", "altlp1") is the permutation named `name` (any
+case, its 31 characters) */
+static int mcc_sound_name_matches_whole(
+	uint8_t const *permutation_name,
+	char const *stream_name)
+{
+	size_t index;
+
+	if (!stream_name)
+		return 1;
+	for (index = 0; index < 31; index++)
+	{
+		int expected = (unsigned char)stream_name[index];
+		int found = permutation_name[index];
+
+		if (expected >= 'A' && expected <= 'Z')
+			expected += 'a' - 'A';
+		if (found >= 'A' && found <= 'Z')
+			found += 'a' - 'A';
+		if (expected != found)
+			return 0;
+		if (!expected)
+			return 1;
+	}
+	return 1;
+}
+
+/* (port) the streams of a CELT bank's record (`count` from `first`) a pitch
+range's first `permutations` permutations are by their names (MCC's CELT
+banks name a stream after its permutation, but do not keep the tag's order:
+strnglp3's loops are lp4, lp1, lp2, lp3 in the tag and lp1-lp4 in the bank):
+1 with `streams` filled when every one of them names a stream of its own;
+else 0 (the order is taken as it is) */
+#define MCC_SOUND_NAMED_PERMUTATIONS 64
+
+static int mcc_sound_streams_by_name(
+	struct mcc_sound_source const *source,
+	int bank,
+	uint32_t first,
+	uint32_t count,
+	uint8_t const *permutations,
+	int32_t permutation_count,
+	uint32_t *streams)
+{
+	uint64_t used = 0;
+	int32_t index;
+
+	if (permutation_count <= 0 || permutation_count > MCC_SOUND_NAMED_PERMUTATIONS || count > MCC_SOUND_NAMED_PERMUTATIONS ||
+		(uint32_t)permutation_count > count)
+	{
+		return 0;
+	}
+	for (index = 0; index < permutation_count; index++)
+	{
+		uint8_t const *permutation = permutations + (uint32_t)index * SOUND_PERMUTATION_BYTES;
+		uint32_t candidate;
+		int found = 0;
+
+		/* (its own place first: a bank whose names repeat keeps the order) */
+		for (candidate = 0; candidate < count && !found; candidate++)
+		{
+			uint32_t tried = ((uint32_t)index + candidate) % count;
+			struct mcc_sound_stream stream;
+
+			if (used & (1ULL << tried) || !source->stream(source->context, bank, first + tried, &stream) || !stream.name)
+				continue;
+			if (mcc_sound_name_matches_whole(permutation, stream.name))
+			{
+				used |= 1ULL << tried;
+				streams[index] = first + tried;
+				found = 1;
+			}
+		}
+		if (!found)
+			return 0;
+	}
+	return 1;
+}
+
+/* (port) A sound of one of MCC's CELT banks whose tag splits a long sound
+into permutations (the music, the cinematics' music and foley: Halo's
+"split long sound into permutations", a head permutation followed by the
+pieces its next permutation index chains) where MCC's bank has each head's
+whole chain as one stream. Each pitch range's heads (its actual permutation
+count) are the streams in order; a head's chain's length (its pieces'
+buffer sizes, Halo PC's 16-bit PCM at the tag's rate and channels) must be
+its stream's, within a frame of CELT or a hundredth. The head is given the
+whole stream (custom_edition_sounds.c makes it a chain of links again as
+long sounds are) and ends there; the pieces are left without samples (no
+head reaches them now). FALSE when the sound is not such a one (as many
+permutations as streams): mcc_sound_map maps it one to one. */
+#define SOUND_SPLIT_LONG_SOUND_BIT 1
+#define SOUND_PITCH_RANGE_ACTUAL_PERMUTATION_COUNT_OFFSET 0x2C
+#define SOUND_PERMUTATION_NEXT_OFFSET 0x2A
+
+static int mcc_sound_map_chains(
+	struct load_state const *state,
+	uint8_t *sound,
+	char const *path,
+	int bank,
+	int named,
+	uint32_t const *first,
+	uint32_t const *count,
+	uint32_t total_first,
+	uint32_t total_count,
+	int32_t pitch_range_count,
+	uint32_t pitch_ranges_offset,
+	struct custom_edition_conversion_report *report)
+{
+	struct mcc_sound_source const *source = mcc_sound_source_current;
+	int tag_channels = read_u16(sound + SOUND_ENCODING_OFFSET) == SOUND_ENCODING_STEREO ? 2 : 1;
+	uint32_t tag_rate = read_u16(sound + SOUND_SAMPLE_RATE_OFFSET) == SOUND_SAMPLE_RATE_44KHZ ? 44100 : 22050;
+	uint32_t permutations = 0;
+	uint32_t channels = 0;
+	uint32_t output_rate = 0;
+	uint32_t heads_mapped = 0;
+	uint32_t longest_ms = 0;
+	uint32_t by_name_streams[MCC_SOUND_NAMED_PERMUTATIONS];
+	int by_name = 0;
+	char const *failure = NULL;
+	char line[256];
+	int32_t range_index;
+	int pass;
+
+	if (!(read_u32(sound) & (1U << SOUND_SPLIT_LONG_SOUND_BIT)) || pitch_range_count <= 0 ||
+		pitch_range_count > MCC_SOUND_RANGES)
+	{
+		return 0;
+	}
+	for (range_index = 0; range_index < pitch_range_count; range_index++)
+	{
+		uint8_t const *range = state->tag_cache + pitch_ranges_offset + (uint32_t)range_index * SOUND_PITCH_RANGE_BYTES;
+		int32_t range_permutations;
+		uint32_t offset;
+
+		if (!loaded_block_get(range + SOUND_PITCH_RANGE_PERMUTATIONS_OFFSET, tag_cache_address, state->used_bytes,
+			SOUND_PERMUTATION_BYTES, &range_permutations, &offset))
+		{
+			range_permutations = 0;
+		}
+		if (named && (uint32_t)range_permutations <= count[range_index])
+			return 0;
+		permutations += (uint32_t)range_permutations;
+	}
+	if (!named && permutations <= total_count)
+		return 0;
+	/* pass 0 checks every chain against its stream, pass 1 changes them */
+	for (pass = 0; pass < 2 && !failure; pass++)
+	{
+		uint32_t cursor = 0;
+
+		heads_mapped = 0;
+		for (range_index = 0; range_index < pitch_range_count && !failure; range_index++)
+		{
+			uint8_t const *range = state->tag_cache + pitch_ranges_offset + (uint32_t)range_index * SOUND_PITCH_RANGE_BYTES;
+			int32_t range_permutations;
+			uint32_t permutations_offset;
+			int32_t heads;
+			int32_t head;
+
+			if (!loaded_block_get(range + SOUND_PITCH_RANGE_PERMUTATIONS_OFFSET, tag_cache_address, state->used_bytes,
+				SOUND_PERMUTATION_BYTES, &range_permutations, &permutations_offset))
+			{
+				range_permutations = 0;
+			}
+			heads = read_s16(range + SOUND_PITCH_RANGE_ACTUAL_PERMUTATION_COUNT_OFFSET);
+			if (heads < 1 || heads > range_permutations)
+			{
+				failure = "a pitch range choosing from no permutations";
+				break;
+			}
+			if (named && (uint32_t)heads != count[range_index])
+			{
+				failure = "a pitch range with another number of heads than its record's streams";
+				break;
+			}
+			/* (the heads' streams by their names, where the record is the
+			range's alone) */
+			by_name = (named || pitch_range_count == 1) &&
+				mcc_sound_streams_by_name(source, bank, named ? first[range_index] : total_first,
+					named ? count[range_index] : total_count, state->tag_cache + permutations_offset, heads, by_name_streams);
+			for (head = 0; head < heads && !failure; head++)
+			{
+				uint8_t *head_permutation = state->tag_cache + permutations_offset + (uint32_t)head * SOUND_PERMUTATION_BYTES;
+				struct mcc_sound_stream stream;
+				uint32_t index = by_name ? by_name_streams[head] : named ? first[range_index] + (uint32_t)head : total_first + cursor;
+				uint64_t chain_bytes = 0;
+				uint64_t expected;
+				uint64_t tolerance;
+				uint64_t frames;
+				uint64_t need;
+				int32_t piece = head;
+				int32_t steps = 0;
+
+				if (!named && cursor >= total_count)
+				{
+					failure = "more heads than streams";
+					break;
+				}
+				cursor++;
+				/* the chain: the head and its pieces, each once at most */
+				while (piece >= 0 && piece < range_permutations && steps <= range_permutations)
+				{
+					uint8_t *permutation = state->tag_cache + permutations_offset + (uint32_t)piece * SOUND_PERMUTATION_BYTES;
+
+					chain_bytes += read_u32(permutation + SOUND_PERMUTATION_BUFFER_SIZE_OFFSET);
+					if (pass == 1 && piece != head)
+					{
+						uint8_t *samples = permutation + SOUND_PERMUTATION_SAMPLES_OFFSET;
+
+						/* (a piece no head reaches now: no samples) */
+						write_u16(permutation + SOUND_PERMUTATION_COMPRESSION_OFFSET, SOUND_COMPRESSION_XBOX_ADPCM);
+						write_u32(samples + TAG_DATA_SIZE_OFFSET, 0);
+						write_u32(samples + TAG_DATA_FILE_OFFSET_OFFSET, 0);
+						write_u32(permutation + SOUND_PERMUTATION_BUFFER_SIZE_OFFSET, 0);
+					}
+					piece = read_s16(permutation + SOUND_PERMUTATION_NEXT_OFFSET);
+					steps++;
+				}
+				if (steps > range_permutations)
+				{
+					failure = "a chain of permutations that loops";
+					break;
+				}
+				if (!source->stream(source->context, bank, index, &stream))
+				{
+					failure = "a stream the bank does not have";
+					break;
+				}
+				expected = chain_bytes / (2u * (uint32_t)tag_channels) * 44100u / tag_rate;
+				tolerance = stream.samples / 100 > 512 ? stream.samples / 100 : 512;
+				if (stream.channels < 1 || stream.channels > 2 || stream.rate != 44100)
+					failure = "a rate or channel count the game does not play";
+				else if (channels && stream.channels != channels)
+					failure = "streams of different channels";
+				else if (stream.bytes == 0 || stream.offset > 0x7FFFFFFFu || stream.bytes > 0x7FFFFFFFu - stream.offset)
+					failure = "a CELT stream that is empty or too long";
+				else if (expected + tolerance < stream.samples || stream.samples + tolerance < expected)
+					failure = "a chain of permutations not as long as its stream";
+				if (failure)
+				{
+					if (source->trace)
+					{
+						snprintf(line, sizeof(line), "%s: head %ld of pitch range %ld (%.32s): %lu frames in the tag, stream %lu (%s) %lu",
+							path, (long)head, (long)range_index, (char const *)head_permutation, (unsigned long)expected,
+							(unsigned long)index, stream.name ? stream.name : "?", (unsigned long)stream.samples);
+						source->trace(source->context, line);
+					}
+					break;
+				}
+				channels = stream.channels;
+				output_rate = channels == 1 || tag_rate != 44100 ? 22050 : 44100;
+				frames = ((uint64_t)stream.samples * output_rate + stream.rate - 1) / stream.rate;
+				need = (frames + 63) / 64 * 36 * channels;
+				if (pass == 0)
+				{
+					uint32_t length_ms = (uint32_t)((uint64_t)stream.samples * 1000 / stream.rate);
+
+					if (length_ms > longest_ms)
+						longest_ms = length_ms;
+				}
+				else
+				{
+					uint8_t *samples = head_permutation + SOUND_PERMUTATION_SAMPLES_OFFSET;
+
+					write_u16(head_permutation + SOUND_PERMUTATION_COMPRESSION_OFFSET,
+						(uint16_t)(CUSTOM_EDITION_PERMUTATION_MCC_CELT | (uint32_t)bank));
+					write_u16(head_permutation + SOUND_PERMUTATION_NEXT_OFFSET, 0xFFFF);
+					write_u32(samples + TAG_DATA_SIZE_OFFSET, stream.bytes);
+					write_u32(samples + TAG_DATA_FILE_OFFSET_OFFSET, stream.offset);
+					write_u32(samples + TAG_DATA_FLAGS_OFFSET,
+						(read_u32(samples + TAG_DATA_FLAGS_OFFSET) & ~(1U << SOUND_SAMPLES_IN_RESOURCE_MAP_BIT)) |
+						CUSTOM_EDITION_SAMPLES_MCC_CELT_FLAG);
+					write_u32(head_permutation + SOUND_PERMUTATION_BUFFER_SIZE_OFFSET, (uint32_t)need);
+					report->mcc_sound_celt_adpcm_bytes += need;
+				}
+				heads_mapped++;
+			}
+		}
+		if (!failure && pass == 0 && !named && cursor != total_count)
+			failure = "fewer heads than streams";
+	}
+	if (failure)
+	{
+		report->mcc_sounds_mismatched++;
+		if (source->trace)
+		{
+			snprintf(line, sizeof(line), "%s: %lu permutations in chains, %lu streams from %lu: %s (silent)", path,
+				(unsigned long)permutations, (unsigned long)total_count, (unsigned long)total_first, failure);
+			source->trace(source->context, line);
+		}
+		return 1;
+	}
+	write_u16(sound + SOUND_SAMPLE_RATE_OFFSET, output_rate == 44100 ? SOUND_SAMPLE_RATE_44KHZ : SOUND_SAMPLE_RATE_22KHZ);
+	write_u16(sound + SOUND_ENCODING_OFFSET, channels == 2 ? SOUND_ENCODING_STEREO : SOUND_ENCODING_MONO);
+	write_u16(sound + SOUND_COMPRESSION_OFFSET, SOUND_COMPRESSION_XBOX_ADPCM);
+	report->mcc_sounds_mapped++;
+	report->mcc_sound_permutations_mapped += (int32_t)heads_mapped;
+	report->mcc_sounds_celt_mapped++;
+	report->mcc_sound_celt_permutations_mapped += (int32_t)heads_mapped;
+	if (source->trace)
+	{
+		snprintf(line, sizeof(line), "%s: %lu chains of %lu permutations from stream %lu of bank %d, %lu Hz, %lu channels, %lu ms, CELT made Xbox ADPCM",
+			path, (unsigned long)heads_mapped, (unsigned long)permutations, (unsigned long)(named ? first[0] : total_first), bank,
+			(unsigned long)output_rate, (unsigned long)channels, (unsigned long)longest_ms);
+		source->trace(source->context, line);
+	}
+	return 1;
+}
+
 static void mcc_sound_map(
 	struct load_state const *state,
 	uint32_t sound_offset,
@@ -4181,6 +4497,13 @@ static void mcc_sound_map(
 	struct mcc_sound_stream stream;
 	uint32_t first[MCC_SOUND_RANGES];
 	uint32_t count[MCC_SOUND_RANGES];
+	int range_bank[MCC_SOUND_RANGES];
+	int bank = -1;
+	int celt = 0;
+	uint32_t output_rate = 0;
+	uint32_t names_matched = 0;
+	uint32_t by_name_streams[MCC_SOUND_NAMED_PERMUTATIONS];
+	int by_name = 0;
 	int named = 0;
 	uint32_t total_first = 0;
 	uint32_t total_count = 0;
@@ -4206,7 +4529,7 @@ static void mcc_sound_map(
 	{
 		pitch_range_count = 0;
 	}
-	if (source->find(source->context, path, &total_first, &total_count, &elsewhere))
+	if (source->find(source->context, path, &bank, &total_first, &total_count, &elsewhere))
 	{
 		first[0] = total_first;
 	}
@@ -4223,13 +4546,16 @@ static void mcc_sound_map(
 			memcpy(range_name, pitch_range, 32);
 			range_name[32] = 0;
 			if (!range_name[0] || snprintf(range_path, sizeof(range_path), "%s\\%s", path, range_name) >= (int)sizeof(range_path) ||
-				!source->find(source->context, range_path, &first[pitch_range_index], &count[pitch_range_index], &range_elsewhere))
+				!source->find(source->context, range_path, &range_bank[pitch_range_index], &first[pitch_range_index],
+					&count[pitch_range_index], &range_elsewhere) ||
+				(pitch_range_index > 0 && range_bank[pitch_range_index] != range_bank[0]))
 			{
 				named = 0;
 				if (pitch_range_index == 0 && range_elsewhere)
 					elsewhere = 1;
 				break;
 			}
+			bank = range_bank[0];
 		}
 	}
 	if (!named && !total_count)
@@ -4243,6 +4569,14 @@ static void mcc_sound_map(
 			snprintf(line, sizeof(line), "%s: %s", path, elsewhere ? "in a CELT bank (silent)" : "in no list (silent)");
 			source->trace(source->context, line);
 		}
+		return;
+	}
+	/* (a sound of a CELT bank: made Xbox ADPCM as it loads, at its own
+	rate where the game plays it - a mono sound at 22 kHz only) */
+	celt = bank != MCC_SOUND_SOURCE_ADPCM_BANK;
+	if (celt && mcc_sound_map_chains(state, sound, path, bank, named, first, count, total_first, total_count,
+		pitch_range_count, pitch_ranges_offset, report))
+	{
 		return;
 	}
 	if (pitch_range_count <= 0)
@@ -4273,6 +4607,12 @@ static void mcc_sound_map(
 				failure = "a pitch range with another number of permutations than its record's streams";
 				break;
 			}
+			/* (a CELT bank's streams by their names, where the record is the
+			range's alone: mcc_sound_streams_by_name) */
+			by_name = celt && (named || pitch_range_count == 1) &&
+				mcc_sound_streams_by_name(source, bank, named ? first[pitch_range_index] : total_first,
+					named ? count[pitch_range_index] : total_count, state->tag_cache + permutations_offset, permutation_count,
+					by_name_streams);
 			for (permutation_index = 0; permutation_index < permutation_count && !failure; permutation_index++)
 			{
 				uint8_t *permutation = state->tag_cache + permutations_offset + (uint32_t)permutation_index * SOUND_PERMUTATION_BYTES;
@@ -4285,23 +4625,36 @@ static void mcc_sound_map(
 					failure = "more permutations than streams";
 					break;
 				}
-				index = named ? first[pitch_range_index] + local : total_first + streams_done;
-				if (!source->stream(source->context, index, &stream))
+				index = by_name ? by_name_streams[permutation_index] : named ? first[pitch_range_index] + local : total_first + streams_done;
+				if (!source->stream(source->context, bank, index, &stream))
 				{
 					failure = "a stream the bank does not have";
 					break;
 				}
-				need = ((uint64_t)stream.samples + 63) / 64 * 36 * stream.channels;
+				if (celt)
+				{
+					/* (the Xbox ADPCM it is made: its frames at the output rate,
+					pass 1 knowing the rate) */
+					uint64_t frames = output_rate ?
+						((uint64_t)stream.samples * output_rate + stream.rate - 1) / (stream.rate ? stream.rate : 1) : stream.samples;
+
+					need = (frames + 63) / 64 * 36 * stream.channels;
+				}
+				else
+					need = ((uint64_t)stream.samples + 63) / 64 * 36 * stream.channels;
 				if (stream.channels < 1 || stream.channels > 2 || (stream.rate != 22050 && stream.rate != 44100))
 					failure = "a rate or channel count the game does not play";
 				else if (stream.name_range >= 0 && (stream.name_range != pitch_range_index ||
 					(uint32_t)stream.name_permutation != local))
 					failure = "a stream whose name's numbers are not its permutation's";
-				else if (!mcc_sound_name_matches(permutation, stream.name))
+				else if (!celt && !mcc_sound_name_matches(permutation, stream.name))
 					failure = "a stream named for another permutation";
-				else if (need == 0 || need > stream.bytes || need > MCC_SOUND_MAXIMUM_PERMUTATION_BYTES ||
+				else if (celt && (need == 0 || stream.bytes == 0 || stream.offset > 0x7FFFFFFFu ||
+					stream.bytes > 0x7FFFFFFFu - stream.offset || need > 0x7FFFFFFFull))
+					failure = "a CELT stream that is empty or too long";
+				else if (!celt && (need == 0 || need > stream.bytes || need > MCC_SOUND_MAXIMUM_PERMUTATION_BYTES ||
 					(uint64_t)stream.offset + need > source->bank_bytes ||
-					(uint64_t)source->combined_offset + stream.offset + need > 0xFFFFFFFFull)
+					(uint64_t)source->combined_offset + stream.offset + need > 0xFFFFFFFFull))
 					failure = "a stream that is empty, too long for the sound cache or past the bank";
 				else if (pass == 0 && (pitch_range_index > 0 || streams_done > 0) && (stream.rate != rate || stream.channels != channels))
 					failure = "streams of different rates or channels";
@@ -4315,6 +4668,24 @@ static void mcc_sound_map(
 					channels = stream.channels;
 					if (length_ms > longest_ms)
 						longest_ms = length_ms;
+					if (celt && mcc_sound_name_matches_whole(permutation, stream.name))
+						names_matched++;
+				}
+				else if (celt)
+				{
+					uint8_t *samples = permutation + SOUND_PERMUTATION_SAMPLES_OFFSET;
+
+					/* (the stream's place in its bank's file: read and made
+					Xbox ADPCM by the sound cache, custom_edition_sounds.c) */
+					write_u16(permutation + SOUND_PERMUTATION_COMPRESSION_OFFSET,
+						(uint16_t)(CUSTOM_EDITION_PERMUTATION_MCC_CELT | (uint32_t)bank));
+					write_u32(samples + TAG_DATA_SIZE_OFFSET, stream.bytes);
+					write_u32(samples + TAG_DATA_FILE_OFFSET_OFFSET, stream.offset);
+					write_u32(samples + TAG_DATA_FLAGS_OFFSET,
+						(read_u32(samples + TAG_DATA_FLAGS_OFFSET) & ~(1U << SOUND_SAMPLES_IN_RESOURCE_MAP_BIT)) |
+						CUSTOM_EDITION_SAMPLES_MCC_CELT_FLAG);
+					write_u32(permutation + SOUND_PERMUTATION_BUFFER_SIZE_OFFSET, (uint32_t)need);
+					report->mcc_sound_celt_adpcm_bytes += need;
 				}
 				else
 				{
@@ -4333,6 +4704,12 @@ static void mcc_sound_map(
 		}
 		if (!failure && pass == 0 && !named && streams_done != total_count)
 			failure = "fewer permutations than streams";
+		if (!failure && pass == 0 && celt)
+		{
+			/* the game plays a mono sound at 22 kHz only, a stereo one at
+			its tag's rate */
+			output_rate = channels == 1 || read_u16(sound + SOUND_SAMPLE_RATE_OFFSET) != SOUND_SAMPLE_RATE_44KHZ ? 22050 : 44100;
+		}
 	}
 	if (failure)
 	{
@@ -4345,18 +4722,31 @@ static void mcc_sound_map(
 		}
 		return;
 	}
-	write_u16(sound + SOUND_SAMPLE_RATE_OFFSET, rate == 44100 ? SOUND_SAMPLE_RATE_44KHZ : SOUND_SAMPLE_RATE_22KHZ);
-	write_u16(sound + SOUND_ENCODING_OFFSET, channels == 2 ? SOUND_ENCODING_STEREO : SOUND_ENCODING_MONO);
-	write_u16(sound + SOUND_COMPRESSION_OFFSET, SOUND_COMPRESSION_XBOX_ADPCM);
-	tag_longest_ms = read_u32(sound + SOUND_LONGEST_PERMUTATION_LENGTH_OFFSET);
-	report->mcc_sounds_mapped++;
-	report->mcc_sound_permutations_mapped += (int32_t)streams_done;
-	if (source->trace)
 	{
-		snprintf(line, sizeof(line), "%s: %lu permutations from stream %lu%s, %lu Hz, %lu channels, %lu ms (the tag says %lu)", path,
-			(unsigned long)streams_done, (unsigned long)(named ? first[0] : total_first), named ? " (a record to each pitch range)" : "",
-			(unsigned long)rate, (unsigned long)channels, (unsigned long)longest_ms, (unsigned long)tag_longest_ms);
-		source->trace(source->context, line);
+		uint16_t tag_rate = read_u16(sound + SOUND_SAMPLE_RATE_OFFSET);
+		uint16_t tag_encoding = read_u16(sound + SOUND_ENCODING_OFFSET);
+		uint32_t played_rate = celt ? output_rate : rate;
+
+		write_u16(sound + SOUND_SAMPLE_RATE_OFFSET, played_rate == 44100 ? SOUND_SAMPLE_RATE_44KHZ : SOUND_SAMPLE_RATE_22KHZ);
+		write_u16(sound + SOUND_ENCODING_OFFSET, channels == 2 ? SOUND_ENCODING_STEREO : SOUND_ENCODING_MONO);
+		write_u16(sound + SOUND_COMPRESSION_OFFSET, SOUND_COMPRESSION_XBOX_ADPCM);
+		tag_longest_ms = read_u32(sound + SOUND_LONGEST_PERMUTATION_LENGTH_OFFSET);
+		report->mcc_sounds_mapped++;
+		report->mcc_sound_permutations_mapped += (int32_t)streams_done;
+		if (celt)
+		{
+			report->mcc_sounds_celt_mapped++;
+			report->mcc_sound_celt_permutations_mapped += (int32_t)streams_done;
+		}
+		if (source->trace)
+		{
+			snprintf(line, sizeof(line), "%s: %lu permutations from stream %lu of bank %d%s, %lu Hz, %lu channels, %lu ms (the tag says %lu, %s %s)%s%s", path,
+				(unsigned long)streams_done, (unsigned long)(named ? first[0] : total_first), bank, named ? " (a record to each pitch range)" : "",
+				(unsigned long)played_rate, (unsigned long)channels, (unsigned long)longest_ms, (unsigned long)tag_longest_ms,
+				tag_rate == SOUND_SAMPLE_RATE_44KHZ ? "44 kHz" : "22 kHz", tag_encoding == SOUND_ENCODING_STEREO ? "stereo" : "mono",
+				celt ? ", CELT made Xbox ADPCM" : "", celt && names_matched != streams_done ? ", stream names not the permutations'" : "");
+			source->trace(source->context, line);
+		}
 	}
 }
 

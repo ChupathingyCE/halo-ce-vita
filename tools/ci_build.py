@@ -108,6 +108,9 @@ def main() -> int:
     # in every build, whose BSD licenses ask the same
     shutil.copy2(ROOT / "port/third_party/tremor/COPYING", dist / "tremor-COPYING.txt")
     shutil.copy2(ROOT / "port/third_party/libogg/COPYING", dist / "libogg-COPYING.txt")
+    # MCC's Halo CE dialogue and music (port/third_party/celt), in every
+    # build, whose BSD license asks the same
+    shutil.copy2(ROOT / "port/third_party/celt/COPYING", dist / "celt-COPYING.txt")
     return 0
 
 

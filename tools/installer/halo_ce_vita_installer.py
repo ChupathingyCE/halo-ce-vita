@@ -825,8 +825,13 @@ def find_ce_installers() -> List[str]:
 # MCC's own bitmaps.map, ui.map for the menus when there is no Xbox ui.map),
 # halo1/maps/custom_edition (the Halo PC files), and for the classic sound
 # effects halo1/sound/pc/sounds_adpcm.fsb (88 MB) with its list
-# lst/sounds_adpcm.lst.bin (the other lists only count what stays silent).
-# Nothing else of MCC (dialogue and music banks, the other games) is needed.
+# lst/sounds_adpcm.lst.bin, and the banks of CELT (fsb_celt.h, made Xbox
+# ADPCM as they play) with their lists: the dialogue (sounds_dialogs.fsb, the
+# English one, 330 MB: the marines, the announcer, the cinematics), the music
+# (sounds_music.fsb, 957 MB), the streamed ambience, cinematic music and
+# foley (sounds_stream.fsb, 159 MB) and the few sound effects only
+# Anniversary has (sounds_debug.fsb, 95 MB). Nothing else of MCC (the other
+# languages' dialogue, the other games) is needed.
 
 STAGING_MCC = "mcc"  # -> ux0:data/haloce-vita/mcc, the game's Halo content folder there
 # Halo PC's resource maps in MCC: the game takes them from here when the maps
@@ -840,6 +845,11 @@ MCC_MULTIPLAYER_MAPS = ("beavercreek", "sidewinder", "damnation", "ratrace", "pr
                         "deathisland", "gephyrophobia", "icefields", "infinity", "timberland")
 MCC_SOUND_PARTS = ("halo1", "sound", "pc")
 MCC_SOUND_BANK = "sounds_adpcm.fsb"
+# (each optional: without one its sounds are silent)
+MCC_SOUND_CELT_BANKS = (("sounds_dialogs.fsb", "the dialogue of MCC's maps is silent"),
+                        ("sounds_music.fsb", "the music of MCC's maps is silent"),
+                        ("sounds_stream.fsb", "the cinematics' music and the streamed ambience of MCC's maps are silent"),
+                        ("sounds_debug.fsb", "a few sound effects of MCC's maps are silent"))
 MCC_SOUND_LISTS = ("sounds_adpcm.lst.bin", "sounds_dialogs.lst.bin", "sounds_music.lst.bin",
                    "sounds_stream.lst.bin", "sounds_debug.lst.bin")
 MCC_FILE_MAXIMUM = 2 << 30
@@ -1002,6 +1012,8 @@ def mcc_plan(path: str) -> MccPlan:
     sound = (STAGING_MCC,) + MCC_SOUND_PARTS
     take(MCC_SOUND_PARTS, MCC_SOUND_BANK, sound + (MCC_SOUND_BANK,), "bank", False,
          "MCC's maps play without sound effects")
+    for name, note in MCC_SOUND_CELT_BANKS:
+        take(MCC_SOUND_PARTS, name, sound + (name,), "bank", False, note)
     for name in MCC_SOUND_LISTS:
         take(MCC_SOUND_PARTS + ("lst",), name, sound + ("lst", name), "list", False,
              "MCC's maps play without sound effects" if name == MCC_SOUND_LISTS[0] else "")

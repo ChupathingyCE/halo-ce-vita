@@ -55,6 +55,7 @@ LICENSES = {
     "miniupnpc-LICENSE.txt": "port/third_party/miniupnpc/LICENSE",
     "tremor-COPYING.txt": "port/third_party/tremor/COPYING",
     "libogg-COPYING.txt": "port/third_party/libogg/COPYING",
+    "celt-COPYING.txt": "port/third_party/celt/COPYING",
 }
 # where a 32-bit libSDL3.so.0 is looked for (Linux), in this order
 SDL_CANDIDATES = (ROOT.parent / "sdl3-i686/lib", ROOT.parent.parent / "sdl3-i686/lib", Path("/usr/lib32"),

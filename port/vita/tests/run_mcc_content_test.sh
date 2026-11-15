@@ -15,7 +15,7 @@
 #      campaign  each of HALO_TEST_MCC_LEVELS (b30 d40) started as the campaign
 #                list starts it (mods\mcc_<level>), its cinematics skipped,
 #                played HALO_TEST_MCC_SECONDS (60): it must load from MCC's
-#                folder, say its sounds are silent, tick on, and log no
+#                folder, say where its sounds are (MCC's FMOD banks), tick on, and log no
 #                assertion or exception
 #      won       mcc_b30 won goes on to mcc_b40, MCC's next level
 #      mp        mcc_bloodgulch, an offline game with HALO_TEST_MCC_BOTS (6)
@@ -159,7 +159,7 @@ case " $parts " in *" harness "*)
 				! grep -aq "custom edition: loading 'd:\\\\mcc\\\\halo1\\\\maps\\\\$level.map'" "$debug"; then
 				fail "mcc_$level was not loaded from MCC's folder ($out/mcc_$level)"
 			elif ! grep -aq "mcc: '$level' is MCC's own campaign map: its sounds are in MCC's FMOD banks" "$debug"; then
-				fail "mcc_$level: its silent sounds were not said"
+				fail "mcc_$level: where its sounds are was not said"
 			elif [ "${ticks:-0}" -lt $((seconds * 20)) ]; then
 				fail "mcc_$level reached tick ${ticks:-0} in $seconds s"
 			else
@@ -547,7 +547,7 @@ case " $parts " in *" inmaps "*)
 		if ! grep -aq "the menu map is MCC's halo1.maps.ui.map (no Xbox ui.map" "$out/beside_mcc/data/debug.txt" 2>/dev/null &&
 			! grep -aq "the menu map is MCC's halo1.maps.ui.map (no Xbox ui.map" "$out/beside/haloce-vita/data/debug.txt"; then
 			fail "beside: no Xbox file: MCC's ui.map was not the menus' map"
-		elif ! grep -aq "mcc sound: .* play from sounds_adpcm.fsb" "$out/beside/haloce-vita/data/debug.txt"; then
+		elif ! grep -aq "mcc sound: .* from sounds_adpcm.fsb" "$out/beside/haloce-vita/data/debug.txt"; then
 			fail "beside: MCC's sound bank was not found"
 		fi
 		if grep -aq "content: the Halo content folder: .*/beside/haloce-vita/mcc$" "$out/beside_mcc/run.log"; then

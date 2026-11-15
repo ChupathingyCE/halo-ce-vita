@@ -140,15 +140,35 @@ LIBOGG_INCLUDE = f"-I{LIBOGG_DIR / 'include'}"
 TLSF_DIR = Path("port/third_party/tlsf")
 
 
+# MCC's Halo CE dialogue, music and streamed sounds (port/linux/src/fsb_celt.c):
+# libcelt 0.11, its files as sources.txt lists them, each with celt_port.h
+# first (its names prefixed: Opus has functions of the same names)
+CELT_DIR = Path("port/third_party/celt")
+CELT_FLAGS = (f"-I{CELT_DIR / 'libcelt'}", f"-include {CELT_DIR / 'celt_port.h'}")
+
+
+def celt_sources() -> List[Path]:
+    """libcelt's sources (port/third_party/celt/sources.txt)"""
+    return [CELT_DIR / line.strip() for line in (CELT_DIR / "sources.txt").read_text().splitlines() if line.strip()]
+
+
+def is_celt_source(source: Path) -> bool:
+    """whether `source` is one of libcelt's (built with CELT_FLAGS, not Opus's)"""
+    return CELT_DIR in Path(source).parents
+
+
 def ogg_sound_sources(tlsf: bool = True) -> List[Path]:
-    """Tremor's and libogg's sources, and TLSF's unless the build has it
-    already (the Vita's host layer)"""
+    """Tremor's and libogg's sources, libcelt's (MCC's CELT banks), and
+    TLSF's unless the build has it already (the Vita's host layer)"""
     sources = [TREMOR_DIR / name for name in TREMOR_SOURCES] + [LIBOGG_DIR / name for name in LIBOGG_SOURCES]
-    return sources + ([TLSF_DIR / "tlsf.c"] if tlsf else [])
+    return sources + celt_sources() + ([TLSF_DIR / "tlsf.c"] if tlsf else [])
 
 
-def ogg_sound_cflags(abi: str) -> str:
-    """the decoder's flags: its own, with the platform's ABI"""
+def ogg_sound_cflags(abi: str, source: Path = None) -> str:
+    """the decoders' flags: their own, with the platform's ABI (libcelt's
+    with its own)"""
+    if source is not None and is_celt_source(source):
+        return " ".join([abi, "-std=gnu11", "-O2", *CELT_FLAGS, "-DNDEBUG", "-w"])
     return " ".join([abi, "-std=gnu11", "-O2", LIBOGG_INCLUDE, "-DNDEBUG", "-w"])
 # the self-updater's TLS (port/linux/src/posix_update.c) and the update
 # check's (posix_https.c)
@@ -615,7 +635,7 @@ def generate_linux_build(n: Writer, sln: Any) -> None:
             add_object(EXPAT_DIR / name, " ".join([abi, "-std=gnu11", f"-I{EXPAT_DIR}", "-w"]))
         # Custom Edition's Ogg Vorbis sounds (port/linux/src/ogg_sound.c)
         for source in ogg_sound_sources():
-            add_object(source, ogg_sound_cflags(abi))
+            add_object(source, ogg_sound_cflags(abi, source))
         # the game's sin, pow and the rest, the same on every port
         # (port/include/halo_math.h)
         for source in musl_math_sources():
@@ -683,7 +703,8 @@ def generate_linux_build(n: Writer, sln: Any) -> None:
                                  obj_dir / (game_dir / "cache_file_formats.o"),
                                  obj_dir / "port/linux/src/ogg_sound.o",
                                  obj_dir / "port/linux/src/xbox_adpcm_encoder.o",
-                                 *(obj_dir / source.with_suffix(".o") for source in ogg_sound_sources()),
+                                 *(obj_dir / source.with_suffix(".o") for source in ogg_sound_sources()
+                                   if not is_celt_source(source)),
                                  obj_dir / (game_dir / "tag_validate.o"),
                                  obj_dir / "port/linux/src/tag_relocate.o",
                                  *(obj_dir / source.with_suffix(".o") for source in sorted(game_dir.glob("tag_schema*.c"))),

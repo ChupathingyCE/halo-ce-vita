@@ -215,34 +215,62 @@ these numbers all agree with its streams (else it stays silent and is
 counted), and its streams are of one rate (22050 or 44100 Hz) and channel
 count and fit the sound cache.
 
-Still silent: everything in the CELT banks: dialogue
-(`sounds_dialogs.fsb` and the other languages'), music, streamed ambience
-and foley (`sounds_music.fsb`, `sounds_stream.fsb`), and the few
-Anniversary-only sound effects the ADPCM bank has no classic twin of. One
-line says what each map got (`mcc sound: 468 of the map's 1438 sounds
-play from sounds_adpcm.fsb ...; still silent: 970 in the CELT banks ...`),
-and `HALO_MCC_SOUND_TRACE=1` logs each sound. Without the sound folder
-the maps play silent, as before (`mcc: no sound effects bank`); a bank or
-list that is damaged or of another version is refused, said, and the
-sounds stay silent.
+**CELT (dialogue, music, streams)** (`port/linux/src/fsb_celt.c`,
+`port/third_party/celt`): the dialogue (`sounds_dialogs.fsb`, English:
+the marines, the announcer, the cinematics), the music
+(`sounds_music.fsb`), the streamed ambience, cinematic music and foley
+(`sounds_stream.fsb`) and the Anniversary-only sound effects
+(`sounds_debug.fsb`) are FMOD's CELT: every stream a run of frames, each a
+big-endian `0x17C30DF3`, a little-endian payload size and the payload, 512
+samples a frame at 44100 Hz, the stream's sample count its frames times
+512. That is libcelt 0.11.0 (bitstream 0x80000010, Mumble's copy, BSD) in
+FMOD's framing, `celt_mode_create(44100, 512)`, built as Opus's
+integration of it was (`OPUS_BUILD`: the pitch postfilter on) with the
+decoder's signalling off; the Opus library's CELT is a later codec and does
+not decode it, and libcelt built plainly refuses two frames of five.
 
-**CELT (dialogue, music, streams; not done)**: every stream of the other
-banks starts with FMOD's CELT frame header (a big-endian `0x17C30DF3`, a
-little-endian payload size, the payload; `fsb5_celt_frame_check`), 512
-samples a frame at 44100 Hz, constant bit rate (370 bytes a mono frame, 464 a
-stereo one; a 6-channel music stream is three stereo layers' frames one after
-another), and every stream's sample count is its frames times 512. That is
-libcelt 0.11.0 (bitstream 0x80000010) in FMOD's framing, with
-`celt_mode_create(44100, 512)` and the decoder's signalling switched off; the
-Opus library's CELT is not bitstream-compatible. libcelt 0.11 is BSD-licensed
-(Xiph.Org/CSIRO; Mumble keeps a copy, mumble-voip/celt-0.11.0), and a build of
-it decodes MCC's dialogue streams cleanly (no frame refused, speech-level RMS)
-at about 500 times real time on a desktop core. The plan is a decoder module
-beside `ogg_sound.c` and a transcoding beside Ogg Vorbis in
-`custom_edition_sounds.c` (decode, take 44.1 kHz mono to the 22 kHz the game
-plays, encode Xbox ADPCM, keep it in the `.sndcache` file), the music through
-the chains of links long Ogg sounds already use; the combined offset space
-will need a window for each bank (the music bank is 957 MB).
+A sound is looked for as MCC's classic mode plays it first: `sound\sfx\X`
+as `sound\old_sfx\X` (the ADPCM bank, as before), the music
+`sound\music\X` and the cinematics' `sound\sinomatixx\X` as
+`sound\old_music\...` (the Anniversary music has the paths of their own),
+in every bank; then the path itself (the dialogue, the foley, the few
+Anniversary-only effects). A CELT sound's permutations are pointed at their
+streams in the bank's file (compression `CUSTOM_EDITION_PERMUTATION_MCC_CELT`
+with the bank's number, the samples flagged so the tag check takes them as
+the bank's: `TAG_VALIDATE_MCC_CELT_STREAMS`, MCC's maps only) and made Xbox
+ADPCM as the sound cache loads them (`custom_edition_sounds.c`, through the
+sound converter `h2_sound_codec.c` (1.2.0's, cut to CELT and Xbox ADPCM here): a mono sound at 22 kHz, the
+rate the game plays mono at, a stereo one at its tag's), kept in the map's
+`.sndcache` file and filled in the background as Ogg Vorbis sounds are. A
+long one (the music) plays as a chain of links (each made from the frame it
+starts at: the frames before it passed over by their headers, four decoded
+to settle the decoder). MCC's banks keep the streams of a split long sound
+(a head permutation and the pieces its next index chains, Halo's "split long
+sound into permutations") as one stream per head: the head is given its
+whole stream when the chain's length (its pieces' buffer sizes) is the
+stream's, and the pieces left without samples. The banks name their
+streams after the permutations but do not keep the tag's order (strnglp3's
+loops): the streams are matched by name where every permutation names one.
+On a10 all 1471 sounds play (396 from the ADPCM bank, 1075 from the CELT
+banks); a scene pack built from an MCC map has its CELT permutations made
+Xbox ADPCM as it is built (`scene_pack_ce.c`).
+
+One line says what each map got (`mcc sound: 1471 of the map's 1471 sounds
+play: 396 from sounds_adpcm.fsb ..., 1075 from the CELT banks ...; still
+silent: 0 in CELT banks that are not there, ...`), `HALO_MCC_SOUND_TRACE=1`
+logs each sound and `HALO_OGG_TRACE=1` each permutation made ("celt
+sound: ..."). Without a bank its sounds stay silent and it is said; without
+the sound folder the maps play silent (`mcc: no sound effects bank`); a bank
+or list that is damaged or of another version is refused, said, and its
+sounds stay silent. The installer copies the four CELT banks (1.5 GB) with
+the ADPCM bank.
+
+Checked against the Xbox's own (Nov 8 2026): the x10 cinematic's lines
+decoded from `sounds_dialogs.fsb` and the Xbox a10.map's Xbox ADPCM of the
+same lines have the same loudness (RMS 4591 and 4588) and spectrograms
+below 4 kHz that correlate 0.88-0.90 (another line: 0.31); the a10 opening
+played on both layouts mixes to the same sound (0.99 sample correlation over
+48 s of the cinematic's music).
 
 Tests: `port/vita/tests/run_mcc_sound_test.sh` (the FSB5 reader and list
 parser on made-up files under AddressSanitizer and UBSan, a fuzz target,

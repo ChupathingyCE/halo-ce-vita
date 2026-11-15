@@ -1127,6 +1127,13 @@ static boolean custom_edition_cache_tags_validate(
 		ranges[range_count].offset = COMBINED_SOUNDS_OFFSET;
 		ranges[range_count++].size = globals->resource_files[_resource_map_sounds].source.size;
 	}
+	if (globals->map_from_mcc && range_count < MAXIMUM_TAG_VALIDATE_FILE_RANGES)
+	{
+		/* (port) its sounds of MCC's CELT banks (mcc_sound.h), read from the
+		banks' files: offsets within 2 GB */
+		ranges[range_count].offset = TAG_VALIDATE_MCC_CELT_STREAMS;
+		ranges[range_count++].size = 0x7FFFFFFFUL;
+	}
 	if (!tag_validate_custom_edition_tags(
 		tag_cache,
 		(long)(report->tag_data_bytes + report->resource_tag_bytes),
@@ -2302,8 +2309,9 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 	{
 		/* (MCC keeps every sound of its stock maps in FMOD banks,
 		sound\pc\*.fsb: the sound effects (IMA ADPCM) play from their bank,
-		mcc_sound.h; the CELT banks' dialogue and music do not yet) */
-		error(_error_silent, "mcc: '%s' is MCC's own %s map: its sounds are in MCC's FMOD banks, the sound effects played from sounds_adpcm.fsb and the dialogue and music silent in this version",
+		the dialogue, music and streams (CELT) made Xbox ADPCM as they load,
+		mcc_sound.h) */
+		error(_error_silent, "mcc: '%s' is MCC's own %s map: its sounds are in MCC's FMOD banks, the sound effects played from sounds_adpcm.fsb, the dialogue, music and streams made Xbox ADPCM from the CELT banks",
 			mcc_stem, mcc_kind == _mcc_content_campaign ? "campaign" : mcc_kind == _mcc_content_menu ? "menu" : "multiplayer");
 	}
 	globals->map_header_crc = cache_file_crc32_update(0, header, CACHE_FILE_HEADER_BYTES);
