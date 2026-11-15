@@ -689,17 +689,20 @@ static void read_widget(struct reader *reader, const XML_Char **attributes, long
 
 static void read_child(struct reader *reader, const XML_Char **attributes, long owner)
 {
-	const char *widget = NULL, *controller = NULL;
+	const char *widget = NULL, *controller = NULL, *halo_pc = NULL;
 	long x = 0, y = 0;
 	struct attribute table[] =
 	{
 		{ "widget", &widget }, { "controller", &controller }, { "x", NULL, &x }, { "y", NULL, &y },
+		{ "halo_pc", &halo_pc },
 	};
 
 	read_attributes(reader, "child", attributes, table, sizeof(table) / sizeof(*table));
 	if (!reader->failed && !widget)
 		reader_error(reader, "a <child> needs a widget");
 	child_add(reader, owner, HALO_MENU_NONE, widget, x, y, controller);
+	if (!reader->failed && halo_pc && reader->menus.child_count)
+		reader->menus.children[reader->menus.child_count - 1].halo_pc = halo_pc;
 }
 
 static void read_handler(struct reader *reader, const XML_Char **attributes, long owner)

@@ -23,11 +23,26 @@
 	<widget name="ce/main/forge" extends="ui\shell\main_menu\main_menu_item_settings" bitmap="ce/main/forge_art">
 		<on event="a start" open="h3/forge/lobby"/>
 	</widget>
+	<!-- (an MCC-only install: its ui.map is Halo PC's, whose CAMPAIGN, MULTIPLAYER and SETTINGS rows
+	     open Halo PC's own flows, which run Halo PC's functions - this build has not those. halo_pc=
+	     puts these in their place there: the map's rows' look, the Xbox's rows' handlers - CAMPAIGN and
+	     SETTINGS the Xbox's profile pickers, the Halo 3 set's for them as the map has not the Xbox's
+	     (menu_tags.c menu_tags_screen); MULTIPLAYER straight to its screen, as the Xbox's, without
+	     Halo PC's new-profile step first; rc.8) -->
+	<widget name="ce/main/campaign_pc" extends="ui\shell\main_menu\main_menu_item_load_camp">
+		<on event="a start" run="new game if no plyr profiles" open="ui\shell\main_menu\load_campaign_player_profile" branch="true" label="load_campaign"/>
+	</widget>
+	<widget name="ce/main/multiplayer_pc" extends="ui\shell\main_menu\main_menu_item_multiplayer">
+		<on event="a start" open="ui\shell\main_menu\multiplayer_type_select\multiplayer_type_select_screen" label="multiplayer"/>
+	</widget>
+	<widget name="ce/main/settings_pc" extends="ui\shell\main_menu\main_menu_item_settings">
+		<on event="a start" open="ui\shell\main_menu\settings_select\player_setup\player_profile_select_screen" label="settings"/>
+	</widget>
 	<widget name="ce/main/list" extends="ui\shell\main_menu\main_menu_select_list" classic_patch="true" drop="children">
 		<on event="start" run="port settings panel"/>
-		<child widget="ui\shell\main_menu\main_menu_item_load_camp" x="194" y="235"/>
-		<child widget="ui\shell\main_menu\main_menu_item_multiplayer" x="192" y="264"/>
-		<child widget="ui\shell\main_menu\main_menu_item_settings" x="192" y="293"/>
+		<child widget="ui\shell\main_menu\main_menu_item_load_camp" halo_pc="ce/main/campaign_pc" x="194" y="235"/>
+		<child widget="ui\shell\main_menu\main_menu_item_multiplayer" halo_pc="ce/main/multiplayer_pc" x="192" y="264"/>
+		<child widget="ui\shell\main_menu\main_menu_item_settings" halo_pc="ce/main/settings_pc" x="192" y="293"/>
 		<child widget="ce/main/media" x="192" y="322"/>
 		<child widget="ce/main/forge" x="192" y="351"/>
 	</widget>

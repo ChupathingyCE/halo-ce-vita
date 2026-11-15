@@ -89,6 +89,9 @@ struct halo_menu_child
 {
 	long nested;
 	char const *widget;
+	/* (halo_pc=: the widget in its place on a Halo PC ui.map - an MCC-only install's, which has
+	not the Xbox's screens -, as Classic+'s main menu rows open the Xbox's flows there) */
+	char const *halo_pc;
 	long x, y;
 	char const *controller;
 	long next;
