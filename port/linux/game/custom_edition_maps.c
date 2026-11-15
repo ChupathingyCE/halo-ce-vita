@@ -915,7 +915,7 @@ static void mcc_multiplayer_maps_add(
 			map->display_name[character] = (wchar_t)(unsigned char)title[character];
 		}
 		map->display_name[character] = 0;
-		ustrncpy(map->description, TW(L"Your MCC files'\r\nown map. No sound\r\nyet in this version."),
+		ustrncpy(map->description, TW(L"Your MCC files'\r\nown map."),
 			MAXIMUM_DESCRIPTION_LENGTH);
 		map->description[MAXIMUM_DESCRIPTION_LENGTH] = 0;
 		added++;

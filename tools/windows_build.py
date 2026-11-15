@@ -521,7 +521,7 @@ def generate_windows_build(n: Writer, sln: Any) -> None:
             add_object(MONOCYPHER_DIR / name, " ".join([abi, "-std=gnu11", "-w"]))
         # Custom Edition's Ogg Vorbis sounds (port/linux/src/ogg_sound.c)
         for source in ogg_sound_sources():
-            add_object(source, ogg_sound_cflags(abi))
+            add_object(source, ogg_sound_cflags(abi, source))
         # the game's sin, pow and the rest, the same on every port
         # (port/include/halo_math.h)
         for source in musl_math_sources():

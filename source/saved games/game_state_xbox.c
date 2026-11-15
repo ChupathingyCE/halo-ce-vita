@@ -333,6 +333,140 @@ void platform_log(const char *format, ...);
 
 #define GAME_STATE_WRITE_PIECE (256 * 1024)
 
+/* (port, test) HALO_TEST_CHECKPOINT_NO_MEMORY=1 (PC builds only): no
+memory for the checkpoint copy nor for any game-state-sized image beside
+the game state, as on a Vita whose user RAM ran out (the copy given back,
+game_state_checkpoint_copy_release, and no 16 MB left for a read beside
+the game state). The harness's HALO_HEAP_LIMIT_KB starves the renderer
+too; this fails only these allocations. */
+static boolean game_state_test_no_memory(
+	void)
+{
+#ifndef HALO_VITA
+	static int no_memory = -1;
+
+	if (no_memory < 0)
+	{
+		const char *setting = getenv("HALO_TEST_CHECKPOINT_NO_MEMORY");
+
+		no_memory = setting && *setting && *setting != '0';
+	}
+	return no_memory != 0;
+#else
+	return FALSE;
+#endif
+}
+
+/* an image of the game state's size, beside it */
+static void *game_state_image_allocate(
+	long size)
+{
+	return game_state_test_no_memory() ? NULL : malloc(size);
+}
+
+/* (port) Reading a game state image with no memory beside the game
+state. The image is read beside the game state and taken once checked
+(game_state_image_accept), which needs a second 16 MB: on a Vita whose
+checkpoint copy was given back for room in user RAM there is none, and the
+revert (death, Save and Quit) failed - the level started over, Save and
+Quit wrote the game as it was instead of the checkpoint - and the resume
+of the campaign save crashed (free of the failed allocation).
+
+Without that memory the game state is first kept in a file of its own
+(z:\savegame_live.bin), the image read straight into the game state in
+pieces and checked there, and when it cannot be read or is not an image
+of this build, the kept game state is read back: the game state is then
+as it was, as when the image beside it is refused. Nothing in the game is
+made smaller and the same bytes are taken; it costs the kept state's
+write, only on this path (whose checkpoints write the file as they are
+taken already). */
+#define GAME_STATE_KEPT_FILE "z:\\savegame_live.bin"
+
+/* SIZE bytes of BUFFER at the file's start, in pieces (a piece that
+fails is tried again: a busy memory card) */
+static boolean game_state_pieces_transfer(
+	HANDLE file,
+	void *buffer,
+	long size,
+	boolean write)
+{
+	long offset;
+
+	for (offset = 0; offset < size; offset += GAME_STATE_WRITE_PIECE)
+	{
+		long piece = size - offset;
+		boolean done = FALSE;
+		int attempt;
+
+		if (piece > GAME_STATE_WRITE_PIECE)
+			piece = GAME_STATE_WRITE_PIECE;
+		for (attempt = 0; !done && attempt < 3; attempt++)
+		{
+			unsigned long bytes = 0;
+
+			done = SetFilePointer(file, offset, NULL, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
+				(write ? WriteFile(file, (byte *)buffer + offset, piece, &bytes, NULL) :
+					ReadFile(file, (byte *)buffer + offset, piece, &bytes, NULL)) &&
+				bytes == (unsigned long)piece;
+		}
+		if (!done)
+			return FALSE;
+	}
+	return TRUE;
+}
+
+/* the file's first SIZE bytes taken into the game state at BUFFER, checked
+there; FALSE with the game state as it was: *READ_WHOLE FALSE when the
+file could not be read (or the game state not kept first), TRUE when it is
+not an image of this build's game state */
+static boolean game_state_read_in_place(
+	HANDLE file,
+	void *buffer,
+	long size,
+	boolean *read_whole)
+{
+	HANDLE kept;
+	boolean taken;
+
+	*read_whole = FALSE;
+	kept = CreateFileA(GAME_STATE_KEPT_FILE, GENERIC_READ|GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL, NULL);
+	if (kept == INVALID_HANDLE_VALUE)
+	{
+		platform_log("game state: couldn't make %s to keep the game state in (#%d)", GAME_STATE_KEPT_FILE,
+			(int)GetLastError());
+		return FALSE;
+	}
+	if (!game_state_pieces_transfer(kept, buffer, size, TRUE))
+	{
+		platform_log("game state: couldn't keep the game state in %s (#%d)", GAME_STATE_KEPT_FILE, (int)GetLastError());
+		CloseHandle(kept);
+		DeleteFileA(GAME_STATE_KEPT_FILE);
+		return FALSE;
+	}
+#ifdef HALO_VITA
+	memory_watch_prepare_write(buffer, size);
+#endif
+	taken = game_state_pieces_transfer(file, buffer, size, FALSE);
+	*read_whole = taken;
+	taken = taken && game_state_image_valid(buffer, size);
+	if (!taken && !game_state_pieces_transfer(kept, buffer, size, FALSE))
+	{
+		/* (neither the image nor the game state it replaced: nothing that
+		can be run or saved is left, and the campaign save on the card is
+		not touched) */
+		platform_log("game state: neither the image read nor the game state kept in %s could be read (#%d): "
+			"the game stops here, the campaign save is kept as it was", GAME_STATE_KEPT_FILE, (int)GetLastError());
+		error(_error_silent, "couldn't read the game state back: stopped");
+		exit(EXIT_FAILURE);
+	}
+	CloseHandle(kept);
+	DeleteFileA(GAME_STATE_KEPT_FILE);
+	if (taken)
+		error(_error_silent, "the saved game is taken");
+	return taken;
+}
+
 static struct
 {
 	void *snapshot;
@@ -444,7 +578,7 @@ static boolean game_state_writer_ready(
 		game_state_writer.snapshot_block = block;
 	}
 #else
-	game_state_writer.snapshot = malloc(xbox_game_state_globals.buffer_size);
+	game_state_writer.snapshot = game_state_image_allocate(xbox_game_state_globals.buffer_size);
 #endif
 	if (!game_state_writer.snapshot)
 	{
@@ -746,7 +880,24 @@ boolean game_state_read_from_file(
 	(game_state_image_accept): into the checkpoint copy when there is one
 	(not valid: above), so that no more memory is needed */
 #ifdef HALO_LINUX
-	image = game_state_writer.snapshot ? game_state_writer.snapshot : malloc(xbox_game_state_globals.buffer_size);
+	image = game_state_writer.snapshot ? game_state_writer.snapshot :
+		game_state_image_allocate(xbox_game_state_globals.buffer_size);
+	if (!image)
+	{
+		static unsigned long in_place_logged;
+		boolean read_whole;
+
+		result = game_state_read_in_place(xbox_game_state_globals.handle, xbox_game_state_globals.buffer,
+			xbox_game_state_globals.buffer_size, &read_whole);
+		if (!result)
+			platform_log("game state: no memory beside the game state (%ld KB) and the checkpoint read back into it %s",
+				(long)xbox_game_state_globals.buffer_size / 1024,
+				read_whole ? "is not a game state of this build" : "could not be read");
+		else if (in_place_logged++ < 16)
+			platform_log("game state: no memory beside the game state (%ld KB): the checkpoint read back into it in place",
+				(long)xbox_game_state_globals.buffer_size / 1024);
+		return result;
+	}
 #else
 	image = malloc(xbox_game_state_globals.buffer_size);
 #endif
@@ -1262,7 +1413,33 @@ void game_state_read_from_persistent_storage(
 	if (file != INVALID_HANDLE_VALUE)
 	{
 		/* port: read beside the game state, and taken once checked */
+#ifdef HALO_LINUX
+		void *image = game_state_image_allocate(buffer_size);
+
+		/* (no memory beside the game state: read into it, above; the
+		caller has checked the file's checksum) */
+		if (!image)
+		{
+			boolean read_whole;
+
+			if (game_state_read_in_place(file, buffer, buffer_size, &read_whole))
+			{
+				platform_log("campaign save: no memory beside the game state (%ld KB): read into it in place",
+					buffer_size / 1024);
+			}
+			else
+			{
+				platform_log("campaign save: no memory beside the game state and the save read into it %s",
+					read_whole ? "is not a game state of this build: it is deleted" : "could not be read: it is kept");
+				if (read_whole)
+					delete_persistent_storage();
+			}
+			CloseHandle(file);
+			return;
+		}
+#else
 		void *image = malloc(buffer_size);
+#endif
 
 		if (!image ||
 			SetFilePointer(file, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER ||

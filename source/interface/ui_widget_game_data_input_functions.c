@@ -2630,6 +2630,14 @@ static void game_options_menu_update_text_desc(
 			while (spinner_list && spinner_list->type != _ui_widget_type_spinner_list)
 				spinner_list = spinner_list->next;
 
+#ifdef HALO_LINUX
+			/* port: a row with none (Halo PC's MOUSE SETUP runs this on its list,
+			whose last row is its button bar: MCC's ui.map, port/linux/game/
+			halo_pc_menus.c): reached only with the focus there, past every
+			row with one; the description stays the last row's */
+			if (!spinner_list)
+				return;
+#endif
 			match_vassert(
 				"c:\\halo\\SOURCE\\interface\\ui_widget_game_data_input_functions.c",
 				0x90C,
@@ -2691,6 +2699,14 @@ static void game_options_menu_update_pic_desc(
 			while (spinner_list && spinner_list->type != _ui_widget_type_spinner_list)
 				spinner_list = spinner_list->next;
 
+#ifdef HALO_LINUX
+			/* port: a row with none (Halo PC's MOUSE SETUP runs this on its list,
+			whose last row is its button bar: MCC's ui.map, port/linux/game/
+			halo_pc_menus.c): reached only with the focus there, past every
+			row with one; the description stays the last row's */
+			if (!spinner_list)
+				return;
+#endif
 			match_vassert(
 				"c:\\halo\\SOURCE\\interface\\ui_widget_game_data_input_functions.c",
 				0x996,

@@ -73,6 +73,21 @@ component this far past 1 stays within that after the packing's rounding
 (Extinction's take 996 KB, Halo PC's own maps about 330 KB) */
 #define MAXIMUM_STRIPS_BYTES 0x400000UL
 
+/* (port) the most model parts, and the most vertices or strip indices of
+all of them or of a structure BSP's materials, a map's geometry is made
+from: far past any map's (and any memory's), so that the totals the room
+is sized from never wrap on a 32-bit build. cache_file_formats.c bounds
+the walk that makes them; these hold whatever reaches here. After
+ChupathingyCE (af3dd1460, "the room count stops at the tag cache's size",
+MrMilenko; GPL-3.0-or-later) */
+#define MAXIMUM_GEOMETRY_PARTS 0x100000L
+#define MAXIMUM_GEOMETRY_ELEMENTS 0x4000000L
+/* (port) a part's vertices (16-bit strip indices) and strip triangles: no
+more than its load allows (cache_file_formats.c gbxmodel_part_check: at
+most 65,535 vertices, its strip within the model data) */
+#define MAXIMUM_PART_VERTICES 0xFFFFL
+#define MAXIMUM_PART_STRIP_TRIANGLES 0x1000000L
+
 /* ---------- structures */
 
 /* this build's model geometry and part, as models.c and rasterizer.c each
@@ -401,6 +416,20 @@ static boolean custom_edition_model_count(
 				part_index,
 				struct custom_edition_model_part);
 
+			/* (each part's counts within what the load allowed,
+			cache_file_formats.c gbxmodel_part_check: the tags were written
+			in place since, and the schemas' check, tag_validate.c, does not
+			look at these, so that no room below is sized past 32 bits) */
+			if (totals->part_count >= MAXIMUM_GEOMETRY_PARTS ||
+				part->vertex_count < 1 || part->vertex_count > MAXIMUM_PART_VERTICES ||
+				part->strip_triangle_count < 1 || part->strip_triangle_count > MAXIMUM_PART_STRIP_TRIANGLES ||
+				part->vertex_count > MAXIMUM_GEOMETRY_ELEMENTS - totals->vertex_count ||
+				part->strip_triangle_count > MAXIMUM_GEOMETRY_ELEMENTS - 2 - totals->strip_index_count)
+			{
+				error(_error_silent, "custom edition: the models have more parts or vertices than any map (at '%s'); refusing it", name);
+				custom_edition_cache_load_failure_note(T("this map file is damaged or not supported"));
+				return FALSE;
+			}
 			totals->part_count++;
 			if (model_has_many_nodes(model))
 			{
@@ -533,7 +562,13 @@ static void model_data_plan_read(
 	struct model_data_prefetch *prefetch = &reader->prefetch;
 	unsigned long model_data_bytes = reader->report->model_data_bytes;
 
-	if (offset >= stream->start && offset + size <= stream->start + stream->length)
+	/* (as model_data_stream_read: nothing past the model data) */
+	if (offset > model_data_bytes || size > model_data_bytes - offset)
+	{
+		return;
+	}
+	if (offset >= stream->start && offset - stream->start <= stream->length &&
+		size <= stream->length - (offset - stream->start))
 	{
 		return;
 	}
@@ -634,7 +669,14 @@ static void const *model_data_stream_read(
 {
 	unsigned long model_data_bytes = reader->report->model_data_bytes;
 
-	if (offset >= stream->start && offset + size <= stream->start + stream->length)
+	/* (port: what a part names, within the model data, whatever was written
+	over its fields since the load checked them - no sum below wraps) */
+	if (offset > model_data_bytes || size > model_data_bytes - offset)
+	{
+		return NULL;
+	}
+	if (offset >= stream->start && offset - stream->start <= stream->length &&
+		size <= stream->length - (offset - stream->start))
 	{
 		return stream->buffer + (offset - stream->start);
 	}
@@ -1463,6 +1505,7 @@ boolean custom_edition_structure_bsp_load(
 	long lightmap_vertex_size = rasterizer_geometry_get_vertex_size(_rasterizer_vertex_type_environment_lightmap_compressed);
 	unsigned long vertices_size = 0;
 	unsigned long vertices_offset = 0;
+	unsigned long vertices_counted = 0;
 	boolean success = TRUE;
 	long lightmap_index;
 	/* (port) a Halo: CE Anniversary map's: its materials' vertices in the
@@ -1489,6 +1532,12 @@ boolean custom_edition_structure_bsp_load(
 				lightmap_index,
 				struct structure_lightmap);
 
+			if (lightmap->materials.count < 0 || lightmap->materials.count > MAXIMUM_GEOMETRY_PARTS - material_total)
+			{
+				error(_error_silent, "custom edition: the structure BSP has more materials than any map; refusing it");
+				custom_edition_cache_load_failure_note(T("this map file is damaged or not supported"));
+				return FALSE;
+			}
 			material_total += lightmap->materials.count;
 		}
 		file_offsets = halo_custom_edition_memory_alloc((unsigned long)MAX(material_total, 1) * sizeof(*file_offsets));
@@ -1518,6 +1567,19 @@ boolean custom_edition_structure_bsp_load(
 				struct structure_material);
 			long vertex_count = material->vertices.count;
 			long lightmap_vertex_count = material->lightmap_vertices.count;
+
+			/* (the room for them all: within MAXIMUM_GEOMETRY_ELEMENTS
+			vertices, which no product or sum below takes past 32 bits) */
+			if (vertex_count < 0 || lightmap_vertex_count < 0 ||
+				vertex_count > MAXIMUM_STRUCTURE_MATERIAL_VERTICES || lightmap_vertex_count > MAXIMUM_STRUCTURE_MATERIAL_VERTICES ||
+				(unsigned long)(vertex_count + lightmap_vertex_count) > MAXIMUM_GEOMETRY_ELEMENTS - vertices_counted)
+			{
+				error(_error_silent, "custom edition: the structure BSP's materials have more vertices than any map; refusing it");
+				halo_custom_edition_memory_free(file_offsets);
+				custom_edition_cache_load_failure_note(T("this map file is damaged or not supported"));
+				return FALSE;
+			}
+			vertices_counted += (unsigned long)(vertex_count + lightmap_vertex_count);
 
 			if (vertices_in_file)
 			{

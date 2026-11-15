@@ -135,7 +135,8 @@ PSVitaAlive or VitaDB are often versions behind.
   [VitaShell](https://github.com/TheOfficialFloW/VitaShell/releases).
 - The shader compiler `ur0:data/libshacccg.suprx`: if you don't have it, run
   [ShaRKF00D](https://github.com/Rinnegatamante/ShaRKF00D/releases) once.
-- About 1.5 GB free on `ux0:`.
+- Free space on `ux0:`: about 2 GB with Xbox files, about 3.1 GB with MCC's
+  (most of it MCC's dialogue and music).
 - Your own **Xbox** copy of Halo: Combat Evolved (disc or image) -
   recommended - or, optional and fully supported, your own Halo: The Master
   Chief Collection on Steam. The PC version's maps don't work.
@@ -151,7 +152,7 @@ Two kinds of game files, two folders. **Never mix them.**
 | --- | --- |
 | **Xbox disc**: the `maps` folder, and `default.xbe` | `ux0:data/haloce-vita/maps` (and `ux0:data/haloce-vita/default.xbe`) |
 | **Steam MCC**: everything inside `halo1\maps` (`a10.map` ... `ui.map`, `bitmaps.map`, and the `custom_edition` folder) | `ux0:data/haloce-vita/mcc/halo1/maps` |
-| **Steam MCC sound**: `halo1\sound\pc\sounds_adpcm.fsb` | `ux0:data/haloce-vita/mcc/halo1/sound/pc/sounds_adpcm.fsb` |
+| **Steam MCC sound**: from `halo1\sound\pc`, `sounds_adpcm.fsb`, `sounds_dialogs.fsb`, `sounds_music.fsb`, `sounds_stream.fsb`, `sounds_debug.fsb` and the `lst` folder | `ux0:data/haloce-vita/mcc/halo1/sound/pc/` |
 
 MCC's files in the Xbox `maps` folder don't work: since 1.1.3 the game says
 so and where to move them (1.1.2 showed a black screen with no sound).
@@ -168,9 +169,13 @@ so and where to move them (1.1.2 showed a black screen with no sound).
    folders `mcc`, `mcc/halo1` and `mcc/halo1/maps` in `ux0:data/haloce-vita/`
    and copy **the files inside `halo1\maps`** (and its `custom_edition`
    folder) into `ux0:data/haloce-vita/mcc/halo1/maps`. Not into `maps`.
-4. **MCC sound** (optional): copy `halo1\sound\pc\sounds_adpcm.fsb`
-   to `ux0:data/haloce-vita/mcc/halo1/sound/pc/sounds_adpcm.fsb`, and the
-   `lst` folder beside it.
+4. **MCC sound** (optional): from `halo1\sound\pc`, copy
+   `sounds_adpcm.fsb` (the sound effects), `sounds_dialogs.fsb`,
+   `sounds_music.fsb`, `sounds_stream.fsb` and `sounds_debug.fsb` (the
+   dialogue, music and cinematic sound, about 1.5 GB more) and the `lst`
+   folder to `ux0:data/haloce-vita/mcc/halo1/sound/pc/`. Installed MCC's
+   files with an older version? Copy the four new banks, or run Setup again:
+   it skips what's already there.
 5. Leave FTP mode in VitaShell (Circle) and start Halo CE.
 
 ### Easy install (Windows tool)
@@ -256,6 +261,10 @@ this project. Get them **one** of these ways:
    MCC's own and don't work.
 2. Copy `bitmaps.map`, `sounds.map` and `loc.map` from it to
    `ux0:data/haloce-vita/maps/` on the Vita.
+
+This is for Xbox installs. If you installed MCC's files, the
+`custom_edition` folder is already in `ux0:data/haloce-vita/mcc/halo1/maps/`
+and the game uses it: nothing to copy.
 
 #### Option C: Halo Custom Edition installed on a PC
 
@@ -362,8 +371,8 @@ read. The game looks in:
 
 MCC somewhere else? Set `paths.content` in `config.toml` to its folder (the
 one with `halo1` in it). Not found, the main menu says **Halo MCC not
-found**; `paths.content = "none"` turns the search off. MCC's sound effects
-play; its music and dialogue are silent in this version.
+found**; `paths.content = "none"` turns the search off. MCC's sound effects,
+music and dialogue all play.
 
 Or, the Xbox way:
 
@@ -973,6 +982,8 @@ shader compiler's heap, and the Ogg Vorbis decoder's),
 [Tremor](https://gitlab.xiph.org/xiph/tremor) and
 [libogg](https://gitlab.xiph.org/xiph/ogg) by Xiph.Org (Halo Custom
 Edition maps' Ogg Vorbis sounds),
+[CELT](https://github.com/mumble-voip/celt-0.11.0) 0.11 by Xiph.Org, CSIRO
+and contributors (BSD: the dialogue and music of MCC's Halo CE maps),
 [Expat](https://libexpat.github.io) (the PC menus' files),
 [Mbed TLS](https://github.com/Mbed-TLS/mbedtls),
 [miniupnpc](https://github.com/miniupnp/miniupnp),

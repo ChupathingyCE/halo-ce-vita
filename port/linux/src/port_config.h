@@ -44,6 +44,8 @@ real one; each write also bumps halo_settings_generation, so the readers
 that keep a setting read it again */
 int config_write_string(const char *name, const char *value);
 int config_write_real(const char *name, double value);
+/* and an integer one (Halo PC's GAMMA: port/linux/game/halo_pc_menus.c) */
+int config_write_integer(const char *name, long value);
 /* a setting's default as text (a string's without its quotes); 1 if the
 setting exists */
 int config_default_text_of(const char *name, char *text, size_t size);

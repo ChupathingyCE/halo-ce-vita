@@ -31,8 +31,14 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 	<!-- the list -->
 	<widget name="h3/mods/strip" left="0" top="20" width="640" height="36" bitmap="h3/strip"/>
 	<widget name="h3/mods/rule" left="0" top="56" width="640" height="2" bitmap="h3/rule"/>
-	<widget name="h3/mods/title" type="text" left="28" top="26" width="260" height="26" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/mods_text" string_index="0"/>
-	<widget name="h3/mods/mods_status" type="text" left="280" top="31" width="336" height="18" align="right" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
+	<widget name="h3/mods/title" type="text" left="28" top="26" width="260" height="26" font="h3/font_title" color="#FFF2F6FA" text_y="1"/>
+	<widget name="h3/mods/tab_games" type="text" left="290" top="28" width="84" height="22" bitmap="h3/row" font="h3/font_item" color="#FFEEF2F6" text_x="10" text_y="2">
+		<on event="a" run="port h3 mods tab games"/>
+	</widget>
+	<widget name="h3/mods/tab_mods" type="text" left="378" top="28" width="84" height="22" bitmap="h3/row" font="h3/font_item" color="#FFEEF2F6" text_x="10" text_y="2">
+		<on event="a" run="port h3 mods tab mods"/>
+	</widget>
+	<widget name="h3/mods/mods_status" type="text" left="466" top="31" width="150" height="18" align="right" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
 	<widget name="h3/mods/panel" left="16" top="66" width="608" height="262" bitmap="h3/panel"/>
 	<widget name="h3/mods/header_name" type="text" left="40" top="70" width="290" height="16" font="h3/font_small" color="#FF9FB6CC" string_list="h3/mods_text" string_index="1"/>
 	<widget name="h3/mods/header_kind" type="text" left="336" top="70" width="110" height="16" font="h3/font_small" color="#FF9FB6CC" string_list="h3/mods_text" string_index="2"/>
@@ -116,8 +122,8 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 		<data input="port h3 mods"/>
 		<on event="y" run="port h3 mods details" open="h3/mods/details"/>
 		<on event="x" run="port h3 mods delete ask" open="h3/mods/confirm"/>
-		<on event="left_trigger" run="port h3 mods page up"/>
-		<on event="right_trigger" run="port h3 mods page down"/>
+		<on event="left_trigger" run="port h3 mods tab next"/>
+		<on event="right_trigger" run="port h3 mods tab next"/>
 		<child widget="h3/mods/row_1" x="20" y="92"/>
 		<child widget="h3/mods/row_2" x="20" y="112"/>
 		<child widget="h3/mods/row_3" x="20" y="132"/>
@@ -151,11 +157,15 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 	<!-- (the folders are looked through as MOD MANAGER opens it, port h3 mods init on the main
 	menu's row, and again after a delete: not each time the details or the question go back to it) -->
 	<widget name="h3/mods/screen" flags="pass_unhandled_to_focused_child">
+		<on event="left_trigger" run="port h3 mods tab next"/>
+		<on event="right_trigger" run="port h3 mods tab next"/>
 		<on event="b back" back="true"/>
 		<child widget="h3/main/haze"/>
 		<child widget="h3/mods/strip"/>
 		<child widget="h3/mods/rule"/>
 		<child widget="h3/mods/title"/>
+		<child widget="h3/mods/tab_games"/>
+		<child widget="h3/mods/tab_mods"/>
 		<child widget="h3/mods/mods_status"/>
 		<child widget="h3/mods/panel"/>
 		<child widget="h3/mods/header_name"/>

@@ -361,6 +361,10 @@
 #            picker (the list START GAME hosts from) leaves it out; again with
 #            it off (HALO_MAPS_DISABLED) and turned on in MOD MANAGER: the
 #            picker offers it
+#   h3games  GAME MANAGER's GAMES tab (its first; START > MEDIA > GAME MANAGER): Halo
+#            CE checked over the made-up maps folder (installed from the Xbox's
+#            files, a broken map found), Triangle the details, Square nothing (no
+#            import in 1.1.x), R and L the tabs, B back to START
 #   h3modstouch  taps: MOD MANAGER on the main menu, mygulch's row (off), the
 #            screen's Back
 #   pausesave  the campaign pause's save and quit writes the save and the level
@@ -484,7 +488,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3modspicker h3modstouch h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -719,8 +723,10 @@ mods_data() { # FOLDER
 	ln -s "$folder/outside" "$folder/mods/TestMod/assets/outside"
 	ln -s "$folder/outside/sentinel.txt" "$folder/mods/TestMod/assets/linked.txt"
 }
-# (the main menu: down four to MOD MANAGER, A: its list, broken.map first)
-h3modspad="wait:150:3000 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:4000"
+# (1.1.3: Select - Back - opens START, MEDIA's fourth row GAME MANAGER, A: it opens on its GAMES tab; R to MODS,
+# the mod manager as it was: its list, broken.map first)
+h3gmpad="wait:150:5000 back:150:2500 down:150:500 down:150:500 down:150:500 a wait:150:4000"
+h3modspad="$h3gmpad rt:150:1500"
 # (MOD MANAGER, mygulch's row - two down -, A; B: the main menu, on MOD MANAGER; up three to MULTIPLAYER, A;
 # down two to MAP, A: the map picker (the lists custom maps are offered in), B)
 h3pickerpad="$h3modspad down:150:500 down:150:500 a wait:150:2000 b wait:150:3000 up:150:500 up:150:500 up:150:500 a wait:150:3000 down:150:500 down:150:500 a wait:150:3000 b wait:150:3000"
@@ -2463,7 +2469,7 @@ PY
 		skip_null h3modstouch "taps" && continue
 		# (MOD MANAGER's row on the main menu; mygulch's row, the third; the screen's Back: icon and label)
 		mods_data "$out/h3mods-data"
-		run h3modstouch "$out/h3mods-data" 25 "wait:150:16000" HALO_MENU_STYLE=halo3 \
+		run h3modstouch "$out/h3mods-data" 25 "wait:150:16000" HALO_MENU_STYLE=halo3 HALO_TEST_GAME_MANAGER_TAB=1 \
 			"HALO_TEST_TAPS=4000:60,358 8000:200,142 12000:560,452"
 		check_h3 h3modstouch halo3
 		log=$out/h3modstouch/run.log
@@ -2471,6 +2477,25 @@ PY
 		grep -aq "menus: h3 mods: mygulch.map turned off" "$log" || fail h3modstouch "a tap on mygulch's row did not turn it off"
 		grep -a "ui: screen" "$log" | tail -1 | grep -q 'pc.h3.main.screen' ||
 			fail h3modstouch "a tap on Back did not go back to the main menu" ;;
+	h3games)
+		# (GAME MANAGER's GAMES tab, first: Halo CE checked - the made-up maps folder's maps, one of them
+		# broken -, Triangle its details, B; Square asks nothing (1.1.x has no import screen); R: MODS, the
+		# mod manager's list; L: GAMES again; B: START)
+		mods_data "$out/h3mods-data"
+		run h3games "$out/h3mods-data" 40 "$h3gmpad y wait:150:2500 b wait:150:2000 x wait:150:2000 rt:150:1500 lt:150:1500 b wait:150:2500" \
+			HALO_MENU_STYLE=halo3
+		check_h3 h3games halo3
+		log=$out/h3games/run.log
+		grep -aq "ui: screen pc.h3.mods.screen" "$log" || fail h3games "GAME MANAGER did not open"
+		grep -aqE "game manager: checked: Halo CE [1-9][0-9]* maps \(Xbox [1-9][0-9]*, MCC 0\), sources 1, [1-9][0-9]* issues" "$log" ||
+			fail h3games "Halo CE's check did not run, did not say the Xbox's files alone, or did not find the broken map"
+		grep -aq "game manager: broken: issue 0" "$log" || fail h3games "broken.map was not said to be no map"
+		grep -aq "ui: screen pc.h3.mods.details" "$log" || fail h3games "Triangle did not open the game's details"
+		grep -aq "ui: screen pc.h3.mods.confirm" "$log" && fail h3games "Square asked something on GAMES"
+		grep -aq "menus: game manager: the MODS tab" "$log" || fail h3games "R did not go to MODS"
+		grep -aq "menus: game manager: the GAMES tab" "$log" || fail h3games "L did not go back to GAMES"
+		grep -a "ui: screen" "$log" | tail -1 | grep -q 'pc.h3.start.screen' ||
+			fail h3games "B did not go back to START" ;;
 	h3friends)
 		# (FRIENDS, the seventh item; ADD FRIEND: a code typed; APPEAR OFFLINE; FRIENDS CAN JOIN;
 		# PARTY and FRIEND CODE BACKUP passed; Delta's request: Square declines; Bravo (focused

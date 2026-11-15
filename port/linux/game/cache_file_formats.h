@@ -370,7 +370,12 @@ struct custom_edition_load_report
 	uint32_t tag_data_crc;
 	/* (port) a Halo: CE Anniversary cache's structure BSPs
 	(structure_bsp_count of them), and where they are all loaded (the
-	header checksum is not taken: MCC's covers other bytes) */
+	header checksum is not taken: MCC's covers other bytes). A Custom
+	Edition cache's are recorded here too, as they were checked (each
+	linked_address the place its reference loads it, no vertices in the
+	file): the game reads a structure BSP only where one of these says
+	(custom_edition_cache_structure_bsp_checked), whatever the reference in
+	the tags says by then */
 	uint32_t mcc_cea_structure_bsp_address;
 	struct mcc_cea_structure_bsp mcc_cea_structure_bsps[CACHE_FILE_MAXIMUM_STRUCTURE_BSPS];
 };
@@ -491,6 +496,22 @@ one makes its sound unplayable (sound_prepare). */
 #define CUSTOM_EDITION_PERMUTATION_PCM_HALVED (CUSTOM_EDITION_PERMUTATION_HALVED | 0)
 #define CUSTOM_EDITION_PERMUTATION_XBOX_ADPCM_HALVED (CUSTOM_EDITION_PERMUTATION_HALVED | 1)
 
+/* (port) A permutation's compression as custom_edition_cache_convert leaves
+it for the sound cache when its samples are a stream of one of MCC's CELT
+banks (mcc_sound.h: the dialogue, music and streamed sounds of MCC's own
+maps), the bank's number (MCC_SOUND_BANK_*) in the low byte: its samples'
+file offset and size the stream's place and size in that bank's file, its
+buffer size the Xbox ADPCM it is made (custom_edition_sounds.c), at its
+sound's rate and channels. */
+#define CUSTOM_EDITION_PERMUTATION_MCC_CELT 0x200
+#define CUSTOM_EDITION_PERMUTATION_MCC_CELT_BANK(compression) ((int)((compression) & 0xFF))
+#define CUSTOM_EDITION_PERMUTATION_IS_MCC_CELT(compression) (((compression) & 0xFF00) == CUSTOM_EDITION_PERMUTATION_MCC_CELT)
+/* (port) such a permutation's samples carry this in their flags: the tag
+check takes them as a stream of MCC's bank, not of the map's files, when the
+loader of an MCC map allows it (tag_schema.h's TAG_VALIDATE_MCC_CELT_STREAMS,
+TAG_VALIDATE_MCC_CELT_STREAM_FLAG: the same bit) */
+#define CUSTOM_EDITION_SAMPLES_MCC_CELT_FLAG 0x10000U
+
 /* what custom_edition_cache_convert changed */
 struct custom_edition_conversion_report
 {
@@ -498,12 +519,17 @@ struct custom_edition_conversion_report
 	banks (mcc_sound_source; mcc_sound.h): sounds and permutations made
 	playable, sounds whose permutations did not match the bank's streams or
 	were of another rate or channels than their streams (left silent), sounds
-	the lists name in a bank of CELT streams (dialogue, music: not played
-	yet), and sounds no list names */
+	the lists name in a bank of CELT streams that is not there (left
+	silent), and sounds no list names; and of the sounds made playable, those
+	of the CELT banks (made Xbox ADPCM as they load: dialogue, music,
+	streamed sounds) and their permutations' Xbox ADPCM */
 	int32_t mcc_sounds_mapped;
 	int32_t mcc_sound_permutations_mapped;
 	int32_t mcc_sounds_mismatched;
 	int32_t mcc_sounds_in_celt_banks;
+	int32_t mcc_sounds_celt_mapped;
+	int32_t mcc_sound_celt_permutations_mapped;
+	uint64_t mcc_sound_celt_adpcm_bytes;
 	int32_t mcc_sounds_unlisted;
 	int32_t mcc_sound_permutations_unmapped;
 	uint64_t mcc_sound_adpcm_bytes;
@@ -706,6 +732,20 @@ then translate them from there. The next custom_edition_cache_load starts
 from CUSTOM_EDITION_TAG_CACHE_ADDRESS again. */
 void custom_edition_cache_tags_moved(
 	uint32_t address);
+/* (port) The structure BSP the load of the cache `report` describes checked
+at `file_offset` of `size` bytes (struct mcc_cea_structure_bsp), or NULL
+when it checked none there. A structure BSP is read only where its load
+checked it: the scenario's reference to it lies in tags that the
+conversions and the tags' check (tag_validate.c) write in place after the
+load, so by the time the game reads the BSP it may name other bytes, or
+another place, than were checked. After ChupathingyCE (MrMilenko,
+GPL-3.0-or-later): 7a898133f, "the BSP loads only from the reference that
+was checked" (#1069). */
+struct mcc_cea_structure_bsp const *custom_edition_cache_structure_bsp_checked(
+	struct custom_edition_load_report const *report,
+	uint32_t file_offset,
+	uint32_t size);
+
 /* the address the tags of the last cache loaded are linked to:
 CUSTOM_EDITION_TAG_CACHE_ADDRESS, or a Halo: CE Anniversary cache's
 MCC_CEA_TAG_CACHE_ADDRESS, for the units that move the pointers */
@@ -731,9 +771,16 @@ enum cache_file_status custom_edition_cache_convert(
 
 /* (port) One stream of an MCC FSB bank, as custom_edition_cache_convert
 needs it of a sound's permutation: its bytes in the bank's file, and what it
-holds (IMA ADPCM, which is Halo's Xbox ADPCM, so it is played as it lies). */
+holds (IMA ADPCM, which is Halo's Xbox ADPCM, so it is played as it lies;
+or CELT, made Xbox ADPCM as it loads). */
+/* (the IMA ADPCM bank's number, mcc_sound.h's MCC_SOUND_BANK_ADPCM; the
+CELT banks' are others) */
+#define MCC_SOUND_SOURCE_ADPCM_BANK 0
+
 struct mcc_sound_stream
 {
+	/* the bank's number (MCC_SOUND_BANK_*: the IMA ADPCM bank 0) */
+	int bank;
 	uint32_t offset;
 	uint32_t bytes;
 	uint32_t samples;
@@ -748,18 +795,21 @@ struct mcc_sound_stream
 
 /* What MCC's sound lists and FSB banks say about the sounds of its own maps
 (mcc_sound.c), which custom_edition_cache_convert asks for each sound tag
-of such a map. `find` gives the streams (the bank's first and how many,
-consecutive) of the sound tag `path`: 1 when the ADPCM bank has them, else
-0 with `*elsewhere` 1 when another bank (CELT) does and 0 when no list
-names it. `stream` gives stream `index`. The bank's file is the sounds slot
-of the combined offset space, which starts at `combined_offset`, `bank_bytes`
-long. `trace`, when not NULL, is told a line for each sound
-(HALO_MCC_SOUND_TRACE). */
+of such a map. `find` gives the bank and the streams (the bank's first and
+how many, consecutive) of the sound tag `path` (the classic sound MCC plays
+in its classic mode first, the one named after it in an old_ folder, then
+the path's own): 1 when a bank that is there has them, else 0 with
+`*elsewhere` 1 when a CELT bank that is not there does and 0 when no list
+names it. `stream` gives stream `index` of bank `bank`. The IMA ADPCM
+bank's file is the sounds slot of the combined offset space, which starts at
+`combined_offset`, `bank_bytes` long; a CELT bank's streams are read from
+its own file as they load. `trace`, when not NULL, is told a line for each
+sound (HALO_MCC_SOUND_TRACE). */
 struct mcc_sound_source
 {
 	void *context;
-	int (*find)(void *context, char const *path, uint32_t *first, uint32_t *count, int *elsewhere);
-	int (*stream)(void *context, uint32_t index, struct mcc_sound_stream *stream);
+	int (*find)(void *context, char const *path, int *bank, uint32_t *first, uint32_t *count, int *elsewhere);
+	int (*stream)(void *context, int bank, uint32_t index, struct mcc_sound_stream *stream);
 	void (*trace)(void *context, char const *line);
 	uint32_t combined_offset;
 	uint32_t bank_bytes;

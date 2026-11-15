@@ -272,6 +272,16 @@ struct tag_validate_file_range
 	unsigned long size;
 };
 
+/* (port) A file range at this offset (no file's) says that the map's file
+data flagged TAG_VALIDATE_MCC_CELT_STREAM_FLAG (in its flags, the tag
+data's second word) are streams of MCC's CELT banks (mcc_sound.h; the sound
+permutations of MCC's own maps, cache_file_formats.c), each within the
+range's size (the largest bank's) from 0 and read from its bank's file, not
+from the map's: the loader of an MCC map gives it, no other. Without it such
+data are checked as any other. */
+#define TAG_VALIDATE_MCC_CELT_STREAMS 0xFFFFFFFFUL
+#define TAG_VALIDATE_MCC_CELT_STREAM_FLAG 0x10000UL
+
 /* ---------- prototypes/TAG_SCHEMA_*.C */
 
 /* the groups the validator knows: lists of them (each ending with a 0 group

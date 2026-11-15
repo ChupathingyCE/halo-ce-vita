@@ -136,10 +136,12 @@ def make_mcc(root, sound=True, custom_edition=True, extra=True):
             files[maps + "custom_edition/" + name] = fake_resource_map(kind, 4096, seed=kind)
     if sound:
         files["halo1/sound/pc/sounds_adpcm.fsb"] = b"FSB5" + b"\1" * 3000
+        for name, _ in hcv.MCC_SOUND_CELT_BANKS:
+            files["halo1/sound/pc/" + name] = b"FSB5" + name.encode() * 100
         for name in hcv.MCC_SOUND_LISTS:
             files["halo1/sound/pc/lst/" + name] = struct.pack("<II", 1, 0)
     if extra:
-        files["halo1/sound/pc/sounds_music.fsb"] = b"FSB5" + b"\2" * 5000      # not needed
+        files["halo1/sound/pc/sounds_dialogs_french.fsb"] = b"FSB5" + b"\2" * 5000  # not needed (English only)
         files["halo1/sound/pc/lst/tags_params.ps"] = b"ps"                     # not needed
         files["halo3/maps/guardian.map"] = b"daeh" + struct.pack("<I", 13)     # another game
         files["mcclauncher.exe"] = b"MZ"

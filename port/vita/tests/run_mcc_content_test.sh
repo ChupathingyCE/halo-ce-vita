@@ -15,7 +15,7 @@
 #      campaign  each of HALO_TEST_MCC_LEVELS (b30 d40) started as the campaign
 #                list starts it (mods\mcc_<level>), its cinematics skipped,
 #                played HALO_TEST_MCC_SECONDS (60): it must load from MCC's
-#                folder, say its sounds are silent, tick on, and log no
+#                folder, say where its sounds are (MCC's FMOD banks), tick on, and log no
 #                assertion or exception
 #      won       mcc_b30 won goes on to mcc_b40, MCC's next level
 #      mp        mcc_bloodgulch, an offline game with HALO_TEST_MCC_BOTS (6)
@@ -38,16 +38,31 @@
 #                 HALO_MENU_SOURCE=mcc (paths.menu_source) MCC's, and the
 #                 campaign still starts the Xbox's a10; with "xbox" and no
 #                 Xbox ui.map the menus' map is missing, not MCC's
-#      mccmenu    no Xbox file at all: MCC's ui.map is the menus' map
-#                 (menu_tags_loaded after it), the classic menu's six rows
-#                 each reached and named (CAMPAIGN, MULTIPLAYER, PROFILES,
-#                 SETTINGS, CREDITS, QUIT), a picture drawn; SETTINGS (one
-#                 of Halo PC's own functions) says the menu is not supported
-#                 with MCC's menu file yet, logs the function, and the menu
-#                 goes on, no assertion
+#      mccmenu    no Xbox file at all, Menu style Classic: MCC's ui.map is the
+#                 menus' map (menu_tags_loaded after it), Halo PC's own rows:
+#                 CAMPAIGN, CREDITS and QUIT reached, MULTIPLAYER and PROFILES
+#                 greyed and passed over; SETTINGS (Halo PC's function 137)
+#                 edits a profile (made, none yet), its MOUSE, AUDIO and VIDEO
+#                 SETUP open, their OK sets this build's settings, which
+#                 stay after a restart (mccmenu2); its rows with no equivalent
+#                 greyed (halo_pc_menus.c), no assertion
+#      mcccplus   no Xbox file, Menu style Classic+ (after campaign, with its
+#                 profile): Classic+'s rows on MCC's main menu (CAMPAIGN
+#                 MULTIPLAYER SETTINGS MEDIA FORGE) and every screen behind
+#                 them the Xbox's as on the Xbox's files (classic/
+#                 xbox_screens.xml), no Halo 3 screen: SELECT PROFILE, LOAD
+#                 LEVEL, CHOOSE DIFFICULTY; split screen's START TO JOIN,
+#                 SELECT MAP (another map), SELECT GAMETYPE, lobby; SELECT
+#                 PROFILE TO EDIT, EDIT PROFILE SETTINGS and its pages; MEDIA;
+#                 FORGE's START FORGE playing MCC's Blood Gulch
 #      b30        mods\mcc_b30 started by the console from that menu, played
 #      campaign   CAMPAIGN, a new profile, the difficulty, with no Xbox map:
 #                 MCC's a10 starts (mods\mcc_a10)
+#      mccgames   (1.1.3) no Xbox file, Classic+: MEDIA > GAME MANAGER's GAMES
+#                 tab says Halo CE installed from MCC's files alone (its maps
+#                 counted, its PC files the custom_edition ones), nothing wrong
+#      bothgames  (1.1.3) the Xbox's maps and MCC's, Halo 3: START > MEDIA >
+#                 GAME MANAGER says both, each one's maps counted
 #
 # 4. auto: the PC finding the player's MCC by itself (paths.content "auto"),
 #    HOME a folder of the test's with a made-up Steam: its libraryfolders.vdf
@@ -159,7 +174,7 @@ case " $parts " in *" harness "*)
 				! grep -aq "custom edition: loading 'd:\\\\mcc\\\\halo1\\\\maps\\\\$level.map'" "$debug"; then
 				fail "mcc_$level was not loaded from MCC's folder ($out/mcc_$level)"
 			elif ! grep -aq "mcc: '$level' is MCC's own campaign map: its sounds are in MCC's FMOD banks" "$debug"; then
-				fail "mcc_$level: its silent sounds were not said"
+				fail "mcc_$level: where its sounds are was not said"
 			elif [ "${ticks:-0}" -lt $((seconds * 20)) ]; then
 				fail "mcc_$level reached tick ${ticks:-0} in $seconds s"
 			else
@@ -319,33 +334,61 @@ PY
 			echo "xboxonly: paths.menu_source=xbox: MCC's ui.map not read"
 		fi
 
-		# mccmenu: no Xbox file; the six rows, the handler message
-		# (A on each row and B back: CAMPAIGN, MULTIPLAYER and PROFILES open a screen,
-		# SETTINGS one of Halo PC's own functions, which fails, with the menu as it was; CREDITS
-		# and QUIT open theirs)
-		mrun mccmenu 60 no HALO_MENU_STYLE=classic \
-			"HALO_TEST_PAD=wait:150:3000 a wait:150:3500 b wait:150:2500 down:150:700 a wait:150:3500 b wait:150:2500 down:150:700 a wait:150:3500 b wait:150:2500 down:150:700 a wait:150:3500 down:150:700 a wait:150:3500 b wait:150:2500 down:150:700 a wait:150:3000 b wait:150:2500"
+		# mccmenu: no Xbox file, Menu style Classic ("original": Halo PC's own menus; Classic+
+		# has its own, mcccplus). The main menu's six rows: MULTIPLAYER and PROFILES greyed and
+		# passed over (Halo PC's network games and its profile list: port/linux/game/
+		# halo_pc_menus.c), CAMPAIGN, CREDITS and QUIT open theirs; SETTINGS (Halo PC's own
+		# function 137) makes a profile (none yet) and opens EDIT PROFILE SETTINGS, whose
+		# CONTROLS SETUP, GAMEPADS, NETWORK SETUP and CHANGE COLOR are greyed; MOUSE SETUP,
+		# AUDIO SETUP and VIDEO SETUP open, AUDIO's MASTER VOLUME a step down with OK, MOUSE's
+		# sensitivity a step up and invert with OK. mccmenu2, a restart on the same files:
+		# AUDIO SETUP and MOUSE SETUP open with those values.
+		pad="wait:150:3000 a:150:3500 b:150:2500 down:150:700 a:150:4000"
+		pad="$pad down:150:700 down:150:700 a:150:3000 left:150:700 down:150:600 down:150:600 down:150:600 right:150:600 a:150:3000"
+		pad="$pad up:150:600 a:150:3000 right:150:600 down:150:600 right:150:600 down:150:600 right:150:600 a:150:3000"
+		pad="$pad down:150:600 down:150:600 a:150:3000 right:150:700 b:150:2500 b:150:2500"
+		pad="$pad down:150:700 a:150:3500 b:150:2500 down:150:700 a:150:3000 b:150:2500"
+		mrun mccmenu 75 no HALO_MENU_STYLE=original HALO_TEST_CONFIG="$out/mccmenu_config.toml" "HALO_TEST_PAD=$pad"
 		log=$(menu_log mccmenu)
 		debug=$(menu_debug mccmenu)
 		missing=
-		for row in load_camp multiplayer profile settings credits quit_game; do
+		for row in load_camp settings credits quit_game; do
 			grep -aq "ui: handler of ui.shell.main_menu.main_menu_item_$row: event 0" "$log" || missing="$missing $row"
+		done
+		for row in main_menu_item_multiplayer main_menu_item_profile controller_setup_profile_item gamepads_profile_item \
+			network_settings_profile_item color_profile_item; do
+			grep -aq "menus: Halo PC's $row greyed: " "$log" || missing="$missing $row(greyed)"
+		done
+		for screen in player_profile_edit_screen mouse_settings.mouse_settings_screen \
+			audio_settings.audio_settings_screen video_settings.video_settings_screen; do
+			grep -aq "ui: screen ui.shell.main_menu.settings_select.player_setup.player_profile_edit.$screen" "$log" ||
+				missing="$missing $screen"
 		done
 		if ! grep -aq "menus: the menu map is MCC's halo1.maps.ui.map (no Xbox ui.map in the maps folder)" "$debug" ||
 			! grep -aq "custom edition: loading 'd:.mcc.halo1.maps.ui.map'" "$debug" ||
 			! grep -aq "ui: screen ui.shell.main_menu.main_menu" "$log"; then
 			fail "mccmenu: MCC's ui.map was not the menus' with no Xbox file ($out/mccmenu)"
 		elif [ -n "$missing" ]; then
-			fail "mccmenu: main menu rows not reached:$missing ($out/mccmenu)"
-		elif ! grep -aq "MCC's menu file: This menu isn't supported with MCC's menu file yet" "$log" ||
-			! grep -aq "menus: MCC's ui.map: widget 'ui.shell.main_menu.main_menu_item_settings' ran function [0-9]*, one of Halo PC's own" "$debug"; then
-			fail "mccmenu: SETTINGS did not say it is not supported with MCC's menu file ($out/mccmenu)"
-		elif [ "$(grep -ac "ui: screen ui.shell.main_menu.main_menu$" "$log")" -lt 3 ]; then
-			fail "mccmenu: the menu did not go on after the unsupported entry ($out/mccmenu)"
+			fail "mccmenu: rows, greyed rows or SETTINGS' screens not reached:$missing ($out/mccmenu)"
+		elif grep -aq "ran function 137, one of Halo PC's own\|MCC's menu file: This menu isn't supported" "$debug" "$log" ||
+			! grep -aq "menus: Halo PC's SETTINGS: editing profile" "$log" ||
+			grep -aq "ui: handler of ui.shell.main_menu.main_menu_item_\(multiplayer\|profile\): event 0" "$log"; then
+			fail "mccmenu: SETTINGS did not edit a profile, or a greyed row was pressed ($out/mccmenu)"
+		elif ! grep -aq "menus: Halo PC's AUDIO SETUP: set master 9, music 10, effects 10" "$log" ||
+			! grep -aq "menus: Halo PC's MOUSE SETUP: set sensitivity 6, invert yes" "$log"; then
+			fail "mccmenu: AUDIO SETUP's or MOUSE SETUP's OK did not set the settings ($out/mccmenu)"
 		elif ! picture_drawn "$out/mccmenu"; then
 			fail "mccmenu: no picture drawn ($out/mccmenu)"
 		else
-			echo "mccmenu: MCC's ui.map alone: the six rows reached (CAMPAIGN MULTIPLAYER PROFILES SETTINGS CREDITS QUIT), SETTINGS says it is not supported yet, the menu goes on"
+			mrun mccmenu2 25 no HALO_MENU_STYLE=original HALO_TEST_CONFIG="$out/mccmenu_config.toml" \
+				"HALO_TEST_PAD=wait:150:3000 down:150:700 a:150:3500 down:150:700 down:150:700 a:150:3000 b:150:2500 up:150:700 a:150:3000 b:150:2500"
+			log=$(menu_log mccmenu2)
+			if ! grep -aq "menus: Halo PC's AUDIO SETUP: master 9, music 10, effects 10" "$log" ||
+				! grep -aq "menus: Halo PC's MOUSE SETUP: sensitivity 6, invert yes" "$log"; then
+				fail "mccmenu2: AUDIO SETUP's or MOUSE SETUP's settings did not stay after a restart ($out/mccmenu2)"
+			else
+				echo "mccmenu: MCC's ui.map alone, Menu style Classic: CAMPAIGN CREDITS QUIT reached, MULTIPLAYER PROFILES greyed; SETTINGS edits a profile, MOUSE AUDIO VIDEO open, their OK sets the settings, which stay after a restart"
+			fi
 		fi
 
 		# mcconline: no Xbox file, Menu style Online (ElDewrito): the set of screens is added
@@ -366,6 +409,34 @@ PY
 			echo "mcconline: MCC's ui.map alone, Menu style Online: the screens added, the Online main menu up"
 		fi
 
+		# mccgames / bothgames (1.1.3): GAME MANAGER's GAMES tab - where Halo CE was installed from, its
+		# maps counted and checked (game_manager.c), Triangle its details. Classic+: down three to MEDIA,
+		# down two to GAME MANAGER; Halo 3: Select (START), down three to GAME MANAGER
+		mrun mccgames 32 no HALO_MENU_STYLE=classic \
+			"HALO_TEST_PAD=wait:150:5000 down:150:600 down:150:600 down:150:600 a wait:150:2500 down:150:600 down:150:600 a wait:150:5000 y wait:150:2500 b wait:150:2000"
+		log=$(menu_log mccgames)
+		if ! grep -aq "ui: screen pc.ce.mods.screen" "$log"; then
+			fail "mccgames: Classic+'s MEDIA > GAME MANAGER did not open ($out/mccgames)"
+		elif ! grep -aqE "game manager: checked: Halo CE [1-9][0-9]* maps \(Xbox 0, MCC [1-9][0-9]*\), sources 2, 0 issues, PC files 7" "$log"; then
+			fail "mccgames: GAMES did not say Halo CE from MCC's files alone, all good ($out/mccgames)"
+		elif ! grep -aq "ui: screen pc.ce.mods.details" "$log"; then
+			fail "mccgames: Triangle did not open the game's details ($out/mccgames)"
+		else
+			echo "mccgames: MCC's files alone, Classic+: GAME MANAGER says Halo CE from MCC's files, good"
+		fi
+		mrun bothgames 32 yes HALO_MENU_STYLE=halo3 \
+			"HALO_TEST_PAD=wait:150:6000 back:150:2500 down:150:600 down:150:600 down:150:600 a wait:150:5000 y wait:150:2500 b wait:150:2000"
+		log=$(menu_log bothgames)
+		if ! grep -aq "ui: screen pc.h3.mods.screen" "$log"; then
+			fail "bothgames: START > MEDIA > GAME MANAGER did not open ($out/bothgames)"
+		elif ! grep -aqE "game manager: checked: Halo CE [1-9][0-9]* maps \(Xbox [1-9][0-9]*, MCC [1-9][0-9]*\), sources 3, " "$log"; then
+			fail "bothgames: GAMES did not say Halo CE from both the Xbox's files and MCC's ($out/bothgames)"
+		elif ! grep -aq "ui: screen pc.h3.mods.details" "$log"; then
+			fail "bothgames: Triangle did not open the game's details ($out/bothgames)"
+		else
+			echo "bothgames: the Xbox's files and MCC's, Halo 3: GAME MANAGER says both"
+		fi
+
 		# b30: started from that menu (the console's map_name, as the menus' tests start a level)
 		mrun b30 "$seconds" no HALO_MENU_STYLE=classic \
 			'HALO_TEST_COMMANDS=150:map_name mods\mcc_b30;L450:(set cheat_deathless_player true);L600:@skip;L900:@skip'
@@ -381,13 +452,70 @@ PY
 			echo "b30: MCC's menus alone, then mods\\mcc_b30 started and played to tick $ticks"
 		fi
 
-		# campaign: the classic menu starts MCC's a10 with no Xbox map
+		# campaign: Classic+ starts MCC's a10 with no Xbox map (a first start: CAMPAIGN makes a
+		# profile, as the Xbox's does, then CHOOSE DIFFICULTY)
 		mrun campaign 70 no HALO_MENU_STYLE=classic \
 			"HALO_TEST_PAD=wait:150:3000 a wait:150:4000 a wait:150:4000 a wait:150:5000 wait:150:40000"
 		if ! grep -aq "memory: loaded mods.mcc_a10" "$(menu_log campaign)"; then
 			fail "campaign: CAMPAIGN, the difficulty did not start MCC's a10 with no Xbox map ($out/campaign)"
 		else
 			echo "campaign: CAMPAIGN, a new profile, the difficulty: MCC's a10 started (mods\\mcc_a10), no Xbox map"
+		fi
+
+		# mcccplus: no Xbox file, Menu style Classic+ (rc.9): every row and the screens behind it are
+		# the Xbox's screens as Classic+ has them on the Xbox's files (classic/xbox_screens.xml), never
+		# the Halo 3 set's: CAMPAIGN's SELECT PROFILE, LOAD LEVEL, CHOOSE DIFFICULTY; MULTIPLAYER, its
+		# SPLIT SCREEN's START TO JOIN, SELECT MAP (another map picked), SELECT GAMETYPE and lobby;
+		# SETTINGS' SELECT PROFILE TO EDIT, EDIT PROFILE SETTINGS and each of its pages (CONTROLLER
+		# SETUP, ADVANCED CONTROLS, CHANGE COLOR, MORE OPTIONS); MEDIA; FORGE, its START FORGE
+		# playing MCC's Blood Gulch. Each backed out of to the main menu. The profile: campaign's.
+		pad="wait:150:4000 a:150:3500 a:150:3500 a:150:3500 b:150:2500 b:150:2500 b:150:2500"
+		pad="$pad down:150:700 a:150:3500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500"
+		pad="$pad a:150:4000 start:150:2500 a:150:3000 a:150:4000 right:150:1500 a:150:4000 a:150:4000"
+		pad="$pad b:150:2500 b:150:2500 b:150:2500 b:150:2500 b:150:2500"
+		pad="$pad down:150:700 a:150:3000 a:150:3000 down:150:600 a:150:3000 b:150:2500 down:150:600 a:150:3000"
+		pad="$pad b:150:2500 down:150:600 a:150:3000 b:150:2500 down:150:600 a:150:3000 b:150:2500 b:150:2500 b:150:2500"
+		pad="$pad down:150:700 a:150:3000 b:150:2500 down:150:700 a:150:4000 down:150:600 down:150:600 a:150:3000"
+		pad="$pad level:150:5000"
+		rm -rf "$out/mcccplus_save"
+		cp -a "$out/campaign/save" "$out/mcccplus_save" 2> /dev/null
+		mrun mcccplus 200 no HALO_MENU_STYLE=classic HALO_SAVE_ROOT="$out/mcccplus_save" "HALO_TEST_PAD=$pad"
+		log=$(menu_log mcccplus)
+		missing=
+		for screen in load_campaign_player_profile solo_level_select.solo_level_select_screen \
+			difficulty_select.difficulty_select_list_screen \
+			multiplayer_type_select.split_screen.4way_profile_select.4way_start2join_screen \
+			multiplayer_type_select.split_screen.splitscreen_map_select_wrapper \
+			multiplayer_type_select.split_screen.gametype_select_screen_wrapper \
+			multiplayer_type_select.split_screen.pregame.splitscreen_pregame_wrapper_normal \
+			settings_select.player_setup.player_profile_select_screen \
+			settings_select.player_setup.player_profile_edit.player_profile_edit_screen \
+			settings_select.player_setup.player_profile_edit.color_edit.color_select_screen; do
+			grep -aq "ui: screen ui.shell.main_menu.$screen\$" "$log" || missing="$missing $screen"
+		done
+		for screen in 'pc.mp.screen' 'pc.cp.xb.settings_select.player_setup.player_profile_edit.controller_edit.controller_options_screen' \
+			'pc.cp.xb.settings_select.player_setup.player_profile_edit.advanced_controls.advanced_controls_screen' \
+			'pc.cp.custom.screen' 'pc.ce.media.screen' 'pc.cp.forge.lobby'; do
+			grep -aq "ui: screen $screen\$" "$log" || missing="$missing $screen"
+		done
+		if grep -aq "OpenCE's multiplayer screens not added" "$log"; then
+			fail "mcccplus: the menus folder's screens were not added with MCC's ui.map alone, Classic+ ($out/mcccplus)"
+		elif ! grep -aq "menus: Classic+ on Halo PC's ui.map: [0-9]* of the Xbox screens' widgets as the Xbox has them" "$log"; then
+			fail "mcccplus: the Xbox screens' widgets were not put in Halo PC's ui.map ($out/mcccplus)"
+		elif grep -aq "menus: Halo 3 screen" "$log"; then
+			fail "mcccplus: a Halo 3 screen opened in Classic+: $(grep -a -m1 'menus: Halo 3 screen' "$log") ($out/mcccplus)"
+		elif [ -n "$missing" ]; then
+			fail "mcccplus: not opened:$missing ($out/mcccplus)"
+		elif [ "$(grep -ac "ui: screen ui.shell.main_menu.main_menu$" "$log")" -lt 5 ]; then
+			fail "mcccplus: not back on the main menu after each row ($out/mcccplus)"
+		elif grep -aq "has no sequences\|segmentation fault" "$log"; then
+			fail "mcccplus: a widget's bitmap with no sequences, or a fault ($out/mcccplus)"
+		elif ! grep -aq "memory: loaded levels.test.mcc_bloodgulch" "$log"; then
+			fail "mcccplus: FORGE's START FORGE did not play MCC's Blood Gulch ($out/mcccplus)"
+		elif ! picture_drawn "$out/mcccplus"; then
+			fail "mcccplus: no picture drawn ($out/mcccplus)"
+		else
+			echo "mcccplus: MCC's ui.map alone, Classic+: the Xbox's screens for every row (SELECT PROFILE, LOAD LEVEL, CHOOSE DIFFICULTY; split screen's START TO JOIN, SELECT MAP, SELECT GAMETYPE, lobby; SELECT PROFILE TO EDIT, EDIT PROFILE SETTINGS and its pages), MEDIA, FORGE played; no Halo 3 screen"
 		fi
 	fi
 	;;
@@ -547,7 +675,7 @@ case " $parts " in *" inmaps "*)
 		if ! grep -aq "the menu map is MCC's halo1.maps.ui.map (no Xbox ui.map" "$out/beside_mcc/data/debug.txt" 2>/dev/null &&
 			! grep -aq "the menu map is MCC's halo1.maps.ui.map (no Xbox ui.map" "$out/beside/haloce-vita/data/debug.txt"; then
 			fail "beside: no Xbox file: MCC's ui.map was not the menus' map"
-		elif ! grep -aq "mcc sound: .* play from sounds_adpcm.fsb" "$out/beside/haloce-vita/data/debug.txt"; then
+		elif ! grep -aq "mcc sound: .* from sounds_adpcm.fsb" "$out/beside/haloce-vita/data/debug.txt"; then
 			fail "beside: MCC's sound bank was not found"
 		fi
 		if grep -aq "content: the Halo content folder: .*/beside/haloce-vita/mcc$" "$out/beside_mcc/run.log"; then

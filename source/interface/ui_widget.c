@@ -2538,14 +2538,20 @@ static __inline boolean widget_instance_can_handle_events(
 /* port: a row of OpenCE's lists (port/linux/game/menu_tags.c) that takes no
 focus: hidden or disabled (a list's rows past its games:
 port/linux/game/menu_functions.c), which up and down pass over */
+boolean halo_pc_menu_row_greyed(struct widget_instance const *widget);
+
 static boolean widget_instance_port_skipped(
 	struct widget_instance *list,
 	struct widget_instance *child)
 {
 	extern boolean pc_menu_tag(long tag_index);
 
-	return child && list->type == _ui_widget_type_column_list && pc_menu_tag(list->definition_tag_index) &&
-		(!child->visible || child->disabled);
+	if (!child || list->type != _ui_widget_type_column_list)
+		return FALSE;
+	/* (and a row of Halo PC's own screens greyed for having no equivalent
+	here: port/linux/game/halo_pc_menus.c) */
+	return pc_menu_tag(list->definition_tag_index) ? (!child->visible || child->disabled) :
+		halo_pc_menu_row_greyed(child);
 }
 
 #endif
@@ -2811,6 +2817,31 @@ static void ui_widget_port_held_render(
 
 #endif
 #ifdef HALO_LINUX
+/* port: a code-generated spinner list's item shown as text (Halo PC's
+RESOLUTION and REFRESH RATE: port/linux/game/halo_pc_menus.c), kept in
+the widget's own memory, freed with it */
+void ui_widget_port_spinner_text(
+	struct widget_instance *spinner,
+	wchar_t const *text)
+{
+	unsigned long length;
+	wchar_t *copy;
+
+	if (!spinner || spinner->type != _ui_widget_type_spinner_list || !text)
+		return;
+	if (spinner->parameters.list.item_text && !ustrcmp(spinner->parameters.list.item_text, text))
+		return;
+	length = ustrlen(text);
+	copy = pool_new_pointer(widget_memory_pool, 2 * length + 2, __FILE__, __LINE__);
+	if (!copy)
+		return;
+	csmemcpy(copy, text, 2 * length);
+	copy[length] = 0;
+	if (spinner->parameters.list.item_text)
+		dispose_pointer(widget_memory_pool, spinner->parameters.list.item_text);
+	spinner->parameters.list.item_text = copy;
+}
+
 /* port: gives a list's child the focus, as up and down do (OpenCE's lists,
 port/linux/game/menu_functions.c: off a row that went away) */
 void ui_widget_port_give_focus(
@@ -4032,10 +4063,33 @@ static void widget_instance_initialize(
 	}
 	if (definition->background_bitmap.index != NONE)
 	{
-		widget->animation.number_of_sprite_frames = TAG_BLOCK_GET_ELEMENT(
-			&bitmap_group_get(definition->background_bitmap.index)->sequences,
-			0,
-			struct bitmap_group_sequence)->bitmap_count;
+		struct bitmap_group *background = bitmap_group_get(definition->background_bitmap.index);
+
+		/* (port, 1.1.3: a background bitmap with no sequences - a Halo PC bitmap of MCC's
+		files, which the Xbox's ui.map never pairs with a widget - is drawn as its first
+		bitmap with no sprite frames; the original read sequence 0 regardless, and on the
+		Vita that read past an empty block faulted: owner's rc.8 Classic+ MULTIPLAYER crash) */
+		if (background && background->sequences.count > 0 && background->sequences.address)
+		{
+			widget->animation.number_of_sprite_frames = TAG_BLOCK_GET_ELEMENT(
+				&background->sequences,
+				0,
+				struct bitmap_group_sequence)->bitmap_count;
+		}
+		else
+		{
+			void platform_log(char const *format, ...);
+			static long said_tag = NONE;
+
+			widget->animation.number_of_sprite_frames = 0;
+			if (said_tag != tag_index)
+			{
+				said_tag = tag_index;
+				platform_log("ui: widget %s: background bitmap %s has no sequences (no sprite frames)",
+					tag_index != NONE ? tag_get_name(tag_index) : "?",
+					tag_get_name(definition->background_bitmap.index));
+			}
+		}
 	}
 	if (!widget_globals.dont_load_children_recursive)
 	{
@@ -6993,6 +7047,16 @@ static void widget_instance_render_recursive(
 	}
 	offset.x += widget->horizontal_offset;
 	offset.y += widget->vertical_offset;
+#ifdef HALO_LINUX
+	/* port: Halo PC's own screens' values and greyed rows, on MCC's ui.map
+	(port/linux/game/halo_pc_menus.c: Halo PC's game data inputs, which this
+	build has not, did this) */
+	{
+		extern void halo_pc_menu_render(struct widget_instance *widget);
+
+		halo_pc_menu_render(widget);
+	}
+#endif
 	for (input_index = 0;
 		input_index < definition->game_data_inputs.count;
 		input_index++)
@@ -7068,6 +7132,14 @@ static void widget_instance_render_recursive(
 				alpha_modifier;
 		}
 		color = modulate_pixel32_by_real_alpha(0xFFFFFFFF, alpha);
+#ifdef HALO_LINUX
+		/* port: a row of Halo PC's own screens greyed for having no
+		equivalent here (port/linux/game/halo_pc_menus.c) drawn dark too:
+		Halo PC's main menu rows are pictures its blend draws whole whatever
+		their alpha */
+		if (halo_pc_menu_row_greyed(widget))
+			color = (color & 0xFF000000) | 0x00777777;
+#endif
 #ifdef HALO_LINUX
 		{
 			/* a background as wide as the 640 menu columns (the pause
@@ -7546,10 +7618,16 @@ static void widget_instance_tab_to_next_valid_widget(
 		struct ui_widget_definition *definition =
 			ui_widget_definition_get(child->definition_tag_index);
 
-		if (definition->event_handlers.count > 0 ||
+		if ((definition->event_handlers.count > 0 ||
 			TEST_FLAG(definition->flags, _widget_pass_unhandled_events_to_children_bit) ||
 			widget->type == _ui_widget_type_spinner_list ||
 			widget->type == _ui_widget_type_column_list)
+#ifdef HALO_LINUX
+			/* port: not a row of Halo PC's own screens greyed for having no
+			equivalent here (port/linux/game/halo_pc_menus.c) */
+			&& !halo_pc_menu_row_greyed(child)
+#endif
+			)
 		{
 			widget->focused_child = child;
 			break;
@@ -7585,10 +7663,16 @@ static void widget_instance_tab_to_previous_valid_widget(
 		struct ui_widget_definition *definition =
 			ui_widget_definition_get(child->definition_tag_index);
 
-		if (definition->event_handlers.count > 0 ||
+		if ((definition->event_handlers.count > 0 ||
 			TEST_FLAG(definition->flags, _widget_pass_unhandled_events_to_children_bit) ||
 			widget->type == _ui_widget_type_spinner_list ||
 			widget->type == _ui_widget_type_column_list)
+#ifdef HALO_LINUX
+			/* port: not a row of Halo PC's own screens greyed for having no
+			equivalent here (port/linux/game/halo_pc_menus.c) */
+			&& !halo_pc_menu_row_greyed(child)
+#endif
+			)
 		{
 			widget->focused_child = child;
 			break;

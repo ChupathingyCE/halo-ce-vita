@@ -6264,7 +6264,7 @@ int main(void)
 	write_file("ux0:data/haloce-vita/mcc/halo1/maps/bitmaps.map", "x", 1);
 	write_file("ux0:data/haloce-vita/mcc/halo1/maps/ui.map", "x", 1);
 	open_page("Modded maps");
-	check(strstr(menu, "\n\x04" "Content: ux0:data/haloce-vita/mcc\n\x04" "Halo CE: 2 MCC maps (no sound yet)\n") &&
+	check(strstr(menu, "\n\x04" "Content: ux0:data/haloce-vita/mcc\n\x04" "Halo CE: 2 MCC maps\n") &&
 		!strstr(menu, "Content: the Xbox maps") && menu_fits(), "an MCC folder: where the content is read from, its maps");
 	press(VITA_BUTTON_CIRCLE);
 	remove("ux0:data/haloce-vita/mcc/halo1/maps/a10.map");

@@ -55,6 +55,59 @@ struct stdio_source
 
 /* ---------- private code */
 
+static uint32_t tag_cache_u32(
+	uint8_t const *tag_cache,
+	uint32_t offset)
+{
+	return (uint32_t)tag_cache[offset] | (uint32_t)tag_cache[offset + 1] << 8 |
+		(uint32_t)tag_cache[offset + 2] << 16 | (uint32_t)tag_cache[offset + 3] << 24;
+}
+
+/* Each of the scenario's structure BSP references as the conversion left
+it, and whether the game would read it: only as its load checked it
+(custom_edition_cache_structure_bsp_checked, the place a Custom Edition
+map's reference names or a Halo: CE Anniversary map's room after its tags). */
+static void structure_bsp_references_print(
+	uint8_t *tag_cache,
+	uint32_t loaded_bytes,
+	struct custom_edition_load_report const *report)
+{
+	/* (scenario_definitions.h: the structure BSPs block; a reference) */
+	enum { SCENARIO_BYTES = 0x5B0, SCENARIO_STRUCTURE_BSPS = 0x5A4, REFERENCE_BYTES = 0x20 };
+	uint32_t linked = custom_edition_cache_linked_address();
+	uint8_t const *scenario = loaded_bytes >= 8 ?
+		custom_edition_cache_tag_get(tag_cache, loaded_bytes, tag_cache_u32(tag_cache, 4), 'scnr', SCENARIO_BYTES) :
+		NULL;
+	uint32_t count;
+	uint32_t address;
+	uint32_t index;
+
+	if (!scenario)
+	{
+		return;
+	}
+	count = tag_cache_u32(scenario, SCENARIO_STRUCTURE_BSPS);
+	address = tag_cache_u32(scenario, SCENARIO_STRUCTURE_BSPS + 4);
+	for (index = 0; index < count && index < CACHE_FILE_MAXIMUM_STRUCTURE_BSPS; index++)
+	{
+		uint32_t offset = address - linked + index * REFERENCE_BYTES;
+		struct mcc_cea_structure_bsp const *checked;
+		uint32_t place;
+
+		if (address < linked || offset > loaded_bytes || REFERENCE_BYTES > loaded_bytes - offset)
+		{
+			printf("structure_bsp_reference.%" PRIu32 ": outside the tags\n", index);
+			continue;
+		}
+		checked = custom_edition_cache_structure_bsp_checked(report, tag_cache_u32(tag_cache, offset),
+			tag_cache_u32(tag_cache, offset + 4));
+		place = report->identity.format == _cache_file_format_mcc_cea_cache ?
+			report->mcc_cea_structure_bsp_address : checked ? checked->linked_address : 0;
+		printf("structure_bsp_reference.%" PRIu32 ": %s\n", index,
+			checked && tag_cache_u32(tag_cache, offset + 8) == place ? "as checked" : "not checked");
+	}
+}
+
 static int stdio_read(
 	void *context,
 	uint32_t offset,
@@ -337,6 +390,20 @@ static int report_custom_edition_cache(
 		printf("computed_checksum: 0x%08" PRIx32 "\n", report.computed_checksum);
 		printf("trailing_bytes: 0x%" PRIx32 "\n", report.trailing_bytes);
 		print_flags("warnings", report.warnings, warning_names, NUMBER_OF_CUSTOM_EDITION_WARNINGS);
+		if (status == _cache_file_status_ok)
+		{
+			int32_t bsp_index;
+
+			/* (what the game reads each structure BSP as: as checked) */
+			for (bsp_index = 0; bsp_index < report.structure_bsp_count && bsp_index < CACHE_FILE_MAXIMUM_STRUCTURE_BSPS;
+				bsp_index++)
+			{
+				struct mcc_cea_structure_bsp const *bsp = &report.mcc_cea_structure_bsps[bsp_index];
+
+				printf("structure_bsp_checked.%" PRId32 ": 0x%" PRIx32 "+0x%" PRIx32 " at 0x%08" PRIx32 "\n", bsp_index,
+					bsp->file_offset, bsp->size, bsp->linked_address);
+			}
+		}
 		if (status == _cache_file_status_ok && identity->format == _cache_file_format_mcc_cea_cache)
 		{
 			struct mcc_cea_fix_report fix;
@@ -408,6 +475,7 @@ static int report_custom_edition_cache(
 					printf(" %s", custom_edition_behaviour_name((short)behaviour));
 			}
 			printf("%s\n", conversion.behaviours ? "" : " none");
+			structure_bsp_references_print(tag_cache, loaded_bytes, &report);
 			if (dump_path)
 			{
 				FILE *dump = fopen(dump_path, "wb");

@@ -51,7 +51,8 @@ right. Cancel asks first.
      selected and the page says why.
 5. **Destination.**
    - **Vita:** its address, as VitaShell shows it, with **Test connection**;
-     the VPK; the folder the files are gathered in on their way (about 2.5 GB).
+     the VPK; the folder the files are gathered in on their way (about 2.5 GB
+     with Xbox files, about 3.1 GB with MCC's).
    - **PC:** the install folder (`%LOCALAPPDATA%\Programs\Halo CE`,
      `~/.local/share/halo-ce` on Linux: no admin needed), with **Browse**, the
      space needed and free, and check boxes for a desktop shortcut and a Start
@@ -113,7 +114,8 @@ install go, and any other stops the install until they are moved away. The versi
 never taken as the version a signed download may not be older than.
 
 For a Vita, the files are gathered in a folder first (by default
-`Documents/Halo CE Vita files`, about 2.5 GB with everything), laid out as
+`Documents/Halo CE Vita files`; about 2.5 GB with Xbox files and movies, about
+3.1 GB with MCC's), laid out as
 the game reads them, and stay there afterwards, so a copy that stopped can go on:
 
 ```
@@ -132,7 +134,7 @@ If you copy by hand instead, keep the two kinds of files apart:
 | --- | --- |
 | Xbox disc (`maps` folder, `default.xbe`) | `ux0:data/haloce-vita/maps` |
 | Steam MCC (inside `halo1\maps`, with `custom_edition`) | `ux0:data/haloce-vita/mcc/halo1/maps` |
-| Steam MCC sound (`halo1\sound\pc\sounds_adpcm.fsb`) | `ux0:data/haloce-vita/mcc/halo1/sound/pc/sounds_adpcm.fsb` |
+| Steam MCC sound (from `halo1\sound\pc`: `sounds_adpcm.fsb`, `sounds_dialogs.fsb`, `sounds_music.fsb`, `sounds_stream.fsb`, `sounds_debug.fsb`, the `lst` folder) | `ux0:data/haloce-vita/mcc/halo1/sound/pc/` |
 
 MCC's files in the Xbox `maps` folder don't work (Setup never puts them there).
 Setup's last page says the same.
@@ -158,7 +160,7 @@ Files page; on the command line, the commands below.
      Xbox app's `XboxGames` folders), or choose it with Browse...
      (Steam: right-click the game, Manage, Browse local files; its `halo1`
      folder or a Steam library works too). It copies exactly what the game
-     reads, about 1.4 GB, to `ux0:data/haloce-vita/mcc/`:
+     reads, about 3.1 GB, to `ux0:data/haloce-vita/mcc/`:
 
      ```
      mcc/halo1/maps/a10.map ... d40.map         the campaign
@@ -167,12 +169,18 @@ Files page; on the command line, the commands below.
      mcc/halo1/maps/ui.map                      MCC's menus (used only with no Xbox ui.map)
      mcc/halo1/maps/custom_edition/             Halo PC's bitmaps.map, loc.map, sounds.map
      mcc/halo1/sound/pc/sounds_adpcm.fsb        the classic sound effects (88 MB)
-     mcc/halo1/sound/pc/lst/sounds_*.lst.bin    which sounds they are (the adpcm list is
-                                                needed; the others only count what is silent)
+     mcc/halo1/sound/pc/sounds_dialogs.fsb      the dialogue, English (330 MB)
+     mcc/halo1/sound/pc/sounds_music.fsb        the music (957 MB)
+     mcc/halo1/sound/pc/sounds_stream.fsb       cinematic music, streamed ambience (159 MB)
+     mcc/halo1/sound/pc/sounds_debug.fsb        a few Anniversary-only effects (95 MB)
+     mcc/halo1/sound/pc/lst/sounds_*.lst.bin    which sounds are in each bank
      ```
 
-     Nothing else of MCC (its dialogue and music banks, the other games) is
-     copied. Each file's header is checked (cache version 13, FSB5, the
+     The four dialogue and music banks are about 1.5 GB; each is optional
+     (without one, its sounds are silent). Files already there at the same
+     size are skipped, so running Setup again after an older install copies
+     only the new banks. Nothing else of MCC (the other languages, the other
+     games) is copied. Each file's header is checked (cache version 13, FSB5, the
      lists' version), before and after copying; the campaign and
      `bitmaps.map` must be there, or nothing is copied. Nothing of MCC goes
      to the `maps` folder.

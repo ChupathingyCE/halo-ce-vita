@@ -107,6 +107,7 @@ for a gamepad); a test build's HALO_TEST_TEXT_INPUT answers in its place,
 #include "command.h"
 #include "forge_blocks.h"
 #include "mod_manager.h"
+#include "game_manager.h"
 #include "custom_edition_maps.h"
 #include "map_checks.h"
 #include "mcc_content.h"
@@ -501,6 +502,10 @@ enum
 	_function_forge_start_command,
 	_function_forge_command_objective,
 	_function_forge_command_prepare,
+	/* (1.1.3, GAME MANAGER's tabs in the mod manager's screen: game_manager.c) */
+	_function_h3_mods_tab_games,
+	_function_h3_mods_tab_mods,
+	_function_h3_mods_tab_next,
 };
 
 /* in port_game_data_input_names' order */
@@ -2074,7 +2079,7 @@ static void h3_campaign_update(struct widget_instance *widget)
 	else if (h3_campaign.network == _h3_campaign_adhoc)
 		snprintf(text, sizeof(text), "%s", T("Co-op with the PS Vitas near you."));
 	else if (h3_mcc_level(h3_campaign.level))
-		snprintf(text, sizeof(text), "%s", T("MCC files, on this PS Vita alone. Sound effects only for now."));
+		snprintf(text, sizeof(text), "%s", T("MCC files, on this PS Vita alone."));
 	else
 		snprintf(text, sizeof(text), "%s", T("This party is local to this PS Vita."));
 	/* (the mission's level cannot be played: why; START GAME then says it
@@ -12064,6 +12069,9 @@ static struct
 	focus it was made with) */
 	struct widget_instance *list;
 	long list_creation_time;
+	/* GAME MANAGER's tabs, in this screen: 0 GAMES (first), 1 MODS (this manager as it was) */
+	short tab;
+	short game;
 } h3_mods;
 
 /* "12.3 MB" ("512 KB", "3.1 GB") */
@@ -12128,6 +12136,9 @@ static void h3_mods_said(void)
 
 static void h3_mods_initialize(void)
 {
+	h3_mods.tab = getenv("HALO_TEST_GAME_MANAGER_TAB") ? (short)atoi(getenv("HALO_TEST_GAME_MANAGER_TAB")) : 0;
+	h3_mods.game = 0;
+	game_manager_scan();
 	mod_manager_scan();
 	browser_view_reset(&h3_mods.view);
 	h3_mods.page = 0;
@@ -12135,6 +12146,265 @@ static void h3_mods_initialize(void)
 	if (!h3_mods_chosen())
 		h3_mods_choose(mod_manager_entry(0));
 	h3_mods_said();
+}
+
+/* ---- GAME MANAGER's GAMES tab (1.1.3; 1.2.0's, Halo CE alone, no import screen), in the mod manager's own screen, list,
+labels and footer: Halo CE's row (installed from the Xbox's files, MCC's or both, size on the card, Good or Needs
+attention), its lines under the list, Triangle the details (what is wrong and what to do: copy the file again, or run
+Setup again). Square does nothing here (1.2.0's import is not in 1.1.x) */
+
+static void h3_games_size_text(unsigned long long bytes, char *text, size_t size)
+{
+	if (bytes >= (1ULL << 30))
+		snprintf(text, size, "%.1f GB", (double)bytes / (double)(1ULL << 30));
+	else
+		snprintf(text, size, "%.0f MB", (double)bytes / (double)(1ULL << 20));
+}
+
+static char const *h3_games_name(short game)
+{
+	(void)game;
+	return T("HALO CE");
+}
+
+/* where the game was installed from, in words */
+static char const *h3_games_source(struct game_manager_game const *game)
+{
+	int both = (1 << _game_manager_source_xbox) | (1 << _game_manager_source_mcc);
+
+	if ((game->sources & both) == both)
+		return T("Xbox + MCC files");
+	return game->sources & (1 << _game_manager_source_mcc) ? T("MCC files") : T("Xbox files");
+}
+
+/* what is wrong with the game's files, said line by line (the details' text), then the facts; the good words when nothing is */
+static void h3_games_issue_lines(struct game_manager_game const *game, boolean with_source, char *lines, size_t size)
+{
+	/* (each issue's words, for the Xbox's files, then for MCC's) */
+	static char const *const words[NUMBER_OF_GAME_MANAGER_SOURCES][NUMBER_OF_GAME_MANAGER_ISSUES] =
+	{
+		{
+			N_("%s can't be read as a map. Copy it again from your Xbox disc image."),
+			N_("%s has changed. Copy it again from your Xbox disc image."),
+			N_("%s is missing. Copy it from your Xbox disc image."),
+			N_("%s can't be read. Copy it again from your Xbox disc image."),
+			N_("The disc's default.xbe is missing (the loading screen's picture and sound). Copy it from your Xbox disc image."),
+			N_("The disc's default.xbe is damaged. Copy it again from your Xbox disc image."),
+			N_("%s is an MCC map in the maps folder. Move it to mcc/halo1/maps."),
+		},
+		{
+			N_("%s can't be read as a map. Copy it again from MCC's halo1/maps."),
+			N_("%s is cut short or changed. Copy it again from MCC's halo1/maps."),
+			N_("%s is missing. Copy it from MCC's halo1/maps."),
+			N_("%s can't be read. Copy it again from MCC's halo1/maps."),
+			N_("The disc's default.xbe is missing (the loading screen's picture and sound). Copy it from your Xbox disc image."),
+			N_("The disc's default.xbe is damaged. Copy it again from your Xbox disc image."),
+			N_("%s is an MCC map in the maps folder. Move it to mcc/halo1/maps."),
+		},
+	};
+	int index, shown = MIN(game->issue_count, 10);
+
+	lines[0] = 0;
+	if (with_source && game->installed)
+	{
+		char line[200];
+
+		if ((game->sources & 3) == 3)
+			snprintf(line, sizeof(line), T("Installed from your Xbox files (%d maps) and MCC's (%d maps).\n"),
+				game->map_counts[_game_manager_source_xbox], game->map_counts[_game_manager_source_mcc]);
+		else if (game->sources & (1 << _game_manager_source_mcc))
+			snprintf(line, sizeof(line), T("Installed from MCC's files (%d maps).\n"), game->map_counts[_game_manager_source_mcc]);
+		else
+			snprintf(line, sizeof(line), T("Installed from your Xbox files (%d maps).\n"), game->map_counts[_game_manager_source_xbox]);
+		snprintf(lines, size, "%s", line);
+	}
+	for (index = 0; index < MIN(shown, GAME_MANAGER_MAXIMUM_ISSUES); index++)
+	{
+		char line[200];
+		int kind = PIN(game->issues[index].kind, 0, NUMBER_OF_GAME_MANAGER_ISSUES - 1);
+		int source = PIN(game->issues[index].source, 0, NUMBER_OF_GAME_MANAGER_SOURCES - 1);
+
+		snprintf(line, sizeof(line), T(words[source][kind]), game->issues[index].name);
+		if (strlen(lines) + strlen(line) + 2 < size)
+			snprintf(lines + strlen(lines), size - strlen(lines), "%s\n", line);
+	}
+	if (game->issue_count > shown && strlen(lines) + 40 < size)
+		snprintf(lines + strlen(lines), size - strlen(lines), T("...and %d more.\n"), game->issue_count - shown);
+	if (game->issue_count && strlen(lines) + 80 < size)
+		snprintf(lines + strlen(lines), size - strlen(lines), "%s\n", T("Running Setup again also puts every file right."));
+	if (!game->issue_count && strlen(lines) + 80 < size)
+		snprintf(lines + strlen(lines), size - strlen(lines), "%s\n", T("Checked by size and header. Every map checks out."));
+	if (strlen(lines) + 120 < size)
+		snprintf(lines + strlen(lines), size - strlen(lines), "%s\n", game->pc_files == 7 ?
+			T("PC files (Custom Edition maps): in place.") :
+			T("PC files (Custom Edition maps): not there. They are in MCC's halo1/maps/custom_edition."));
+	if (strlen(lines) + 120 < size)
+	{
+		if (game->movies)
+			snprintf(lines + strlen(lines), size - strlen(lines), T("Movies: %d.\n"), game->movies);
+		else
+			snprintf(lines + strlen(lines), size - strlen(lines), "%s\n", T("Movies: none (optional: Setup makes them from your Xbox disc image)."));
+	}
+}
+
+static void h3_gm_tabs_show(struct widget_instance *screen)
+{
+	struct widget_instance *found;
+	static char const *const labels[] = { "label_modes", "label_check", "label_needs", "label_source" };
+	int index;
+
+	text_show(named(screen, "title"), T("GAME MANAGER"));
+	if ((found = named(screen, "tab_games")) != NULL)
+	{
+		found->animation.current_frame_index = h3_mods.tab == 0 ? 1 : 0;
+		text_show(found, T("GAMES"));
+	}
+	if ((found = named(screen, "tab_mods")) != NULL)
+	{
+		found->animation.current_frame_index = h3_mods.tab == 1 ? 1 : 0;
+		text_show(found, T("MODS"));
+	}
+	/* (classic: one line says which, L and R change it) */
+	text_show(named(screen, "games_label"), h3_mods.tab == 0 ? T("L R: GAMES (MODS)") : T("L R: MODS (GAMES)"));
+	for (index = 0; index < (int)NUMBEROF(labels); index++)
+	{
+		if ((found = named(screen, labels[index])) != NULL)
+			widget_instance_set_visibility_recursive(found, h3_mods.tab == 1);
+	}
+	if ((found = named(screen, "note")) != NULL)
+		widget_instance_set_visibility_recursive(found, h3_mods.tab == 1);
+}
+
+/* (a click on a tab gives it the focus: the list takes it back, its rows are what the pad moves) */
+static void h3_gm_focus_list(struct widget_instance *screen, struct widget_instance *list)
+{
+	if (screen && screen->focused_child && screen->focused_child != list)
+	{
+		char const *name = strrchr(screen->focused_child->name, '/');
+
+		name = name ? name + 1 : screen->focused_child->name;
+		if (!strncmp(name, "tab_", 4))
+			ui_widget_port_give_focus(screen, list);
+	}
+}
+
+static void h3_gm_update(struct widget_instance *list)
+{
+	struct widget_instance *screen = screen_of(list);
+	struct widget_instance *child, *hint;
+	long index = 0, focused = h3_mods.game;
+	struct game_manager_game game;
+	char text[192], size_text[32], lines[1600];
+	int hint_index;
+
+	h3_gm_tabs_show(screen);
+	h3_gm_focus_list(screen, list);
+	for (child = list->child; child; child = child->next)
+	{
+		if (strncmp(child->name, "row_", 4))
+			continue;
+		if (child == list->focused_child && index < NUMBER_OF_GAME_MANAGER_GAMES)
+			focused = index;
+		if (index >= NUMBER_OF_GAME_MANAGER_GAMES)
+		{
+			widget_instance_set_visibility_recursive(child, FALSE);
+			child->disabled = TRUE;
+			index++;
+			continue;
+		}
+		game_manager_get((int)index, &game);
+		widget_instance_set_visibility_recursive(child, TRUE);
+		child->disabled = FALSE;
+		h3_games_size_text(game.bytes, size_text, sizeof(size_text));
+		row_column(child, "row_name", h3_games_name((short)index));
+		row_column(child, "row_kind", game.state == 1 ? "" : game.installed ? h3_games_source(&game) : T("Not installed"));
+		row_column(child, "row_size", game.installed ? size_text : "");
+		if (game.state == 1)
+			snprintf(text, sizeof(text), "%d%%", game.progress);
+		else if (!game.installed)
+			text[0] = 0;
+		else
+			snprintf(text, sizeof(text), "%s", game.state == 3 ? T("Attention") : T("Good"));
+		row_column(child, "row_state", text);
+		child->animation.current_frame_index = child == list->focused_child ? 1 : 0;
+		index++;
+	}
+	/* (the list is given its focus here, as the mods' rows are: the game's row) */
+	{
+		struct widget_instance *wanted = NULL;
+		long at = 0;
+		boolean on_a_game = FALSE;
+
+		for (child = list->child; child; child = child->next)
+		{
+			if (strncmp(child->name, "row_", 4))
+				continue;
+			if (at < NUMBER_OF_GAME_MANAGER_GAMES && child == list->focused_child)
+				on_a_game = TRUE;
+			if (at == h3_mods.game)
+				wanted = child;
+			at++;
+		}
+		if (!on_a_game && wanted)
+			ui_widget_port_give_focus(list, wanted);
+	}
+	h3_mods.game = (short)focused;
+	game_manager_get((int)focused, &game);
+	h3_games_size_text(game.bytes, size_text, sizeof(size_text));
+	if (!game.installed && game.state != 1)
+	{
+		text_show(named(screen, "detail_modes"), T("Not installed. Copy your Xbox maps or MCC's halo1/maps, or run Setup."));
+		text_show(named(screen, "detail_check"), "");
+		text_show(named(screen, "detail_needs"), "");
+		text_show(named(screen, "detail_source"), "");
+	}
+	else
+	{
+		if (game.state == 1)
+			snprintf(text, sizeof(text), "%d %s, %s %s", game.map_count, T("maps"), size_text, T("on the card"));
+		else
+			snprintf(text, sizeof(text), "%s: %d %s, %s %s", h3_games_source(&game), game.map_count, T("maps"), size_text,
+				T("on the card"));
+		text_show(named(screen, "detail_modes"), text);
+		if (game.state == 1)
+			snprintf(text, sizeof(text), "%s %d%%", T("Checking its files..."), game.progress);
+		else
+			snprintf(text, sizeof(text), "%s", game.state == 3 ? T("Needs attention") : T("Good"));
+		text_show(named(screen, "detail_check"), text);
+		h3_games_issue_lines(&game, FALSE, lines, sizeof(lines));
+		{
+			char *newline = strchr(lines, '\n');
+
+			if (newline)
+				*newline = 0;
+		}
+		text_show(named(screen, "detail_needs"), game.state == 3 ? lines : "");
+		text_show(named(screen, "detail_source"), game.state != 1 ? T("Triangle: the details") : "");
+	}
+	{
+		static char const *const hints[] = { "a_butn", "toggle", "y_butn", "details_label", "x_butn", "delete_label" };
+		boolean checked = game.state != 1;
+
+		/* (A and Square have nothing to do on GAMES: Triangle's details alone) */
+		for (hint_index = 0; hint_index < (int)NUMBEROF(hints); hint_index++)
+		{
+			if ((hint = named(screen, hints[hint_index])) != NULL)
+				widget_instance_set_visibility_recursive(hint, hint_index >= 2 && hint_index < 4 && checked);
+		}
+	}
+	if (!h3_mods.message[0] || system_milliseconds() - h3_mods.message_time > H3_MODS_MESSAGE_MILLISECONDS)
+		text_show(named(screen, "mods_message"), "");
+	else
+		text_show(named(screen, "mods_message"), h3_mods.message);
+	{
+		int used, free_space;
+		char free_text[24];
+
+		mod_manager_totals(&used, &free_space);
+		h3_mods_size_text(free_text, sizeof(free_text), free_space);
+		snprintf(text, sizeof(text), T("%s free"), free_text);
+		text_show(named(screen, "mods_status"), text);
+	}
 }
 
 /* (port h3 mods) the rows, the chosen one's facts, the totals */
@@ -12154,6 +12424,14 @@ static void h3_mods_update(struct widget_instance *list)
 		browser_view_reset(&h3_mods.view);
 		focused = NULL;
 	}
+	/* (the GAMES tab: the same list, labels and footer, for the game) */
+	if (h3_mods.tab == 0)
+	{
+		h3_gm_update(list);
+		return;
+	}
+	h3_gm_tabs_show(screen);
+	h3_gm_focus_list(screen, list);
 	for (index = 0, child = list->child; child; child = child->next)
 	{
 		if (strncmp(child->name, "row_", 4))
@@ -12271,7 +12549,7 @@ static struct halo_mod_entry const *h3_mods_row_entry(struct widget_instance *wi
 /* (port h3 mods toggle: a row's Cross) off or on */
 static void h3_mods_toggle(struct widget_instance *widget)
 {
-	struct halo_mod_entry const *entry = h3_mods_row_entry(widget);
+	struct halo_mod_entry const *entry = h3_mods.tab == 0 ? NULL : h3_mods_row_entry(widget);
 	short index;
 
 	if (!entry)
@@ -12295,6 +12573,19 @@ static void h3_mods_details_update(struct widget_instance *widget)
 	char text[480], modes[64], size_text[24];
 	int length = 0;
 
+	if (h3_mods.tab == 0)
+	{
+		struct game_manager_game game;
+		char lines[1600], title[96];
+
+		game_manager_get(h3_mods.game, &game);
+		snprintf(title, sizeof(title), "%s: %s", h3_games_name(h3_mods.game), game.state == 3 ? T("Needs attention") : T("Good"));
+		h3_capitals(title);
+		text_show(named(screen, "details_title"), title);
+		h3_games_issue_lines(&game, TRUE, lines, sizeof(lines));
+		text_show(named(screen, "details_text"), lines);
+		return;
+	}
 	if (!entry)
 		return;
 	text_show(named(screen, "details_title"), entry->kind == HALO_MOD_KIND_MCC_MOD ? entry->title : entry->file);
@@ -12324,6 +12615,8 @@ static void h3_mods_confirm_update(struct widget_instance *widget)
 	struct halo_mod_entry const *entry = h3_mods_chosen();
 	char text[256];
 
+	if (h3_mods.tab == 0)
+		return;
 	if (!entry)
 		return;
 	if (entry->kind == HALO_MOD_KIND_MCC_MOD)
@@ -12339,6 +12632,9 @@ static boolean h3_mods_delete_ask(void)
 {
 	struct halo_mod_entry const *entry = h3_mods_chosen();
 
+	/* (GAMES: nothing to delete, and 1.1.x has no import screen) */
+	if (h3_mods.tab == 0)
+		return FALSE;
 	if (!entry)
 		return FALSE;
 	if (!entry->deletable)
@@ -12357,6 +12653,8 @@ static void h3_mods_delete(void)
 	char file[HALO_MODS_NAME_BYTES], text[160];
 	int kind, answer;
 
+	if (h3_mods.tab == 0)
+		return;
 	if (!entry)
 		return;
 	snprintf(file, sizeof(file), "%s", entry->file);
@@ -23115,7 +23413,14 @@ boolean pc_menu_event_function_invoke(
 		h3_mods_toggle(widget);
 		return TRUE;
 	case _function_h3_mods_details:
-		/* (the details open for an entry; with none, nothing) */
+		/* (the details open for an entry; with none, nothing - GAMES: the game's, once its check is done) */
+		if (h3_mods.tab == 0)
+		{
+			struct game_manager_game game;
+
+			game_manager_get(h3_mods.game, &game);
+			return game.state >= 2;
+		}
 		return h3_mods_chosen() != NULL;
 	case _function_h3_mods_delete_ask:
 		return h3_mods_delete_ask();
@@ -23375,6 +23680,16 @@ boolean pc_menu_event_function_invoke(
 		return online_host_change(widget, -1);
 	case _function_online_host_edit:
 		return online_host_edit(widget);
+	case _function_h3_mods_tab_games:
+		h3_mods.tab = 0;
+		return TRUE;
+	case _function_h3_mods_tab_mods:
+		h3_mods.tab = 1;
+		return TRUE;
+	case _function_h3_mods_tab_next:
+		h3_mods.tab = (short)(1 - h3_mods.tab);
+		platform_log("menus: game manager: the %s tab", h3_mods.tab ? "MODS" : "GAMES");
+		return TRUE;
 	case _function_online_exit:
 		platform_log("menus: online EXIT: the game closes");
 		exit(EXIT_SUCCESS);

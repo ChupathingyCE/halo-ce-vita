@@ -1127,6 +1127,13 @@ static boolean custom_edition_cache_tags_validate(
 		ranges[range_count].offset = COMBINED_SOUNDS_OFFSET;
 		ranges[range_count++].size = globals->resource_files[_resource_map_sounds].source.size;
 	}
+	if (globals->map_from_mcc && range_count < MAXIMUM_TAG_VALIDATE_FILE_RANGES)
+	{
+		/* (port) its sounds of MCC's CELT banks (mcc_sound.h), read from the
+		banks' files: offsets within 2 GB */
+		ranges[range_count].offset = TAG_VALIDATE_MCC_CELT_STREAMS;
+		ranges[range_count++].size = 0x7FFFFFFFUL;
+	}
 	if (!tag_validate_custom_edition_tags(
 		tag_cache,
 		(long)(report->tag_data_bytes + report->resource_tag_bytes),
@@ -2302,8 +2309,9 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 	{
 		/* (MCC keeps every sound of its stock maps in FMOD banks,
 		sound\pc\*.fsb: the sound effects (IMA ADPCM) play from their bank,
-		mcc_sound.h; the CELT banks' dialogue and music do not yet) */
-		error(_error_silent, "mcc: '%s' is MCC's own %s map: its sounds are in MCC's FMOD banks, the sound effects played from sounds_adpcm.fsb and the dialogue and music silent in this version",
+		the dialogue, music and streams (CELT) made Xbox ADPCM as they load,
+		mcc_sound.h) */
+		error(_error_silent, "mcc: '%s' is MCC's own %s map: its sounds are in MCC's FMOD banks, the sound effects played from sounds_adpcm.fsb, the dialogue, music and streams made Xbox ADPCM from the CELT banks",
 			mcc_stem, mcc_kind == _mcc_content_campaign ? "campaign" : mcc_kind == _mcc_content_menu ? "menu" : "multiplayer");
 	}
 	globals->map_header_crc = cache_file_crc32_update(0, header, CACHE_FILE_HEADER_BYTES);
@@ -2485,10 +2493,12 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 			(unsigned long)report.mcc_cea_structure_bsp_address);
 		globals->mcc_cea = TRUE;
 		tag_validate_structure_vertices_in_file(TRUE);
-		globals->mcc_cea_structure_bsp_count = report.structure_bsp_count;
-		globals->mcc_cea_structure_bsp_address = report.mcc_cea_structure_bsp_address;
-		csmemcpy(globals->mcc_cea_structure_bsps, report.mcc_cea_structure_bsps, sizeof(globals->mcc_cea_structure_bsps));
 	}
+	/* (port) its structure BSPs as the load checked them, any map's: the
+	only ones read (custom_edition_cache_structure_bsp_reference_checked) */
+	globals->mcc_cea_structure_bsp_count = report.structure_bsp_count;
+	globals->mcc_cea_structure_bsp_address = report.mcc_cea_structure_bsp_address;
+	csmemcpy(globals->mcc_cea_structure_bsps, report.mcc_cea_structure_bsps, sizeof(globals->mcc_cea_structure_bsps));
 	if (!custom_edition_cache_tags_convert(tag_cache, tag_cache_bytes, &report))
 	{
 		error(_error_silent, "custom edition: cannot run '%s'", path);
@@ -2680,14 +2690,13 @@ Halo PC's own are numbered from here */
 /* (ui_widget.c) A handler of a menu widget ran a function that failed:
 with MCC's own ui.map as the menus' map, one of Halo PC's own functions (a
 number past the Xbox's, which this build has no mapping for yet) cancels the
-action as an Xbox function that fails does, and the player is told once in a
-while that the menu is not supported with MCC's menu file yet, the missing
-function logged once for each widget */
+action as an Xbox function that fails does, the missing function logged once
+for each widget (no message box: our own screens drawn over Halo PC's, as the
+Halo 3 style's mission picker, ran one at every column change - owner rc.8) */
 void custom_edition_cache_menu_handler_failed(
 	long definition_tag_index,
 	long function_index)
 {
-	void platform_show_message(char const *title, char const *message);
 	struct custom_edition_cache_globals *globals = &custom_edition_cache_globals;
 	static struct
 	{
@@ -2695,8 +2704,6 @@ void custom_edition_cache_menu_handler_failed(
 		long function_index;
 	} logged[64];
 	static long logged_count;
-	static unsigned long shown_at;
-	unsigned long now = system_milliseconds();
 	char const *name;
 	long index;
 
@@ -2725,12 +2732,6 @@ void custom_edition_cache_menu_handler_failed(
 			logged[logged_count++].function_index = function_index;
 		}
 	}
-	if (function_index >= MENU_XBOX_FUNCTION_COUNT && (!shown_at || now - shown_at > 1500))
-	{
-		shown_at = now ? now : 1;
-		platform_show_message(T("MCC's menu file"), T("This menu isn't supported with MCC's menu file yet."));
-	}
-
 	return;
 }
 
@@ -2897,6 +2898,16 @@ boolean custom_edition_cache_tags_loaded(
 	return custom_edition_cache_globals.tags_loaded;
 }
 
+/* whether the menus' map is MCC's own ui.map (Halo PC's menus:
+halo_pc_menus.c) */
+boolean custom_edition_cache_menus_are_mcc_ui(
+	void)
+{
+	struct custom_edition_cache_globals const *globals = &custom_edition_cache_globals;
+
+	return globals->tags_loaded && globals->map_from_mcc && !csstrcmp(globals->map_mcc_stem, "ui");
+}
+
 boolean custom_edition_cache_packs_allowed(
 	unsigned long first_offset)
 {
@@ -3024,6 +3035,42 @@ void custom_edition_cache_structure_bsp_moved(
 	}
 
 	return;
+}
+
+boolean custom_edition_cache_structure_bsp_reference_checked(
+	long file_offset,
+	long size,
+	void const *base_address)
+{
+	struct custom_edition_cache_globals *globals = &custom_edition_cache_globals;
+	int32_t bsp_index;
+
+	if (!globals->tags_loaded)
+	{
+		return FALSE;
+	}
+	for (bsp_index = 0;
+		bsp_index < globals->mcc_cea_structure_bsp_count && bsp_index < CACHE_FILE_MAXIMUM_STRUCTURE_BSPS;
+		bsp_index++)
+	{
+		struct mcc_cea_structure_bsp const *bsp = &globals->mcc_cea_structure_bsps[bsp_index];
+		/* (where the game has the tags: a Custom Edition map's BSP where
+		its reference loaded it, a Halo: CE Anniversary map's in the room
+		after the tags, where the load moved its reference) */
+		uint32_t place = globals->mcc_cea ? globals->mcc_cea_structure_bsp_address : bsp->linked_address;
+
+		if (bsp->size &&
+			bsp->file_offset == (uint32_t)file_offset &&
+			bsp->size == (uint32_t)size &&
+			(uintptr_t)base_address == (uintptr_t)globals->tag_cache + (place - custom_edition_cache_linked_address()))
+		{
+			return TRUE;
+		}
+	}
+	error(_error_silent, "custom edition: a structure BSP of 0x%lX bytes at 0x%08lX, read to %p, is not one the map was checked with",
+		(unsigned long)size, (unsigned long)file_offset, base_address);
+
+	return FALSE;
 }
 
 boolean custom_edition_cache_structure_bsp_vertices(

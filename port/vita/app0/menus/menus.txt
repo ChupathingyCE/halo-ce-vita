@@ -40,6 +40,7 @@ classic/customize.xml
 classic/standins.xml
 classic/players.xml
 classic/fileshare_friends.xml
+classic/xbox_screens.xml
 # Menu style Online (a preview: menus/online, menu_tags.c menu_tags_online)
 online/main.xml
 online/customize.xml

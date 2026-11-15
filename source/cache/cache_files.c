@@ -1825,6 +1825,22 @@ boolean scenario_structure_bsp_load(
 
 	tag_cache_base_address = physical_memory_get_tag_cache_base_address();
 #ifdef HALO_LINUX
+	/* port: a Custom Edition map's structure BSP is read only as its load
+	checked it - that range of the file, to that place - whatever its
+	reference in the tags (written in place since) says now
+	(custom_edition_cache.c; after ChupathingyCE, MrMilenko,
+	GPL-3.0-or-later: 7a898133f, #1069) */
+	if (custom_edition_cache_tags_loaded() &&
+		!custom_edition_cache_structure_bsp_reference_checked(
+			reference->file_offset,
+			reference->file_size,
+			reference->base_address))
+	{
+		halo_map_load_refused(cache_files_loaded_map, "this map file is damaged or not supported");
+		return FALSE;
+	}
+#endif
+#ifdef HALO_LINUX
 	/* port: a structure BSP reference's file range and load address come
 	from the (untrusted) map; the Xbox loader reads file_size bytes from the
 	file into base_address. Refuse one that would read out of the file or

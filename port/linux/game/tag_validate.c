@@ -719,6 +719,20 @@ static void validate_block_extent(
 	return;
 }
 
+/* (port) the size of the largest of MCC's CELT banks when the loader allows
+their streams (TAG_VALIDATE_MCC_CELT_STREAMS), else 0 */
+static unsigned long mcc_celt_streams_size(void)
+{
+	short range_index;
+
+	for (range_index = 0; range_index < tag_validate_globals.file_range_count; range_index++)
+	{
+		if (tag_validate_globals.file_ranges[range_index].offset == TAG_VALIDATE_MCC_CELT_STREAMS)
+			return tag_validate_globals.file_ranges[range_index].size;
+	}
+	return 0;
+}
+
 static void validate_data_extent(
 	struct tag_validation *validation,
 	struct tag_data *data,
@@ -728,6 +742,21 @@ static void validate_data_extent(
 	if (data->size < 0)
 	{
 		tag_validate_refuse(validation, "has %ld bytes", data->size);
+		return;
+	}
+	if (field->type == _tag_schema_file_data && (data->pad & TAG_VALIDATE_MCC_CELT_STREAM_FLAG) && mcc_celt_streams_size())
+	{
+		/* (port) a stream of one of MCC's CELT banks, read from the bank's
+		file as it is made Xbox ADPCM (custom_edition_sounds.c): within the
+		largest bank, and not cut to the game's largest */
+		unsigned long limit = mcc_celt_streams_size();
+
+		if (data->file_offset < 0 || (unsigned long)data->file_offset > limit ||
+			(unsigned long)data->size > limit - (unsigned long)data->file_offset)
+		{
+			tag_validate_refuse(validation, "has %ld bytes at %08lx, outside MCC's sound banks",
+				data->size, (unsigned long)data->file_offset);
+		}
 		return;
 	}
 	if (field->maximum > 0 && data->size > field->maximum)
@@ -1697,7 +1726,12 @@ static boolean validate_pack_tags_in(
 	tag_validate_globals.file_ranges[0].size = file_size;
 	tag_validate_globals.file_ranges[1].offset = 0;
 	tag_validate_globals.file_ranges[1].size = 0;
-	tag_validate_globals.file_range_count = 2;
+	/* (port: a pack built from one of MCC's own maps keeps that map's sounds
+	of MCC's CELT banks as the banks' streams, made Xbox ADPCM as they load:
+	scene_pack_ce.c) */
+	tag_validate_globals.file_ranges[2].offset = TAG_VALIDATE_MCC_CELT_STREAMS;
+	tag_validate_globals.file_ranges[2].size = 0x7FFFFFFFUL;
+	tag_validate_globals.file_range_count = 3;
 	if (!schemas_fit())
 	{
 		tag_validate_refuse(&validation, "cannot be checked: a tag schema is wrong");

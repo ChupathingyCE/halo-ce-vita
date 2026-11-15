@@ -168,9 +168,11 @@ static const char *const halo1_stock_maps[] =
 	"icefields", "infinity", "timberland",
 };
 /* a cache file's header: 'head' little-endian ("daeh" as it lies), then
-its version, 13 for MCC's Halo CE (mcc_content.c's table) */
+its version, 13 for MCC's Halo CE (mcc_content.c's table), 5 for the Xbox
+disc's */
 #define HALO1_HEADER_SIGNATURE "daeh"
 #define HALO1_CACHE_VERSION 13
+#define XBOX_CACHE_VERSION 5
 
 /* `path` without its trailing separators into `out` */
 static int path_trimmed(const char *path, char *out, unsigned long out_size)
@@ -188,19 +190,22 @@ static int path_trimmed(const char *path, char *out, unsigned long out_size)
 }
 
 /* whether the file at `path` starts with MCC's Halo CE cache header: 1 yes,
--1 a file that is not (an Xbox map's), 0 no such file */
+2 the Xbox disc's header, -1 another file, 0 no such file */
 static int file_has_mcc_header(const char *path)
 {
 	unsigned char header[8];
 	FILE *stream = fopen(path, "rb");
 	size_t got;
+	unsigned long version;
 
 	if (!stream)
 		return 0;
 	got = fread(header, 1, sizeof(header), stream);
 	fclose(stream);
-	return got == sizeof(header) && !memcmp(header, HALO1_HEADER_SIGNATURE, 4) &&
-		(header[4] | header[5] << 8 | header[6] << 16 | (unsigned long)header[7] << 24) == HALO1_CACHE_VERSION ? 1 : -1;
+	if (got != sizeof(header) || memcmp(header, HALO1_HEADER_SIGNATURE, 4))
+		return -1;
+	version = header[4] | header[5] << 8 | header[6] << 16 | (unsigned long)header[7] << 24;
+	return version == HALO1_CACHE_VERSION ? 1 : version == XBOX_CACHE_VERSION ? 2 : -1;
 }
 
 int mcc_paths_maps_folder_is_mcc(const char *maps_folder, char *found)
@@ -211,13 +216,19 @@ int mcc_paths_maps_folder_is_mcc(const char *maps_folder, char *found)
 	if (!path_trimmed(maps_folder, base, sizeof(base)))
 		return 0;
 	/* (ui.map first: it is what the game needs to start; then each stock
-	map. One with MCC's header is enough: an Xbox disc's maps have none.) */
+	map. One with MCC's header is enough: an Xbox disc's maps have none. The
+	first with the Xbox disc's header ends the look: an Xbox install, the
+	one recommended, reads one file at each start, not 30 - 1.1.3 audit) */
 	for (index = 0; index <= sizeof(halo1_stock_maps) / sizeof(halo1_stock_maps[0]); index++)
 	{
 		char path[MCC_PATHS_BYTES + 64];
+		int header;
 
 		snprintf(path, sizeof(path), "%s/%s.map", base, index ? halo1_stock_maps[index - 1] : "ui");
-		if (file_has_mcc_header(path) > 0)
+		header = file_has_mcc_header(path);
+		if (header == 2)
+			return 0;
+		if (header == 1)
 		{
 			if (found)
 				snprintf(found, MCC_PATHS_BYTES, "%.*s", MCC_PATHS_BYTES - 1, path);
