@@ -478,9 +478,10 @@ set -u
 export HALO_BOTS_ONLINE=${HALO_BOTS_ONLINE:-off}
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA:-$root/../data2276}
-menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+data=${HALO_TEST_DATA:-$data_root/data2276}
+menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
@@ -488,7 +489,7 @@ all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classi
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
-ce_maps=${HALO_TEST_CE_MAPS:-$root/../custom-maps-dl}
+ce_maps=${HALO_TEST_CE_MAPS:-$data_root/custom-maps-dl}
 status=0
 fail() { echo "FAIL ($1): $2"; status=1; }
 # (a gxm-null harness, configure.py --linux-d3d gxm-null: the Vita's renderer recording into

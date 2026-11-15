@@ -28,6 +28,7 @@
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 out=${TMPDIR:-/tmp}/ogg_sound_test.$$
 . "$here/test_out.sh"
 test_out_begin "$out"
@@ -59,7 +60,7 @@ done
 
 resources=${HALO_TEST_CE_RESOURCES:-}
 if [ -z "$resources" ]; then
-	resources="${HALO_TEST_DATA:-$root/../data2276}/maps"
+	resources="${HALO_TEST_DATA:-$data_root/data2276}/maps"
 	[ -e "$resources/sounds.map" ] ||
 		resources="$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/custom_edition"
 fi

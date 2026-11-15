@@ -196,15 +196,16 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA:-$root/../data2276}
+data=${HALO_TEST_DATA:-$data_root/data2276}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_bots_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
 bots=${HALO_TEST_BOTS:-6}
 cases=${*:-slayer teams}
 cases=$(echo " $cases " | sed 's/ vehicles / vctf vslayer vteams iron /; s/ new / powerups turret ladders /; s/ playlists / playlist playlistcancel /; s/ tactics / lanes vantage roles precisions /; s/ precisions / precision precisionlanes precision2 /; s/ teleports / teleporters teleporters2 lastway /')
-ce_maps=${HALO_TEST_CE_MAPS:-$root/../custom-maps-dl}
+ce_maps=${HALO_TEST_CE_MAPS:-$data_root/custom-maps-dl}
 ce_resources=${HALO_TEST_CE_RESOURCES:-}
 if [ -z "$ce_resources" ]; then
 	ce_resources="$data/maps"

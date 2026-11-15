@@ -77,16 +77,17 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
 tool=$(readlink -f "${HALO_TEST_PACK_TOOL:-$root/build/linux/scene_pack_test}")
-data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_scene_pack_test.$$}
 recipes=$root/port/vita/app0/packs
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 . "$here/test_out.sh"
 test_out_begin "$out"
 cases=${*:-tool damaged verified stale banshee ai cetool cemodels}
-ce_maps=${HALO_TEST_CE_MAPS:-$root/../custom-maps-dl}
+ce_maps=${HALO_TEST_CE_MAPS:-$data_root/custom-maps-dl}
 ce_resources=${HALO_TEST_CE_RESOURCES:-$data/maps}
 status=0
 fail() { echo "FAIL: $1"; status=1; }
@@ -427,7 +428,7 @@ EOF
 			echo "SKIP: cemodels: no extinction.map in $ce_maps (HALO_TEST_CE_MAPS) or Halo PC resource maps"
 			continue
 		fi
-		profile=${HALO_TEST_PROFILE:-$root/../vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
+		profile=${HALO_TEST_PROFILE:-$data_root/vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
 		if [ ! -r "$profile" ]; then
 			echo "SKIP: cemodels: no profile (HALO_TEST_PROFILE)"
 			continue

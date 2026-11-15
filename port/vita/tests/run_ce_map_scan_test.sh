@@ -23,10 +23,11 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
-profile=${HALO_TEST_PROFILE:-$root/../vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
-ce_map=${HALO_TEST_CE_MAP:-$root/../custom-maps-dl/extinction.map}
+data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
+profile=${HALO_TEST_PROFILE:-$data_root/vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
+ce_map=${HALO_TEST_CE_MAP:-$data_root/custom-maps-dl/extinction.map}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_ce_map_scan_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"

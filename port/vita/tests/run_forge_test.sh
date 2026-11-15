@@ -358,14 +358,15 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_forge_test.$$}
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 . "$here/test_out.sh"
 test_out_begin "$out"
 cases=${*:-v1 budget fly b30 off files variants edit fileshare fstouch touch panel packs packnote packcopy smallmap aiteam aioff round aisave airespawn aicap aimarker spawns spawnplay teleport objectives flagground flagswap physics phaseshot phaserider precision allai allaimenu aicopy flood clearai clearaimenu rotate floodcov sentinels marines aivariant pelican aimapfallback blocks blockitems lobbycost mpvariant}
-ce_maps=${HALO_TEST_CE_MAPS:-$root/../custom-maps-dl}
+ce_maps=${HALO_TEST_CE_MAPS:-$data_root/custom-maps-dl}
 status=0
 fail() { echo "FAIL: $1"; status=1; }
 
@@ -832,7 +833,7 @@ smallmap_runs() {
 
 # (packcopy: the Halo 3 main menu's MULTIPLAYER, its lobby (hosting Battle
 # Creek: its copy begins), back twice; FORGE: the lobby, packs building)
-packcopy_profile=${HALO_TEST_PROFILE:-$root/../vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
+packcopy_profile=${HALO_TEST_PROFILE:-$data_root/vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
 packcopypad="wait:150:3000 down:150:600 a:150:4000 b:150:3000 b:150:3000 down:150:600 a:150:2500 wait:150:120000"
 
 packcopy_runs() {

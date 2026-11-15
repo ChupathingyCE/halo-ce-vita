@@ -54,11 +54,12 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/crossplay_maps_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
 mkdir -p "$out"
-data=${HALO_TEST_DATA:-$root/../data2276}
+data=${HALO_TEST_DATA:-$data_root/data2276}
 ce_map=${HALO_TEST_CE_MAP:-}
 status=0
 fail() { echo "FAIL $*"; status=1; }

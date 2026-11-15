@@ -50,13 +50,14 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 if [ "${NETVERSIONS_NETNS_INSIDE:-}" != 1 ]; then
 	export NETVERSIONS_NETNS_INSIDE=1
 	exec unshare -rn bash -c 'ip link set lo up; ip link add d0 type dummy 2>/dev/null &&
 		ip addr add 192.168.77.2/24 brd + dev d0 && ip link set d0 up; exec "$@"' netns "$0" "$@"
 fi
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA:-$root/../data2276}
+data=${HALO_TEST_DATA:-$data_root/data2276}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_netversion_fetch_test.$$}
 key=${NETVERSIONS_TEST_KEY:-}
 . "$here/test_out.sh"

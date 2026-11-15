@@ -7,15 +7,21 @@
 # stopped is made good again (saved_game_file_recover).
 #
 # With HALO_TEST_PROFILE's profile (never in the repository; skipped without),
-# Menu style Halo 3: CUSTOMIZATION, the profile, COLOR right (WHITE: colour 0;
-# the profile's is RANDOM, -1), Circle saves - the save stopped dead
+# Menu style Halo 3: START, SETTINGS, APPEARANCE (CUSTOMIZATION, a main menu row until
+# 1.1.3's menu rework), the profile, LOOK SENSITIVITY right (4; the profile's is 3),
+# Circle saves - the save stopped dead
 # (HALO_TEST_PROFILE_WRITE_CRASH, a debug build's _exit) after each step:
 #
 #   tmp     the new file written and checked: the next start keeps blam.sav
-#           (the colour before), the .tmp dropped
+#           (the sensitivity before), the .tmp dropped
 #   bak     blam.sav moved to .bak: the next start takes the whole .tmp
-#           ("profile restored from its unfinished save", colour 0)
-#   rename  done: colour 0, the .bak the file before
+#           ("profile restored from its unfinished save", look 4)
+#   rename  done: look 4, the .bak the file before
+#
+# (Not COLOR, as until 1.1.3: since the platform's own colours a colour change is two
+# writes - the colour's byte first (player_cosmetics_profile_save, the profile's block
+# as it was), then the profile - and the crash knob stops the first; the look
+# sensitivity is the profile's block alone, one write.)
 #
 # then, with no write: blam.sav of 0 bytes, cut short or of garbage beside a
 # good .bak (a .tmp cut short too) - "profile restored from backup", never
@@ -30,8 +36,9 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-$(mktemp -d "${TMPDIR:-/tmp}/profile_safety_test.XXXXXX")}
 . "$here/test_out.sh"
 test_out_begin "$out"
@@ -68,19 +75,21 @@ fresh_save() { # DIR
 	cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$1/u/UDATA/$id/"
 }
 d="down:150:600"
-open_editor="wait:150:3000 $d $d $d $d $d a wait:150:3000 a wait:150:4000"
-# (the editor's first line of the profile: "editing <name>: color <c>, ...")
+# (Start: MEDIA | SETTINGS; right to SETTINGS, down to APPEARANCE - the profile's
+# CUSTOMIZATION -, A; the profile, A)
+open_editor="wait:150:3000 start:150:2500 right:150:1000 $d a wait:150:3000 a wait:150:4000"
+# (the editor's first line of the profile: "editing <name>: color <c>, ..., look <l>, ...")
 editing() { grep -a "menus: h3 customize: editing" "$out/$1/run.log" | head -1 | sed 's/.*editing //'; }
-# a next start on that save: the profile whole, in colour WANT
-check_start() { # NAME SAVE WANT_COLOR [restored|backup|none]
+# a next start on that save: the profile whole, its look sensitivity WANT
+check_start() { # NAME SAVE WANT_LOOK [restored|backup|none]
 	local name=$1 save=$2 want=$3 how=$4 log
 	run "$name" "$save" 20 "$open_editor"
 	log=$out/$name/run.log
 	echo "$name: $(editing "$name")"
 	[ "$(cat "$out/$name/exit")" = 0 ] || fail "$name: exit $(cat "$out/$name/exit")"
 	grep -aqiE "assert|exception|halt" "$log" && fail "$name: an assertion, exception or halt"
-	grep -aq "menus: h3 customize: editing birch: color $want," "$log" ||
-		fail "$name: the editor did not open on birch in colour $want ($(editing "$name"))"
+	grep -aq "menus: h3 customize: editing birch: color -1, .*, look $want," "$log" ||
+		fail "$name: the editor did not open on birch with look $want ($(editing "$name"))"
 	grep -aq "is damaged" "$log" && fail "$name: the profile was damaged"
 	grep -aq "checksum failed on player profile file" "$out/$name/data/debug.txt" && fail "$name: the profile's checksum failed"
 	case $how in
@@ -92,12 +101,12 @@ check_start() { # NAME SAVE WANT_COLOR [restored|backup|none]
 	[ "$(stat -c %s "$save/u/UDATA/$id/blam.sav" 2>/dev/null)" = 512 ] || fail "$name: blam.sav not 512 bytes"
 }
 
-# (COLOR right: WHITE, colour 0; Circle saves)
-save_pad="$open_editor $d right:150:800 b wait:150:4000"
+# (down six - COLOR, VISOR, MODEL, STICK, BUTTONS - to LOOK SENSITIVITY, right: 4; Circle saves)
+save_pad="$open_editor $d $d $d $d $d $d right:150:800 b wait:150:4000"
 for stage in tmp bak rename; do
 	save=$out/save_$stage
 	fresh_save "$save"
-	run "crash_$stage" "$save" 25 "$save_pad" HALO_TEST_PROFILE_WRITE_CRASH=$stage
+	run "crash_$stage" "$save" 35 "$save_pad" HALO_TEST_PROFILE_WRITE_CRASH=$stage
 	log=$out/crash_$stage/run.log
 	echo "--- crash after $stage: exit $(cat "$out/crash_$stage/exit"); files: $(LC_ALL=C ls "$save/u/UDATA/$id" | tr '\n' ' ')"
 	[ "$(cat "$out/crash_$stage/exit")" = 86 ] || fail "crash_$stage: the save did not stop dead after $stage (exit $(cat "$out/crash_$stage/exit"))"
@@ -106,24 +115,24 @@ for stage in tmp bak rename; do
 	case $stage in
 	tmp) [ "$files" = "SaveMeta.xbx blam.sav blam.sav.tmp " ] || fail "crash_tmp: files $files"
 		cmp -s "$HALO_TEST_PROFILE" "$save/u/UDATA/$id/blam.sav" || fail "crash_tmp: blam.sav changed before its .tmp was named"
-		check_start "after_$stage" "$save" -1 none ;;
+		check_start "after_$stage" "$save" 3 none ;;
 	bak) [ "$files" = "SaveMeta.xbx blam.sav.bak blam.sav.tmp " ] || fail "crash_bak: files $files"
-		check_start "after_$stage" "$save" 0 restored ;;
+		check_start "after_$stage" "$save" 4 restored ;;
 	rename) [ "$files" = "SaveMeta.xbx blam.sav blam.sav.bak " ] || fail "crash_rename: files $files"
-		check_start "after_$stage" "$save" 0 none ;;
+		check_start "after_$stage" "$save" 4 none ;;
 	esac
 	cmp -s "$HALO_TEST_PROFILE" "$save/u/UDATA/$id/blam.sav.bak" 2>/dev/null || [ $stage = tmp ] ||
 		fail "after_$stage: blam.sav.bak is not the profile before the save"
 done
 
-# (the save in full, no crash: colour 0, the .bak the file before, no .tmp)
+# (the save in full, no crash: look 4, the .bak the file before, no .tmp)
 save=$out/save_whole
 fresh_save "$save"
-run whole "$save" 25 "$save_pad"
+run whole "$save" 35 "$save_pad"
 echo "--- a whole save: files $(LC_ALL=C ls "$save/u/UDATA/$id" | tr '\n' ' ')"
-grep -aq "menus: h3 customize: saved birch: color 0," "$out/whole/run.log" || fail "whole: the save was not made"
+grep -aq "menus: h3 customize: saved birch: color -1, .*, look 4," "$out/whole/run.log" || fail "whole: the save was not made"
 cmp -s "$HALO_TEST_PROFILE" "$save/u/UDATA/$id/blam.sav.bak" || fail "whole: blam.sav.bak is not the file before"
-check_start after_whole "$save" 0 none
+check_start after_whole "$save" 4 none
 
 # (a damaged blam.sav beside a good .bak, as a write cut by a power cut in place left it)
 for damage in empty short garbage tmpshort; do
@@ -137,7 +146,7 @@ for damage in empty short garbage tmpshort; do
 	tmpshort) head -c 300 "$HALO_TEST_PROFILE" > "$save/u/UDATA/$id/blam.sav.tmp" ;;
 	esac
 	echo "--- $damage"
-	check_start "damaged_$damage" "$save" -1 backup
+	check_start "damaged_$damage" "$save" 3 backup
 	cmp -s "$HALO_TEST_PROFILE" "$save/u/UDATA/$id/blam.sav" || fail "damaged_$damage: blam.sav not the .bak's copy"
 done
 # (no good copy at all: damaged, as before)

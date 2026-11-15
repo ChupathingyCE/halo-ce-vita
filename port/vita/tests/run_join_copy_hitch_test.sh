@@ -27,7 +27,8 @@
 #   HALO_TEST_OUT    the output folder (kept with HALO_TEST_KEEP=1)
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
-data=${HALO_TEST_DATA:-$root/../data2276}
+. "$here/test_data_root.sh"
+data=${HALO_TEST_DATA:-$data_root/data2276}
 customs=${HALO_TEST_CUSTOMS:-60}
 leave=${HALO_TEST_LEAVE_LOBBY:-10}
 limit=${HALO_TEST_HITCH_MS:-100}
