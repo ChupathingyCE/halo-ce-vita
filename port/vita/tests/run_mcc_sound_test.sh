@@ -10,6 +10,12 @@
 # 2. fuzz    mcc_sound_fuzz.c: MCC_FUZZ_ITERATIONS (default 100000) changed
 #            banks and lists from a fixed seed; with MCC_FUZZ_SECONDS=n also n
 #            seconds of libFuzzer (clang), what it finds in MCC_FUZZ_OUT
+#    celtfuzz celt_fuzz.c (1.1.3 audit): MCC's FMOD CELT streams decoded and made
+#            Xbox ADPCM as the sound cache does (h2_sound_codec.c, fsb_celt.c,
+#            libcelt) on changed chunks, CELT_FUZZ_SECONDS (default 60) of
+#            libFuzzer under ASan and UBSan (clang; SKIP without), seeded from
+#            the player's own sounds_dialogs.fsb and sounds_music.fsb when there
+#            (celt_fuzz_seeds.py); what it finds in CELT_FUZZ_OUT
 # 3. audit   mcc_sound_audit.c on the player's own sound folder (HALO_TEST_MCC_ROOT,
 #            default Steam's; SKIP without one): every bank and list parses, the
 #            lists name only streams the banks have, the ADPCM bank is covered once
@@ -40,7 +46,7 @@
 #                read from the player's bank (only MCC's own maps and scene packs)
 #   HALO_TEST_VITA  the harness (default build/linux/halo)   HALO_TEST_DATA  the Xbox maps
 #   HALO_TEST_MCC_ROOT  MCC's halo1 folder                  HALO_TEST_OUT   where the logs go
-#   run_mcc_sound_test.sh [unit|fuzz|audit|harness]   (default all)
+#   run_mcc_sound_test.sh [unit|fuzz|celtfuzz|audit|harness]   (default all)
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
@@ -53,7 +59,7 @@ test_out_begin "$out"
 mkdir -p "$out"
 status=0
 fail() { echo "FAIL: $1"; status=1; }
-parts=${*:-unit fuzz audit harness}
+parts=${*:-unit fuzz celtfuzz audit harness}
 cc=${CC:-gcc}
 sanitize="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
 echo 'int main(void){return 0;}' | $cc $sanitize -x c - -o "$out/probe" 2>/dev/null || sanitize=
@@ -89,6 +95,50 @@ esac
 
 have_mcc=0
 [ -r "$mcc/sound/pc/sounds_adpcm.fsb" ] && [ -r "$mcc/maps/bitmaps.map" ] && have_mcc=1
+
+case " $parts " in *" celtfuzz "*)
+	# libcelt's files with celt_port.h each, as tools/linux_build.py builds them
+	celt="$root/port/third_party/celt"
+	fuzz_seconds=${CELT_FUZZ_SECONDS:-60}
+	if ! command -v clang > /dev/null 2>&1 ||
+		! echo 'int LLVMFuzzerTestOneInput(const unsigned char *d, unsigned long n){(void)d;(void)n;return 0;}' |
+			clang -fsanitize=fuzzer -x c - -o "$out/celt_probe" 2> /dev/null; then
+		echo "SKIP (celtfuzz): no clang with libFuzzer"
+	else
+		# (rate.c's own "-1 << n" in the mode's setup, libcelt's, benign: not a finding)
+		celt_flags="-g -O1 -fsanitize=fuzzer-no-link,address,undefined -fno-sanitize=shift -fno-sanitize-recover=undefined"
+		mkdir -p "$out/celt_obj"
+		objects=
+		while read -r source; do
+			[ -n "$source" ] || continue
+			object="$out/celt_obj/$(basename "$source" .c).o"
+			clang $celt_flags -std=gnu11 -w -I"$celt/libcelt" -include "$celt/celt_port.h" -c "$celt/$source" -o "$object" ||
+				fail "celtfuzz: libcelt's $source did not build"
+			objects="$objects $object"
+		done < "$celt/sources.txt"
+		if clang -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize=shift -fno-sanitize-recover=undefined \
+			-D_GNU_SOURCE -I"$src" "$here/celt_fuzz.c" "$src/h2_sound_codec.c" "$src/fsb_celt.c" "$src/xbox_adpcm_encoder.c" \
+			$objects -lm -o "$out/celt_fuzz"; then
+			fuzz_out=${CELT_FUZZ_OUT:-$out/celt_fuzz_findings}
+			mkdir -p "$fuzz_out/corpus"
+			if [ -r "$mcc/sound/pc/sounds_dialogs.fsb" ]; then
+				echo "celtfuzz: $(python3 -I "$here/celt_fuzz_seeds.py" "$mcc/sound/pc" "$fuzz_out/corpus") seeds from MCC's CELT banks"
+			else
+				echo "celtfuzz: no MCC CELT bank at $mcc/sound/pc (HALO_TEST_MCC_ROOT): no seeds, the fuzzer's own"
+			fi
+			if "$out/celt_fuzz" -max_total_time="$fuzz_seconds" -max_len=8192 -artifact_prefix="$fuzz_out/" "$fuzz_out/corpus" \
+				> "$out/celt_fuzz.log" 2>&1; then
+				echo "celtfuzz: $(grep -a "^Done" "$out/celt_fuzz.log" | tail -1), no crash, no UB"
+			else
+				tail -20 "$out/celt_fuzz.log"
+				fail "celtfuzz: libFuzzer found something (see $fuzz_out, $out/celt_fuzz.log)"
+			fi
+		else
+			fail "celtfuzz: celt_fuzz did not build"
+		fi
+	fi
+	;;
+esac
 
 case " $parts " in *" audit "*)
 	if [ $have_mcc = 0 ]; then
