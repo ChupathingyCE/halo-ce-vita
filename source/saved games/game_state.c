@@ -470,6 +470,12 @@ is its opening cinematic's, and the press that took the pause's REVERT TO
 CHECKPOINT, held on, skipped it again and again) */
 static unsigned long game_state_revert_count;
 
+#ifdef HALO_LINUX
+/* port: whether the last revert landed on a checkpoint (Save and Quit
+writes only a checkpoint) */
+static boolean game_state_revert_landed;
+#endif
+
 unsigned long game_state_port_revert_count(
 	void)
 {
@@ -480,6 +486,9 @@ void game_state_revert(
 	void)
 {
 	game_state_revert_count++;
+#ifdef HALO_LINUX
+	game_state_revert_landed = FALSE;
+#endif
 	if (!game_state_globals.saved_game_valid && !recover_saved_games_hack)
 	{
 #ifdef HALO_LINUX
@@ -496,6 +505,7 @@ void game_state_revert(
 	{
 		unsigned long long started = halo_load_profile_now();
 		unsigned long long after_load_started;
+		long revert_tick = game_time_initialized() ? (long)game_time_get() : 0L;
 
 		game_state_call_before_load_procs();
 		/* port (from OpenCE, MrBruh's "Third hardening round"): a file
@@ -505,12 +515,21 @@ void game_state_revert(
 		{
 			game_state_globals.saved_game_valid = FALSE;
 			main_reset_map();
+			/* (port) said as it is: the release builds' halo.log said
+			"reverted" whatever happened */
+			error(_error_silent, "couldn't revert to the checkpoint: the level starts over");
+			platform_log("game state: couldn't read back the checkpoint taken at tick %ld (now tick %ld): "
+				"not reverted, the level starts over", game_state_checkpoint_tick, revert_tick);
+		}
+		else
+		{
+			game_state_revert_landed = TRUE;
 		}
 		halo_load_profile_add(_halo_load_game_state_revert, started, GAME_STATE_SIZE);
 		after_load_started = halo_load_profile_now();
 		game_state_call_after_load_procs();
 		halo_load_profile_add(_halo_load_persistent_after_load, after_load_started, 0);
-		if (game_state_revert_log_lines++ < 160)
+		if (game_state_revert_landed && game_state_revert_log_lines++ < 160)
 			platform_log("game state: reverted to the checkpoint taken at tick %ld (now tick %ld)",
 				game_state_checkpoint_tick, (long)game_time_get());
 	}
@@ -562,6 +581,18 @@ void game_state_save_to_persistent_storage(
 		game_state_note_event("save and quit");
 		game_state_revert();
 #ifdef HALO_LINUX
+		/* (port) the save is the last checkpoint or nothing: when the
+		revert did not land on one (none taken yet, or it could not be read
+		back), the game as it is now is not written in its place, and the
+		save on the card stays as it was */
+		if (!game_state_revert_landed)
+		{
+			error(_error_silent, "save and quit: no checkpoint to save, the save is kept as it was");
+			platform_log("save and quit: %s: the last checkpoint could not be had back, nothing written (%s kept as it was)",
+				tag_get_name(global_scenario_index), custom ? "savegame_custom.bin" : "savegame.bin");
+			game_state_set_persistent_storage_custom(previous);
+			return;
+		}
 		started = halo_load_profile_now();
 #endif
 		game_state_write_to_persistent_storage(
@@ -1602,6 +1633,7 @@ void game_state_try_and_load_from_persistent_storage(
 		game_state_call_after_load_procs();
 		halo_load_profile_add(_halo_load_persistent_after_load, started, 0);
 		game_state_save();
+		platform_log("campaign save: resumed at tick %ld", (long)game_time_get());
 	}
 #else
 	if (game_state_read_header_from_persistent_storage(
