@@ -152,6 +152,9 @@ for a gamepad); a test build's HALO_TEST_TEXT_INPUT answers in its place,
 #include <string.h>
 
 #include "../../vita/include/vita_version.h"
+#ifdef HALO_VITA
+#include "../../vita/include/vita_controls.h" /* (the Forge menu's CONTROLS: the buttons as mapped) */
+#endif
 #include "player_cosmetics.h"
 
 /* the platform layer's */
@@ -3892,11 +3895,30 @@ static void h3_forge_controls_update(struct widget_instance *widget)
 	char text[768];
 
 #ifdef HALO_VITA
-	controls = T("Fly: left stick. Up: Cross. Down: D-pad down.\nFaster: hold L. Look: right stick.\n"
-		"Grab, drop: R. Copy: Circle. Delete: Triangle.\nObjects: Square. Holding one: its properties.\n"
-		"Rotate: hold L + right stick; with R: roll.\nL + left stick: distance. L + D-pad right: snap.\n"
-		"Upright: D-pad left. Speed: D-pad right.\nSpartan: Select + D-pad up.");
-	nudge = T("Nudge: L + D-pad up, then L + sticks.");
+	/* (1.1.4: the buttons as the player's Buttons settings have them, not
+	the default layout's - a remapped Delete or Spartan combo read wrong here;
+	vita_controls.c vita_xbox_button_name: the monitor reads the game's Xbox
+	buttons, forge.c forge_pad_get) */
+	static char vita_controls[512];
+	static char vita_nudge[96];
+	char const *a = T(vita_xbox_button_name(VITA_XBOX_A)), *b = T(vita_xbox_button_name(VITA_XBOX_B));
+	char const *x = T(vita_xbox_button_name(VITA_XBOX_X)), *y = T(vita_xbox_button_name(VITA_XBOX_Y));
+	char const *black = T(vita_xbox_button_name(VITA_XBOX_BLACK)), *white = T(vita_xbox_button_name(VITA_XBOX_WHITE));
+	char const *lt = T(vita_xbox_button_name(VITA_XBOX_LEFT_TRIGGER));
+	char const *rt = T(vita_xbox_button_name(VITA_XBOX_RIGHT_TRIGGER));
+	char const *ls = T(vita_xbox_button_name(VITA_XBOX_LEFT_STICK));
+	char const *rs = T(vita_xbox_button_name(VITA_XBOX_RIGHT_STICK));
+	char const *back = T(vita_xbox_button_name(VITA_XBOX_BACK));
+
+	snprintf(vita_controls, sizeof(vita_controls),
+		T("Fly: left stick. Up: %s. Down: %s.\nFaster: hold %s. Look: right stick.\n"
+		"Grab, drop: %s. Copy: %s. Delete: %s.\nObjects: %s. Holding one: its properties.\n"
+		"Rotate: hold %s + right stick; with %s: roll.\n%s + left stick: distance. %s + %s: snap.\n"
+		"Upright: %s. Speed: %s.\nSpartan: %s + %s."),
+		a, ls, lt, rt, b, y, x, lt, rt, lt, lt, white, black, white, back, rs);
+	snprintf(vita_nudge, sizeof(vita_nudge), T("Nudge: %s + %s, then %s + sticks."), lt, rs, lt);
+	controls = vita_controls;
+	nudge = vita_nudge;
 	/* (the front screen, forge_touch.inc, unless the panel's Touch in Forge
 	is off) */
 	if (!getenv("HALO_FORGE_TOUCH") || atoi(getenv("HALO_FORGE_TOUCH")))

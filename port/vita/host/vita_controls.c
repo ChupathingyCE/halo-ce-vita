@@ -37,6 +37,7 @@ button (Black) with the old 0.1 s and no border.
 
 #include "vita_controls.h"
 #include "vita_host.h"
+#include "lang.h" /* (N_: the button names, translated where shown) */
 
 #include <stdlib.h>
 #include <string.h>
@@ -197,6 +198,32 @@ unsigned long vita_button_named(const char *value, unsigned long fallback)
 		if (strcmp(value, button_values[index]) == 0)
 			return button_bits[index];
 	return fallback;
+}
+
+/* (1.1.4, the Forge menu's CONTROLS: menu_functions.c) the name of what
+holds Xbox button `xbox` in the player's settings now (VITA_BUTTON_NAMES:
+"Cross", "D-pad down"...; a touch zone's row when a zone alone holds it; "None"
+when nothing does), an English key for T() */
+const char *vita_xbox_button_name(int xbox_button)
+{
+	static const char *const button_names[VITA_BUTTON_CHOICES] = { VITA_BUTTON_NAMES };
+	static const char *const zone_names[VITA_ZONE_COUNT] = {
+		N_("Touch top left"), N_("Touch top right"), N_("Touch left edge"), N_("Touch right edge"),
+		N_("Rear touch left"), N_("Rear touch right"),
+	};
+	struct vita_controls_config config;
+	int index;
+
+	if (xbox_button <= VITA_XBOX_OFF || xbox_button >= VITA_XBOX_COUNT)
+		return "None";
+	vita_controls_config_load(&config);
+	for (index = 0; index < VITA_BUTTON_CHOICES; index++)
+		if (button_bits[index] && config.xbox_button[xbox_button] == button_bits[index])
+			return button_names[index];
+	for (index = 0; index < VITA_ZONE_COUNT; index++)
+		if (config.zone_xbox[index] == xbox_button)
+			return zone_names[index];
+	return "None";
 }
 
 void vita_controls_config_load(struct vita_controls_config *config)
