@@ -60,6 +60,15 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 		<string text="DELETE ALL"/>
 		<string text="Delete"/>
 		<string text="Select"/>
+		<!-- 21-25 (1.1.5): a FIREFIGHT game's pause and its leaving -->
+		<string text="LEAVE FIREFIGHT"/>
+		<string text="LEAVE FIREFIGHT?"/>
+		<string text="Your Firefight ends here: its score is not kept."/>
+		<string text="FIREFIGHT"/>
+		<string text="Survive the Covenant's waves. Lives are shared: a
+round cleared gives some back. Each round's last
+wave is the heavy wave; after a set, a bonus round -
+big points a kill, no lives lost."/>
 	</strings>
 
 	<!-- the object browser: its rows (a name, a count), written by port forge browser -->
@@ -278,6 +287,56 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 		<child widget="h3/pause/b_butn"/>
 		<child widget="h3/pause/back"/>
 		<child widget="h3/forge/pause/list" x="56" y="120"/>
+	</widget>
+
+	<!-- (1.1.5) a FIREFIGHT game's pause (menu_tags.c: for the level's pause screen while the mode runs):
+	     Forge's menu would offer the monitor, saving, undo and DELETE ALL - RESUME and LEAVE FIREFIGHT
+	     alone, the mode's words in the controls' place; port forge title writes FIREFIGHT · the map -->
+	<widget name="h3/firefight/pause/leave" type="text" width="220" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="21">
+		<on event="a start" open="h3/firefight/leave/screen"/>
+	</widget>
+	<widget name="h3/firefight/pause/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<child widget="h3/forge/pause/resume" x="0" y="0"/>
+		<child widget="h3/firefight/pause/leave" x="0" y="20"/>
+	</widget>
+	<widget name="h3/firefight/pause/column" left="48" top="112" width="236" height="48" bitmap="h3/column"/>
+	<widget name="h3/firefight/pause/caption" type="text" left="312" top="146" width="296" height="16" font="h3/font_small" color="#FF9FB6CC" string_list="h3/forge_menu" string_index="24"/>
+	<widget name="h3/firefight/pause/words" type="text" left="312" top="170" width="304" height="190" font="h3/font_small" color="#FFD3CBC3" string_list="h3/forge_menu" string_index="25"/>
+	<widget name="h3/firefight/pause/screen" flags="pass_unhandled_to_focused_child pause_game">
+		<on event="b back" close="all"/>
+		<child widget="h3/pause/haze"/>
+		<child widget="h3/pause/strip"/>
+		<child widget="h3/pause/rule"/>
+		<child widget="h3/forge/pause/title"/>
+		<child widget="h3/pause/players"/>
+		<child widget="h3/pause/nameplate"/>
+		<child widget="h3/firefight/pause/column"/>
+		<child widget="h3/forge/pause/controls_panel"/>
+		<child widget="h3/firefight/pause/caption"/>
+		<child widget="h3/forge/pause/controls_rule"/>
+		<child widget="h3/firefight/pause/words"/>
+		<child widget="h3/pause/buttons"/>
+		<child widget="h3/pause/a_butn"/>
+		<child widget="h3/pause/select"/>
+		<child widget="h3/pause/b_butn"/>
+		<child widget="h3/pause/back"/>
+		<child widget="h3/firefight/pause/list" x="56" y="120"/>
+	</widget>
+	<widget name="h3/firefight/leave/title" type="text" left="132" top="156" width="376" height="22" font="h3/font_title" color="#FFF2F6FA" string_list="h3/forge_menu" string_index="22"/>
+	<widget name="h3/firefight/leave/text" type="text" left="132" top="194" width="376" height="80" font="h3/font_small" color="#FFCFD9E3" string_list="h3/forge_menu" string_index="23"/>
+	<widget name="h3/firefight/leave/screen" flags="pass_unhandled_to_focused_child pause_game">
+		<on event="a start" run="port forge quit"/>
+		<on event="b back" back="true"/>
+		<child widget="h3/pause/haze"/>
+		<child widget="h3/forge/leave/panel"/>
+		<child widget="h3/forge/leave/rule"/>
+		<child widget="h3/forge/leave/strip"/>
+		<child widget="h3/firefight/leave/title"/>
+		<child widget="h3/firefight/leave/text"/>
+		<child widget="h3/forge/leave/a_butn"/>
+		<child widget="h3/forge/leave/leave"/>
+		<child widget="h3/forge/leave/b_butn"/>
+		<child widget="h3/forge/leave/back"/>
 	</widget>
 
 	<!-- leaving, asked first (Halo 3's dialog over the haze) -->

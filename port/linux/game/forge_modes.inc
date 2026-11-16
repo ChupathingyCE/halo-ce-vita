@@ -2589,6 +2589,20 @@ short forge_modes_builtin_of(
 	return NONE;
 }
 
+/* (menu_functions.c's carnage report) whether the last game was a FIREFIGHT
+game - its report is the mode's until the next map loads */
+boolean forge_modes_game_reported(
+	void)
+{
+	return forge_modes.reported;
+}
+
+boolean forge_modes_game_running(
+	void)
+{
+	return forge_modes.running != _forge_mode_none;
+}
+
 void forge_modes_game_request(
 	short mode)
 {

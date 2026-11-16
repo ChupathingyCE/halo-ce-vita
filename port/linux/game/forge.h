@@ -617,6 +617,14 @@ struct carnage_report;
 boolean forge_modes_carnage_report(
 	struct carnage_report *report,
 	boolean in_game);
+/* (the Halo 3 menus' carnage report: a local Firefight game's goes on as a
+local Command game's does) whether the last game was a FIREFIGHT game */
+boolean forge_modes_game_reported(
+	void);
+/* (menu_tags.c: the pause screen; menu_functions.c: its title) whether a
+FIREFIGHT game runs now */
+boolean forge_modes_game_running(
+	void);
 
 /* (the Forge lobby's live game, the settings panel, the network test) the
 game this machine hosts is a Forge game of the map at map_path, with that

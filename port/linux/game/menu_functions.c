@@ -3864,7 +3864,9 @@ static void h3_forge_title_update(struct widget_instance *widget)
 		forge_level_name(level, (short)sizeof(level));
 		name = level;
 	}
-	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", T("FORGE"), name);
+	/* (1.1.5: a FIREFIGHT game's pause - h3/firefight/pause/screen - is
+	titled the mode's) */
+	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", forge_modes_game_running() ? T("FIREFIGHT") : T("FORGE"), name);
 	h3_capitals(text);
 	text_show(widget, text);
 	snprintf(text, sizeof(text), "%s", forge_monitor_active() ? T("PLAY AS SPARTAN") : T("MONITOR"));
@@ -14909,12 +14911,15 @@ static boolean h3_carnage_network(void)
 }
 
 /* (a local Command game - a Forge game's, no server -: its report goes on
-to the main menu, as Forge's leave does: command.c) */
+to the main menu, as Forge's leave does: command.c; 1.1.5: a local FIREFIGHT
+game's the same - forge_modes.inc -: its report said "Waiting for the host"
+for ever, no host there being) */
 void main_goto_main_menu(void);
 
 static boolean h3_carnage_local_command(void)
 {
-	return !global_network_game_server_get() && game_connection() == _game_connection_local && command_game_running();
+	return !global_network_game_server_get() && game_connection() == _game_connection_local &&
+		(command_game_running() || forge_modes_game_reported());
 }
 
 static boolean h3_carnage_hosting(void)
@@ -15285,7 +15290,7 @@ static void h3_carnage_frame(boolean main_menu_loaded)
 		else if (!server && h3_carnage_local_command() && game_engine_showing_postgame() && !h3_carnage.gone_on)
 		{
 			h3_carnage.gone_on = TRUE;
-			platform_log("menus: h3 carnage: a local Command game goes on: the main menu");
+			platform_log("menus: h3 carnage: a local %s game goes on: the main menu", command_game_running() ? "Command" : "Firefight");
 			main_goto_main_menu();
 		}
 		return;

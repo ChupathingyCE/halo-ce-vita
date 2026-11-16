@@ -3515,3 +3515,8 @@
 # (1.1.5: a Firefight layout made in Forge on a map with no built-in layout - the Firefight lobby's picker, the panel)
 "Choose a layout of this map with Firefight zones." = "Elige un diseño de este mapa con zonas de Firefight."
 "Choose a layout with Firefight zones" = "Elige un diseño con zonas de Firefight"
+# (1.1.5: a FIREFIGHT game's pause - RESUME, LEAVE FIREFIGHT, the mode's words - and its leaving: halo3/forge.xml)
+"LEAVE FIREFIGHT" = "SALIR DE FIREFIGHT"
+"LEAVE FIREFIGHT?" = "¿SALIR DE FIREFIGHT?"
+"Your Firefight ends here: its score is not kept." = "Tu Firefight termina aquí: la puntuación no se guarda."
+"Survive the Covenant's waves. Lives are shared: a\nround cleared gives some back. Each round's last\nwave is the heavy wave; after a set, a bonus round -\nbig points a kill, no lives lost." = "Resiste las oleadas del Covenant. Las vidas son\ncompartidas: una ronda superada devuelve algunas.\nLa última oleada de cada ronda es la pesada; tras\nuna serie, una ronda de bonificación: muchos puntos\npor baja, sin perder vidas."
