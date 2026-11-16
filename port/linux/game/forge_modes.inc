@@ -2443,12 +2443,61 @@ kills and points. The banner in the middle. Blind: the banner only */
 /* (the box's bottom above the screen's: clear of the game's own lower
 corner) */
 #define FORGE_MODES_HUD_BOTTOM 418.f
+/* (1.1.5, the owner: "I don't like it over the weapon") where the box stands,
+in the HUD's own frame (command_hud_frame_begin: the game's HUD window, 480
+high): at the top middle (the default: clear of the weapon, the game's own
+message lines, the motion tracker and the banner), under Halo CE's ammunition
+and grenade counter at the top left (the game's messages - pickups, the kill
+feed - start there and run under the box: not the default), under the shield
+and health at the top right, or where it was, over the weapon. HALO_FIREFIGHT_HUD=left|middle|right|weapon
+(env.txt on a Vita) or the console's "forge mode hud <place>" to compare. */
+enum
+{
+	_forge_modes_hud_left,
+	_forge_modes_hud_middle,
+	_forge_modes_hud_right,
+	_forge_modes_hud_weapon,
+	NUMBER_OF_FORGE_MODES_HUD_PLACES
+};
+static char const *const forge_modes_hud_place_names[NUMBER_OF_FORGE_MODES_HUD_PLACES] = { "left", "middle", "right", "weapon" };
+static short forge_modes_hud_place_chosen = NONE;
+/* (the compact box of the corners; under the counter's bottom, under the
+shield's) */
+#define FORGE_MODES_HUD_BOX_CORNER 200.f
+#define FORGE_MODES_HUD_LEFT_TOP 64.f
+#define FORGE_MODES_HUD_RIGHT_TOP 46.f
+#define FORGE_MODES_HUD_MIDDLE_TOP 6.f
+
+static short forge_modes_hud_place_of(
+	char const *name)
+{
+	short place;
+
+	for (place = 0; name && place < NUMBER_OF_FORGE_MODES_HUD_PLACES; place++)
+		if (!strcmp(name, forge_modes_hud_place_names[place]) || (name[0] == '0' + place && !name[1]))
+			return place;
+	return NONE;
+}
+
+static short forge_modes_hud_place(
+	void)
+{
+	if (forge_modes_hud_place_chosen == NONE)
+	{
+		short place = forge_modes_hud_place_of(getenv("HALO_FIREFIGHT_HUD"));
+
+		forge_modes_hud_place_chosen = place != NONE ? place : _forge_modes_hud_middle;
+	}
+	return forge_modes_hud_place_chosen;
+}
 
 static void forge_modes_draw(
 	short local_player_index)
 {
 	real width, x, y;
-	real const box = FORGE_MODES_HUD_BOX;
+	short const place = forge_modes_hud_place();
+	real const box = place == _forge_modes_hud_left || place == _forge_modes_hud_right ? FORGE_MODES_HUD_BOX_CORNER : FORGE_MODES_HUD_BOX;
+	real box_bottom = 0.f;
 	char line[128];
 	char right[64];
 	boolean bonus = forge_modes.state == _forge_modes_state_bonus_start || forge_modes.state == _forge_modes_state_bonus ||
@@ -2470,13 +2519,18 @@ static void forge_modes_draw(
 		boolean round_time = !bonus && forge_modes.firefight.round_minutes;
 
 		rows = (short)(rows + (forge_modes.skulls_on ? 1 : 0) + (objective ? 1 : 0) + (round_time ? 1 : 0));
-		/* (its rows from the bottom right up) */
-		x = width - box - 12.f;
-		y = FORGE_MODES_HUD_BOTTOM - 19.f - FORGE_MODES_HUD_ROW * (real)(rows - 1);
+		/* (its place: the top left under the game's counter, the top middle,
+		the top right under the shield; over the weapon its rows from the
+		bottom right up) */
+		x = place == _forge_modes_hud_left ? 2.f : place == _forge_modes_hud_middle ? (width - box) * 0.5f :
+			place == _forge_modes_hud_right ? width - box - 8.f : width - box - 12.f;
+		y = place == _forge_modes_hud_left ? FORGE_MODES_HUD_LEFT_TOP : place == _forge_modes_hud_middle ? FORGE_MODES_HUD_MIDDLE_TOP :
+			place == _forge_modes_hud_right ? FORGE_MODES_HUD_RIGHT_TOP :
+			FORGE_MODES_HUD_BOTTOM - 19.f - FORGE_MODES_HUD_ROW * (real)(rows - 1);
+		box_bottom = y + 19.f + FORGE_MODES_HUD_ROW * (real)(rows - 1);
 		/* (the title strip: the mode, its set and round - or the bonus
 		round) */
 		command_hud_draw_art(COMMAND_HUD_ART_STRIP, x, y, x + box, y + 18.f, 0.85f);
-		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x + 6.f, y + 2.f, x + box, 0, COMMAND_HUD_LIGHT, T(FORGE_FIREFIGHT_NAME));
 		if (bonus)
 			snprintf(line, sizeof(line), "%s", T("BONUS ROUND"));
 		else if (forge_modes.firefight.sets)
@@ -2484,7 +2538,16 @@ static void forge_modes_draw(
 				forge_modes.firefight.rounds);
 		else
 			snprintf(line, sizeof(line), T("SET %d  ROUND %d/%d"), forge_modes.set, forge_modes.round, forge_modes.firefight.rounds);
-		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x, y + 2.f, x + box - 6.f, 1, bonus ? COMMAND_HUD_ORANGE : COMMAND_HUD_DIM, line);
+		/* (the mode's name where the strip has room for both: the compact
+		box of the corners says the set and round alone, at the left) */
+		if (command_hud_measure_text(COMMAND_HUD_FONT_ITEM, T(FORGE_FIREFIGHT_NAME)) + command_hud_measure_text(COMMAND_HUD_FONT_ITEM, line) +
+			24.f <= box)
+		{
+			command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x + 6.f, y + 2.f, x + box, 0, COMMAND_HUD_LIGHT, T(FORGE_FIREFIGHT_NAME));
+			command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x, y + 2.f, x + box - 6.f, 1, bonus ? COMMAND_HUD_ORANGE : COMMAND_HUD_DIM, line);
+		}
+		else
+			command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x + 6.f, y + 2.f, x + box, 0, bonus ? COMMAND_HUD_ORANGE : COMMAND_HUD_LIGHT, line);
 		y += 19.f;
 		if (bonus)
 		{
@@ -2581,7 +2644,8 @@ static void forge_modes_draw(
 	/* (the banner: a round's start, the bonus round's, the end) */
 	if (forge_modes.banner[0] && system_milliseconds() < forge_modes.banner_until)
 	{
-		real top = 96.f;
+		/* (under the box at the top middle) */
+		real top = place == _forge_modes_hud_middle && box_bottom + 8.f > 96.f ? box_bottom + 8.f : 96.f;
 
 		command_hud_draw_art(COMMAND_HUD_ART_STRIP, width * 0.5f - 170.f, top, width * 0.5f + 170.f, top + (forge_modes.banner_line[0] ? 50.f : 32.f),
 			0.85f);
@@ -2709,6 +2773,28 @@ static boolean forge_modes_command(
 		forge_modes_game_request(FORGE_MODE_REQUEST_FIREFIGHT);
 		return TRUE;
 	}
+	/* ("mode hud left|middle|right|weapon": the HUD box's place, to compare) */
+	if (!strncmp(rest, "hud ", 4))
+	{
+		short place = forge_modes_hud_place_of(rest + 4);
+
+		if (place != NONE)
+			forge_modes_hud_place_chosen = place;
+		platform_log("forge modes: the HUD box at the %s", forge_modes_hud_place_names[forge_modes_hud_place()]);
+		return TRUE;
+	}
+#ifndef HALO_RELEASE
+	/* (tests: "mode say <text>" - a line in the game's own messages, to see
+	where they stand beside the box) */
+	if (!strncmp(rest, "say ", 4))
+	{
+		wchar_t wide[200];
+
+		forge_modes_wide(rest + 4, wide, (int)NUMBEROF(wide));
+		hud_print_message(forge_globals.local_player_index, wide);
+		return TRUE;
+	}
+#endif
 	if (!strcmp(rest, "where"))
 	{
 		platform_log("forge modes: %s, state %d, set %d round %d wave %d, score %ld, kills %ld (the player's %ld), deaths %ld, "
