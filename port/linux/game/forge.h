@@ -440,6 +440,9 @@ boolean forge_game_active(
 	void);
 boolean forge_monitor_active(
 	void);
+/* (hud.c) the Spartan's action prompt left undrawn for the monitor */
+boolean forge_monitor_hides_prompt(
+	short local_player_index);
 
 /* (the Forge menu) monitor and Spartan flipped, as Select + D-pad up does:
 asked here, done at the next forge_update */
