@@ -374,6 +374,11 @@
 #            picker (the list START GAME hosts from) leaves it out; again with
 #            it off (HALO_MAPS_DISABLED) and turned on in MOD MANAGER: the
 #            picker offers it
+#   h3workshoppicker  h3modspicker's walk with a Steam Workshop item's multiplayer map in the mods
+#            folder (mods/2900000002/maps, MCC's Blood Gulch of this PC as the item's file
+#            coldsnapextended.map, its halo1/maps/bitmaps.map beside: a Workshop build alone):
+#            the lobby's map picker offers it as ws2900000002_coldsna-8866, with mygulch (15 maps,
+#            2 custom), MCC mods off; the maps folder's own file of that reserved name is not listed
 #   h3games  GAME MANAGER's GAMES tab (its first; START > MEDIA > GAME MANAGER): Halo
 #            CE checked over the made-up maps folder (installed from the Xbox's
 #            files, a broken map found), Triangle the details, Square nothing (no
@@ -502,7 +507,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3workshop h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3workshop h3workshoppicker h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -2471,6 +2476,34 @@ for case in $cases; do
 		[ "$(cat "$out/h3mods-data/outside/sentinel.txt" 2>/dev/null)" = kept ] ||
 			fail h3mods "a file a link in the mod pointed at was deleted (the link was followed)"
 		grep -aq "menus: h3 mods: Deleted TestMod" "$log" || fail h3mods "the screen did not say the mod was deleted" ;;
+	h3workshoppicker)
+		ws_mp_map=${HALO_TEST_WORKSHOP_MP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/bloodgulch.map}
+		if ! grep -aq "port h3 workshop" "$binary"; then
+			echo "--- h3workshoppicker"; echo "SKIP (h3workshoppicker): not a Steam Workshop build (configure.py --steam-workshop)"
+			continue
+		fi
+		if [ ! -f "$ws_mp_map" ]; then
+			echo "--- h3workshoppicker"; echo "SKIP (h3workshoppicker): no MCC multiplayer map (HALO_TEST_WORKSHOP_MP_MAP)"
+			continue
+		fi
+		mods_data "$out/h3wsp-data"
+		mkdir -p "$out/h3wsp-data/mods/2900000002/maps" "$out/h3wsp-data/mods/2900000002/halo1/maps"
+		cp --reflink=auto "$ws_mp_map" "$out/h3wsp-data/mods/2900000002/maps/coldsnapextended.map"
+		ln -s "$(dirname "$ws_mp_map")/bitmaps.map" "$out/h3wsp-data/mods/2900000002/halo1/maps/bitmaps.map"
+		# (a maps-folder file of the reserved name: never listed)
+		cp --reflink=auto "$(readlink -f "$out/h3wsp-data/maps/mygulch.map")" "$out/h3wsp-data/maps/ws2900000002_x.map"
+		run h3workshoppicker "$out/h3wsp-data" 50 "$h3pickerpad" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch
+		check_h3 h3workshoppicker halo3
+		log=$out/h3workshoppicker/run.log
+		grep -aq "menus: cascade: mp maps$" "$log" || fail h3workshoppicker "MAP did not open the lobby's map picker"
+		grep -aq "mods: d:.mods.2900000002.maps.coldsnapextended.map is the Steam Workshop multiplayer map ws2900000002_coldsna-8866" \
+			"$out/h3workshoppicker/data/debug.txt" || fail h3workshoppicker "the Workshop map was not found in the mods folder"
+		grep -aq "workshop: 1 Steam Workshop multiplayer maps for the level list" "$out/h3workshoppicker/data/debug.txt" ||
+			fail h3workshoppicker "the Workshop map is not in the multiplayer level list"
+		grep -aq "the maps folder's 'ws2900000002_x' is not listed: that name is a Steam Workshop map's" \
+			"$out/h3workshoppicker/data/debug.txt" || fail h3workshoppicker "the maps folder's file of the reserved name was listed"
+		grep -aq "menus: h3 mp: the map picker: 15 maps (2 custom)" "$log" ||
+			fail h3workshoppicker "the map picker did not offer the Workshop map beside mygulch" ;;
 	h3modspicker)
 		mods_data "$out/h3mods-data"
 		run h3modspicker "$out/h3mods-data" 50 "$h3pickerpad" HALO_MENU_STYLE=halo3

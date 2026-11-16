@@ -3619,6 +3619,9 @@
 "The host's game had already started: download the item from STEAM WORKSHOP, then join again." = "La partida del anfitrión ya había empezado: descarga el elemento desde STEAM WORKSHOP y vuelve a unirte."
 "This version can't download Steam Workshop maps." = "Esta versión no puede descargar mapas del Steam Workshop."
 "Steam Workshop" = "Steam Workshop"
+"The STEAM WORKSHOP screen can't open here: download the item from STEAM WORKSHOP, then join again." = "La pantalla STEAM WORKSHOP no puede abrirse aquí: descarga el elemento desde STEAM WORKSHOP y vuelve a unirte."
+"The host is playing %s, a map from the Steam Workshop (item %s).\n\n%s" = "El anfitrión juega %s, un mapa del Steam Workshop (elemento %s).\n\n%s"
+"The host's game started before the Steam download ended: join again once the item is installed." = "La partida del anfitrión empezó antes de que terminara la descarga de Steam: vuelve a unirte cuando el elemento esté instalado."
 "MCC's Halo CE mods and maps, from your own Steam" = "Mods y mapas de Halo CE de MCC, desde tu propio Steam"
 "The host is playing %s, a map from the Steam Workshop, which you don't have. You answered no to downloading it." = "El anfitrión juega %s, un mapa del Steam Workshop, que no tienes. Respondiste que no a descargarlo."
 

@@ -263,7 +263,8 @@ ChupathingyCE or OpenCE (~/halo-test-out/workshop-runs/NOTES.md has the per-file
 
 - **No web page, no site, no third party.** The list comes only from Steam's CM over the signed-in TLS session; no
   steamcommunity.com page is read, no list of anyone else's, no image fetched. Nothing is downloaded from another
-  player, ever (a joiner who lacks a map is never sent one by a host: 1.1.3 plays Workshop maps offline only).
+  player, ever (a joiner who lacks a map is never sent one by a host: it may download the item from Steam itself,
+  section 8).
 - **What Steam says about an item is checked** (steam_workshop_item_ok): result OK, consumer app 976730, tag Halo1,
   not banned, has content (hcontent_file != 0), size at most 4 GB, an id of at most 12 digits (the mods folder's key).
   The manifest must name depot 976730 and that gid, its crc_clear must match.
@@ -287,8 +288,8 @@ ChupathingyCE or OpenCE (~/halo-test-out/workshop-runs/NOTES.md has the per-file
   there removed first). A refused or failed item's staging is deleted: nothing of it is kept. A cancelled or lost
   session keeps it for a resume.
 - **What plays**: the mods folder's MCC mods - Halo: CE Anniversary caches of solo scenarios, offline, for a game of
-  this machine's own (docs/mcc_cea_maps.md "Offline only"): unchanged. Multiplayer-only items are listed and not
-  offered for download ("Multiplayer maps: not in this version").
+  this machine's own (docs/mcc_cea_maps.md "Offline only"): unchanged. Multiplayer items are downloaded too and
+  their maps are the multiplayer lists', offline and online (section 8).
 
 **Fuzzed**: steam_fuzz.c ws_list (QueryFiles/GetDetails responses: titles printable ASCII, counts capped) and
 ws_names (the name rule: a taken name is plain, ours, inside the folder). **Fake-server flows**: ws-items (a campaign
@@ -311,3 +312,114 @@ QueryFiles' required tag "Halo1" and its paging behave as the fake does; real it
 4. Real Workshop items carry DLLs ("modded halo3.dll (REQUIRED)/halo3.dll" in this PC's items): never written here.
 5. A name of a real item would have refused the whole item under a first, stricter rule (any odd name refused): the
    rule now refuses only names that leave the folder and skips the rest.
+
+## 8. Steam Workshop multiplayer maps online (feat/11x-steam-workshop-mp, Nov 16 2026: off by default, same switch)
+
+Owner decisions (Nov 16): Workshop multiplayer maps play offline (bots, split screen) and online; a joiner who lacks
+the host's map is asked to download it from Steam - **never from the host: no game files between players, ever**; the
+Workshop is reachable from the settings overlay. Same build switch as section 7 (configure.py --steam-workshop).
+
+### 8.1 What is played, and under which name
+
+A Workshop item the game installed (section 7) is the mods folder's `mods/<id>`. Its `maps/*.map` files that are
+Halo: CE Anniversary caches of **multiplayer** scenarios (custom_edition_cache_mod_map_kind: the cache loader's own
+header and tag-index check) are the multiplayer maps `ws<id>_<map>` (port/linux/game/workshop_maps.c), level
+`levels\test\ws<id>_<map>\ws<id>_<map>`, at most 25 characters like every custom map (a long file name keeps its first
+characters, '-' and four hex digits of FNV-1a of the whole: `ws2900000002_coldsna-8866`; two maps of one item that
+would share a name are both left out, so every machine resolves a name to the same file or none). They are listed in
+the multiplayer level list after the maps folder's (custom_edition_maps.c), in every menu style that lists custom
+maps, whatever MCC mods (game.mcc_mods) and PC maps are; a mod turned off in the mod manager is left out. The pattern
+is reserved: a maps-folder file of that form is never listed or loaded, and the name is only ever looked up in the
+mods folder (custom_edition_map_path), never in the maps folder where map sharing writes. Loading reuses the mod-map
+path (from_mods): sound cache in `mods/<id>/cache`, resource maps beside the map, else the item's own
+`halo1/maps/bitmaps.map` / `sounds.map` (where real Workshop multiplayer items keep them: seen in this PC's depotcache
+manifests, item manifests 4520562000989635516 and 4896837317637153445), else the player's own MCC's
+(`d:\mcc\halo1\maps\`, read only). Then the same loader checks as every CE/MCC map (the release-1.1.4-int hardening:
+tag check, geometry bounds, model conversion bounds; merged into this branch).
+
+### 8.2 The network fields: none added
+
+| Field | Who sends it | Bounds | What this build does with it |
+|---|---|---|---|
+| `network_game.map.name` (0x80 bytes, existing) | the host's game settings | already ended at 0x80 and refused with ".." (network_client_manager.c); the Workshop parser reads at most 0x80, needs the terminator inside, exactly `levels\test\N\N`, N = "ws" + 1-12 digits (no leading zero) + '_' + 1+ of [a-z0-9_-], <= 25 | the item id (<= 12 digits, < 10^12) and the map name; anything else is "not a Workshop map" and the existing checks decide |
+| `network_game.map.version` (32 bits, existing) | the host | any value | the host's copy's identity (header checksum + length, custom_edition_cache_map_identity); compared to this machine's copy's |
+
+There is **no new message, no new field, no capability bit, no version bump**. The item identity is the name's id plus
+the copy's identity; the fingerprint is 32 bits (the same the custom-map check has always used). A collision cannot
+hurt a joiner: whatever copy it plays is its own, installed through section 7's checks and loaded through the map
+loader's own checks; a mismatch only means the two machines' tags differ (the existing "different copy" refusal).
+
+### 8.3 The joiner's decisions (network_game_client_map_check, map_share.c)
+
+Pure decision: `workshop_map_join_verdict` (plain C, unit-tested and fuzzed). In order, before the MCC/custom-map
+checks and after the crossplay branch (a PC host's game is unchanged: section 8.6):
+1. not a Workshop name -> the old checks;
+2. host identity 0 -> refused ("isn't the same version"); a host of this build always sends one, so 0 is a host of
+   another build or a modified one - **never** a download prompt;
+3. no copy here -> `_network_game_client_map_workshop_missing`: in a Workshop build, the question "This map is from the
+   Steam Workshop - download it from Steam?" (YES/NO, the item id and the map name in it; a public game adds that the
+   host only named the item). Without the Workshop build: a plain refusal naming the item. Nothing is ever asked of
+   the host (no map-share query is sent for a Workshop name);
+4. a different copy -> refused, told to download the item again (Steam serves the current version; the host may need
+   to update too). Never a download prompt (no loop of downloads a host can trigger), never the host's copy.
+5. YES -> the Workshop job for that one item (`menu_functions_workshop_open_item`: steam_job_start_workshop, the id
+   chosen at once - no list), its STEAM WORKSHOP screen over the lobby for the QR and progress. Everything of
+   sections 3 and 7 applies unchanged: QR sign-in to the player's own account, TLS, revoke + log off on every path,
+   GetDetails' checks (Halo1, app 976730, not banned, size), the name rule, header checks, staging, the game's own map
+   check per map, then mods/<id>. Only after the session ended (game thread): install, look again, the identity
+   compared again; equal -> precached and the join goes on; else the joiner leaves, told why (stopped, refused, still
+   not the host's). The joiner adds its players to the lobby meanwhile (the host's start waits for its precache at
+   most 180 s: a3c520d2e); a host that starts first ends the download (map_share_client_game_starting -> fail ->
+   steam_job_cancel: revoked, logged off, what is in kept for a resume). Leaving the lobby cancels it the same way.
+6. NO -> told, back at the menus; no Steam connection is opened.
+
+A host can make a joiner's player see one question per join naming any 12-digit item id. The answer is the player's;
+the item must pass every section 7 check; the download goes only to the player's own staging folder and is never
+played unless it passes the map check. The question names the id so the player can look it up. No auto-answer in
+release builds (HALO_MAP_SHARE_ANSWER is a test hook compiled out with HALO_RELEASE, as map sharing's).
+
+### 8.4 The host's side: nothing is sent
+
+`custom_edition_maps_shareable` is false for a Workshop name (both by the reserved pattern and because the map is a
+mod map), so a map-share query from any joiner - an older build that takes it for a custom map it lacks - is answered
+`_map_share_refusal_not_shared`, never an offer, never a byte. The dedicated server never looks in the mods folder,
+so it cannot host one.
+
+### 8.5 Older and other builds (crossplay)
+
+- 1.1.2 and the 1.1.3 candidate without this branch: the name is a custom map they lack; they ask the host (map
+  share), are refused "not shared", and leave with their usual message. Measured: run_netns_online_test.sh
+  workshopold with build release-1.1.2 and release-1.1.4-int (no Workshop): see 8.7.
+- Builds before map sharing: the old "custom map isn't in your maps folder" refusal.
+- OpenCE / ChupathingyCE / GulchCE (the crossplay wire): this build hosts the crossplay wire only with Who can join
+  Everyone; there the name is sent unchanged (no `custom_maps\` form: it is not a Custom Edition cache) and the
+  version is 0 (network_identity's crossplay branch), so a PC client sees a map it lacks and our host serves no map
+  share on that wire; Chupathingy's own Workshop scheme (an id in the name's tail, a sidecar) is not used or read.
+  Our joiner on a PC host's game takes the crossplay branch first, which refuses a name that is not a PC map's.
+  Workshop maps are therefore for Vita / Vita PC games; on an Everyone game PC players are refused cleanly.
+- A newer build later adding fields would need its own review; this one parses nothing new.
+
+### 8.6 Rate limits and abuse
+
+One question per join (the state machine holds one download; a map change cancels it). No retry loop: a failed or
+refused download leaves the game. The Steam side keeps section 3/7's limits (8 items a session, sizes, idle 600 s).
+The joiner never opens a connection to anything but Steam's CM/CDN for this.
+
+### 8.7 Tests (Nov 16 2026, headless, RX 7900; the harness binary of this branch, --steam-workshop --steam-test-ca)
+
+- run_workshop_maps_test.sh: 33 checks (names made/read, level names, verdicts, ids, unended record bytes).
+- run_net_fuzz_test.sh target `workshop` (net_fuzz_workshop.c: the record's 0x80 name bytes, both identities, any
+  id/stem): 11 seeds, 60 s libFuzzer, 11.7 M runs, 0 findings (with crossplay_maps 7.1 M and map_share 5.3 M, 0).
+- run_netns_online_test.sh `workshop` (both have it: 91 s played together), `workshopget`, `workshopno`,
+  `workshopdiff`, `workshopold` (results in ~/halo-test-out/workshop-mp-runs/NOTES.md).
+- Offline: a local game with 3 bots on ws2900000002_coldsna-8866 (MCC Blood Gulch as a Workshop item): loaded from
+  mods/2900000002, bots' nav built, 85 s of play, kills.
+
+### 8.8 Findings of this review
+
+1. Real Workshop multiplayer items keep their bitmaps.map/sounds.map in `halo1/maps/`, not beside the maps: section
+   7's loader refused them ("a resource map that was not supplied"). Fixed for every mod map (8.1). Campaign items
+   with the same layout (e.g. manifest 2683077323621946101) benefit too. Unverified against a real item download.
+2. A host can name any item id in a question (8.3): accepted, by design (the player decides, every check applies).
+3. The 32-bit identity is not a security boundary (8.2); it is the same as custom maps'.
+4. No new parser on the wire; the one new parser (the name) is bounded, fuzzed, and reads only the existing field.

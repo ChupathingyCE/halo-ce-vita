@@ -63,14 +63,16 @@ ws_played() { # ws_played LOG: the joiner's seconds with two players playing
 	grep -a "network test: tick" "$1" | grep -a "| playing" | grep -aEc "player [0-9]+:.* player [0-9]+:"
 }
 
-ws_no_map_share() { # nothing of the map asked of the host, nothing sent
-	grep -aE "map share: (asking the host|machine .* asks|serving|sending|offering)" "$hl" "$jl" | head -3
-	grep -aqE "map share: asking the host about" "$jl" && fail "the joiner asked the host for the Workshop map"
-	grep -aqiE "map share: .*(offer|upload|sending)" "$hl" && fail "the host offered or sent a map"
+ws_no_map_share() { # nothing of the map asked of the host, nothing sent (the network events: debug.txt)
+	local jd=$out/joiner/data/debug.txt hd=$out/host/data/debug.txt
+	grep -aE "map share: (asking the host|machine .* asks|serving|sending|offering)" "$hl" "$jl" "$hd" "$jd" | head -3
+	grep -aqE "map share: asking the host about" "$jl" "$jd" && fail "the joiner asked the host for the Workshop map"
+	grep -aqiE "map share: .*(offer|upload|sending)" "$hl" "$hd" && fail "the host offered or sent a map"
 }
 
 workshop_case() {
-	local hl=$out/host/run.log jl=$out/joiner/run.log two fake_dir fake_pid fake_cm fake_cdn fake_token old
+	local hl=$out/host/run.log jl=$out/joiner/run.log jd=$out/joiner/data/debug.txt two fake_dir fake_pid fake_cm fake_cdn
+	local fake_token old
 	[ -f "$ws_mcc" ] || { echo "SKIP ($mode): no MCC multiplayer map (HALO_TEST_WORKSHOP_MP_MAP)"; exit 0; }
 	grep -aq "port h3 workshop" "$vita" && grep -aq "HALO_STEAM_TEST_CM" "$vita" ||
 		{ echo "SKIP ($mode): not a Steam Workshop test build (configure.py --steam-workshop --steam-test-ca)"; exit 0; }
@@ -117,17 +119,17 @@ workshop_case() {
 		exec 7>&-
 		wait "$fake_pid" 2>/dev/null || true
 		ws_check_clean "$hl" "$jl"
-		grep -aE "Steam Workshop|workshop|steam job: (started|sign-in|workshop)" "$jl" | head -14
-		grep -aq "map share: asking the player about the Steam Workshop map '$ws_name' (item $ws_id" "$jl" ||
+		grep -aE "Steam Workshop|workshop|steam job: (started|sign-in|workshop)" "$jl" "$jd" | head -16
+		grep -aq "map share: asking the player about the Steam Workshop map '$ws_name' (item $ws_id" "$jd" ||
 			fail "the joiner was not asked about the Workshop map"
-		grep -aq "menus: workshop: item $ws_id's download begun for the host's map" "$jl" ||
-			fail "the Workshop download of the item did not begin (its screen over the lobby)"
-		grep -aq "ui: screen pc.h3.workshop.screen" "$jl" || fail "the STEAM WORKSHOP screen did not open over the lobby"
+		# (logged once the STEAM WORKSHOP screen opened over the lobby, the job begun)
+		grep -aq "menus: workshop: item $ws_id's download begun for the host's map (the screen over the lobby)" "$jl" ||
+			fail "the Workshop download of the item did not begin with its screen over the lobby"
 		grep -aq "steam job: workshop: 1 items chosen" "$jl" || fail "the job did not take the one item"
 		grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$jl" ||
 			fail "the session did not end done, revoked and logged off"
 		grep -aq "menus: workshop: $ws_id installed in mods" "$jl" || fail "the item was not installed"
-		grep -aq "map share: the Steam Workshop map '$ws_name' is installed and the host's" "$jl" ||
+		grep -aq "map share: the Steam Workshop map '$ws_name' is installed and the host's" "$jd" ||
 			fail "the installed copy was not found the host's"
 		cmp -s "$ws_mcc" "$out/joiner/data/mods/$ws_id/maps/$ws_file" || fail "the map installed is not the item's bytes"
 		[ -z "$(ls -A "$out/joiner/data/workshop" 2>/dev/null)" ] || fail "the staging folder is not empty"
@@ -146,8 +148,8 @@ workshop_case() {
 			HALO_MAP_SHARE_ANSWER=no HALO_STEAM_TEST_CM="ws://127.0.0.1:9/cmsocket/" HALO_STEAM_TEST_CDN="http://127.0.0.1:9"
 		wait $last_pid $host_pid 2>/dev/null
 		ws_check_clean "$hl" "$jl"
-		grep -aE "Steam Workshop|steam job" "$jl" | head -6
-		grep -aq "map share: asking the player about the Steam Workshop map '$ws_name'" "$jl" ||
+		grep -aE "Steam Workshop|steam job" "$jl" "$jd" | head -6
+		grep -aq "map share: asking the player about the Steam Workshop map '$ws_name'" "$jd" ||
 			fail "the joiner was not asked about the Workshop map"
 		grep -aq "You answered no to downloading it" "$jl" || fail "the joiner was not told it answered no"
 		grep -aq "steam job: started" "$jl" && fail "a Steam session began though the player said no"
@@ -167,7 +169,7 @@ workshop_case() {
 		grep -aE "Steam Workshop|join: the host's map" "$jl" | head -6
 		grep -aq "The host's Steam Workshop map $ws_name isn't the same version as yours" "$jl" ||
 			fail "the joiner was not told its copy is not the host's"
-		grep -aq "asking the player about the Steam Workshop map" "$jl" && fail "the joiner was asked to download"
+		grep -aq "asking the player about the Steam Workshop map" "$jl" "$jd" && fail "the joiner was asked to download"
 		grep -aq "steam job: started" "$jl" && fail "a Steam session began"
 		cmp -s "$ws_other" "$out/joiner/data/mods/$ws_id/maps/$ws_file" || fail "the joiner's own copy was changed"
 		ws_no_map_share
@@ -186,14 +188,19 @@ workshop_case() {
 			wait $last_pid $host_pid 2>/dev/null
 			ws_check_clean "$hl" "$jl"
 			grep -aE "join: the host's map|map share|Halo: (custom )?map" "$jl" | head -6
-			grep -aE "map share" "$hl" | head -4
+			grep -aE "map share" "$hl" "$out/host/data/debug.txt" | head -4
 			grep -aq "join: the host's map is levels.test.$ws_name" "$jl" || fail "the older joiner never saw the host's map"
 			grep -aqE "map share: (receiving|downloaded|installed)" "$jl" && fail "the older joiner received a map"
-			grep -aqiE "map share: .*(offer|upload|sending)" "$hl" && fail "the host offered or sent a map to the older joiner"
+			grep -aqiE "map share: .*(offer|upload|sending)" "$hl" "$out/host/data/debug.txt" &&
+				fail "the host offered or sent a map to the older joiner"
 			[ -e "$out/joiner/data/maps/$ws_name.map" ] && fail "a map file of the Workshop name appeared in the old joiner's maps"
 			two=$(ws_played "$jl")
 			[ "${two:-0}" = 0 ] || fail "the older joiner played ($two s) a map it does not have"
-			grep -aq "network test: tick" "$jl" || fail "the older joiner did not stay up"
+			grep -aq "the host does not share that map" "$jl" ||
+				fail "the older joiner was not told the host does not share the map"
+			grep -aq "map share: refusing '$ws_name' to a machine: the host does not share that map" \
+				"$out/host/data/debug.txt" || fail "the host did not refuse the older joiner's map share query"
+			grep -aq "exiting after debug.exit_after" "$jl" || fail "the older joiner did not stay up to the end of the run"
 			cp "$hl" "$out/host-$(basename "$old").log"; cp "$jl" "$out/joiner-$(basename "$old").log"
 		done
 		;;

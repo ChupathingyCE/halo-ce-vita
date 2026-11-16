@@ -93,3 +93,34 @@ Built by the same script (`sh port/vita/tests/steam_live_pc.sh`). The owner, and
 What it answers: whether QueryFiles with the required tag Halo1 lists Halo CE's items for a normal account; whether
 an MCC owner gets depot 976730's key and the request code for an item's hcontent_file (Chupathingy's client relies
 on both); the real items' names through our name rule (the log says "N files of other kinds left out"); the rate.
+
+## Workshop multiplayer maps (feat/11x-steam-workshop-mp, prepared Nov 16 2026; **not run**)
+
+Two machines of a --steam-workshop build (two PC builds on one LAN, or the PC build and a Vita with the test build):
+the HOST and the JOINER. Only the owner signs in to Steam. Docs: docs/steam_download_security.md section 8.
+
+1. On the HOST: GAME MANAGER > DOWNLOAD FROM STEAM > STEAM WORKSHOP (or, in the Classic menus, the settings panel's
+   Multiplayer > Modded maps > Steam Workshop). Sign in with the QR. Pick a small Halo CE **multiplayer** item (the
+   row says "multiplayer"; for example one of the items this PC already has in Steam's depotcache: 4520562000989635516's
+   item or 4896837317637153445's - find their item ids in the Steam client's Workshop page). Download it; the screen
+   says "Installed in the mods folder: 1".
+2. On the HOST: MULTIPLAYER (any style): the map list shows the item's maps after the custom maps (named after their
+   files; the description says "Steam Workshop item <id>"). Play one offline with bots for a minute: textures and
+   sounds right? (If its bitmaps.map is in the item's halo1/maps, that one is used: halo.log says "takes its bitmaps
+   from".) Then host a System Link / Online game on it.
+3. On the JOINER, which does NOT have the item: join the HOST's game. Expect the question "This map is from the Steam
+   Workshop - download it from Steam?" naming the map and the item id. Answer YES: the STEAM WORKSHOP screen opens over
+   the lobby with a QR; sign in (the owner's own account again is fine); the item downloads, is checked and installed;
+   the joiner precaches the map and plays the HOST's game. Steam app > Authorized devices: the device is gone again.
+4. On the JOINER, delete the item (MOD MANAGER, or mods/<id>), join again and answer NO: told, back at the menus, no
+   Steam sign-in.
+5. Mismatch (optional): on the JOINER, replace mods/<id>/maps/<file>.map with another map of the same name; join:
+   refused "isn't the same version as yours"; no question.
+6. An older build (1.1.2) joining the HOST's Workshop game: refused cleanly (its usual "custom map" message, the host
+   "doesn't share" it); nothing downloaded from the host.
+7. Send the lane both machines' halo.log (no secret: the logs never hold a token; check by searching for "eyJ").
+
+What it answers: real multiplayer items' layout (their resource maps in halo1/maps) and their maps loading with the
+right pixels; the online join with the download from Steam in the middle of a lobby (does the QR on the lobby screen
+read well; does the host's 180 s start hold suffice for a real download); the identity matching across two real
+downloads of one item.

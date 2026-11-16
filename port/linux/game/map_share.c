@@ -1482,6 +1482,13 @@ static void map_share_client_refusal_text(
 {
 	struct map_share_download *download = &map_share_download;
 
+	/* (a Steam Workshop map: nothing of it is the host's to send) */
+	if (download->workshop_id[0])
+	{
+		snprintf(text, (size_t)text_size, T("The host is playing %s, a map from the Steam Workshop (item %s).\n\n%s"),
+			download->name, download->workshop_id, why);
+		return;
+	}
 	if (download->pc_maps_only)
 	{
 		snprintf(text, (size_t)text_size, T("The host is playing the PC (Custom Edition) map %s, and PC maps is off. "
@@ -2512,8 +2519,9 @@ static void map_share_client_workshop_start(
 	{
 		char text[640];
 
-		snprintf(text, sizeof(text), "%s", started < 0 ?
-			T("Charge the Vita to 30 percent or plug in the charger first, then join again.") :
+		snprintf(text, sizeof(text), "%s", started == -1 ?
+			T("Charge the Vita to 30 percent or plug in the charger first, then join again.") : started < 0 ?
+			T("The STEAM WORKSHOP screen can't open here: download the item from STEAM WORKSHOP, then join again.") :
 			T("A Steam download is under way already: let it finish, then join again."));
 		map_share_client_fail(text);
 		return;
@@ -2741,7 +2749,8 @@ boolean map_share_client_game_starting(
 		does) */
 		network_event("map share: the host's game started before '%s' was here", download->name);
 		map_share_client_refusal_text(text, sizeof(text), download->pc_maps_only ?
-			T("The host's game started before you answered.") :
+			T("The host's game started before you answered.") : download->workshop_id[0] ?
+			T("The host's game started before the Steam download ended: join again once the item is installed.") :
 			T("The host's game started before the map could be downloaded: join while the host is in the lobby."));
 		map_share_client_fail(text);
 		return FALSE;

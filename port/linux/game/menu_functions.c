@@ -13395,7 +13395,7 @@ int menu_functions_workshop_open(void)
 /* (map_share.c: a joiner whose host plays a Steam Workshop map it lacks, the player having said yes) the Workshop's
 download of that one item begun - the sign-in, then the item straight away, no list - and the STEAM WORKSHOP screen
 opened over the game's lobby for its QR and progress (Circle cancels; Back after the end goes back to the lobby): 1,
-0 if a Steam job runs already or the screen cannot open, -1 if the battery is too low to start */
+0 if a Steam job runs already, -1 if the battery is too low to start, -2 if the screen cannot open here */
 int menu_functions_workshop_open_item(char const *id_text)
 {
 #ifdef HALO_STEAM_WORKSHOP
@@ -13409,7 +13409,7 @@ int menu_functions_workshop_open_item(char const *id_text)
 	{
 		platform_log("menus: workshop: item %s not begun (%s)", id_text ? id_text : "?", screen == NONE ? "no screen" :
 			!active ? "no screen up" : "a bad number");
-		return 0;
+		return -2;
 	}
 	h3_workshop.marked_count = 0;
 	h3_workshop.installed = h3_workshop.refused = 0;
@@ -13431,7 +13431,7 @@ int menu_functions_workshop_open_item(char const *id_text)
 	{
 		steam_job_cancel();
 		platform_log("menus: workshop: item %s: the screen did not open; the session ends", id_text);
-		return 0;
+		return -2;
 	}
 	platform_log("menus: workshop: item %s's download begun for the host's map (the screen over the lobby)", id_text);
 	return 1;
