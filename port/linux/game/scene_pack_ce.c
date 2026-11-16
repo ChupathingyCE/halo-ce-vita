@@ -75,6 +75,7 @@ What Custom Edition holds otherwise, and what the pack holds instead:
 #include "../src/xbox_adpcm_encoder.h"
 #include "../../third_party/zlib/zlib_prefixed.h"
 
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -343,9 +344,54 @@ static int ce_file_read(void *context, uint32_t offset, uint32_t size, void *buf
 	struct ce_file *file = context;
 
 	if (!file->file || offset > file->size || size > file->size - offset)
+	{
+		platform_log("scene packs: a read of %lu bytes at %lu is outside its file (%lu bytes%s)", (unsigned long)size,
+			(unsigned long)offset, file->size, file->file ? "" : ", not open");
 		return 0;
+	}
 	if (size && (fseek(file->file, (long)offset, SEEK_SET) || fread(buffer, 1, size, file->file) != size))
-		return 0;
+	{
+		/* (the PC's renderer write-protects the pages its textures were
+		made of, to see them change - memory_watch.c -: the program's own
+		write to one is caught and let through, the kernel's read() into
+		one fails with EFAULT. A build whose room in the memory window had
+		held the menus' backdrop's textures - Menu style Online, MCC's
+		files alone - lost its map so: "a30.map is damaged or not
+		supported (the file could not be read)", Command without its
+		marines. Read again through a buffer of our own, copied in) */
+		enum { BOUNCE_BYTES = 256 * 1024 };
+		int first_error = errno;
+		unsigned char *bounce = malloc(BOUNCE_BYTES);
+		uint32_t done = 0;
+
+		clearerr(file->file);
+		if (bounce && !fseek(file->file, (long)offset, SEEK_SET))
+		{
+			while (done < size)
+			{
+				uint32_t chunk = size - done < BOUNCE_BYTES ? size - done : BOUNCE_BYTES;
+
+				if (fread(bounce, 1, chunk, file->file) != chunk)
+					break;
+				memcpy((unsigned char *)buffer + done, bounce, chunk);
+				done += chunk;
+			}
+		}
+		free(bounce);
+		if (done != size)
+		{
+			platform_log("scene packs: a read of %lu bytes at %lu failed (the file %lu bytes, errno %d then %d, buffer %p)",
+				(unsigned long)size, (unsigned long)offset, file->size, first_error, errno, buffer);
+			return 0;
+		}
+		{
+			static int said;
+
+			if (said++ < 4)
+				platform_log("scene packs: a read of %lu bytes at %lu failed (errno %d): read again through a buffer of our own",
+					(unsigned long)size, (unsigned long)offset, first_error);
+		}
+	}
 	if (file->hooked && scene_pack_ce_read_hook && size)
 		scene_pack_ce_read_hook(offset, buffer, size);
 	return 1;
