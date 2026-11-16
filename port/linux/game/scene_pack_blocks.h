@@ -103,6 +103,9 @@ void scene_pack_blocks_free(
 
 /* how many tags it made (the source's tags count on from source->count:
 the made tag i is the source's tag source->count + i) */
+/* the made tags' bytes (their range from SCENE_PACK_BLOCKS_ADDRESS) */
+unsigned long scene_pack_blocks_size(
+	struct scene_pack_blocks const *blocks);
 long scene_pack_blocks_tag_count(
 	struct scene_pack_blocks const *blocks);
 

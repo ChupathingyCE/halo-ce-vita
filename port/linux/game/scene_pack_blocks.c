@@ -1724,6 +1724,12 @@ void scene_pack_blocks_free(
 	free(blocks);
 }
 
+unsigned long scene_pack_blocks_size(
+	struct scene_pack_blocks const *blocks)
+{
+	return blocks ? blocks->size : 0;
+}
+
 long scene_pack_blocks_tag_count(
 	struct scene_pack_blocks const *blocks)
 {
