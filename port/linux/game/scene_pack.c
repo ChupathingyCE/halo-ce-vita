@@ -947,12 +947,9 @@ boolean scene_pack_recipe_parse(
 		why_set(why, why_size, "the recipe has no pack name, map or tag%s", NULL);
 		return FALSE;
 	}
-	/* (the blocks are made from an Xbox map's tags) */
-	if (recipe->blocks && recipe->custom_edition_map_count)
-	{
-		why_set(why, why_size, "the recipe's blocks need an Xbox map%s", NULL);
-		return FALSE;
-	}
+	/* (1.1.4: the blocks are made from an Xbox map's tags, or from a Custom
+	Edition / MCC map's as the builder has them converted - an install from
+	MCC alone had no building blocks in Forge: build_blocks) */
 	if (recipe->map_count && recipe->custom_edition_map_count)
 	{
 		why_set(why, why_size, "the recipe names both Xbox and Custom Edition maps%s", NULL);
@@ -1195,7 +1192,7 @@ boolean scene_pack_recipe_mcc_fallback(
 {
 	short index, count = 0;
 
-	if (!recipe->map_count || recipe->custom_edition_map_count || recipe->blocks || !mcc_directory || !*mcc_directory ||
+	if (!recipe->map_count || recipe->custom_edition_map_count || !mcc_directory || !*mcc_directory ||
 		scene_pack_source_find(recipe, maps_directory, NULL, 0, NULL))
 	{
 		return FALSE;
@@ -1901,9 +1898,16 @@ static unsigned char *source_at(struct build_state const *state, unsigned long a
 {
 	unsigned long offset = address - state->source_address;
 
-	/* (the blocks' tags, at addresses of their own) */
-	if (state->blocks && address >= SCENE_PACK_BLOCKS_ADDRESS)
-		return scene_pack_blocks_at(state->blocks, address, size);
+	/* (the blocks' tags, at addresses of their own: within their range -
+	a Custom Edition source's tags are a buffer at any address, build_blocks
+	refuses the blocks when the two overlap) */
+	if (state->blocks)
+	{
+		unsigned char *bytes = scene_pack_blocks_at(state->blocks, address, size);
+
+		if (bytes)
+			return bytes;
+	}
 	/* (a backdrop's structure bsp, at its own: past the tag data's, where
 	the Xbox loads a bsp) */
 	if (state->bsp && address >= state->bsp_address)
@@ -1918,6 +1922,48 @@ static unsigned char *source_at(struct build_state const *state, unsigned long a
 	if (address < state->source_address || offset > state->tags_size || size > state->tags_size - offset)
 		return NULL;
 	return state->tags + offset;
+}
+
+/* Forge's building blocks made of the source map's tags (scene_pack_blocks.c),
+as more of the source's tags: an Xbox map's (scene_pack_build_many) or a
+Custom Edition / MCC map's as the builder has them converted
+(scene_pack_build_custom_edition: 1.1.4, an install from MCC alone had none).
+The source's tags must not lie across the blocks' own addresses, where
+source_at serves the blocks first */
+static void build_blocks(struct build_state *state, char const *map)
+{
+	struct scene_pack_blocks_source source;
+	char why[SCENE_PACK_WHY_SIZE];
+
+	/* (tools/scene_pack_test.c's blocksfuzz: the source's tag data damaged
+	as the blocks read it) */
+	if (scene_pack_blocks_source_hook)
+		scene_pack_blocks_source_hook(state->tags, state->tags_size, state->source_address, state->instances,
+			state->source_count);
+	source.tags = state->tags;
+	source.tags_size = state->tags_size;
+	source.address = state->source_address;
+	source.instances = state->instances;
+	source.count = state->source_count;
+	source.map = map;
+	state->blocks = scene_pack_blocks_make(&source, why, sizeof(why));
+	if (!state->blocks)
+	{
+		build_fail(state, "%s", why);
+		return;
+	}
+	if (state->source_address < SCENE_PACK_BLOCKS_ADDRESS + scene_pack_blocks_size(state->blocks) &&
+		SCENE_PACK_BLOCKS_ADDRESS < state->source_address + state->tags_size)
+	{
+		build_fail(state, "the map's tags lie across the blocks' addresses on this machine%s", NULL);
+		return;
+	}
+	{
+		char const *walls, *floors;
+
+		scene_pack_blocks_materials(state->blocks, &walls, &floors);
+		platform_log("scene packs: %s: the blocks' walls of %s, floors of %s", state->recipe->name, walls, floors);
+	}
 }
 
 static unsigned long link_address(unsigned long offset)
@@ -2418,7 +2464,7 @@ static void model_part_buffers(struct build_state *state, unsigned long source, 
 	unsigned char *part = source_at(state, source, MODEL_PART_SIZE);
 
 	/* (a block's: its vertices and strip made by scene_pack_blocks.c) */
-	if (state->blocks && part && source >= SCENE_PACK_BLOCKS_ADDRESS)
+	if (state->blocks && part && scene_pack_blocks_at(state->blocks, source, MODEL_PART_SIZE) == part)
 	{
 		unsigned char *vertices = NULL, *indices = NULL;
 		unsigned long vertex_bytes = 0, index_bytes = 0;
@@ -4237,6 +4283,9 @@ static boolean scene_pack_build_custom_edition(
 		build_fail(&state, "there is no memory to build the pack%s", NULL);
 	else if (!source_table_read(&state))
 		build_fail(&state, "the map's tag header is damaged%s", NULL);
+	/* (1.1.4) Forge's building blocks of MCC's own map (build_blocks) */
+	if (!state.failed && recipe->blocks)
+		build_blocks(&state, result->map);
 	/* (port) the menus' backdrop made of MCC's own a30: its structure bsp
 	read and made this build's (backdrop_custom_edition) */
 	state.bsp_tag = state.scenario_tag = NONE;
@@ -4524,32 +4573,7 @@ static boolean build_many_once(
 		else if (!source_table_read(state))
 			build_fail(state, "the map's tag header is damaged%s", NULL);
 		if (!state->failed && state->recipe->blocks)
-		{
-			struct scene_pack_blocks_source source;
-			char why[SCENE_PACK_WHY_SIZE];
-
-			/* (tools/scene_pack_test.c's blocksfuzz: the source's tag data
-			damaged as the blocks read it) */
-			if (scene_pack_blocks_source_hook)
-				scene_pack_blocks_source_hook(state->tags, state->tags_size, state->source_address, state->instances,
-					state->source_count);
-			source.tags = state->tags;
-			source.tags_size = state->tags_size;
-			source.address = state->source_address;
-			source.instances = state->instances;
-			source.count = state->source_count;
-			source.map = map;
-			state->blocks = scene_pack_blocks_make(&source, why, sizeof(why));
-			if (!state->blocks)
-				build_fail(state, "%s", why);
-			else
-			{
-				char const *walls, *floors;
-
-				scene_pack_blocks_materials(state->blocks, &walls, &floors);
-				platform_log("scene packs: %s: the blocks' walls of %s, floors of %s", state->recipe->name, walls, floors);
-			}
-		}
+			build_blocks(state, map);
 		/* (a backdrop's structure bsp: its bytes read from the map's start,
 		where its bsps are, then its scenario trimmed) */
 		state->bsp_tag = state->scenario_tag = NONE;

@@ -19,6 +19,18 @@
 #               never written again after 1.1.2 added the two rows: it had
 #               neither, and its fourteenth row was RESUME again)
 #
+#   mccblocks   Forge's building blocks on an install from MCC alone (no Xbox
+#               map in the maps folder, MCC's halo1 folder as the Halo content:
+#               HALO_TEST_MCC_ROOT, default Steam's; SKIP without): a Forge
+#               game of MCC's Blood Gulch builds blocks_bloodgulch from MCC's
+#               own map (scene_pack.c build_blocks on the Custom Edition
+#               builder's tags: before 1.1.4 "the recipe's blocks need an Xbox
+#               map" and the browser's BLOCKS was empty), the browser lists 17
+#               blocks, a wall is placed and a shot's line meets it
+#   mccblockstool  the same pack by the tool (build/linux/scene_pack_test build,
+#               a recipe naming MCC's bloodgulch.map as a Custom Edition map):
+#               built twice to the same bytes, passing the pack check with no
+#               correction, its walls and floors the Xbox build's bitmaps
 #
 #   run_forge_polish_test.sh [CASE...]      (default: all)
 #   HALO_TEST_VITA        the harness (default build/linux/halo of this tree)
@@ -34,7 +46,7 @@ out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_forge_polish_test.$$}
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 . "$here/test_out.sh"
 test_out_begin "$out"
-cases=${*:-monitorprompt onlinemenu}
+cases=${*:-monitorprompt onlinemenu mccblocks mccblockstool}
 status=0
 fail() { echo "FAIL: $1"; status=1; }
 
@@ -60,6 +72,28 @@ run() {
 		HALO_MENU_STYLE=classic HALO_SYSTEM_LINK_TEST=forge:9 HALO_TEST_FORGE_PACKS=none \
 		HALO_SCREENSHOT_DIR="$dir/shots" HALO_TEST_COMMANDS="$commands" "$@" \
 		timeout -k 5 $((seconds + 120)) "$binary" > "$dir/run.log" 2>&1)
+	echo $? > "$dir/exit"
+	rm -rf "$dir/save"
+}
+
+mcc=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
+
+# run_mcc NAME SECONDS COMMANDS [VAR=value...]: as run, on an install from MCC alone: the maps folder
+# empty, MCC's halo1 folder linked into a Halo content folder of the run's (never copied)
+run_mcc() {
+	local name=$1 seconds=$2 commands=$3 dir="$out/$1"
+	shift 3
+	rm -rf "$dir"
+	mkdir -p "$dir/data/maps" "$dir/save" "$dir/shots" "$dir/content/halo1"
+	ln -sfn "$mcc/maps" "$dir/content/halo1/maps"
+	[ -d "$mcc/sound" ] && ln -sfn "$mcc/sound" "$dir/content/halo1/sound"
+	(cd "$dir" && exec env SDL_AUDIODRIVER=dummy HALO_DATA_ROOT="$dir/data" HALO_SAVE_ROOT="$dir/save" \
+		HALO_CONTENT_ROOT="$dir/content" \
+		HALO_NO_VSYNC=1 HALO_FRAME_CAP=30 HALO_EXIT_AFTER="$seconds" HALO_FULLSCREEN=0 HALO_HIDDEN_WINDOW=1 \
+		HALO_NO_AUDIO=1 HALO_TICK_THREAD=1 HALO_UPDATE_AUTO=false HALO_NET_ONLINE=false HALO_UI_LOG=1 \
+		HALO_MENU_STYLE=classic HALO_SYSTEM_LINK_TEST=forge:9 HALO_TEST_FORGE_PACKS=none \
+		HALO_SCREENSHOT_DIR="$dir/shots" HALO_TEST_COMMANDS="$commands" "$@" \
+		timeout -k 5 $((seconds + 180)) "$binary" > "$dir/run.log" 2>&1)
 	echo $? > "$dir/exit"
 	rm -rf "$dir/save"
 }
@@ -125,6 +159,48 @@ for c in $cases; do
 		expect $c "the Forge menu opened (Menu style Online)" "ui: screen pc.online.forge.pause.screen"
 		expect $c "MAGNETS: A on the seventh row turns them off" "forge: magnets off"
 		expect $c "NUDGE: A on the eighth row steps it to 10 cm" "forge: nudge step 10 cm"
+		;;
+	mccblocks)
+		if [ ! -r "$mcc/maps/bloodgulch.map" ]; then
+			echo "SKIP: no MCC bloodgulch.map in $mcc/maps (HALO_TEST_MCC_ROOT)"; continue
+		fi
+		# (the pack built as the game asks for it, before the Forge game starts: the
+		# session's first commands come after; a wall spawned 4 world units off and let
+		# go, a projectile's line from the camera meets it)
+		cmd="L300:forge list;L306:forge spawn wall;L312:forge distance 4;L318:forge drop;L330:forge blocks ray;L336:@shot 00-wall"
+		run_mcc $c 60 "$cmd"
+		checked $c || continue
+		expect $c "the blocks' recipe falls back to MCC's own map" "scene packs: blocks_bloodgulch: no Xbox map of its in the maps folder: built from MCC's own bloodgulch.map"
+		expect $c "built from it, the Xbox build's bitmaps" "scene packs: blocks_bloodgulch: the blocks' walls of levels.test.bloodgulch.bitmaps.cap_metal, floors of levels.b30.bitmaps.metal flat generic"
+		expect $c "loaded for the Forge game" "forge: blocks: blocks_bloodgulch loaded"
+		expect $c "the browser's BLOCKS: 17" "forge: palette blocks: 17"
+		expect $c "a wall placed" "forge: spawned Wall \\(wall, blocks\\)"
+		expect $c "a shot's line meets it" "forge: blocks: ray from .* meets the object forge.blocks.wall "
+		;;
+	mccblockstool)
+		tool=$root/build/linux/scene_pack_test
+		if [ ! -r "$mcc/maps/bloodgulch.map" ] || [ ! -x "$tool" ]; then
+			echo "SKIP: no MCC bloodgulch.map in $mcc/maps or no $tool"; continue
+		fi
+		mkdir -p "$out/$c"
+		python3 -I - "$mcc/maps/bloodgulch.map" "$out/$c/recipe.txt" <<'PYEOF'
+import sys, struct, os
+path, recipe = sys.argv[1], sys.argv[2]
+header = open(path, 'rb').read(0x800)
+open(recipe, 'w').write("pack blocks_bloodgulch\ncemap bloodgulch %d %08x\nblocks\n" % (os.path.getsize(path), struct.unpack_from('<I', header, 0x64)[0]))
+PYEOF
+		for n in 1 2; do
+			"$tool" build "$out/$c/recipe.txt" "$mcc/maps" "$out/$c/blocks_$n.pack" > "$out/$c/build_$n.log" 2>&1 || fail "$c: build $n failed ($out/$c/build_$n.log)"
+		done
+		if [ -s "$out/$c/blocks_1.pack" ] && cmp -s "$out/$c/blocks_1.pack" "$out/$c/blocks_2.pack"; then
+			echo "  ok: $c: built twice to the same bytes ($(stat -c %s "$out/$c/blocks_1.pack") bytes)"
+		else
+			fail "$c: the two builds differ or are empty"
+		fi
+		grep -q "the blocks' walls of levels.test.bloodgulch.bitmaps.cap_metal, floors of levels.b30.bitmaps.metal flat generic" "$out/$c/build_1.log" && \
+			echo "  ok: $c: the Xbox build's bitmaps" || fail "$c: the bitmaps chosen ($out/$c/build_1.log)"
+		"$tool" check "$out/$c/blocks_1.pack" > "$out/$c/check.log" 2>&1 && grep -q "56 tags from bloodgulch" "$out/$c/check.log" && \
+			grep -q "0 corrections" "$out/$c/check.log" && echo "  ok: $c: 56 tags, checked with no correction" || fail "$c: the pack check ($out/$c/check.log)"
 		;;
 	*)
 		fail "unknown case $c"
