@@ -14,40 +14,40 @@ The art is this set's own; the pictures and the maps' and missions' words the pl
 	<bitmap name="online/cascade/tab_bitmap">
 		<frame png="online/tab_on.png" width="256" height="64"/>
 	</bitmap>
-	<widget name="online/cascade/row_0" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_0" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_1" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_1" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_2" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_2" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_3" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_3" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_4" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_4" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_5" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_5" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_6" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_6" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_7" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_7" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_8" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_8" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_9" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_9" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_10" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_10" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
-	<widget name="online/cascade/row_11" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="8" text_y="1">
+	<widget name="online/cascade/row_11" type="text" width="224" height="17" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="1">
 		<on event="a" run="port cascade pick" back="true"/>
 	</widget>
 	<widget name="online/cascade/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -69,36 +69,36 @@ The art is this set's own; the pictures and the maps' and missions' words the pl
 		<child widget="online/cascade/row_10" y="180"/>
 		<child widget="online/cascade/row_11" y="198"/>
 	</widget>
-	<widget name="online/cascade/c1_0" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_0" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_1" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_1" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_2" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_2" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_3" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_3" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_4" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_4" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_5" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_5" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_6" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_6" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_7" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_7" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_8" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_8" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_9" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_9" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_10" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_10" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c1_11" type="text" width="224" height="17" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="1"/>
-	<widget name="online/cascade/c2_11" type="text" width="224" height="17" font="online/font_item" color="#FF7F8FA2" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_0" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_0" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_1" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_1" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_2" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_2" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_3" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_3" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_4" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_4" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_5" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_5" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_6" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_6" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_7" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_7" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_8" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_8" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_9" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_9" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_10" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_10" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c1_11" type="text" width="224" height="17" font="online/font_item" color="#FFB0B9B1" text_x="8" text_y="1"/>
+	<widget name="online/cascade/c2_11" type="text" width="224" height="17" font="online/font_item" color="#FF737C75" text_x="8" text_y="1"/>
 	<widget name="online/cascade/mark" width="224" height="17" bitmap="online/cascade/mark_bitmap"/>
 	<widget name="online/cascade/arrow" width="8" height="16" bitmap="online/cascade/arrow_bitmap"/>
-	<widget name="online/cascade/title" type="text" left="-40" top="36" width="300" height="34" font="online/font_header" color="#FFF2F6FA" text_y="1"/>
-	<widget name="online/cascade/tab_0" type="text" width="70" height="18" font="online/font_item" color="#FFF0F4F8" align="center" text_y="2"/>
-	<widget name="online/cascade/tab_1" type="text" width="70" height="18" font="online/font_item" color="#FFF0F4F8" align="center" text_y="2"/>
-	<widget name="online/cascade/tab_2" type="text" width="70" height="18" font="online/font_item" color="#FFF0F4F8" align="center" text_y="2"/>
+	<widget name="online/cascade/title" type="text" left="-40" top="36" width="300" height="34" font="online/font_header" color="#FFEDEFEE" text_y="1"/>
+	<widget name="online/cascade/tab_0" type="text" width="70" height="18" font="online/font_item" color="#FFEDEFEE" align="center" text_y="2"/>
+	<widget name="online/cascade/tab_1" type="text" width="70" height="18" font="online/font_item" color="#FFEDEFEE" align="center" text_y="2"/>
+	<widget name="online/cascade/tab_2" type="text" width="70" height="18" font="online/font_item" color="#FFEDEFEE" align="center" text_y="2"/>
 	<widget name="online/cascade/tab_mark" width="70" height="18" bitmap="online/cascade/tab_bitmap"/>
 	<widget name="online/cascade/l_butn" left="440" top="45" width="16" height="16" bitmap="h3/glyph_l"/>
 	<widget name="online/cascade/r_butn" left="676" top="45" width="16" height="16" bitmap="h3/glyph_r"/>
@@ -107,13 +107,13 @@ The art is this set's own; the pictures and the maps' and missions' words the pl
 	<widget name="online/cascade/mp_picture" left="430" top="88" width="140" height="114" bitmap="ui\shell\bitmaps\mp_map_grafix"/>
 	<widget name="online/cascade/mission_picture" left="430" top="88" width="140" height="114" bitmap="h3/sp_levels"/>
 	<widget name="online/cascade/difficulty_emblem" left="430" top="88" width="44" height="48" bitmap="h3/difficulty"/>
-	<widget name="online/cascade/panel_name" type="text" left="430" top="208" width="280" height="20" font="online/font_item" color="#FFF2F6FA" text_y="1"/>
-	<widget name="online/cascade/maps_text" type="text" left="430" top="230" width="280" height="84" font="online/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
-	<widget name="online/cascade/mp_text" type="text" left="430" top="230" width="280" height="84" font="online/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
-	<widget name="online/cascade/ce_text" type="text" left="430" top="230" width="280" height="84" font="online/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\solo_level_select\map_data"/>
-	<widget name="online/cascade/panel_text" type="text" left="430" top="230" width="280" height="84" font="online/font_small" color="#FFCFD9E3"/>
-	<widget name="online/cascade/difficulty_text" type="text" left="430" top="144" width="280" height="84" font="online/font_small" color="#FFCFD9E3" string_list="h3/difficulty_text"/>
-	<widget name="online/cascade/panel_author" type="text" left="430" top="300" width="280" height="16" font="online/font_small" color="#FF9FB6CC"/>
+	<widget name="online/cascade/panel_name" type="text" left="430" top="208" width="280" height="20" font="online/font_item" color="#FFEDEFEE" text_y="1"/>
+	<widget name="online/cascade/maps_text" type="text" left="430" top="230" width="280" height="84" font="online/font_small" color="#FFB8C1B9" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
+	<widget name="online/cascade/mp_text" type="text" left="430" top="230" width="280" height="84" font="online/font_small" color="#FFB8C1B9" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
+	<widget name="online/cascade/ce_text" type="text" left="430" top="230" width="280" height="84" font="online/font_small" color="#FFB8C1B9" string_list="ui\shell\main_menu\solo_level_select\map_data"/>
+	<widget name="online/cascade/panel_text" type="text" left="430" top="230" width="280" height="84" font="online/font_small" color="#FFB8C1B9"/>
+	<widget name="online/cascade/difficulty_text" type="text" left="430" top="144" width="280" height="84" font="online/font_small" color="#FFB8C1B9" string_list="h3/difficulty_text"/>
+	<widget name="online/cascade/panel_author" type="text" left="430" top="300" width="280" height="16" font="online/font_small" color="#FF9AA59C"/>
 	<widget name="online/cascade/screen" flags="pass_unhandled_to_focused_child">
 		<on event="b back" run="port cascade back" back="true"/>
 		<child widget="online/pick/dim"/>

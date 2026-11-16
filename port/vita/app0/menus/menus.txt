@@ -56,3 +56,5 @@ online/cascade.xml
 halo3/start.xml
 halo3/sound.xml
 online/start.xml
+# 1.1.3, the ElDewrito look after Halo 3 and ODST: the Command lobby in the other lobbies geometry
+online/command.xml

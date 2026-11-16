@@ -2269,6 +2269,13 @@ int halo_main_menu_idle(void);
 int halo_main_menu_loaded(void);
 
 #define H3_SCENE_TICKS 0
+/* a lobby's camera shots (scene= and backdrop= "... | x y z yaw pitch [fov]
+| ..."): after Halo 3's lobbies, whose camera cuts between a few shots of
+the characters standing there; each held this long, then cut to the next,
+the first (the screen's own camera, where its characters stand) again after
+the last */
+#define H3_SCENE_SHOTS 4
+#define H3_SCENE_SHOT_US 6500000ULL
 
 static struct
 {
@@ -2282,6 +2289,13 @@ static struct
 	long ticks;
 	/* its field of view (degrees; 0: the game's own, 70) */
 	real field_of_view;
+	/* the other shots its camera cuts to (x y z yaw pitch, field of view:
+	0 the screen's own) and the one shown (0: the screen's own camera),
+	since then (vita_host_time_us; 0: none shown yet) */
+	short shot_count;
+	real shots[H3_SCENE_SHOTS][6];
+	short shot_index;
+	unsigned long long shot_since;
 	char screen[64];
 	/* the characters standing in it (scene_object=: menu_scene_objects.c) */
 	char objects[1024];
@@ -2393,6 +2407,7 @@ static boolean h3_scene_parse(char const *scene)
 	h3_scenes.has_camera = FALSE;
 	h3_scenes.ticks = H3_SCENE_TICKS;
 	h3_scenes.field_of_view = 0.f;
+	h3_scenes.shot_count = 0;
 	if (sscanf(scene, "%31s%n", word, &used) != 1 ||
 		strspn(word, "abcdefghijklmnopqrstuvwxyz0123456789_") != strlen(word))
 	{
@@ -2421,6 +2436,32 @@ static boolean h3_scene_parse(char const *scene)
 			return FALSE;
 		h3_scenes.field_of_view = values[6];
 	}
+	/* (its other shots, "| x y z yaw pitch [fov]" each: one out of range
+	or unreadable ends them, the ones before kept) */
+	{
+		char const *shot = strchr(scene, '|');
+
+		while (shot && h3_scenes.shot_count < H3_SCENE_SHOTS)
+		{
+			real *into = h3_scenes.shots[h3_scenes.shot_count];
+
+			count = sscanf(shot + 1, "%f %f %f %f %f %f", &values[0], &values[1], &values[2], &values[3],
+				&values[4], &values[5]);
+			if (count < 5)
+				break;
+			for (index = 0; index < 5; index++)
+			{
+				if (!(values[index] > -5000.f && values[index] < 5000.f))
+					break;
+				into[index] = values[index];
+			}
+			if (index < 5)
+				break;
+			into[5] = count == 6 && values[5] >= 10.f && values[5] <= 120.f ? values[5] : h3_scenes.field_of_view;
+			h3_scenes.shot_count++;
+			shot = strchr(shot + 1, '|');
+		}
+	}
 	return TRUE;
 }
 
@@ -2437,14 +2478,17 @@ static void h3_scene_request(struct widget_instance *widget)
 		return;
 	char const *objects = NULL;
 
-	/* (the live backdrop, a lit level, not under the Online screens' deep
-	blue haze, which was made for ui.map's dark ring: menu_backdrop.c) */
+	/* (the haze is the ElDewrito look's cinematic grade since 1.1.3 - dark,
+	cool, a low fog, after Halo 3: ODST's menus -, made for the live
+	backdrop's lit level as much as for ui.map's ring: shown over both; it
+	was hidden over the backdrop while it was the deep blue cast made for
+	the dark ring: menu_backdrop.c) */
 	{
 		struct widget_instance *haze = named(screen, "haze");
 
 		if (haze && (!strcmp(tag_get_name(haze->definition_tag_index), "pc\\online\\main\\haze") ||
 			!strcmp(tag_get_name(haze->definition_tag_index), "pc\\h3\\main\\haze")))
-			widget_instance_set_visibility_recursive(haze, !menu_backdrop_active());
+			widget_instance_set_visibility_recursive(haze, TRUE);
 	}
 	scene = h3_scene_of(screen, name, sizeof(name), &objects);
 	if (!scene)
@@ -2764,6 +2808,7 @@ static boolean h3_scene_moves_backdrop(void)
 }
 
 static void h3_scene_apply(void);
+static void h3_scene_shot_update(void);
 real menu_functions_fade_alpha(void);
 
 /* (ui_widget.c, a screen about to open) a screen whose live backdrop's
@@ -3021,7 +3066,10 @@ void menu_functions_scenes_update(void)
 		return;
 	}
 	if (!taken)
+	{
+		h3_scene_shot_update();
 		return;
+	}
 	/* (the main menu gone meanwhile: a level loading, a network game's
 	map; a network game's lobby at the main menu keeps its scenes) */
 	if (!halo_main_menu_loaded())
@@ -3051,6 +3099,69 @@ void menu_functions_scenes_update(void)
 	h3_scene_apply();
 }
 
+/* (a lobby's shots, menu_functions_scenes_update with nothing new) while
+its screen is the one open - a picker opened from it holds the camera -
+each shot held H3_SCENE_SHOT_US, then the camera cut to the next: written
+into the screen's point and set (camera_set, 0 ticks); its characters stay
+where they were made (menu_scene_objects.c: placed once, from the screen's
+own camera). The backdrop's spot shown stays the screen's own, so coming
+back to it from a picker cuts back to that, and another lobby fades as
+before (h3_scene_moves_backdrop) */
+static void h3_scene_shot_update(void)
+{
+	struct scenario_cutscene_camera_point *point;
+	char const *open;
+	char command[96];
+	char const *a, *b;
+	unsigned long long now;
+	real const *shot;
+	real camera[6];
+
+	if (!h3_scenes.shot_count || !h3_scenes.shot_since || h3_scenes.ring || !h3_scenes.has_camera ||
+		h3_scenes.fade_phase != _h3_scene_fade_none || !halo_main_menu_loaded())
+	{
+		return;
+	}
+	/* (its screen still the one open: "pc\\<name>" with backslashes) */
+	open = ui_widget_port_active_screen_name();
+	if (strncmp(open, "pc\\", 3))
+		return;
+	for (a = open + 3, b = h3_scenes.screen; *a && *b && (*a == *b || (*a == '\\' && *b == '/')); a++, b++)
+		;
+	if (*a || *b)
+	{
+		/* (a picker over it: the shot held, its time from the screen's
+		coming back) */
+		h3_scenes.shot_since = vita_host_time_us();
+		return;
+	}
+	now = vita_host_time_us();
+	if (now - h3_scenes.shot_since < H3_SCENE_SHOT_US || (point = h3_scene_point(h3_scenes.point)) == NULL)
+		return;
+	h3_scenes.shot_index = (short)((h3_scenes.shot_index + 1) % (h3_scenes.shot_count + 1));
+	h3_scenes.shot_since = now;
+	if (h3_scenes.shot_index)
+	{
+		shot = h3_scenes.shots[h3_scenes.shot_index - 1];
+	}
+	else
+	{
+		memcpy(camera, h3_scenes.camera, sizeof(h3_scenes.camera));
+		camera[5] = h3_scenes.field_of_view;
+		shot = camera;
+	}
+	point->position.x = shot[0];
+	point->position.y = shot[1];
+	point->position.z = shot[2];
+	h3_scene_point_orient_angles(point, shot[3] * (real)(3.14159265358979 / 180.0),
+		shot[4] * (real)(3.14159265358979 / 180.0));
+	point->field_of_view = shot[5] * (real)(3.14159265358979 / 180.0);
+	snprintf(command, sizeof(command), "(camera_set %s 0)", h3_scenes.point);
+	main_request_host_command_from(command, "menu scene");
+	platform_log("menus: h3 scene: %s: shot %d of %d at %.2f %.2f %.2f, yaw %.1f pitch %.1f", h3_scenes.screen,
+		h3_scenes.shot_index + 1, h3_scenes.shot_count + 1, shot[0], shot[1], shot[2], shot[3], shot[4]);
+}
+
 /* the scene taken put in: ui.map's ring flight, or its camera written into
 its point and cut to, with who stands there */
 static void h3_scene_apply(void)
@@ -3059,6 +3170,8 @@ static void h3_scene_apply(void)
 	char command[96];
 
 	h3_scenes.shown_valid = FALSE;
+	h3_scenes.shot_index = 0;
+	h3_scenes.shot_since = 0;
 	if (h3_scenes.ring)
 	{
 		if (h3_scenes.ring_asleep)
@@ -3123,6 +3236,7 @@ static void h3_scene_apply(void)
 		h3_scenes.shown_field_of_view = h3_scenes.field_of_view;
 	}
 	h3_scenes.ring_asleep = TRUE;
+	h3_scenes.shot_since = h3_scenes.shot_count && h3_scenes.has_camera ? vita_host_time_us() : 0;
 	{
 		char field_of_view[40] = "";
 

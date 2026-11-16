@@ -5846,6 +5846,23 @@ static boolean widget_instance_text_box_is_focused(
 	struct widget_instance *parent = widget->parent;
 	boolean focused = parent ? parent->focused_child == widget : TRUE;
 
+#ifdef HALO_LINUX
+	/* (Menu style Online: a row's own text - the first child of a list's
+	item that holds more than its text, which is always its item's focused
+	child - is lit as the row is, white on its bar and grey off it, as
+	Halo 3's and ODST's rows; the game drew it lit on every row) */
+	{
+		extern int halo_menu_style_online(void);
+
+		if (focused && parent && parent->parent &&
+			(parent->parent->type == _ui_widget_type_spinner_list ||
+			parent->parent->type == _ui_widget_type_column_list) &&
+			halo_menu_style_online())
+		{
+			focused = parent->parent->focused_child == parent;
+		}
+	}
+#endif
 	if (!focused && parent)
 	{
 		struct widget_instance *ancestor;
