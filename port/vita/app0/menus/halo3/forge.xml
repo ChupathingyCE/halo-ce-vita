@@ -227,7 +227,8 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 	<widget name="h3/forge/pause/newround" type="text" width="220" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="14">
 		<on event="a" run="port forge new round" close="all"/>
 	</widget>
-	<widget name="h3/forge/pause/leave" type="text" width="220" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="5">
+	<!-- (its words port forge title's: LEAVE FORGE, or LEAVE COMMAND in a Command game) -->
+	<widget name="h3/forge/pause/leave" type="text" width="220" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a start" open="h3/forge/leave/screen"/>
 	</widget>
 	<widget name="h3/forge/pause/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -284,8 +285,14 @@ The art is this folder's own (tools/halo3_menu_art.py). -->
 	<widget name="h3/forge/leave/panel" left="120" top="150" width="400" height="160" bitmap="h3/panel"/>
 	<widget name="h3/forge/leave/rule" left="120" top="180" width="400" height="2" bitmap="h3/rule"/>
 	<widget name="h3/forge/leave/strip" left="120" top="290" width="400" height="20" bitmap="h3/strip"/>
-	<widget name="h3/forge/leave/title" type="text" left="132" top="156" width="376" height="22" font="h3/font_title" color="#FFF2F6FA" string_list="h3/forge_menu" string_index="7"/>
-	<widget name="h3/forge/leave/text" type="text" left="132" top="194" width="376" height="80" font="h3/font_small" color="#FFCFD9E3" string_list="h3/forge_menu" string_index="8"/>
+	<!-- (their words port forge leave text's: LEAVE FORGE? and Forge's warning, or LEAVE COMMAND? and the game's end in a
+	Command game; a string list here would win over the data input, as the pause's leave row showed) -->
+	<widget name="h3/forge/leave/title" type="text" left="132" top="156" width="376" height="22" font="h3/font_title" color="#FFF2F6FA">
+		<data input="port forge leave text"/>
+	</widget>
+	<widget name="h3/forge/leave/text" type="text" left="132" top="194" width="376" height="80" font="h3/font_small" color="#FFCFD9E3">
+		<data input="port forge leave text"/>
+	</widget>
 	<widget name="h3/forge/leave/a_butn" left="132" top="292" width="16" height="16" bitmap="h3/glyph_cross"/>
 	<widget name="h3/forge/leave/leave" type="text" left="152" top="291" width="80" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/forge_menu" string_index="9"/>
 	<widget name="h3/forge/leave/b_butn" left="236" top="292" width="16" height="16" bitmap="h3/glyph_circle"/>

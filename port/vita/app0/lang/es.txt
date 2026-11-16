@@ -3423,6 +3423,8 @@
 "No room for another %s: %d at most." = "No cabe otro (%s): %d como máximo."
 "Command on %s" = "Mando en %s"
 "LEAVE COMMAND" = "SALIR DEL MANDO"
+"LEAVE COMMAND?" = "¿SALIR DEL MANDO?"
+"The Command game ends when you leave.\nNothing of it is kept." = "La partida de Mando termina al salir.\nNo se guarda nada de ella."
 "To the main menu in %ld" = "Al menú principal en %ld"
 "Command" = "Mando"
 "Command mode plays on Blood Gulch for now:\nchoose it under SELECT MAP." = "El modo Mando se juega en Blood Gulch por ahora:\nelígelo en ELEGIR MAPA."

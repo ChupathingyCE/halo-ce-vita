@@ -523,6 +523,7 @@ static char const *const port_game_data_input_names[] =
 	"port cascade",
 	/* (1.1.4) */
 	"port command prepare",
+	"port forge leave text",
 };
 
 static struct

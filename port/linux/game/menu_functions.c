@@ -596,6 +596,8 @@ enum
 	_input_cascade,
 	/* (1.1.4) */
 	_input_command_prepare,
+	/* (1.1.4 polish: the Forge menu's LEAVE screen in a Command game) */
+	_input_forge_leave_text,
 };
 
 /* what a line of typing is for */
@@ -3745,6 +3747,7 @@ static void h3_forge_group_question_update(struct widget_instance *widget)
 /* the Forge menu's title (FORGE · <map>) and its monitor row's words */
 static boolean typing_done(short typing, char *text, int size);
 static void h3_forge_save(void);
+static void h3_forge_leave_text_update(struct widget_instance *widget);
 
 static void h3_forge_title_update(struct widget_instance *widget)
 {
@@ -3819,13 +3822,55 @@ static void h3_forge_title_update(struct widget_instance *widget)
 		forge_level_name(level, (short)sizeof(level));
 		name = level;
 	}
-	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", T("FORGE"), name);
+	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", command_active() ? T("COMMAND") : T("FORGE"), name);
 	h3_capitals(text);
 	text_show(widget, text);
 	snprintf(text, sizeof(text), "%s", forge_monitor_active() ? T("PLAY AS SPARTAN") : T("MONITOR"));
 	text_show(named(screen, "toggle"), text);
 	snprintf(text, sizeof(text), "%s", command_active() ? T("LEAVE COMMAND") : T(COMMAND_MODE_NAME));
 	text_show(named(screen, "command"), text);
+	/* (1.1.4 polish: a Command game's pause is this screen - its title
+	COMMAND, its rows RESUME and LEAVE COMMAND alone: the monitor, the map
+	variant's save, undo, snap, the AI rows, DELETE ALL and NEW ROUND are
+	Forge's editing, not a commander's; the status line (the last save) too) */
+	{
+		static char const *const forge_rows[] =
+		{
+			"toggle", "save", "undo", "redo", "snap", "magnets", "nudge", "allai", "cleardead", "clearall", "deleteall", "newround",
+		};
+		boolean command = command_active();
+		struct widget_instance *found;
+		short index;
+
+		for (index = 0; index < (short)NUMBEROF(forge_rows); index++)
+		{
+			if ((found = named(screen, forge_rows[index])) != NULL)
+			{
+				widget_instance_set_visibility_recursive(found, !command);
+				found->disabled = command;
+			}
+		}
+		if ((found = named(screen, "leave")) != NULL)
+		{
+			found->vertical_offset = command ? 20 : 260;
+			text_show(found, command ? T("LEAVE COMMAND") : T("LEAVE FORGE"));
+		}
+		if (command)
+			text_show(named(screen, "status"), "");
+	}
+}
+
+/* (port forge leave text: the LEAVE screen's title and text) a Command
+game's words, or Forge's own (the string list's) */
+static void h3_forge_leave_text_update(struct widget_instance *widget)
+{
+	struct widget_instance *screen = screen_of(widget);
+	boolean title = widget == named(screen, "title");
+
+	if (command_active())
+		text_show(widget, title ? T("LEAVE COMMAND?") : T("The Command game ends when you leave.\nNothing of it is kept."));
+	else
+		text_show(widget, title ? T("LEAVE FORGE?") : T("Anything not saved is lost when you leave.\nSAVE MAP VARIANT keeps what you placed."));
 }
 
 /* the Forge menu's controls: the Vita's buttons; on the desktop the
@@ -23801,6 +23846,9 @@ void pc_menu_game_data_function_invoke(
 		break;
 	case _input_forge_controls:
 		h3_forge_controls_update(widget);
+		break;
+	case _input_forge_leave_text:
+		h3_forge_leave_text_update(widget);
 		break;
 	case _input_h3_mp_lobby:
 		h3_mp_lobby_update(widget);
