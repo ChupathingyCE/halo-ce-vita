@@ -2945,6 +2945,20 @@ boolean widget_event_function_list_widget_goto_next_item(
 		}
 		else
 		{
+#ifdef HALO_LINUX
+			/* port: one of Halo PC's own scrolling lists on MCC's ui.map
+			scrolls its items under its rows before the focus leaves them
+			(port/linux/game/halo_pc_menus.c) */
+			{
+				extern boolean halo_pc_menu_list_step(struct widget_instance *list, boolean forward);
+
+				if (halo_pc_menu_list_step(widget, TRUE))
+				{
+					widget->parameters.list.last_list_tab_direction = 15;
+					return TRUE;
+				}
+			}
+#endif
 			child = NULL;
 			if (widget->focused_child)
 			{
@@ -3084,6 +3098,18 @@ boolean widget_event_function_list_widget_goto_previous_item(
 		}
 		else
 		{
+#ifdef HALO_LINUX
+			/* port: (as goto_next_item) Halo PC's scrolling lists */
+			{
+				extern boolean halo_pc_menu_list_step(struct widget_instance *list, boolean forward);
+
+				if (halo_pc_menu_list_step(widget, FALSE))
+				{
+					widget->parameters.list.last_list_tab_direction = -15;
+					return TRUE;
+				}
+			}
+#endif
 			child = NULL;
 			if (widget->focused_child)
 			{
@@ -7593,6 +7619,17 @@ static void widget_instance_tab_to_next_valid_widget(
 {
 	struct widget_instance *child;
 
+#ifdef HALO_LINUX
+	/* port: one of Halo PC's own scrolling lists on MCC's ui.map scrolls
+	its items under its rows before the focus leaves them
+	(port/linux/game/halo_pc_menus.c) */
+	{
+		extern boolean halo_pc_menu_list_step(struct widget_instance *list, boolean forward);
+
+		if (halo_pc_menu_list_step(widget, TRUE))
+			return;
+	}
+#endif
 	if (widget->focused_child && widget->focused_child->next)
 		child = widget->focused_child->next;
 	else
@@ -7629,6 +7666,15 @@ static void widget_instance_tab_to_previous_valid_widget(
 {
 	struct widget_instance *child;
 
+#ifdef HALO_LINUX
+	/* port: (as the next) Halo PC's scrolling lists */
+	{
+		extern boolean halo_pc_menu_list_step(struct widget_instance *list, boolean forward);
+
+		if (halo_pc_menu_list_step(widget, FALSE))
+			return;
+	}
+#endif
 	if (widget->focused_child)
 	{
 		if (widget->focused_child->previous)

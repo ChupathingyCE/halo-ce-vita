@@ -3951,6 +3951,13 @@ static boolean pc_function_difficulty_start(
 		return FALSE;
 	main_set_difficulty(index);
 	ui_play_audio_feedback_sound(2);
+	/* (the profile played with made the active one again, where the way
+	here lost it: port/linux/game/halo_pc_menus.c) */
+	{
+		extern void halo_pc_menu_campaign_starting(void);
+
+		halo_pc_menu_campaign_starting();
+	}
 	return switch_from_main_menu_to_single_player(widget, event, widget_deleted);
 }
 
@@ -4024,6 +4031,22 @@ boolean ui_widget_event_handler_function_invoke(
 		if (pc_function_invoke(widget, event, function_index, widget_deleted, &mapped_result))
 			return mapped_result;
 	}
+	/* port: an Xbox function run by one of Halo PC's own scrolling lists on
+	MCC's ui.map (the Xbox's list functions of the same numbers expect the
+	Xbox's 3-wide spinners: port/linux/game/halo_pc_menus.c) */
+	if ((short)function_index >= 0 && function_index < 102)
+	{
+		extern boolean main_menu_is_active(void);
+		extern boolean halo_pc_menu_xbox_function_invoke(struct widget_instance *widget, struct event_record *event,
+			word function_index, boolean *widget_deleted, boolean *result);
+		boolean mapped_result = FALSE;
+
+		if (main_menu_is_active() &&
+			halo_pc_menu_xbox_function_invoke(widget, event, function_index, widget_deleted, &mapped_result))
+		{
+			return mapped_result;
+		}
+	}
 #endif
 	if ((short)function_index >= 0 && function_index < 102)
 	{
@@ -4040,6 +4063,30 @@ boolean ui_widget_event_handler_function_invoke(
 /* port: OpenCE's Create Game > Internet (port/linux/game/menu_functions.c):
 the network game's server started, as the System Link list's Y starts it
 before it opens the map list */
+/* port: for Halo PC's own scrolling lists (port/linux/game/halo_pc_menus.c):
+a campaign level's map name (0 to 9), the profile a delete dialog's OK
+deletes (as "request del player profile" sets it), and "main menu switch to
+solo game" as the difficulty list runs it */
+char const *ui_widget_port_solo_level_map_name(
+	short level)
+{
+	return level >= 0 && level < 10 ? (&event_handler_functions.map_name)[level] : NULL;
+}
+
+void ui_widget_port_set_delete_profile_index(
+	long profile_index)
+{
+	event_handler_functions.profile_index = profile_index;
+}
+
+boolean ui_widget_port_switch_to_single_player(
+	struct widget_instance *widget,
+	struct event_record *event,
+	boolean *widget_deleted)
+{
+	return switch_from_main_menu_to_single_player(widget, event, widget_deleted);
+}
+
 boolean ui_widget_port_start_network_game_server(
 	void)
 {

@@ -1083,6 +1083,85 @@ static void delete_persistent_storage(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* port: the campaign save in a profile's directory (the one the menus'
+LOAD GAME lists: Halo PC's own list, port/linux/game/halo_pc_menus.c), its
+header alone read: its map and difficulty, TRUE when there is one. The
+directory is the profile's (player_profile_get_enclosing_directory_path),
+not the player's current one, which game_state_test_persistent_storage
+reads and checks whole. */
+boolean game_state_saved_game_header_in_directory(
+	const char *directory,
+	char *map_name,
+	short *difficulty)
+{
+	/* (the stock campaign's save, else the custom campaign maps' - MCC's
+	levels on an install with no Xbox map save as those) */
+	static const char *const names[] = { "savegame.bin", "savegame_custom.bin" };
+	struct game_state_header header;
+	char path[256];
+	HANDLE file;
+	unsigned long bytes_read = 0;
+	boolean result = FALSE;
+	int which;
+
+	if (!directory || strlen(directory) > 200)
+		return FALSE;
+	for (which = 0; which < 2 && !result; which++)
+	{
+		strcpy(path, directory);
+		if (path[0] && path[strlen(path) - 1] != '\\' && path[strlen(path) - 1] != '/')
+			strcat(path, "\\");
+		strcat(path, names[which]);
+		file = CreateFileA(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		if (file == INVALID_HANDLE_VALUE)
+			continue;
+		if (ReadFile(file, &header, sizeof(header), &bytes_read, NULL) && bytes_read == sizeof(header) &&
+			header.map_name[0])
+		{
+			header.map_name[sizeof(header.map_name) - 1] = 0;
+			strcpy(map_name, header.map_name);
+			*difficulty = header.difficulty;
+			result = TRUE;
+		}
+		CloseHandle(file);
+	}
+	return result;
+}
+
+/* port: that save deleted (LOAD GAME's DELETE), the kept answers forgotten */
+boolean game_state_delete_saved_game_in_directory(
+	const char *directory)
+{
+	char path[256];
+
+	if (!directory || strlen(directory) > 200)
+		return FALSE;
+	strcpy(path, directory);
+	if (path[0] && path[strlen(path) - 1] != '\\' && path[strlen(path) - 1] != '/')
+		strcat(path, "\\");
+	game_state_persistent_storage_generation++;
+	persistent_header_cache.valid = FALSE;
+	{
+		/* (both saves and their kept answers) */
+		static const char *const names[] = { "savegame", "savegame_custom" };
+		char file_path[256];
+		boolean deleted = FALSE;
+		int which;
+
+		for (which = 0; which < 2; which++)
+		{
+			sprintf(file_path, "%s%s.chk", path, names[which]);
+			DeleteFileA(file_path);
+			sprintf(file_path, "%s%s.bin", path, names[which]);
+			if (DeleteFileA(file_path))
+				deleted = TRUE;
+		}
+		return deleted;
+	}
+}
+#endif
+
 static HANDLE game_state_open_persistent_storage(
 	const char *directory)
 {
