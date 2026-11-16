@@ -191,7 +191,9 @@
 	<strings name="cp/prepare_text">
 		<string text="%b-button =CANCEL"/>
 	</strings>
-	<widget name="cp/command/prepare/title" type="text" left="56" top="160" width="528" height="24" font="ui\large_ui" color="#FF2896FF" string_list="h3/forge_text" string_index="10" text_flags="no_focus_test"/>
+	<!-- (the title's words port command prepare's each frame: PREPARING COMMAND or PREPARING FIREFIGHT; a string list's
+	     text would be copied over them at every draw) -->
+	<widget name="cp/command/prepare/title" type="text" left="56" top="160" width="528" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
 	<widget name="cp/command/prepare/text" type="text" left="56" top="190" width="528" height="58" font="ui\small_ui" color="#FF2896FF" string_list="h3/forge_text" string_index="11" text_flags="no_focus_test"/>
 	<widget name="cp/command/prepare/progress" type="text" left="56" top="252" width="528" height="30" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
 	<widget name="cp/command/prepare/keys" type="text" left="56" top="283" width="528" height="24" font="ui\large_ui" color="#FF2896FF" string_list="cp/prepare_text" string_index="0" text_flags="no_focus_test"/>

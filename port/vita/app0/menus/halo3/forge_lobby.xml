@@ -61,7 +61,9 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 	<widget name="h3/command/prepare/panel" left="120" top="140" width="400" height="190" bitmap="h3/panel"/>
 	<widget name="h3/command/prepare/rule" left="120" top="170" width="400" height="2" bitmap="h3/rule"/>
 	<widget name="h3/command/prepare/strip" left="120" top="310" width="400" height="20" bitmap="h3/strip"/>
-	<widget name="h3/command/prepare/title" type="text" left="132" top="146" width="376" height="22" font="h3/font_title" color="#FFF2F6FA" string_list="h3/forge_text" string_index="10"/>
+	<!-- (its words port command prepare's each frame: PREPARING COMMAND, or PREPARING FIREFIGHT for START FIREFIGHT -
+	a string list's text would be copied over them at every draw, ui_widget.c) -->
+	<widget name="h3/command/prepare/title" type="text" left="132" top="146" width="376" height="22" font="h3/font_title" color="#FFF2F6FA"/>
 	<widget name="h3/command/prepare/text" type="text" left="132" top="180" width="376" height="76" font="h3/font_small" color="#FFCFD9E3" string_list="h3/forge_text" string_index="11"/>
 	<bitmap name="h3/prepare_fill">
 		<frame png="halo3/prepare_fill.png" width="8" height="8"/>
