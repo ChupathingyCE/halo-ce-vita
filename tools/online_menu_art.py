@@ -230,10 +230,9 @@ def title():
 
 def plate(colour):
     # the party list's nameplate card (1.1.3, the card's shape after ODST's
-    # lobby, in this set's navy): a navy card, its left edge and a band of
-    # hazard stripes along its foot in the player's colour (frame 0, no
-    # colour: a muted olive), a light edge on top; 128x16 texels for a widget
-    # 256x18 units (the stripes' slant survives the stretch)
+    # lobby, in this set's navy): a plain navy card, its left edge in the
+    # player's colour (frame 0, no colour: a muted olive), a light edge on
+    # top; 128x16 texels for a widget 256x18 units
     import colorsys
     if colour is None:
         rgb = (124, 140, 64)
@@ -249,13 +248,7 @@ def plate(colour):
         (0.12, NAVY_TOP + (alpha(.90),)),
         (1.0, NAVY + (alpha(.92),)),
     ])
-    draw = ImageDraw.Draw(image)
-    draw.rectangle([0, 0, 2, height - 1], fill=rgb + (255,))
-    band = 3
-    for x in range(3, width + height, 6):
-        draw.polygon([(x, height - band), (x + 3, height - band), (x, height), (x - 3, height)],
-                     fill=rgb + (alpha(.85),))
-    draw.line([(3, height - band - 1), (width - 1, height - band - 1)], fill=(4, 9, 20, alpha(.5)))
+    ImageDraw.Draw(image).rectangle([0, 0, 2, height - 1], fill=rgb + (255,))
     return image
 
 
@@ -275,19 +268,9 @@ def dropdown():
 
 def hazard():
     # START's header strip (1.1.3, after ODST's start menu, in this set's
-    # navy and orange): a dark navy band, orange hazard stripes across its
-    # left half fading out to the right, a light edge under it
+    # navy): a plain dark navy band, a light edge under it
     width, height = 512, 32
     image = Image.new('RGBA', (width, height), (6, 12, 26, alpha(.94)))
-    pixels = image.load()
-    for y in range(height):
-        for x in range(width):
-            fade = max(0.0, min(1.0, (0.78 - x / width) / 0.38))
-            if fade > 0 and (x + y) % 22 < 11:
-                r, g, b, a = pixels[x, y]
-                t = .55 * fade
-                pixels[x, y] = (round(r + (ORANGE[0] - r) * t), round(g + (ORANGE[1] - g) * t),
-                                round(b + (ORANGE[2] - b) * t), a)
     draw = ImageDraw.Draw(image)
     draw.line([(0, height - 1), (width - 1, height - 1)], fill=LINE + (alpha(.45),))
     return image

@@ -101,7 +101,7 @@ opening its screen or the settings panel on its tab (the PS Vita's); the focused
 	</bitmap>
 	<widget name="online/start/tab_mark" width="150" height="3" bitmap="online/start/tab_line"/>
 	<!-- (1.1.3, the ElDewrito look after ODST's start menu: a window from the left third to the
-	screen's right edge, its header strip of hazard stripes with the player's nameplate on it, the
+	screen's right edge, its plain header strip with the player's nameplate on it, the
 	two tabs large under it, the rows at the left, the focused row's words in a card at the right,
 	the button key at the window's foot) -->
 	<widget name="online/start/window" left="24" top="42" width="722" height="409" bitmap="h3/panel"/>
