@@ -68,7 +68,15 @@ Menu style Halo CE's additions (classic/)
   game's, one set per language - in English the main menu's rows are made,
   as the menus load, of the very letters of the player's ui.map's own
   CAMPAIGN, MULTIPLAYER, SETTINGS and GAME DEMOS (port/linux/game/
-  menu_words.c, kept in the data folder; the pictures here the fallback) (classic/en/, classic/es/: "{lang}" in a
+  menu_words.c, kept in the data folder; the pictures here the fallback),
+  and the headings of the port's screens (classic/<lang>/header_*.png) are
+  set, as the menus load, in the letters of the player's ui.map's own
+  screen headings (CHOOSE DIFFICULTY, SELECT GAMETYPE, ...), at their size
+  and over a plate like theirs, in any language whose words those letters
+  spell (port/linux/game/menu_titles.c, with ChupathingyCE's title tool,
+  port/linux/src/title_tool.c; kept in the data folder; the pictures here
+  the fallback: a word with B, J, Q, W or Z, K on MCC's ui.map, an accent)
+  (classic/en/, classic/es/: "{lang}" in a
   <frame png=...> is the language chosen's, English's when it has none), and
   the multiplayer pause's box (classic/pausebox.png); the other pictures are
   the map's own or the player's Halo PC data's, as above.

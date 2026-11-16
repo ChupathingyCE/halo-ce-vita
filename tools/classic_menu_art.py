@@ -14,6 +14,11 @@ tools/fonts/OFL.txt). The same bytes each run.
   game's column list shows by focus. In English they are only the fallback:
   the game makes them of the player's ui.map's own letters as the menus load
   (port/linux/game/menu_words.c).
+- <lang>/header_*.png: the headings below. Only the fallback where the
+  game can make them: as the menus load it sets each heading's words in the
+  letters of the player's ui.map's own screen headings (port/linux/game/
+  menu_titles.c, ChupathingyCE's title tool), in any language whose words
+  those letters spell.
 - <lang>/header_lobby_options.png, header_file_share.png,
   header_mod_manager.png: LOBBY OPTIONS's, FILE SHARE's and MOD MANAGER's
   headings in the look of the Multiplayer screens' (512 x 64 at 35,11: blue
