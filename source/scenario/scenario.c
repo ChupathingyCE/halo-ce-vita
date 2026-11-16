@@ -418,6 +418,14 @@ void scenario_unload(
 		0xA4,
 		!bink_playback_active());
 
+#ifdef HALO_LINUX
+	{
+		/* (perf/113-ce-fights: collision_bsp.c's surface spheres go with the bsps) */
+		extern void collision_surface_spheres_dispose(void);
+
+		collision_surface_spheres_dispose();
+	}
+#endif
 	scenario_tags_unload();
 	global_scenario_index = NONE;
 	global_structure_bsp_index = NONE;

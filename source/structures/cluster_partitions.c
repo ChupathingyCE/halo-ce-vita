@@ -106,6 +106,8 @@ static long *code_00180fa0(
 
 #ifdef HALO_LINUX
 #include "render_epoch.h"
+#include "native_switch.h"
+#include <string.h>
 void platform_log(const char *format, ...);
 /* reference_list_get_next_datum_index, ending the walk at a node the caller
 cannot get instead of loading through NULL: a node freed under the walk
@@ -194,11 +196,45 @@ static struct
 	short cluster_index;
 	unsigned long changes;
 	unsigned long map_generation;
+	unsigned long generation, stamp; /* (perf/f6-cefights) */
 	long count;
 	long datums[CLUSTER_DATUMS_CACHE_LENGTH];
 } cluster_datums_cache[CLUSTER_DATUMS_CACHE_ENTRIES];
 static unsigned long cluster_datums_changes = 1;
 static unsigned long cluster_datums_cache_next;
+
+/* (perf/f6-cefights) cluster_datums_changes counts every change of every
+partition (actor_perception.c and cluster_object_types.c read it so), and the
+cache above was kept only while it stood still - in a fight 300 relinks a
+tick emptied it before the next query (b30: 90 cluster walks a tick, 3800
+list steps, 2.7% of the tick's instructions, almost none kept). A stamp per
+(partition, cluster) slot, bumped by the two functions that add a datum to a
+cluster's list or take one out (reconnect_to_clusters, disconnect), and a
+generation bumped by the partition-wide changes (new, valid, invalid, delete,
+copy) keep an entry while ITS cluster's list is as it was: the same indices in
+the same order as a walk. Two clusters sharing a slot only forget each other
+sooner. HALO_CLUSTER_DATUMS_STAMPS=0: the global count as before; =2 both: a
+kept list compared with the walk (mismatches logged). */
+#define CLUSTER_STAMP_SLOTS 1024
+static unsigned long cluster_stamps[CLUSTER_STAMP_SLOTS];
+static unsigned long cluster_partition_generation = 1;
+static int cluster_stamps_mode = -1;
+static unsigned long cluster_stamps_seen;
+unsigned long cluster_datums_cache_census[3]; /* kept, walked, mismatches */
+
+static __inline__ unsigned long cluster_stamp_slot(
+	struct cluster_partition const *partition,
+	short cluster_index)
+{
+	return ((((unsigned long)(size_t)partition >> 4) * 2654435761UL) ^ ((unsigned long)(unsigned short)cluster_index * 40503UL)) % CLUSTER_STAMP_SLOTS;
+}
+
+static __inline__ void cluster_stamp_bump(
+	struct cluster_partition const *partition,
+	short cluster_index)
+{
+	cluster_stamps[cluster_stamp_slot(partition, cluster_index)]++;
+}
 
 static unsigned long list_tail_slot(long *head)
 {
@@ -367,6 +403,7 @@ void cluster_partition_new(
 
 #ifdef HALO_LINUX
 	cluster_datums_changes++;
+	cluster_partition_generation++; /* (perf/f6-cefights) */
 #endif
 
 	partition->cluster_first_data_references = game_state_malloc(
@@ -405,6 +442,7 @@ void cluster_partition_make_valid(
 {
 #ifdef HALO_LINUX
 	cluster_datums_changes++;
+	cluster_partition_generation++; /* (perf/f6-cefights) */
 #endif
 #ifdef HALO_LINUX
 	list_tail_generation++;
@@ -424,6 +462,7 @@ void cluster_partition_make_invalid(
 {
 #ifdef HALO_LINUX
 	cluster_datums_changes++;
+	cluster_partition_generation++; /* (perf/f6-cefights) */
 #endif
 	if (partition->cluster_reference_data->valid)
 		data_make_invalid(partition->cluster_reference_data);
@@ -439,6 +478,7 @@ void cluster_partition_delete(
 {
 #ifdef HALO_LINUX
 	cluster_datums_changes++;
+	cluster_partition_generation++; /* (perf/f6-cefights) */
 #endif
 	if (partition->cluster_first_data_references)
 		partition->cluster_first_data_references = NULL;
@@ -458,6 +498,7 @@ void cluster_partition_copy(
 {
 #ifdef HALO_LINUX
 	cluster_datums_changes++;
+	cluster_partition_generation++; /* (perf/f6-cefights) */
 #endif
 #ifdef HALO_LINUX
 	list_tail_generation++;
@@ -521,19 +562,48 @@ long cluster_partition_get_cluster_datums(
 		return NONE;
 	if (cached)
 	{
+		halo_native_switch("HALO_CLUSTER_DATUMS_STAMPS", &cluster_stamps_mode, &cluster_stamps_seen);
 		for (slot = 0; slot < CLUSTER_DATUMS_CACHE_ENTRIES; slot++)
 		{
 			if (cluster_datums_cache[slot].partition == partition &&
 				cluster_datums_cache[slot].cluster_index == cluster_index &&
-				cluster_datums_cache[slot].changes == cluster_datums_changes &&
+				(cluster_stamps_mode ?
+					(cluster_datums_cache[slot].generation == cluster_partition_generation &&
+					cluster_datums_cache[slot].stamp == cluster_stamps[cluster_stamp_slot(partition, cluster_index)]) :
+					cluster_datums_cache[slot].changes == cluster_datums_changes) &&
 				cluster_datums_cache[slot].map_generation == halo_map_generation)
 			{
 				if (cluster_datums_cache[slot].count > maximum)
 					return NONE;
 				csmemcpy(indices, cluster_datums_cache[slot].datums, cluster_datums_cache[slot].count * sizeof(*indices));
+				cluster_datums_cache_census[0]++;
+				if (cluster_stamps_mode == 2)
+				{
+					/* (the walk beside: the kept list must be it) */
+					long walked[CLUSTER_DATUMS_CACHE_LENGTH], n = 0, r = *code_00180fa0((struct cluster_partition *)partition, cluster_index);
+
+					while (r != NONE && n < CLUSTER_DATUMS_CACHE_LENGTH)
+					{
+						long d = reference_list_walk_next(partition->data_reference_data, &r);
+
+						if (d == NONE)
+							break;
+						walked[n++] = d;
+					}
+					if (n != cluster_datums_cache[slot].count || memcmp(walked, indices, n * sizeof(long)))
+					{
+						if (cluster_datums_cache_census[2]++ < 8)
+							platform_log("cluster datums cache: cluster %d kept %ld datums, the walk finds %ld", (int)cluster_index,
+								(long)cluster_datums_cache[slot].count, n);
+					}
+					if ((cluster_datums_cache_census[0] & 0x3fff) == 0x3fff)
+						platform_log("cluster datums cache: %lu kept, %lu walked, %lu mismatches", cluster_datums_cache_census[0],
+							cluster_datums_cache_census[1], cluster_datums_cache_census[2]);
+				}
 				return cluster_datums_cache[slot].count;
 			}
 		}
+		cluster_datums_cache_census[1]++;
 	}
 	reference_index = *code_00180fa0((struct cluster_partition *)partition, cluster_index);
 	while (reference_index != NONE)
@@ -552,6 +622,8 @@ long cluster_partition_get_cluster_datums(
 		cluster_datums_cache[slot].partition = partition;
 		cluster_datums_cache[slot].cluster_index = cluster_index;
 		cluster_datums_cache[slot].changes = cluster_datums_changes;
+		cluster_datums_cache[slot].generation = cluster_partition_generation;
+		cluster_datums_cache[slot].stamp = cluster_stamps[cluster_stamp_slot(partition, cluster_index)];
 		cluster_datums_cache[slot].map_generation = halo_map_generation;
 		cluster_datums_cache[slot].count = count;
 		csmemcpy(cluster_datums_cache[slot].datums, indices, count * sizeof(*indices));
@@ -639,6 +711,7 @@ void cluster_partition_reconnect_to_clusters(
 	{
 		short const cluster_index = cluster_indices[cluster_index_index];
 
+		cluster_stamp_bump(partition, cluster_index);
 		reference_list_add(
 			partition->cluster_reference_data,
 			first_cluster_reference,
@@ -748,6 +821,9 @@ void cluster_partition_disconnect(
 #endif
 		short const cluster_index = (short)cluster_reference->datum_index;
 
+#ifdef HALO_LINUX
+		cluster_stamp_bump(partition, cluster_index);
+#endif
 		datum_delete(partition->cluster_reference_data, cluster_reference_index);
 
 		reference_list_remove(

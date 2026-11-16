@@ -175,10 +175,17 @@ struct collision_bsp_test_sphere_context
 	boolean projection_sign;
 	byte pad2;
 	real_point2d center2d;
+#ifdef HALO_LINUX
+	/* (perf/113-ce-fights) the structure bsp's surfaces' bounding spheres
+	(collision_surface_spheres_get; NULL: none for this bsp) */
+	struct collision_surface_sphere *surface_spheres;
+#endif
 };
 
+#ifndef HALO_LINUX
 typedef char collision_bsp_test_sphere_context_size_assert[
 	sizeof(struct collision_bsp_test_sphere_context) == 0x228 ? 1 : -1];
+#endif
 typedef char collision_bsp_test_sphere_context_plane_stack_offset_assert[
 	offsetof(struct collision_bsp_test_sphere_context, plane_stack) == 0x1C ? 1 : -1];
 typedef char collision_bsp_test_sphere_context_projection_axis_offset_assert[
@@ -289,6 +296,180 @@ static void add_feature(
 static void collision_surface_test_sphere(
 	struct collision_bsp_test_sphere_context *data,
 	long surface_index);
+
+#ifdef HALO_LINUX
+#include <pthread.h>
+#include <stdlib.h>
+#include "native_switch.h"
+void platform_log(const char *format, ...);
+
+/* (perf/113-ce-fights, after perf/f6-cefights' flat-record bounds) a
+structure bsp surface's bounding sphere: its ring's vertices' mean and the
+farthest vertex's distance from it, widened by 1/1024 of itself and 1/32 of
+a world unit - more than the float arithmetic of the sphere tests can err by
+over a map's coordinates. A query sphere out of its reach can have no vertex
+within the radius, no edge it meets, and no interior hit (the leaf tests a
+surface only under a plane of the stack, which the sphere straddles: the
+centre's projection onto it lies within the radius, and a point of the
+polygon lies within the bound of the mean), so collision_surface_test_sphere
+returns before walking the ring: the exact tests would add nothing. 1.1.3
+keeps no flat surface records, so the spheres live in a side table per
+structure bsp (16 bytes a surface, calloc'd at the bsp's first sphere test,
+each sphere made at its surface's first test; bound 0: not made yet), kept
+while the map is loaded (a sphere is the bsp's tags', which no checkpoint
+revert changes; a bsp switch keeps the other bsp's for when it comes back)
+and freed at scenario_unload (collision_surface_spheres_dispose), when no
+thread tests a sphere. At most COLLISION_SURFACE_SPHERE_TABLES bsps and
+COLLISION_SURFACE_SPHERE_BYTES in all; a bsp past those tests as before.
+HALO_COLLISION_SURFACE_BOUND=0 tests every surface as before; =2 both, a
+surface the pass-over would have lost logged (census: passed over, tested,
+mismatches). Not game state. */
+struct collision_surface_sphere
+{
+	real x, y, z;
+	real bound;
+};
+enum
+{
+	COLLISION_SURFACE_SPHERE_TABLES = 4,
+	/* (bsps of fewer surfaces - the objects' collision models - test few
+	surfaces a query and keep no table) */
+	COLLISION_SURFACE_SPHERE_MINIMUM = 1024,
+	COLLISION_SURFACE_SPHERE_MAXIMUM = 1 << 17,
+	COLLISION_SURFACE_SPHERE_BYTES = 1536 << 10
+};
+static struct
+{
+	struct collision_bsp const *bsp;
+	long count;
+	struct collision_surface_sphere *spheres;
+} collision_surface_sphere_tables[COLLISION_SURFACE_SPHERE_TABLES];
+static pthread_mutex_t collision_surface_sphere_lock = PTHREAD_MUTEX_INITIALIZER;
+static long collision_surface_sphere_bytes;
+static int collision_surface_bound_value = -1;
+static unsigned long collision_surface_bound_seen;
+unsigned long collision_surface_bound_census[3]; /* passed over, tested, mismatches */
+
+static struct collision_surface_sphere *collision_surface_spheres_get(
+	struct collision_bsp const *bsp)
+{
+	long count = bsp->surfaces.count;
+	struct collision_surface_sphere *spheres = NULL;
+	short slot;
+
+	halo_native_switch("HALO_COLLISION_SURFACE_BOUND", &collision_surface_bound_value, &collision_surface_bound_seen);
+	if (!collision_surface_bound_value || bsp != global_collision_bsp ||
+		count < COLLISION_SURFACE_SPHERE_MINIMUM || count > COLLISION_SURFACE_SPHERE_MAXIMUM)
+		return NULL;
+	for (slot = 0; slot < COLLISION_SURFACE_SPHERE_TABLES; slot++)
+	{
+		if (__atomic_load_n(&collision_surface_sphere_tables[slot].bsp, __ATOMIC_ACQUIRE) == bsp &&
+			collision_surface_sphere_tables[slot].count == count)
+			return collision_surface_sphere_tables[slot].spheres;
+	}
+	pthread_mutex_lock(&collision_surface_sphere_lock);
+	for (slot = 0; slot < COLLISION_SURFACE_SPHERE_TABLES && !spheres; slot++)
+	{
+		if (collision_surface_sphere_tables[slot].bsp == bsp &&
+			collision_surface_sphere_tables[slot].count == count)
+			spheres = collision_surface_sphere_tables[slot].spheres;
+	}
+	for (slot = 0; slot < COLLISION_SURFACE_SPHERE_TABLES && !spheres; slot++)
+	{
+		if (!collision_surface_sphere_tables[slot].bsp)
+		{
+			long bytes = count * (long)sizeof(*spheres);
+
+			if (collision_surface_sphere_bytes + bytes > COLLISION_SURFACE_SPHERE_BYTES)
+				break;
+			spheres = (struct collision_surface_sphere *)calloc(count, sizeof(*spheres));
+			if (!spheres)
+				break;
+			collision_surface_sphere_bytes += bytes;
+			collision_surface_sphere_tables[slot].spheres = spheres;
+			collision_surface_sphere_tables[slot].count = count;
+			__atomic_store_n(&collision_surface_sphere_tables[slot].bsp, bsp, __ATOMIC_RELEASE);
+			platform_log("collision surface spheres: %ld surfaces, %ld KB (%ld KB in all)", count, bytes >> 10,
+				collision_surface_sphere_bytes >> 10);
+		}
+	}
+	pthread_mutex_unlock(&collision_surface_sphere_lock);
+	return spheres;
+}
+
+/* scenario_unload: the map's bsps go with their tags (no thread tests a
+sphere while a map is unloaded) */
+void collision_surface_spheres_dispose(
+	void)
+{
+	short slot;
+
+	pthread_mutex_lock(&collision_surface_sphere_lock);
+	for (slot = 0; slot < COLLISION_SURFACE_SPHERE_TABLES; slot++)
+	{
+		__atomic_store_n(&collision_surface_sphere_tables[slot].bsp, NULL, __ATOMIC_RELEASE);
+		(free)(collision_surface_sphere_tables[slot].spheres); /* (libc's: the calloc's) */
+		collision_surface_sphere_tables[slot].spheres = NULL;
+		collision_surface_sphere_tables[slot].count = 0;
+	}
+	collision_surface_sphere_bytes = 0;
+	pthread_mutex_unlock(&collision_surface_sphere_lock);
+}
+
+/* the surface's sphere, made from its ring at its first test */
+static void collision_surface_sphere_make(
+	struct collision_bsp const *bsp,
+	long surface_index,
+	struct collision_surface_sphere *sphere)
+{
+	struct collision_surface const *surface = TAG_BLOCK_GET_ELEMENT(&bsp->surfaces, surface_index, struct collision_surface);
+	double x = 0.0, y = 0.0, z = 0.0, farthest = 0.0;
+	long count = 0, edge_index;
+	struct collision_surface_sphere made;
+
+	edge_index = surface->first_edge_index;
+	do
+	{
+		struct collision_edge const *edge = TAG_BLOCK_GET_ELEMENT(&bsp->edges, edge_index, struct collision_edge);
+		boolean reverse = edge->surface_indices[1] == surface_index;
+		struct collision_vertex const *vertex = TAG_BLOCK_GET_ELEMENT(&bsp->vertices, edge->vertex_indices[reverse], struct collision_vertex);
+
+		x += vertex->point.x;
+		y += vertex->point.y;
+		z += vertex->point.z;
+		count++;
+		edge_index = edge->edge_indices[reverse];
+	}
+	while (edge_index != surface->first_edge_index && count < 1024);
+	x /= count;
+	y /= count;
+	z /= count;
+	edge_index = surface->first_edge_index;
+	do
+	{
+		struct collision_edge const *edge = TAG_BLOCK_GET_ELEMENT(&bsp->edges, edge_index, struct collision_edge);
+		boolean reverse = edge->surface_indices[1] == surface_index;
+		struct collision_vertex const *vertex = TAG_BLOCK_GET_ELEMENT(&bsp->vertices, edge->vertex_indices[reverse], struct collision_vertex);
+		double dx = vertex->point.x - x, dy = vertex->point.y - y, dz = vertex->point.z - z;
+		double distance = dx * dx + dy * dy + dz * dz;
+
+		if (distance > farthest)
+			farthest = distance;
+		edge_index = edge->edge_indices[reverse];
+	}
+	while (edge_index != surface->first_edge_index && --count > 0);
+	made.x = (real)x;
+	made.y = (real)y;
+	made.z = (real)z;
+	made.bound = (real)(__builtin_sqrt(farthest) * (1.0 + 1.0 / 1024.0) + 1.0 / 32.0);
+	/* (the centre first, the bound last: a reader that sees the bound sees
+	the centre made with it - every thread makes the same values) */
+	sphere->x = made.x;
+	sphere->y = made.y;
+	sphere->z = made.z;
+	__atomic_store(&sphere->bound, &made.bound, __ATOMIC_RELEASE);
+}
+#endif
 static void bsp2d_test_sphere_recursive(
 	struct collision_bsp_test_sphere_context *data,
 	long child_index);
@@ -1044,6 +1225,9 @@ boolean collision_bsp_test_sphere(
 	context.radius = radius;
 	context.result = result;
 	context.stack_depth = 0;
+#ifdef HALO_LINUX
+	context.surface_spheres = collision_surface_spheres_get(bsp);
+#endif
 	result->leaf_count = 0;
 	result->surface_count = 0;
 	result->edge_count = 0;
@@ -1163,6 +1347,60 @@ static void collision_surface_test_sphere(
 	real radius_squared;
 	boolean hit_feature = FALSE;
 
+#ifdef HALO_LINUX
+	/* (perf/113-ce-fights) out of the surface's bounding sphere's reach: no
+	vertex within the radius, no edge the sphere meets, no interior point
+	under the centre - nothing the tests below would add. First, before the
+	surface's own tags are read (the breakable test's return adds nothing
+	either): a passed-over surface costs its sphere's 16 bytes alone */
+	if (data->surface_spheres)
+	{
+		struct collision_surface_sphere *sphere = &data->surface_spheres[surface_index];
+		real bound;
+
+		__atomic_load(&sphere->bound, &bound, __ATOMIC_ACQUIRE);
+
+		if (bound <= 0.0f)
+		{
+			collision_surface_sphere_make(data->bsp, surface_index, sphere);
+			bound = sphere->bound;
+		}
+		{
+			real delta_x = sphere->x - data->center->x;
+			real delta_y = sphere->y - data->center->y;
+			real delta_z = sphere->z - data->center->z;
+			real reach = data->radius + bound;
+
+			if (delta_x * delta_x + delta_y * delta_y + delta_z * delta_z > reach * reach)
+			{
+				if (collision_surface_bound_value == 2)
+				{
+					struct collision_bsp_test_sphere_result *result = data->result;
+					long surface_count = result->surface_count, edge_count = result->edge_count, vertex_count = result->vertex_count;
+
+					/* (the full test: no spheres for this one call) */
+					data->surface_spheres = NULL;
+					collision_surface_test_sphere(data, surface_index);
+					data->surface_spheres = sphere - surface_index;
+					if (result->surface_count != surface_count || result->edge_count != edge_count ||
+						result->vertex_count != vertex_count)
+					{
+						if (collision_surface_bound_census[2]++ < 8)
+							platform_log("collision surface bound: surface %ld passed over, the test added %ld surfaces %ld edges %ld vertices",
+								surface_index, (long)(result->surface_count - surface_count), (long)(result->edge_count - edge_count),
+								(long)(result->vertex_count - vertex_count));
+					}
+					if ((++collision_surface_bound_census[0] & 0xffff) == 0)
+						platform_log("collision surface bound: %lu passed over, %lu tested, %lu mismatches", collision_surface_bound_census[0],
+							collision_surface_bound_census[1], collision_surface_bound_census[2]);
+				}
+				return;
+			}
+			if (collision_surface_bound_value == 2)
+				collision_surface_bound_census[1]++;
+		}
+	}
+#endif
 	if (TEST_FLAG(surface->flags, _collision_surface_breakable_bit))
 	{
 		breakable_surface_index = surface->breakable_surface_index;

@@ -1009,6 +1009,27 @@ void model_node_matrices_from_orientations(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* (perf/vita-fable) the last answers, by model and the name's address (the
+callers pass string literals and tag strings, whose addresses hold): a hit
+is checked against the marker's name before it is returned, so a stale,
+torn or colliding entry can only miss, never answer wrong - the game and
+tick threads both ask, without a lock. Blood Gulch with 7 bots spent 0.5%
+of the harness's CPU in the search's string compares. (perf/113-ce-fights)
+An entry is also the map's (halo_map_generation): a model index and a tag
+string's address of another map can name another model, and only the same
+model's search is sure to land on the same one of two like-named markers. */
+extern unsigned long halo_map_generation;
+enum { MODEL_MARKER_MEMO = 128 };
+static struct
+{
+	long model_index;
+	char const *name;
+	unsigned long map_generation;
+	short marker_index;
+} model_marker_memo[MODEL_MARKER_MEMO];
+#endif
+
 short model_find_marker(
 	long model_index,
 	char const *name)
@@ -1018,6 +1039,21 @@ short model_find_marker(
 		struct model *model = model_definition_get(model_index);
 		short lower_bound = 0;
 		short upper_bound = (short)model->markers.count - 1;
+#ifdef HALO_LINUX
+		unsigned long slot = (((unsigned long)model_index * 2654435761UL) ^ ((unsigned long)name >> 2)) % MODEL_MARKER_MEMO;
+
+		if (model_marker_memo[slot].model_index == model_index && model_marker_memo[slot].name == name &&
+			model_marker_memo[slot].map_generation == halo_map_generation)
+		{
+			short memo_index = model_marker_memo[slot].marker_index;
+
+			if (memo_index >= 0 && memo_index < model->markers.count &&
+				!_stricmp(name, TAG_BLOCK_GET_ELEMENT(&model->markers, memo_index, struct model_marker)->name))
+			{
+				return memo_index;
+			}
+		}
+#endif
 
 		while (lower_bound <= upper_bound)
 		{
@@ -1030,6 +1066,12 @@ short model_find_marker(
 
 			if (comparison == 0)
 			{
+#ifdef HALO_LINUX
+				model_marker_memo[slot].model_index = model_index;
+				model_marker_memo[slot].name = name;
+				model_marker_memo[slot].map_generation = halo_map_generation;
+				model_marker_memo[slot].marker_index = marker_index;
+#endif
 				return marker_index;
 			}
 			if (comparison < 0)
