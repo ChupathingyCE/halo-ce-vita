@@ -351,14 +351,14 @@ PY
 		#   with that save, which A resumes
 		# mccmenu2, a restart on the same files: AUDIO SETUP and MOUSE SETUP open with those
 		# values.
-		pad="wait:150:3000 down:150:800 down:150:800 a:150:4000 a:150:5000 a:150:4000 up:150:800 a:150:3500 a:150:5000"
-		pad="$pad right:150:800 a:150:3000 right:150:800 a:150:5000 up:150:800 a:150:4000"
+		pad="wait:150:3000 down:150:800 down:150:800 a:150:4000 a:150:6000 up:150:800 a:150:3500 a:150:6000"
+		pad="$pad right:150:800 a:150:3000 right:150:800 a:150:5000 a:150:4000"
 		pad="$pad up:150:800 a:150:4000 down:150:800 down:150:800 a:150:4000 b:150:3000 b:150:3000"
 		pad="$pad down:150:800 down:150:800 a:150:4000 down:150:800 a:150:4000 b:150:3000"
 		pad="$pad down:150:800 down:150:800 down:150:800 down:150:800 a:150:4000 down:150:800 a:150:4000"
 		pad="$pad up:150:800 up:150:800 a:150:3000 left:150:700 down:150:600 down:150:600 down:150:600 right:150:600 a:150:3000"
 		pad="$pad up:150:600 a:150:3000 right:150:600 down:150:600 right:150:600 down:150:600 right:150:600 a:150:3000"
-		pad="$pad b:150:3000 b:150:3000 up:150:800 up:150:800 up:150:800 a:150:4000 a:150:5000 level:150:3000 wait:150:40000"
+		pad="$pad b:150:3000 up:150:800 up:150:800 up:150:800 a:150:4000 a:150:5000 level:150:3000 wait:150:40000"
 		pad="$pad wait:150:8000 a:150:4000 a:150:4000 b:150:3000 down:150:800 a:150:4000 a:150:5000 level:150:3000 wait:150:3000"
 		mrun mccmenu 230 no HALO_MENU_STYLE=original HALO_TEST_CONFIG="$out/mccmenu_config.toml" "HALO_TEST_PAD=$pad" \
 			"HALO_TEST_COMMANDS=L240:@skip;L420:game_save_totally_unsafe;L600:@quit"
