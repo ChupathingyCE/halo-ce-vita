@@ -348,6 +348,9 @@ struct path_surface_edges_cache_data
 	unsigned long pathfinding_generation;
 };
 
+/* (perf/f6-cefights) surfaces built with more edges than a way keeps (HALO_AI_PATH_EDGES_LOG) */
+static unsigned long path_surface_edges_too_long;
+
 /* (port) the tick's (68 KB of BSS) */
 static struct path_surface_edges_cache_set path_surface_edges_tick_sets[PATH_SURFACE_EDGES_CACHE_SETS]
 	__attribute__((aligned(64)));
@@ -362,6 +365,42 @@ static struct path_surface_edges_cache_data path_surface_edges_cache =
 /* (port) the offline bots' helper thread's own, allocated as it starts
 (path_search_thread_is_helper; NULL: its edges built each time) */
 static struct path_surface_edges_cache_data *path_surface_edges_helper_cache;
+
+/* (perf/f6-cefights) the tick's cache grown once, at its first use, to
+HALO_AI_PATH_EDGES_SETS sets (default 512: 256 KB, the helper's size - on
+a50 the 128-set cache keeps a quarter of the surfaces the campaign's searches
+ask for, 440 a tick built from the map at 2% of the tick; a way holds a pure
+function of the map's surfaces, so the size changes nothing but the time).
+A power of two; 128 or less, or a failed allocation: the static arrays */
+static boolean path_surface_edges_tick_cache_grown;
+static void path_surface_edges_cache_flush(
+	struct path_surface_edges_cache_data *cache);
+
+static void path_surface_edges_tick_cache_grow(
+	void)
+{
+	const char *setting = getenv("HALO_AI_PATH_EDGES_SETS");
+	long set_count = setting && *setting ? atol(setting) : 512;
+
+	path_surface_edges_tick_cache_grown = TRUE;
+	if (set_count > PATH_SURFACE_EDGES_CACHE_SETS && set_count <= 4096 && !(set_count & (set_count - 1)))
+	{
+		unsigned long ways_size = set_count * sizeof(struct path_surface_edges_cache_way) * PATH_SURFACE_EDGES_CACHE_WAYS;
+		byte *block = (byte *)malloc(ways_size + set_count * sizeof(struct path_surface_edges_cache_set) + 128);
+
+		if (block)
+		{
+			byte *ways = (byte *)(((unsigned long)block + 127) & ~(unsigned long)127);
+
+			path_surface_edges_cache.set_count = set_count;
+			path_surface_edges_cache.ways = (struct path_surface_edges_cache_way (*)[PATH_SURFACE_EDGES_CACHE_WAYS])ways;
+			path_surface_edges_cache.sets = (struct path_surface_edges_cache_set *)(ways + ways_size);
+			/* (a flush of the new arrays; the map it was made from forgotten, so the first lookup flushes again) */
+			path_surface_edges_cache_flush(&path_surface_edges_cache);
+			path_surface_edges_cache.structure = NULL;
+		}
+	}
+}
 #endif
 
 /* ---------- public code */
@@ -1690,6 +1729,8 @@ static short path_surface_edges(
 	{
 		return build_path_edges_for_surface(structure, surface_index, edges);
 	}
+	if (cache == &path_surface_edges_cache && !path_surface_edges_tick_cache_grown)
+		path_surface_edges_tick_cache_grow();
 
 	bsp = TAG_BLOCK_GET_ELEMENT(
 		&structure->collision_bsp,
@@ -1719,6 +1760,20 @@ static short path_surface_edges(
 		if (set->surface_indices[way_index] == surface_index)
 		{
 			break;
+		}
+	}
+	/* (perf/f6-cefights) HALO_AI_PATH_EDGES_LOG=1: the cache's census (kept / built / too many edges to keep) */
+	{
+		static int log_on = -1;
+		static unsigned long census[2];
+
+		if (log_on < 0)
+			log_on = getenv("HALO_AI_PATH_EDGES_LOG") != NULL;
+		if (log_on && cache == &path_surface_edges_cache)
+		{
+			census[recent_index < PATH_SURFACE_EDGES_CACHE_WAYS ? 0 : 1]++;
+			if ((census[0] + census[1]) % 4096 == 0)
+				platform_log("path surface edges cache: %lu kept, %lu built (%lu too long to keep)", census[0], census[1], path_surface_edges_too_long);
 		}
 	}
 
@@ -1757,6 +1812,7 @@ static short path_surface_edges(
 		edge_count = build_path_edges_for_surface(structure, surface_index, edges);
 		if (edge_count > PATH_SURFACE_EDGES_CACHE_EDGES)
 		{
+			path_surface_edges_too_long++;
 			return edge_count;
 		}
 		recent_index = PATH_SURFACE_EDGES_CACHE_WAYS - 1;
