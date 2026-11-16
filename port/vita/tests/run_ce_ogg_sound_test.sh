@@ -59,9 +59,10 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA:-$root/../data2276}
-ce_maps=${HALO_TEST_CE_MAPS:-$root/../custom-maps-dl}
+data=${HALO_TEST_DATA:-$data_root/data2276}
+ce_maps=${HALO_TEST_CE_MAPS:-$data_root/custom-maps-dl}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_ce_ogg_sound_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"

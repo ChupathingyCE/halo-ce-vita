@@ -49,9 +49,10 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 key=${HALO_TEST_TESTERS_KEY:?the test key file the build trusts (configure.py --testers-test-key)}
 binary=${HALO_TEST_VITA:-$root/build/linux/halo}
-data=${HALO_TEST_DATA:-$root/../data2276}
+data=${HALO_TEST_DATA:-$data_root/data2276}
 which=${1:-all}
 status=0
 fail() { echo "FAIL ($scenario): $*"; status=1; }
@@ -236,7 +237,7 @@ run_scenario() {
 		ls "$shots"/offline-*.bmp > /dev/null 2>&1 || fail "no screenshot"
 		;;
 	preview)
-		menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+		menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ] || [ ! -r "$menus_data/maps/bitmaps.map" ]; then
 			echo "--- preview: SKIP (no HALO_TEST_PROFILE or no Halo PC bitmaps.map in $menus_data/maps)"
 		else

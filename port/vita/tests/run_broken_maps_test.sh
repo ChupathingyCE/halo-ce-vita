@@ -6,8 +6,8 @@
 # wizard.map cut short past its header (its header good: it fails as it loads):
 #
 #   forge   the Forge lobby (its packs and the map's blocks on): its map picker
-#           shows Battle Creek as damaged, with the reason, and A does not
-#           choose it; Wizard chosen and START FORGE: it fails to load, and the
+#           (1.1.3: Halo 3's two-column SELECT MAP, the cascade) shows Battle
+#           Creek as damaged, and A does not choose it, saying why; Wizard chosen and START FORGE: it fails to load, and the
 #           game is back at the main menu - the main menu's map's first load
 #           after it taken as failed too (HALO_TEST_UI_LOAD_FAILS, as Ben's
 #           was): tried again, loaded; FORGE again: the lobby is not on Wizard,
@@ -15,12 +15,14 @@
 #   mp      the multiplayer lobby, whose map is Battle Creek by default: on
 #           Sidewinder instead, the live lobby open on SYSTEM LINK with it
 #           (its network a namespace of its own, unshare -rn); the map picker
-#           shows Battle Creek as damaged and does not choose it; Wizard
+#           (SELECT MAP, the cascade; MAP above GAME TYPE since 1.1.3) shows
+#           Battle Creek as damaged and does not choose it; Wizard
 #           chosen: its precache fails, said; back to the main menu and
 #           MULTIPLAYER again: the lobby opens live, its game type read
 #
 #   campaign  d20.map (Keyes) 0 bytes too: the campaign lobby's mission
-#           picker shows why Keyes can't be played, and A does not choose it
+#           picker (SELECT MISSION, the cascade: HALO CE, then its missions)
+#           does not choose Keyes, saying why
 #
 #   run_broken_maps_test.sh [CASE...]   (default: forge mp campaign)
 #   HALO_TEST_VITA         the harness (default build/linux/halo of this tree)
@@ -31,9 +33,10 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
-profile=${HALO_TEST_PROFILE:-$root/../vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
+data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
+profile=${HALO_TEST_PROFILE:-$data_root/vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_broken_maps_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
@@ -112,17 +115,20 @@ for case in $cases; do
 	echo "--- $case"
 	case $case in
 	forge)
-		# (FORGE; MAP: up nine to Battle Creek, A (refused), down ten to Wizard, A, A
-		# (the map itself); START FORGE: back at the main menu; FORGE again, MAP:
-		# the lobby's map, up one to Wizard)
+		# (FORGE; MAP - SELECT MAP, on the lobby's Blood Gulch (the tenth of 13) -: up nine to
+		# Battle Creek, A (refused), down ten to Wizard, A (no saved variants: the map itself,
+		# the picker closes); START FORGE (down two, past EXTRA OBJECTS): back at the main menu,
+		# FORGE still focused (the main menu keeps its row since 1.1.3); FORGE again (the lobby on
+		# NETWORK this time), down to MAP: the lobby's map, then Wizard's row)
 		pad="wait:150:3000 down:150:600 down:150:600 a:150:3000 a:150:2000 $(steps 9 up) a:150:1000 $(steps 10 down)"
-		pad="$pad a:150:1500 a:150:2000 down:150:500 down:150:500 a:150:300 wait:150:12000 down:150:600 down:150:600"
-		pad="$pad a:150:3000 down:150:600 a:150:2000 up:150:1000 wait:150:2000"
+		pad="$pad a:150:2000 down:150:500 down:150:500 a:150:300 wait:150:12000"
+		pad="$pad a:150:3000 down:150:600 a:150:2000 $(steps 13 up) $(steps 10 down) wait:150:2000"
 		run forge 70 0 "$pad" HALO_TEST_UI_LOAD_FAILS=1
 		checked forge
-		expect forge "the picker shows Battle Creek damaged, its reason" \
-			"menus: forge maps: Battle Creek: can't be played: beavercreek.map is damaged - copy it again"
-		expect forge "A does not choose Battle Creek" "menus: forge maps: Battle Creek can't be chosen"
+		expect forge "the picker shows Battle Creek damaged" \
+			"menus: cascade: forge maps: column 1, -, row [0-9]+ of [0-9]+: BATTLE CREEK \\(DAMAGED\\)$"
+		expect forge "A does not choose Battle Creek, saying why" \
+			"menus: cascade: Battle Creek can't be chosen: beavercreek.map is damaged - copy it again"
 		expect forge "Wizard chosen and started" "menus: forge lobby: start levels.test.wizard.wizard"
 		expect forge "Wizard fails to load, said" "Couldn't load Wizard: your wizard.map is cut short or damaged"
 		expect forge "the main menu's map tried again" "new map: the main menu's map did not load: the map copy stopped, tried again"
@@ -138,23 +144,31 @@ for case in $cases; do
 		else
 			echo "  ok: forge: the lobby opens on another map"
 		fi
-		expect forge "the picker shows Wizard damaged now" "menus: forge maps: Wizard: can't be played: wizard.map is damaged"
+		if sed -n '/Couldn.t load Wizard/,$p' "$out/forge/run.log" |
+			grep -aqE "menus: cascade: forge maps: column 1, -, row [0-9]+ of [0-9]+: WIZARD \(DAMAGED\)$"; then
+			echo "  ok: forge: the picker shows Wizard damaged now"
+		else
+			fail "forge: the picker shows Wizard damaged now ($out/forge/run.log)"
+		fi
 		;;
 	mp)
 		if ! unshare -rn true 2> /dev/null; then
 			echo "SKIP: mp: no unprivileged network namespaces (unshare -rn)"; continue
 		fi
-		# (MULTIPLAYER; MAP (down two from NETWORK), up one to Battle Creek, A
-		# (refused); down ten to Wizard, A; B: the main menu; MULTIPLAYER again)
-		pad="wait:150:3000 down:150:700 a wait:150:6000 down:150:500 down:150:500 a:150:2000 up:150:600 a:150:1000"
+		# (MULTIPLAYER; MAP (down one from NETWORK: above GAME TYPE since 1.1.3) - SELECT MAP, on
+		# the lobby's Sidewinder -, up one to Battle Creek, A (refused); down ten to Wizard, A; B:
+		# the main menu, MULTIPLAYER still focused; A: MULTIPLAYER again)
+		pad="wait:150:3000 down:150:700 a wait:150:6000 down:150:500 a:150:2000 up:150:600 a:150:1000"
 		pad="$pad $(steps 10 down) a:150:4000 wait:150:2000 b:150:3000 wait:150:2000 a wait:150:8000"
 		run mp 60 1 "$pad"
 		checked mp
 		expect mp "Battle Creek, the lobby's map, can't be: Sidewinder instead" \
 			"menus: h3 mp: Battle Creek can't be played \\(beavercreek.map is damaged - copy it again\\): the lobby's map is Sidewinder"
 		expect mp "the live lobby opens on Sidewinder" "menus: h3 live lobby: open on SYSTEM LINK \\(Slayer on Sidewinder\\)"
-		expect mp "the picker shows Battle Creek damaged" "menus: h3 maps: Battle Creek .*can't be played: beavercreek.map is damaged"
-		expect mp "A does not choose Battle Creek" "menus: h3 maps: Battle Creek can't be chosen"
+		expect mp "the picker shows Battle Creek damaged" \
+			"menus: cascade: mp maps: column 1, -, row [0-9]+ of [0-9]+: BATTLE CREEK \\(DAMAGED\\)$"
+		expect mp "A does not choose Battle Creek, saying why" \
+			"menus: h3 maps: Battle Creek can't be chosen: beavercreek.map is damaged - copy it again"
 		expect mp "Wizard chosen: its precache fails, said" "Couldn't load Wizard: your wizard.map is cut short or damaged"
 		expect mp "MULTIPLAYER again: the lobby not on Wizard" \
 			"menus: h3 mp: Wizard can't be played \\(wizard.map is damaged - copy it again\\): the lobby's map is Sidewinder"
@@ -167,12 +181,13 @@ for case in $cases; do
 		fi
 		;;
 	campaign)
-		# (CAMPAIGN, the profile, MISSION: down eight to Keyes, A (refused), B)
-		run campaign 40 0 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 $(steps 8 down) a:150:1500 b:150:2000"
+		# (CAMPAIGN, the profile, MISSION - SELECT MISSION: HALO CE, A into its missions, on The
+		# Pillar of Autumn -: down eight to Keyes, A (refused), B)
+		run campaign 40 0 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 a wait:150:1500 $(steps 8 down) a:150:1500 b:150:2000"
 		checked campaign
-		expect campaign "the picker says why Keyes can't be played" \
-			"menus: h3 missions: Keyes: can't be played: d20.map is damaged - copy it again"
-		expect campaign "A does not choose Keyes" "menus: h3 campaign: Keyes can't be chosen"
+		expect campaign "the picker on Keyes" "menus: cascade: missions: column 2, -, row 9 of 10: KEYES$"
+		expect campaign "A does not choose Keyes, saying why" \
+			"menus: h3 campaign: Keyes can't be chosen: d20.map is damaged - copy it again"
 		refuse campaign "the mission stays" "menus: h3 campaign: Keyes on"
 		;;
 	*)

@@ -37,8 +37,9 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
-data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
-profile=${HALO_TEST_PROFILE:-$root/../vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
+. "$here/test_data_root.sh"
+data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
+profile=${HALO_TEST_PROFILE:-$data_root/vita-save-backups/20261017-halo-profile/blam-unlocked.sav}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_shared_tls_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
