@@ -54,6 +54,14 @@
 #               top, inside the large block, out of sight); a rifle let go in the air
 #               under a bridge is not lifted (forge_physics.inc forge_item_inside_solid)
 #
+#   itemsfall   a weapon let go high in the air keeps the spot where it lands: an
+#               assault rifle let go 20 above the ground falls for more than the
+#               editor's 3 s of following (forge.c FORGE_SETTLE_MILLISECONDS), so its
+#               placed spot was where it was in the air 3 s on (z ~5): 30 s later the
+#               game took it from the ground as "away from its spot" and put it back
+#               in the air, falling again; now an item is followed until it comes to
+#               rest (at most 20 s): its spot on the ground, still there at 40 s
+#
 #   run_forge_polish_test.sh [CASE...]      (default: all)
 #   HALO_TEST_VITA        the harness (default build/linux/halo of this tree)
 #   HALO_TEST_DATA_MENUS  a folder with the game's maps folder (the Xbox maps)
@@ -68,7 +76,7 @@ out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_forge_polish_test.$$}
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 . "$here/test_out.sh"
 test_out_begin "$out"
-cases=${*:-monitorprompt onlinemenu mccblocks mccblockstool itemsstay itemsstack}
+cases=${*:-monitorprompt onlinemenu mccblocks mccblockstool itemsstay itemsstack itemsfall}
 status=0
 fail() { echo "FAIL: $1"; status=1; }
 
@@ -299,6 +307,26 @@ PYEOF
 		on 10 -5 2.6 && echo "  ok: $c: the rifle let go in the air under the bridge stays under it ($(item 10))" ||
 			fail "$c: the rifle let go under the bridge was lifted: $(item 10)"
 		expect $c "lifted out of the block on the lower one" "forge: assault rifle let go 0\.[0-9]+ into platform_small: put on its top at .* \(out of the blocks on it too\)"
+		;;
+	itemsfall)
+		# (a rifle let go at 95 -150 20, over the ground at ~0.1; listed 8 s on and 40 s on)
+		cmd="L240:forge camera 92 -150 20 0 0;L262:forge spawn Assault Rifle;L263:forge distance 3;L268:forge drop"
+		cmd="$cmd;L510:forge objects;L1500:forge objects"
+		run $c 70 "$cmd"
+		checked $c || continue
+		# (listing N, object 0: "state z placed-z")
+		item() {
+			awk -v n="$1" '/test command at tick [0-9]+: forge objects/ { l++ }
+				l == n && $0 ~ "forge: object 0: " { for (i = 1; i <= NF; i++) { if ($i == "at" && !z) { z = $(i + 3); sub(",", "", z); s = $(i - 1) }
+					if ($i == "placed") { p = $(i + 4); sub(",", "", p) } } print s, z, p; exit }' "$out/$c/run.log"
+		}
+		item 1 | awk '{ exit !($1 == "alive" && $2 < 2 && $3 < 2) }' &&
+			echo "  ok: $c: the rifle landed and its placed spot is where it landed ($(item 1))" ||
+			fail "$c: 8 s on, the rifle's placed spot is not where it landed (state, z, placed z: $(item 1))"
+		item 2 | awk '{ exit !($1 == "alive" && $2 < 2) }' &&
+			echo "  ok: $c: 40 s on it is still there ($(item 2))" ||
+			fail "$c: 40 s on, the rifle is not on the ground where it landed (state, z, placed z: $(item 2))"
+		refuse $c "never taken from where it landed" "forge: assault rifle \(#1\) gone from its spot"
 		;;
 	*)
 		fail "unknown case $c"

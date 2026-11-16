@@ -328,6 +328,11 @@ enum
 	settles (a character with its brain on: only its fall, not where it
 	walks off to) */
 	FORGE_SETTLE_MILLISECONDS = 3000,
+	/* (a weapon's, a piece of equipment's) followed longer while it still
+	moves - a long fall, a roll down a ramp or a hill: its spot is where it
+	comes to rest (forge_item_life_update keeps it there, brings it back
+	there), not where it was 3 s after it was let go */
+	FORGE_ITEM_SETTLE_MILLISECONDS = 20000,
 };
 
 /* (the scenery group's tag: no header of the game's names it) */
@@ -1729,8 +1734,10 @@ static void forge_homes_update(
 			continue;
 		object = object_get(placed->object_index);
 		if (placed->object_index != forge_globals.held_object_index &&
-			((long)(placed->settle_until - now) <= 0 || object->object.parent_object_index != NONE ||
-				TEST_FLAG(object->object.damage_flags, _object_dead_bit)))
+			(((long)(placed->settle_until - now) <= 0 &&
+				!((FLAG(object->object.type) & _object_mask_item) && !TEST_FLAG(object->object.flags, _object_at_rest_bit) &&
+					(long)(placed->settle_until + FORGE_ITEM_SETTLE_MILLISECONDS - FORGE_SETTLE_MILLISECONDS - now) > 0)) ||
+				object->object.parent_object_index != NONE || TEST_FLAG(object->object.damage_flags, _object_dead_bit)))
 		{
 			continue;
 		}
