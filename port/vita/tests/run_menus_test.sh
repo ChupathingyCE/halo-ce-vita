@@ -1383,8 +1383,8 @@ for case in $cases; do
 			echo "--- h3lobbyscenes"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
 		# (as h3scenes: CAMPAIGN, the profile: the campaign lobby; B, B; down, A: MULTIPLAYER; B;
-		# down, A: FORGE; B - each lobby long enough for its packs' first build)
-		lobby_pad="wait:150:3000 a wait:150:3000 a wait:150:6000 b wait:150:2500 b wait:150:3000 down:150:700 a wait:150:6000 b wait:150:3000 down:150:700 a wait:150:8000 b wait:150:3000"
+		# down twice (past FIREFIGHT), A: FORGE; B - each lobby long enough for its packs' first build)
+		lobby_pad="wait:150:3000 a wait:150:3000 a wait:150:6000 b wait:150:2500 b wait:150:3000 down:150:700 a wait:150:6000 b wait:150:3000 down:150:700 down:150:700 a wait:150:8000 b wait:150:3000"
 		profile_from=$HALO_TEST_PROFILE run h3lobbyscenes "$menus_data" 60 "$lobby_pad" HALO_MENU_STYLE=halo3
 		# (the multiplayer lobby, then the preview: in colour 5, recoloured 9, hidden)
 		run h3lobbyscenes_preview "$menus_data" 26 "wait:150:3000 down:150:700 a wait:150:15000" HALO_MENU_STYLE=halo3 \
@@ -2968,9 +2968,9 @@ PY
 			fail h3friendsfit "the panel's line was cut" ;;
 	h3friendspanel)
 		# (MULTIPLAYER: the lobby's panel; Triangle: FRIENDS; B, B: the main menu, MULTIPLAYER focused; down
-		# to FORGE: its lobby's panel; Triangle; B)
+		# twice (past FIREFIGHT) to FORGE: its lobby's panel; Triangle; B)
 		friends_seed "$out/h3friends-save"
-		save_from="$out/h3friends-save" run h3friendspanel "$menus_data" 40 "$h3mppad wait:150:2500 y wait:150:2500 b wait:150:2000 b wait:150:2500 down:150:500 a wait:150:4000 y wait:150:2500 b wait:150:2000" \
+		save_from="$out/h3friends-save" run h3friendspanel "$menus_data" 40 "$h3mppad wait:150:2500 y wait:150:2500 b wait:150:2000 b wait:150:2500 down:150:500 down:150:500 a wait:150:4000 y wait:150:2500 b wait:150:2000" \
 			HALO_MENU_STYLE=halo3 HALO_TEST_FRIENDS_SHOW=online
 		check_h3 h3friendspanel halo3
 		log=$out/h3friendspanel/run.log
