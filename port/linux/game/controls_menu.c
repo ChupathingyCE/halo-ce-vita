@@ -751,3 +751,117 @@ void controls_menu_game_data(struct widget_instance *widget, long index)
 		break;
 	}
 }
+
+/* ---------- Halo PC's CONTROLS SETUP (port/linux/game/halo_pc_menus.c, on
+MCC's ui.map): the same actions, keys and mouse settings on Halo PC's own
+screen, its CATEGORY spinner the group and its eight rows the group's */
+
+/* the action (or the mouse's ROW_*) of a group's row, -1 past them */
+short controls_menu_pc_action(short group, short row)
+{
+	if (group < 0 || group >= GROUP_COUNT || row < 0 || row >= KEYS_ROWS)
+		return -1;
+	return groups[group][row];
+}
+
+char const *controls_menu_pc_label(short action)
+{
+#ifdef CONTROLS_MENU_NONE
+	(void)action;
+	return "";
+#else
+	if (action <= ROW_SENSITIVITY)
+		return mouse_label(action);
+	return action >= 0 && action < HALO_BIND_ACTION_COUNT ? T(action_labels[action]) : "";
+#endif
+}
+
+/* what the row shows: the action's two keys ("G, -"), or the mouse's value */
+void controls_menu_pc_value(short action, char *text, size_t size)
+{
+#ifdef CONTROLS_MENU_NONE
+	(void)action;
+	text[0] = 0;
+	(void)size;
+#else
+	if (action <= ROW_SENSITIVITY)
+		mouse_value(action, text, size);
+	else if (action >= 0 && action < HALO_BIND_ACTION_COUNT)
+	{
+		const struct halo_bindings *bindings = halo_key_bindings();
+		char first[64], second[64];
+
+		input_shown(bindings->inputs[action][0], first, sizeof(first));
+		input_shown(bindings->inputs[action][1], second, sizeof(second));
+		snprintf(text, size, "%s, %s", first, second);
+	}
+	else
+		text[0] = 0;
+#endif
+}
+
+/* A on a row: a key asked for the action (its first free slot, else its
+first), or the mouse's setting stepped */
+void controls_menu_pc_accept(short action)
+{
+#ifdef CONTROLS_MENU_NONE
+	(void)action;
+#else
+	if (keys_menu.capturing)
+		return;
+	if (action <= ROW_SENSITIVITY)
+		mouse_step(action, 1);
+	else if (action >= 0 && action < HALO_BIND_ACTION_COUNT)
+	{
+		const struct halo_bindings *bindings = halo_key_bindings();
+
+		capture_begin(action, (short)(bindings->inputs[action][0] != HALO_BIND_NONE &&
+			bindings->inputs[action][1] == HALO_BIND_NONE ? 1 : 0));
+	}
+#endif
+}
+
+/* each frame: the key asked for taken once pressed; the status line, and
+whether one is still asked for */
+unsigned char controls_menu_pc_update(char *status, size_t size)
+{
+#ifdef CONTROLS_MENU_NONE
+	status[0] = 0;
+	(void)size;
+	return FALSE;
+#else
+	capture_update();
+	snprintf(status, size, "%s", keys_menu.status);
+	return keys_menu.capturing;
+#endif
+}
+
+void controls_menu_pc_open(void)
+{
+#ifndef CONTROLS_MENU_NONE
+	capture_cancel();
+	keys_menu.status[0] = 0;
+	keys_menu.slot = 0;
+#endif
+}
+
+/* (B, or the screen closing) nothing asked for any more; TRUE when one was */
+unsigned char controls_menu_pc_cancel(void)
+{
+#ifdef CONTROLS_MENU_NONE
+	return FALSE;
+#else
+	if (!keys_menu.capturing)
+		return FALSE;
+	capture_cancel();
+	snprintf(keys_menu.status, sizeof(keys_menu.status), "%s", T("Nothing changed."));
+	return TRUE;
+#endif
+}
+
+void controls_menu_pc_reset(void)
+{
+#ifndef CONTROLS_MENU_NONE
+	reset();
+#endif
+}

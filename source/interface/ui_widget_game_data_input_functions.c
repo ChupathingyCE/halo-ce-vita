@@ -724,6 +724,15 @@ void ui_widget_game_data_function_invoke(
 			pc_menu_game_data_function_invoke(widget, function - 256);
 		return;
 	}
+	/* port: Halo PC's own game data inputs on MCC's ui.map (its scrolling
+	lists' updates, numbered as the Xbox's 3-wide lists' or past them:
+	port/linux/game/halo_pc_menus.c) */
+	{
+		extern boolean halo_pc_menu_game_data_invoke(struct widget_instance *widget, word function);
+
+		if (halo_pc_menu_game_data_invoke(widget, function))
+			return;
+	}
 #endif
 	if ((short)function >= 0 && function < NUMBEROF(game_data_input_function_list))
 	{
