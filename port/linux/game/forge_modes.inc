@@ -2445,11 +2445,13 @@ corner) */
 #define FORGE_MODES_HUD_BOTTOM 418.f
 /* (1.1.5, the owner: "I don't like it over the weapon") where the box stands,
 in the HUD's own frame (command_hud_frame_begin: the game's HUD window, 480
-high): at the top middle (the default: clear of the weapon, the game's own
-message lines, the motion tracker and the banner), under Halo CE's ammunition
-and grenade counter at the top left (the game's messages - pickups, the kill
-feed - start there and run under the box: not the default), under the shield
-and health at the top right, or where it was, over the weapon. HALO_FIREFIGHT_HUD=left|middle|right|weapon
+high): at the top left directly under Halo CE's ammunition and grenade
+counter (the default: the box stands where the game's message lines start -
+hud_messaging_port_anchor, so it follows the HUD's own scale, the screen's
+width, the title-safe window and split screen - and pushes those lines,
+pickups, prompts, kills, "Respawn in", down under itself that frame:
+hud_messaging_port_push_set), at the top middle, under the shield and health
+at the top right, or where it was, over the weapon. HALO_FIREFIGHT_HUD=left|middle|right|weapon
 (env.txt on a Vita) or the console's "forge mode hud <place>" to compare. */
 enum
 {
@@ -2486,9 +2488,29 @@ static short forge_modes_hud_place(
 	{
 		short place = forge_modes_hud_place_of(getenv("HALO_FIREFIGHT_HUD"));
 
-		forge_modes_hud_place_chosen = place != NONE ? place : _forge_modes_hud_middle;
+		forge_modes_hud_place_chosen = place != NONE ? place : _forge_modes_hud_left;
 	}
 	return forge_modes_hud_place_chosen;
+}
+
+/* (the top left) where the game's message lines start, in the HUD's frame
+(480 high, from the HUD window's corner): under the ammunition counter.
+FALSE: not known (the fixed place under the counter then) */
+static boolean forge_modes_hud_anchor(
+	short local_player_index,
+	real *x,
+	real *y,
+	real *unit)
+{
+	point2d point;
+	real const height = (real)(render.camera.window_bounds.y1 - render.camera.window_bounds.y0);
+
+	*unit = height / 480.f;
+	if (*unit <= 0.f || !hud_messaging_port_anchor(local_player_index, &point))
+		return FALSE;
+	*x = ((real)point.x + (real)render.camera.viewport_bounds.x0 - (real)render.camera.window_bounds.x0) / *unit;
+	*y = ((real)point.y + (real)render.camera.viewport_bounds.y0 - (real)render.camera.window_bounds.y0) / *unit;
+	return *x >= 0.f && *y >= 0.f && *y < 240.f;
 }
 
 static void forge_modes_draw(
@@ -2498,6 +2520,8 @@ static void forge_modes_draw(
 	short const place = forge_modes_hud_place();
 	real const box = place == _forge_modes_hud_left || place == _forge_modes_hud_right ? FORGE_MODES_HUD_BOX_CORNER : FORGE_MODES_HUD_BOX;
 	real box_bottom = 0.f;
+	real box_top = 0.f;
+	real box_x = 0.f;
 	char line[128];
 	char right[64];
 	boolean bonus = forge_modes.state == _forge_modes_state_bonus_start || forge_modes.state == _forge_modes_state_bonus ||
@@ -2527,6 +2551,20 @@ static void forge_modes_draw(
 		y = place == _forge_modes_hud_left ? FORGE_MODES_HUD_LEFT_TOP : place == _forge_modes_hud_middle ? FORGE_MODES_HUD_MIDDLE_TOP :
 			place == _forge_modes_hud_right ? FORGE_MODES_HUD_RIGHT_TOP :
 			FORGE_MODES_HUD_BOTTOM - 19.f - FORGE_MODES_HUD_ROW * (real)(rows - 1);
+		if (place == _forge_modes_hud_left)
+		{
+			real anchor_x, anchor_y, unit;
+
+			/* (at the messages' place: their left edge, just under the
+			counter) */
+			if (forge_modes_hud_anchor(local_player_index, &anchor_x, &anchor_y, &unit))
+			{
+				x = PIN(anchor_x, 2.f, MAX(2.f, width - box - 2.f));
+				y = anchor_y + 2.f;
+			}
+		}
+		box_x = x;
+		box_top = y;
 		box_bottom = y + 19.f + FORGE_MODES_HUD_ROW * (real)(rows - 1);
 		/* (the title strip: the mode, its set and round - or the bonus
 		round) */
@@ -2641,11 +2679,22 @@ static void forge_modes_draw(
 				line);
 		}
 	}
+	/* (at the top left the game's message lines go on under the box this
+	frame - hud.c draws them after this) */
+	if (place == _forge_modes_hud_left && box_bottom > 0.f)
+	{
+		real anchor_x, anchor_y, unit;
+
+		if (forge_modes_hud_anchor(local_player_index, &anchor_x, &anchor_y, &unit) && box_bottom + 4.f > anchor_y)
+			hud_messaging_port_push_set(local_player_index, (short)((box_bottom + 4.f - anchor_y) * unit + 0.5f));
+	}
 	/* (the banner: a round's start, the bonus round's, the end) */
 	if (forge_modes.banner[0] && system_milliseconds() < forge_modes.banner_until)
 	{
-		/* (under the box at the top middle) */
-		real top = place == _forge_modes_hud_middle && box_bottom + 8.f > 96.f ? box_bottom + 8.f : 96.f;
+		/* (under the box where they would meet: the top middle, the top
+		left on a 4:3 screen) */
+		real top = box_bottom > 0.f && box_top < 96.f + 50.f && box_x < width * 0.5f + 170.f && box_x + box > width * 0.5f - 170.f &&
+				box_bottom + 8.f > 96.f ? box_bottom + 8.f : 96.f;
 
 		command_hud_draw_art(COMMAND_HUD_ART_STRIP, width * 0.5f - 170.f, top, width * 0.5f + 170.f, top + (forge_modes.banner_line[0] ? 50.f : 32.f),
 			0.85f);

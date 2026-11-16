@@ -43,6 +43,16 @@ void hud_messaging_port_timer_set(
 	struct hud_timer_state const *state);
 short hud_messaging_port_message_count(
 	void);
+#ifdef HALO_LINUX
+/* port: the messages' place (under the ammunition counter) and a port HUD
+box's push of them down this frame (port/linux/game/forge_modes.inc) */
+boolean hud_messaging_port_anchor(
+	short local_player_index,
+	point2d *point);
+void hud_messaging_port_push_set(
+	short local_player_index,
+	short pixels);
+#endif
 
 void scripted_hud_set_state_message(
 	short message_index);

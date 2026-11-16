@@ -517,6 +517,14 @@ static char button_mappings[_icon_custom_1 - _icon_action] =
 long time_code_time = NONE;
 long time_code_stop_time = NONE;
 static long split_screen_hud_message_offset = 17;
+#ifdef HALO_LINUX
+/* port: how far down a port HUD box standing at the messages' place (under
+the ammunition counter: Firefight's, port/linux/game/forge_modes.inc) moves
+the game's message lines - state, pickups, kills, respawns - this frame, per
+local player. hud.c draws forge_draw before hud_messaging_update, so the box
+sets it each frame and the lines use it once (none drawn: none moved) */
+static short hud_messaging_port_push[MAXIMUM_LOCAL_PLAYERS];
+#endif
 
 /* ---------- public code */
 
@@ -909,6 +917,41 @@ void hud_messaging_port_timer_set(
 	timer->corner = PIN(state->corner, 0, 4);
 	timer->paused = state->paused;
 	timer->enabled = state->enabled;
+}
+
+/* port: where the game's message lines start (the HUD globals' messaging
+placement: under the ammunition counter, as the HUD's own scale, the screen's
+width, the title-safe window and split screen place it), in the viewport's
+pixels as hud_calculate_point gives them; drawing the HUD of that player */
+boolean hud_messaging_port_anchor(
+	short local_player_index,
+	point2d *point)
+{
+	if (!hud_msg_def || local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
+		render.local_player_index != local_player_index)
+	{
+		return FALSE;
+	}
+	hud_calculate_point(
+		local_player_index,
+		&hud_msg_def->absolute_placement,
+		&hud_msg_def->placement,
+		NULL,
+		local_player_count() > 1,
+		0.0f,
+		point);
+	if (local_player_count() > 1)
+		point->y = (short)(point->y - split_screen_hud_message_offset);
+	return TRUE;
+}
+
+/* port: the lines moved down by a box at their place this frame (pixels) */
+void hud_messaging_port_push_set(
+	short local_player_index,
+	short pixels)
+{
+	if (local_player_index >= 0 && local_player_index < MAXIMUM_LOCAL_PLAYERS)
+		hud_messaging_port_push[local_player_index] = (short)MAX(0, pixels);
 }
 
 short hud_messaging_port_message_count(
@@ -1516,6 +1559,16 @@ static long compare_messages(
 void hud_messaging_update(
 	short local_player_index)
 {
+#ifdef HALO_LINUX
+	/* port: a box's push of the lines this frame, used once (drawn or not) */
+	short port_push = 0;
+
+	if (local_player_index >= 0 && local_player_index < MAXIMUM_LOCAL_PLAYERS)
+	{
+		port_push = hud_messaging_port_push[local_player_index];
+		hud_messaging_port_push[local_player_index] = 0;
+	}
+#endif
 	if (!cinematic_in_progress() &&
 		local_player_index != NONE &&
 		game_engine_hud_draw_messages(local_player_get_player_index(local_player_index)))
@@ -1542,6 +1595,10 @@ void hud_messaging_update(
 			local_player_count() > 1,
 			0.0f,
 			&screen_point);
+#ifdef HALO_LINUX
+		/* port: under a box standing at the lines' place this frame */
+		screen_point.y = (short)(screen_point.y + port_push);
+#endif
 		line_top = screen_point.y;
 		font = font_definition_get(font_index);
 		if (split_screen)
