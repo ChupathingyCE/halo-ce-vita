@@ -2492,7 +2492,7 @@ for case in $cases; do
 		ln -s "$(dirname "$ws_mp_map")/bitmaps.map" "$out/h3wsp-data/mods/2900000002/halo1/maps/bitmaps.map"
 		# (a maps-folder file of the reserved name: never listed)
 		cp --reflink=auto "$(readlink -f "$out/h3wsp-data/maps/mygulch.map")" "$out/h3wsp-data/maps/ws2900000002_x.map"
-		run h3workshoppicker "$out/h3wsp-data" 50 "$h3pickerpad" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch
+		mods_from="$out/h3wsp-data/mods" run h3workshoppicker "$out/h3wsp-data" 50 "$h3pickerpad" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch
 		check_h3 h3workshoppicker halo3
 		log=$out/h3workshoppicker/run.log
 		grep -aq "menus: cascade: mp maps$" "$log" || fail h3workshoppicker "MAP did not open the lobby's map picker"

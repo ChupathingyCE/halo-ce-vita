@@ -396,7 +396,9 @@ so it cannot host one.
   version is 0 (network_identity's crossplay branch), so a PC client sees a map it lacks and our host serves no map
   share on that wire; Chupathingy's own Workshop scheme (an id in the name's tail, a sidecar) is not used or read.
   Our joiner on a PC host's game takes the crossplay branch first, which refuses a name that is not a PC map's.
-  Workshop maps are therefore for Vita / Vita PC games; on an Everyone game PC players are refused cleanly.
+  Workshop maps are therefore for Vita / Vita PC games; on an Everyone game PC players are refused cleanly. (This
+  bullet is read from the code - network_server_manager.c names only Custom Edition caches custom_maps\; no OpenCE
+  build was run against a Workshop map this lane.)
 - A newer build later adding fields would need its own review; this one parses nothing new.
 
 ### 8.6 Rate limits and abuse
@@ -410,8 +412,15 @@ The joiner never opens a connection to anything but Steam's CM/CDN for this.
 - run_workshop_maps_test.sh: 33 checks (names made/read, level names, verdicts, ids, unended record bytes).
 - run_net_fuzz_test.sh target `workshop` (net_fuzz_workshop.c: the record's 0x80 name bytes, both identities, any
   id/stem): 11 seeds, 60 s libFuzzer, 11.7 M runs, 0 findings (with crossplay_maps 7.1 M and map_share 5.3 M, 0).
-- run_netns_online_test.sh `workshop` (both have it: 91 s played together), `workshopget`, `workshopno`,
-  `workshopdiff`, `workshopold` (results in ~/halo-test-out/workshop-mp-runs/NOTES.md).
+- run_netns_online_test.sh (netns_workshop_cases.sh), all PASS: `workshop` (both have it: 91 s played together, the
+  map loaded from each machine's mods folder, no map share query); `workshopget` (asked, answered yes; the joiner's
+  Steam job against steam_fake_server.py in its own namespace: QR, the one item, 15 MB, revoked and logged off; the
+  item installed through the game's map check, its bytes the map's, its identity the host's, precached; 81 s played;
+  no token in a log or file; nothing asked of or sent by the host; the pixels from the joiner's own MCC, the item
+  having no bitmaps.map); `workshopno` (told, no Steam session, nothing installed); `workshopdiff` (refused "isn't the
+  same version", no question, its own copy untouched); `workshopold` (release-1.1.2 and the 1.1.3 candidate without
+  the Workshop: each told "the host does not share that map", the host's map share refused it, nothing received,
+  each up to the end of the run).
 - Offline: a local game with 3 bots on ws2900000002_coldsna-8866 (MCC Blood Gulch as a Workshop item): loaded from
   mods/2900000002, bots' nav built, 85 s of play, kills.
 
