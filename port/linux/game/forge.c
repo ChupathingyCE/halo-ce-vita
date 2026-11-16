@@ -405,6 +405,9 @@ enum
 /* the in-game set's screens (halo3/forge.xml) */
 #define FORGE_BROWSER_SCREEN "h3/forge/browser/screen"
 #define FORGE_MENU_SCREEN "h3/forge/pause/screen"
+/* (1.1.5) a FIREFIGHT game's: RESUME and LEAVE FIREFIGHT alone (forge_modes.inc;
+menu_tags.c opens it for a map with a pause screen) */
+#define FIREFIGHT_MENU_SCREEN "h3/firefight/pause/screen"
 #define FORGE_PROPERTIES_SCREEN "h3/forge/properties/screen"
 
 static real const forge_speeds[NUMBER_OF_FORGE_SPEEDS] = { 0.6f, 2.f, 5.f };
@@ -3561,14 +3564,22 @@ in its place, and the menu is open by now */
 static void forge_menu_open_pause(
 	void)
 {
-	long screen = menu_tags_ingame_screen(FORGE_MENU_SCREEN);
+	/* (a FIREFIGHT game: its own menu - no monitor, saving, undo or DELETE
+	ALL in a game of waves -; Forge's with none) */
+	boolean firefight = forge_modes_running();
+	long screen = firefight ? menu_tags_ingame_screen(FIREFIGHT_MENU_SCREEN) : NONE;
 
+	if (screen == NONE)
+	{
+		firefight = FALSE;
+		screen = menu_tags_ingame_screen(FORGE_MENU_SCREEN);
+	}
 	if (screen == NONE ||
 		!ui_widget_load_by_name_or_tag(NULL, screen, NULL, forge_globals.local_player_index, NONE, NONE, NONE))
 	{
 		return;
 	}
-	platform_log("forge: the Forge menu opened");
+	platform_log("forge: the %s menu opened", firefight ? "Firefight" : "Forge");
 }
 
 /* ---- undo and redo: a bounded history of what the monitor did (placed,
