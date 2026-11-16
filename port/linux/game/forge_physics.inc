@@ -134,9 +134,15 @@ it (1.1.2: "weapons fall through every block"; one held to look as if it lay
 on a block's top has its origin a little in it). The map's structure needs
 nothing: an item in the ground stays there (its location must stay valid),
 and players and vehicles are pushed out of what they are in. Only items, only
-the objects an item rests on (scenery, machines, controls: items.c's rule),
-and only when some of the item still shows over the top (its origin within
-its bounding radius under it); deeper in, it falls as before */
+the objects an item rests on (scenery, machines, controls: items.c's rule).
+1.1.4: at any depth - 1.1.3 lifted only one whose origin was within its
+bounding radius (a powerup's, a grenade's: 0.1) of the top, and one held a
+little deeper, or let go inside a block from its side, still fell through to
+the ground; the top is looked for FORGE_ITEM_UNBURY_HEIGHT up (the tallest
+block is 2 high), and one under an object, not in it, meets its underside
+first and is left alone. A ramp's 45 degree face is a top too */
+#define FORGE_ITEM_UNBURY_HEIGHT 4.f
+#define FORGE_ITEM_UNBURY_TOP 0.6f
 static void forge_item_unburied(
 	long object_index)
 {
@@ -153,12 +159,12 @@ static void forge_item_unburied(
 	if (!object || !(FLAG(object->object.type) & _object_mask_item) || object->object.parent_object_index != NONE)
 		return;
 	position = object->object.position;
-	height = MAX(object->object.bounding_sphere_radius, 0.1f);
+	height = MAX(object->object.bounding_sphere_radius, FORGE_ITEM_UNBURY_HEIGHT);
 	over = position;
 	over.z += height;
 	/* (inside: going up, a surface left - a back face - before any entered) */
 	if (!collision_test_line(solid | FLAG(_collision_test_back_facing_surfaces_bit), &position, &over, object_index, &left) ||
-		left.type != _collision_result_object || left.plane.n.k < 0.7071f)
+		left.type != _collision_result_object || left.plane.n.k < FORGE_ITEM_UNBURY_TOP)
 	{
 		return;
 	}

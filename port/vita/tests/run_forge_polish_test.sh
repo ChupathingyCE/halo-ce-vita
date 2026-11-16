@@ -32,6 +32,19 @@
 #               built twice to the same bytes, passing the pack check with no
 #               correction, its walls and floors the Xbox build's bitmaps
 #
+#   itemsstay   weapons and equipment placed in Forge stay where they are put
+#               (owner, Nov 15: "every time he placed a gun down on the building
+#               blocks, the guns would fall through"): an assault rifle held 0.08
+#               into a large platform's top, a frag grenade held 0.5 inside a large
+#               block (1.1.3 lifted an item only within its bounding radius of the
+#               top: the grenade fell through to the ground), an overshield on the
+#               ground; 5 s on each lies on its top; 40 s on all three are still
+#               there (1.1.0 to 1.1.3-rc.9: a multiplayer game takes away every item
+#               not held for 30 s, game_engine_update_purge, and the layout's never
+#               came back before the next round); the rifle taken out of the world
+#               comes back at its spot its RESPAWN (30 s) later
+#               (forge.c forge_item_life_update, forge_physics.inc forge_item_unburied)
+#
 #   run_forge_polish_test.sh [CASE...]      (default: all)
 #   HALO_TEST_VITA        the harness (default build/linux/halo of this tree)
 #   HALO_TEST_DATA_MENUS  a folder with the game's maps folder (the Xbox maps)
@@ -46,7 +59,7 @@ out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_forge_polish_test.$$}
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 . "$here/test_out.sh"
 test_out_begin "$out"
-cases=${*:-monitorprompt onlinemenu mccblocks mccblockstool}
+cases=${*:-monitorprompt onlinemenu mccblocks mccblockstool itemsstay}
 status=0
 fail() { echo "FAIL: $1"; status=1; }
 
@@ -201,6 +214,42 @@ PYEOF
 			echo "  ok: $c: the Xbox build's bitmaps" || fail "$c: the bitmaps chosen ($out/$c/build_1.log)"
 		"$tool" check "$out/$c/blocks_1.pack" > "$out/$c/check.log" 2>&1 && grep -q "56 tags from bloodgulch" "$out/$c/check.log" && \
 			grep -q "0 corrections" "$out/$c/check.log" && echo "  ok: $c: 56 tags, checked with no correction" || fail "$c: the pack check ($out/$c/check.log)"
+		;;
+	itemsstay)
+		# (SNAP off; a large platform at 86 -150 3 (its top at 3.125), a large block at
+		# 92 -150 3 (4.0); the rifle 0.08 into the platform's top, the grenade 0.5 into
+		# the block's, the overshield let go over the ground; listed at 5 s, at 40 s;
+		# the rifle (#3) destroyed, listed 35 s after)
+		cmd="L240:forge snap off;L250:forge camera 81 -150 3 0 0;L258:forge spawn platform_large;L259:forge distance 5;L266:forge drop"
+		cmd="$cmd;L270:forge camera 87 -150 3 0 0;L278:forge spawn block_large;L279:forge distance 5;L286:forge drop"
+		cmd="$cmd;L290:forge camera 83 -150 3.045 0 0;L312:forge spawn Assault Rifle;L313:forge distance 3;L318:forge drop"
+		cmd="$cmd;L322:forge camera 89 -150 3.5 0 0;L344:forge spawn Frag Grenade;L345:forge distance 3;L350:forge drop"
+		cmd="$cmd;L354:forge camera 95 -150 1.5 0 0;L376:forge spawn Overshield;L377:forge distance 3;L382:forge drop"
+		cmd="$cmd;L530:forge objects;L532:forge camera 80 -155 6 40 -25;L545:@shot 00-placed;L1600:forge objects;L1602:@shot 01-after-40s"
+		cmd="$cmd;L1610:forge destroy #3;L1620:forge objects;L2700:forge objects"
+		run $c 105 "$cmd"
+		checked $c || continue
+		# listing N (1..4), object K: "state z"
+		item() {
+			awk -v n="$1" -v k="$2" '/test command at tick [0-9]+: forge objects/ { l++ }
+				l == n && $0 ~ ("forge: object " k ": ") { for (i = 1; i <= NF; i++) if ($i == "at") { z = $(i + 3); sub(",", "", z); print $(i - 1), z; exit } }' "$out/$c/run.log"
+		}
+		on() { # LISTING OBJECT LOW HIGH
+			item "$1" "$2" | awk -v lo="$3" -v hi="$4" '{ exit !($1 == "alive" && $2 >= lo && $2 <= hi) }'
+		}
+		on 1 2 3.07 3.5 && echo "  ok: $c: the rifle held into the platform's top lies on it ($(item 1 2))" ||
+			fail "$c: the rifle is not on the platform's top 5 s on: $(item 1 2)"
+		on 1 3 3.95 4.4 && echo "  ok: $c: the grenade held 0.5 inside the large block lies on its top ($(item 1 3))" ||
+			fail "$c: the grenade is not on the large block's top 5 s on: $(item 1 3)"
+		expect $c "the grenade lifted from inside the block" "forge: frag grenade let go 0\.[45][0-9] into block_large: put on its top"
+		on 2 2 3.07 3.5 && on 2 3 3.95 4.4 && [ "$(item 2 4 | cut -d' ' -f1)" = alive ] &&
+			echo "  ok: $c: 40 s on the rifle, the grenade and the overshield are still there" ||
+			fail "$c: 40 s on: the rifle $(item 2 2), the grenade $(item 2 3), the overshield $(item 2 4)"
+		[ "$(item 3 2 | cut -d' ' -f1)" = gone ] && echo "  ok: $c: the rifle taken out of the world" || fail "$c: the rifle not gone: $(item 3 2)"
+		expect $c "its RESPAWN counted" "forge: assault rifle \(#3\) gone from its spot: back in 30 s"
+		expect $c "back at its spot 30 s later" "forge: assault rifle \(#3\) respawned after 30 s at 8[5-6]\.[0-9]+ -1(49|50)\.[0-9]+ 3\.[0-4]"
+		# (respawned: the entry moves to the layout's end, object 4)
+		on 4 4 3.07 3.5 && echo "  ok: $c: and lies on the platform again ($(item 4 4))" || fail "$c: the respawned rifle: $(item 4 4)"
 		;;
 	*)
 		fail "unknown case $c"

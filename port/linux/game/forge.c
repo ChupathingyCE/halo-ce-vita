@@ -234,6 +234,7 @@ Each logs what it did ("forge: ...").
 #include "input/input.h"
 #include "interface/hud_messaging.h"
 #include "items/equipment_definitions.h"
+#include "items/items.h"
 #include "items/weapon_definitions.h"
 #include "main/main.h"
 #include "objects/damage.h"
@@ -6025,6 +6026,128 @@ static short forge_body_seconds(
 #endif
 }
 
+/* (each update, as forge_ai_life_update: the game's host's) the layout's
+weapons and equipment. A multiplayer game takes away every item nobody has
+held for 30 s (game_engine.c game_engine_update_purge) and puts the map's
+own back from its netgame equipment; the layout's are not the map's, so one
+placed in Forge - on the ground, on a block - was gone half a minute later
+and stayed gone until the next round (1.1.0 to 1.1.3-rc.9: to a builder, the
+guns he put on his blocks "fell through" them), and its RESPAWN did nothing:
+- one lying where the editor put it (its home) is never taken away, as the
+  map's own lying at its spot is not;
+- one gone - picked up and used up, thrown, or dropped elsewhere and taken
+  away by the game - comes back at its home its RESPAWN time later (0: with
+  the next round only), its properties and its id kept, as a character does.
+Never what anyone holds; the coming back is the host's game's alone */
+#define FORGE_ITEM_HOME_DISTANCE 0.75f
+static boolean forge_placed_is_item(
+	struct forge_placed const *placed)
+{
+	unsigned long group_tag;
+
+	if (placed->ai || placed->tag_index == NONE)
+		return FALSE;
+	group_tag = tag_get_group_tag(placed->tag_index);
+	return group_tag == WEAPON_DEFINITION_TAG || group_tag == EQUIPMENT_DEFINITION_TAG;
+}
+
+static void forge_item_life_update(
+	void)
+{
+	long now;
+	short index;
+
+	if (!forge_globals.game_active || forge_globals.game_requested || forge_globals.round_pending ||
+		forge_globals.round_resetting || !game_in_progress())
+	{
+		return;
+	}
+	now = game_time_get();
+	forge_placed_update();
+	for (index = 0; index < forge_globals.placed_count && index < FORGE_MAXIMUM_OBJECTS; index++)
+	{
+		struct forge_placed *placed = &forge_globals.placed[index];
+		struct forge_placed kept;
+		long object_index;
+		short refusal;
+
+		if (!forge_placed_is_item(placed))
+			continue;
+		if (placed->object_index != NONE)
+		{
+			struct object_datum *object = object_try_and_get(placed->object_index);
+
+			placed->dead_tick = 0;
+			if (object && (FLAG(object->object.type) & _object_mask_item) && object->object.parent_object_index == NONE &&
+				placed->has_home)
+			{
+				struct item_datum *item = (struct item_datum *)object;
+				real_vector3d from_home;
+
+				from_home.i = object->object.position.x - placed->home.position.x;
+				from_home.j = object->object.position.y - placed->home.position.y;
+				from_home.k = object->object.position.z - placed->home.position.z;
+				if (!TEST_FLAG(item->item.flags, _item_attached_to_unit_bit) &&
+					dot_product3d(&from_home, &from_home) < FORGE_ITEM_HOME_DISTANCE * FORGE_ITEM_HOME_DISTANCE)
+				{
+					item->item.last_owned_time = now;
+				}
+			}
+			continue;
+		}
+		/* (a client keeps its copies at their spots too - the old netcode's
+		client runs the game's 30 s on its own -; what is gone comes back
+		from the host) */
+		if (forge_net_client())
+			continue;
+		if (!placed->dead_tick)
+		{
+			placed->dead_tick = now + 1;
+			platform_log("forge: %s (#%ld) gone from its spot: back in %d s", forge_tag_leaf(placed->tag_index), placed->id,
+				(int)placed->respawn_seconds);
+		}
+		if (!placed->has_home || !placed->respawn_seconds ||
+			now + 1 - placed->dead_tick < (long)placed->respawn_seconds * FORGE_TICKS_PER_SECOND)
+		{
+			continue;
+		}
+		kept = *placed;
+		forge_placed_remove(index);
+		object_index = forge_place(kept.tag_index, &kept.home.position, &kept.home.forward, &kept.home.up, TRUE, &refusal);
+		if (object_index == NONE || forge_globals.placed_count <= 0 ||
+			forge_globals.placed[forge_globals.placed_count - 1].object_index != object_index)
+		{
+			/* (not placed: the entry kept, tried again its time later) */
+			if (forge_globals.placed_count < FORGE_MAXIMUM_OBJECTS)
+			{
+				kept.object_index = NONE;
+				kept.dead_tick = now + 1;
+				forge_globals.placed[forge_globals.placed_count++] = kept;
+				forge_placed_update();
+			}
+			platform_log("forge: %s (#%ld) could not respawn (%d)", forge_tag_leaf(kept.tag_index), kept.id, (int)refusal);
+			index--;
+			continue;
+		}
+		{
+			struct forge_placed *entry = &forge_globals.placed[forge_globals.placed_count - 1];
+
+			entry->id = kept.id;
+			entry->team = kept.team;
+			entry->flags = kept.flags;
+			entry->respawn_seconds = kept.respawn_seconds;
+			entry->ai_team = kept.ai_team;
+			entry->home = kept.home;
+			entry->has_home = TRUE;
+			entry->dead_tick = 0;
+		}
+		platform_log("forge: %s (#%ld) respawned after %d s at %.2f %.2f %.2f", forge_tag_leaf(kept.tag_index), kept.id,
+			(int)kept.respawn_seconds, kept.home.position.x, kept.home.position.y, kept.home.position.z);
+		/* (the entry moved to the end: this index holds the next one) */
+		index--;
+	}
+}
+
 static void forge_ai_life_update(
 	void)
 {
@@ -6047,7 +6170,10 @@ static void forge_ai_life_update(
 		short refusal;
 		boolean held;
 
-		if (!placed->ai || (!placed->waiting && !forge_placed_dead(placed)))
+		/* (a weapon's, a piece of equipment's dead_tick: forge_item_life_update's) */
+		if (!placed->ai)
+			continue;
+		if (!placed->waiting && !forge_placed_dead(placed))
 		{
 			placed->dead_tick = 0;
 			continue;
@@ -6202,6 +6328,8 @@ void forge_update(
 			forge_physics_update();
 			/* (its characters that respawn: the game's host's) */
 			forge_ai_life_update();
+			/* (its weapons and equipment: kept at their spots, their RESPAWN) */
+			forge_item_life_update();
 			forge_net_update();
 		}
 		return;
@@ -6236,6 +6364,7 @@ void forge_update(
 	if (forge_game_playing)
 		forge_ai_hold();
 	forge_ai_life_update();
+	forge_item_life_update();
 #ifndef HALO_RELEASE
 	if (forge_globals.game_active && forge_globals.ai_shots_counted)
 		forge_ai_shots_update();
