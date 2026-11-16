@@ -145,6 +145,11 @@ the multiplayer ones for the Xbox's thirteen, the campaign's for the ten
 levels), or -1 for Halo PC's own maps. */
 int mcc_content_picture_frame(char const *stem);
 
+/* (1.1.4) whether the stock map is one of Halo PC's six multiplayer maps
+(dangercanyon .. timberland): in MCC's halo1\maps alone, never on the Xbox
+disc, never downloaded or shared - Command mode's big team maps */
+int mcc_content_pc_exclusive(char const *stem);
+
 /* The campaign's levels in their order (0 to 9: a10 ... d40), and the
 multiplayer maps (`index` from 0 while it gives one), or NULL. */
 char const *mcc_content_campaign_stem(int index);

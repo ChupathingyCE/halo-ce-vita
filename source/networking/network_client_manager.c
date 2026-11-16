@@ -1590,6 +1590,20 @@ static void network_game_client_map_refusal_show(
 			T("The host's custom map %s isn't the same as yours. Copy the host's map to your maps folder."), name);
 		break;
 	case _network_game_client_map_mcc_missing:
+		{
+			char stem[MCC_CONTENT_STEM_BYTES];
+
+			/* (1.1.4, the owner: a PC-exclusive big team map - Command's -
+			said in plain words, never offered for download or sharing) */
+			if (mcc_content_name_stem(map->name, stem) == _mcc_content_multiplayer && mcc_content_pc_exclusive(stem))
+			{
+				length = snprintf(message, sizeof(message),
+					T("The host is playing %s, a PC-exclusive map from Halo MCC on Steam. It can't be downloaded or shared "
+					"here: add your Steam copy of Halo MCC to join."), mcc_content_title(stem) ? T(mcc_content_title(stem)) : name);
+				platform_log("map: the host's %s is a PC-exclusive map not here: refused, never downloaded", name);
+				break;
+			}
+		}
 		length = snprintf(message, sizeof(message),
 			T("The host is playing %s from its MCC files. To join, set the Halo content folder (Multiplayer > Modded "
 			"maps) to your own copy of Halo: The Master Chief Collection's folder."), name);
