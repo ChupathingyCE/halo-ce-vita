@@ -3754,6 +3754,17 @@ static void mutliplayer_settings_select_list_update_displayed_items(
 							string_index),
 						0xFF);
 					label_box->parameters.text_box.text[0xFF] = 0;
+#ifdef HALO_LINUX
+					/* (port: a description of the port's own - Infection's -, not laid
+					out for the card as the game's are: broken into the card's lines,
+					ui_widget.c ui_widget_port_text_box_fit) */
+					if (unicode_string_list_string_is_port(descriptions_tag_index, (short)string_index))
+					{
+						boolean ui_widget_port_text_box_fit(struct widget_instance *widget, wchar_t *text, long size);
+
+						ui_widget_port_text_box_fit(label_box, label_box->parameters.text_box.text, 0x100);
+					}
+#endif
 				}
 				description_container->visible = TRUE;
 				continue;

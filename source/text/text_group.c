@@ -219,6 +219,25 @@ port/linux/game/infection.c), in the player's language */
 /* (a default game type's description is its index plus 10: ui_widget_game_data_input_functions.c) */
 #define INFECTION_DESCRIPTION_INDEX (INFECTION_DEFAULT_GAME_TYPE_INDEX + 10)
 
+static wchar_t *fallback_string(long tag_index, short string_index);
+
+/* the port's Infection's name or description at string_index of the game
+type names' or descriptions' list, or NULL */
+static wchar_t *port_game_type_string(long tag_index, short string_index)
+{
+	char const *tag_name;
+
+	if (string_index != INFECTION_DEFAULT_GAME_TYPE_INDEX && string_index != INFECTION_DESCRIPTION_INDEX)
+		return NULL;
+	tag_name = tag_get_name(tag_index);
+	if ((string_index == INFECTION_DEFAULT_GAME_TYPE_INDEX && !csstrcasecmp(tag_name, DEFAULT_GAME_TYPE_NAMES_TAG_NAME)) ||
+		(string_index == INFECTION_DESCRIPTION_INDEX && !csstrcasecmp(tag_name, GAME_TYPE_DESCRIPTIONS_TAG_NAME)))
+	{
+		return fallback_string(tag_index, string_index);
+	}
+	return NULL;
+}
+
 /* the built-in string for a string list too short to hold string_index
 (an NTSC map's multiplayer string, a Custom Edition map's name or
 description), or NULL */
@@ -282,6 +301,20 @@ char *string_list_get_string(long tag_index, short string_index)
 	return result;
 }
 
+#ifdef HALO_LINUX
+boolean unicode_string_list_string_is_port(long tag_index, short string_index)
+{
+	struct string_list *list;
+
+	if (tag_index == NONE)
+		return FALSE;
+	if (port_game_type_string(tag_index, string_index))
+		return TRUE;
+	list = unicode_string_list_definition_get(tag_index);
+	return (string_index < 0 || string_index >= list->strings.count) && fallback_string(tag_index, string_index) != NULL;
+}
+#endif
+
 wchar_t *unicode_string_list_get_string(long tag_index, short string_index)
 {
 	wchar_t *result = L"<missing string>";
@@ -290,6 +323,14 @@ wchar_t *unicode_string_list_get_string(long tag_index, short string_index)
 	{
 		struct string_list *list = unicode_string_list_definition_get(tag_index);
 
+#ifdef HALO_LINUX
+		/* (port: Infection's name and description, the port's 27th game
+		type's, are the port's even where the map's lists go on past the
+		Xbox's - MCC's ui.map has 38 game type names and 48 descriptions,
+		its own "Slayer" and "Classic deathmatch" at those places) */
+		if (port_game_type_string(tag_index, string_index))
+			return port_game_type_string(tag_index, string_index);
+#endif
 		if (string_index >= 0 && string_index < list->strings.count)
 		{
 			struct string_list_entry *entry = TAG_BLOCK_GET_ELEMENT(

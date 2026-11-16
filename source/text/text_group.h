@@ -51,6 +51,12 @@ struct string_list_entry
 
 char *string_list_get_string(long tag_index, short string_index);
 wchar_t *unicode_string_list_get_string(long tag_index, short string_index);
+#ifdef HALO_LINUX
+/* port: whether that string is the port's own (Infection's, a Custom
+Edition map's name or description, ...: text_group.c fallback_string)
+rather than the map's */
+boolean unicode_string_list_string_is_port(long tag_index, short string_index);
+#endif
 
 /* ---------- globals */
 

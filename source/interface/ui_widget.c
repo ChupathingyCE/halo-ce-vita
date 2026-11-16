@@ -686,6 +686,9 @@ struct widget_instance;
 #include "ui_widget.h"
 #ifdef HALO_LINUX
 #include "custom_edition_maps.h"
+#ifdef HALO_LINUX
+#include "../../port/linux/src/menu_text_fit.h" /* port: the port's strings fitted to their boxes */
+#endif
 #endif
 
 /* ---------- constants */
@@ -5642,6 +5645,66 @@ void ui_widget_port_text_check(
 }
 #endif
 
+#ifdef HALO_LINUX
+/* port: the width of the first `length` characters of `text` in the font
+the draw mode has (menu_text_fit's measure, ChupathingyCE's) */
+static long ui_widget_port_text_prefix_width(
+	void *context,
+	wchar_t const *text,
+	long length)
+{
+	wchar_t line[MENU_TEXT_FIT_LENGTH];
+	rectangle2d measure = { 0, 0, 2000, 4000 };
+	rectangle2d ink;
+	rectangle2d cursor;
+
+	(void)context;
+	length = MIN(length, (long)NUMBEROF(line) - 1);
+	csmemcpy(line, text, length * sizeof(wchar_t));
+	line[length] = 0;
+	draw_unicode_string_compute_bounds(&measure, line, &ink, &cursor);
+	return MAX(cursor.x0, ink.x1);
+}
+
+/* port: `text` (a buffer of `size` characters) fitted to a text box's room
+in its font (ChupathingyCE's ui_widget_port_text_box_fit, 147f4155a): broken
+into lines at spaces where a line would be wider than the box - the game's
+boxes here do not break a line, they cut it -, a word wider than the box cut
+with "...", and lines the box is not tall enough for left out, "..." after
+the last. For the port's own strings the game's boxes draw from their string
+lists (unicode_string_list_string_is_port: Infection's description, a Custom
+Edition map's name); the game's own strings are laid out for their boxes.
+FALSE (the text as it was) when the box has no font */
+boolean ui_widget_port_text_box_fit(
+	struct widget_instance *widget,
+	wchar_t *text,
+	long size)
+{
+	struct ui_widget_definition *definition = ui_widget_definition_get(widget->definition_tag_index);
+	long font_index = definition->text_font.index;
+	real_argb_color white = get_ui_argb_white();
+	rectangle2d measure = { 0, 0, 2000, 4000 };
+	rectangle2d ink, ink_two, one_line, two_lines;
+	long width, height, line_height, lines = 0, y;
+
+	if (font_index == NONE)
+		return FALSE;
+	draw_string_set_draw_mode(font_index, NONE, 0, 0, &white);
+	width = definition->bounds.x1 - definition->bounds.x0 - definition->horizontal_offset;
+	height = definition->bounds.y1 - definition->bounds.y0 - definition->vertical_offset;
+	/* (the lines the box shows: each whose baseline is above its bottom, as
+	the box draws them, at least one; the baseline from a capital's ink, the
+	line height from a second line's cursor) */
+	draw_unicode_string_compute_bounds(&measure, L"X", &ink, &one_line);
+	draw_unicode_string_compute_bounds(&measure, L"X\rX", &ink_two, &two_lines);
+	line_height = two_lines.y1 - one_line.y1;
+	for (y = ink.y1; line_height > 0 && y < height; y += line_height)
+		lines++;
+	menu_text_fit(text, size, width, MAX(lines, 1), ui_widget_port_text_prefix_width, NULL);
+	return TRUE;
+}
+#endif
+
 /* port: a text box's left (its bounds' and its text's offset) and right in its parent */
 void ui_widget_port_text_box_span(
 	struct widget_instance *widget,
@@ -5874,6 +5937,9 @@ static void widget_instance_render_text_box(
 		short string_list_index;
 		wchar_t *string;
 		unsigned long length;
+#ifdef HALO_LINUX
+		wchar_t fitted[MENU_TEXT_FIT_LENGTH];
+#endif
 
 		if (widget->parameters.text_box.string_list_index == NONE)
 			string_list_index = definition->string_list_index;
@@ -5882,6 +5948,22 @@ static void widget_instance_render_text_box(
 		string = widget == ui_widget_port_error_text_box && ui_widget_port_error_text ?
 			(wchar_t *)ui_widget_port_error_text :
 			unicode_string_list_get_string(definition->text_label_string_list.index, string_list_index);
+#ifdef HALO_LINUX
+		/* (port: a string of the port's own in a list of the map's - Infection's
+		description, a Custom Edition map's name -, fitted to the box as the
+		game's own are laid out for theirs: ui_widget_port_text_box_fit) */
+		if (string != ui_widget_port_error_text && !string_has_icons_to_draw(string) &&
+			unicode_string_list_string_is_port(definition->text_label_string_list.index, string_list_index))
+		{
+			long copied;
+
+			for (copied = 0; string[copied] && copied < (long)NUMBEROF(fitted) - 1; copied++)
+				fitted[copied] = string[copied];
+			fitted[copied] = 0;
+			if (ui_widget_port_text_box_fit(widget, fitted, NUMBEROF(fitted)))
+				string = fitted;
+		}
+#endif
 		{
 			short override_index;
 
