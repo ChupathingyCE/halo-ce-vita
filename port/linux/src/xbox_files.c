@@ -1091,6 +1091,18 @@ int platform_host_path_write_protected(const char *host_path)
 	if (directory_length < 4 || strncasecmp(slash - 4, "maps", 4) ||
 		(directory_length > 4 && slash[-5] != '/' && slash[-5] != ':'))
 		return 0;
+	/* (not a mod's own maps folder, mods/<mod>/maps: an MCC mod's maps/a10.map is the mod's file, which the
+	mod manager's DELETE takes away with the mod - refused, the mod could never be deleted) */
+	if (directory_length > 5 && slash[-5] == '/')
+	{
+		const char *mod_end = slash - 5, *mod_start = mod_end;
+
+		while (mod_start > host_path && mod_start[-1] != '/')
+			mod_start--;
+		if (mod_start - host_path >= 5 && mod_start[-1] == '/' && mod_end > mod_start &&
+			!strncasecmp(mod_start - 5, "mods", 4) && (mod_start - host_path == 5 || mod_start[-6] == '/' || mod_start[-6] == ':'))
+			return 0;
+	}
 	for (index = 0; index < sizeof(names) / sizeof(names[0]); index++)
 	{
 		if (!strcasecmp(name, names[index]))
