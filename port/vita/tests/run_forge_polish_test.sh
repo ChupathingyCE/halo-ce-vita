@@ -45,6 +45,15 @@
 #               comes back at its spot its RESPAWN (30 s) later
 #               (forge.c forge_item_life_update, forge_physics.inc forge_item_unburied)
 #
+#   itemsstack  weapons let go inside stacked and overlapping blocks come out on the
+#               top of the whole stack: a rifle 0.2 into a large block with a small
+#               platform on it (the lower's top and the upper's underside one plane:
+#               before, read as "under the upper one", the rifle fell to the ground),
+#               a grenade 0.2 into the lower of two blocks stacked, a rifle 0.2 into a
+#               block a large block stands 0.3 into (before: lifted on to the block's
+#               top, inside the large block, out of sight); a rifle let go in the air
+#               under a bridge is not lifted (forge_physics.inc forge_item_inside_solid)
+#
 #   run_forge_polish_test.sh [CASE...]      (default: all)
 #   HALO_TEST_VITA        the harness (default build/linux/halo of this tree)
 #   HALO_TEST_DATA_MENUS  a folder with the game's maps folder (the Xbox maps)
@@ -59,7 +68,7 @@ out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_forge_polish_test.$$}
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 . "$here/test_out.sh"
 test_out_begin "$out"
-cases=${*:-monitorprompt onlinemenu mccblocks mccblockstool itemsstay}
+cases=${*:-monitorprompt onlinemenu mccblocks mccblockstool itemsstay itemsstack}
 status=0
 fail() { echo "FAIL: $1"; status=1; }
 
@@ -250,6 +259,46 @@ PYEOF
 		expect $c "back at its spot 30 s later" "forge: assault rifle \(#3\) respawned after 30 s at 8[5-6]\.[0-9]+ -1(49|50)\.[0-9]+ 3\.[0-4]"
 		# (respawned: the entry moves to the layout's end, object 4)
 		on 4 4 3.07 3.5 && echo "  ok: $c: and lies on the platform again ($(item 4 4))" || fail "$c: the respawned rifle: $(item 4 4)"
+		;;
+	itemsstack)
+		# (SNAP off, a row at y -140: a large block at 81 (top 4.0) with a small platform at
+		# 4.125 on it (its top 4.25); a block at 87 with a block at 4.0 on it (top 4.5); a
+		# block at 93 (top 3.5) with a large block 0.3 into it at 3.3 (top 4.3); a bridge at
+		# 99 (its underside at 2.875); the items held at 3.8, 3.3, 3.3 and 2.0, listed 5 s on)
+		cmd="L240:forge snap off"
+		t=250
+		for b in "76 block_large 3" "76 platform_small 4.125" "82 block 3" "82 block 4" "88 block 3" "88 block_large 3.3" "94 bridge 3"; do
+			set -- $b
+			cmd="$cmd;L$t:forge camera $1 -140 $3 0 0;L$((t + 8)):forge spawn $2;L$((t + 9)):forge distance 5;L$((t + 16)):forge drop"
+			t=$((t + 20))
+		done
+		for i in "78 3.8 Assault Rifle" "84 3.3 Frag Grenade" "90 3.3 Assault Rifle" "96 2.0 Assault Rifle"; do
+			set -- $i
+			x=$1 z=$2
+			shift 2
+			cmd="$cmd;L$t:forge camera $x -140 $z 0 0;L$((t + 22)):forge spawn $*;L$((t + 23)):forge distance 3;L$((t + 28)):forge drop"
+			t=$((t + 32))
+		done
+		cmd="$cmd;L$((t + 150)):forge objects;L$((t + 152)):forge camera 80 -147 7 40 -25;L$((t + 165)):@shot 00-stacks"
+		run $c 60 "$cmd"
+		checked $c || continue
+		# (objects 7..10: the four items; "state z" of listing 1)
+		item() {
+			awk -v k="$1" '/test command at tick [0-9]+: forge objects/ { l++ }
+				l == 1 && $0 ~ ("forge: object " k ": ") { for (i = 1; i <= NF; i++) if ($i == "at") { z = $(i + 3); sub(",", "", z); print $(i - 1), z; exit } }' "$out/$c/run.log"
+		}
+		on() { # OBJECT LOW HIGH
+			item "$1" | awk -v lo="$2" -v hi="$3" '{ exit !($1 == "alive" && $2 >= lo && $2 <= hi) }'
+		}
+		on 7 4.2 4.7 && echo "  ok: $c: the rifle let go in the large block lies on the small platform stacked on it ($(item 7))" ||
+			fail "$c: the rifle in the lower of a stack is not on the stack's top (4.25): $(item 7)"
+		on 8 4.45 4.9 && echo "  ok: $c: the grenade let go in the lower of two blocks lies on the upper's top ($(item 8))" ||
+			fail "$c: the grenade in the lower of two stacked blocks is not on the upper's top (4.5): $(item 8)"
+		on 9 4.25 4.7 && echo "  ok: $c: the rifle let go where two blocks overlap lies on the higher top ($(item 9))" ||
+			fail "$c: the rifle in two overlapping blocks is not on the large block's top (4.3): $(item 9)"
+		on 10 -5 2.6 && echo "  ok: $c: the rifle let go in the air under the bridge stays under it ($(item 10))" ||
+			fail "$c: the rifle let go under the bridge was lifted: $(item 10)"
+		expect $c "lifted out of the block on the lower one" "forge: assault rifle let go 0\.[0-9]+ into platform_small: put on its top at .* \(out of the blocks on it too\)"
 		;;
 	*)
 		fail "unknown case $c"
