@@ -36,70 +36,70 @@
 	<widget name="ce/mods/row_size" type="text" left="424" top="1" width="74" height="16" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
 	<widget name="ce/mods/row_state" type="text" left="512" top="1" width="84" height="16" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
 	<widget name="ce/mods/row_1" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
 		<child widget="ce/mods/row_state"/>
 	</widget>
 	<widget name="ce/mods/row_2" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
 		<child widget="ce/mods/row_state"/>
 	</widget>
 	<widget name="ce/mods/row_3" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
 		<child widget="ce/mods/row_state"/>
 	</widget>
 	<widget name="ce/mods/row_4" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
 		<child widget="ce/mods/row_state"/>
 	</widget>
 	<widget name="ce/mods/row_5" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
 		<child widget="ce/mods/row_state"/>
 	</widget>
 	<widget name="ce/mods/row_6" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
 		<child widget="ce/mods/row_state"/>
 	</widget>
 	<widget name="ce/mods/row_7" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
 		<child widget="ce/mods/row_state"/>
 	</widget>
 	<widget name="ce/mods/row_8" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
 		<child widget="ce/mods/row_state"/>
 	</widget>
 	<widget name="ce/mods/row_9" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
 		<child widget="ce/mods/row_state"/>
 	</widget>
 	<widget name="ce/mods/row_10" width="600" height="17" bitmap="server_item_bkds">
-		<on event="a start" run="port h3 mods toggle"/>
+		<on event="a start" run="port h3 mods toggle" open="h3/steam/screen"/>
 		<child widget="ce/mods/row_name"/>
 		<child widget="ce/mods/row_kind"/>
 		<child widget="ce/mods/row_size"/>
