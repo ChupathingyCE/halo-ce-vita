@@ -162,6 +162,8 @@ for a gamepad); a test build's HALO_TEST_TEXT_INPUT answers in its place,
 #endif
 #ifdef HALO_STEAM_WORKSHOP
 #include "../../steamdl/steam_workshop.h"
+#include "rasterizer/rasterizer.h"
+#include "bitmaps/bitmap_group.h"
 #include "cache_file_formats.h"
 #include "custom_edition_cache.h"
 #include "custom_edition_mods.h"
@@ -527,10 +529,13 @@ enum
 	_function_h3_workshop_back,
 	_function_h3_workshop_download,
 	_function_h3_workshop_search,
-	_function_h3_workshop_page_previous,
-	_function_h3_workshop_page_next,
-	_function_h3_workshop_order_previous,
-	_function_h3_workshop_order_next,
+	_function_h3_workshop_tab_previous,
+	_function_h3_workshop_tab_next,
+	_function_h3_workshop_left,
+	_function_h3_workshop_right,
+	_function_h3_workshop_up,
+	_function_h3_workshop_down,
+	_function_h3_workshop_mark,
 	/* (1.1.5: the Firefight lobby, START FIREFIGHT and PREPARING FIREFIGHT) */
 	_function_firefight_lobby_init,
 	_function_forge_start_firefight,
@@ -2920,6 +2925,7 @@ real menu_functions_fade_alpha(void)
 /* (interface.c's full-screen overlays, last: over the 3D and the menus)
 the fade's black */
 static void h3_steam_qr_draw(void);
+static void h3_workshop_draw(void);
 
 void menu_functions_fade_draw(void)
 {
@@ -2932,7 +2938,8 @@ void menu_functions_fade_draw(void)
 	rectangle2d bounds;
 	unsigned long level;
 
-	/* (DOWNLOAD FROM STEAM's QR, over the menus, under the fade) */
+	/* (DOWNLOAD FROM STEAM's QR, STEAM WORKSHOP's pictures, over the menus, under the fade) */
+	h3_workshop_draw();
 	h3_steam_qr_draw();
 	if (alpha <= 0.f)
 		return;
@@ -12899,14 +12906,43 @@ static boolean h3_steam_back(void)
 	return TRUE;
 }
 
-/* ---- STEAM WORKSHOP (halo3/workshop.xml; port/steamdl/steam_workshop.c, docs/steam_download_security.md section 7):
-Halo: MCC's Steam Workshop items for Halo CE, through the player's own Steam sign-in. The notice and SIGN IN, the QR
-(h3_steam_qr_draw: the same job's), then the list of a page (ten), marks, the download, then here - the session
-ended - each downloaded item checked again, every map by the game's own check (custom_edition_cache_file_check, as
-the mods folder's), and moved into the mods folder (steam_workshop_install). 1.1.3 plays a Workshop item's campaign
-maps (the mods folder's MCC mods, offline) and its multiplayer maps (the multiplayer map lists, offline and online:
-custom_edition_mods.c, workshop_maps.h; a joiner without the host's downloads it here, never from the host). */
+/* ---- STEAM WORKSHOP (halo3/workshop.xml; port/steamdl, docs/steam_download_security.md sections 7-9): Halo: MCC's
+Steam Workshop items for Halo CE, through the player's own Steam sign-in. The notice and SIGN IN, the QR
+(h3_steam_qr_draw: the same job's), then the browser - four tabs (POPULAR, NEWEST, TOP RATED, SUBSCRIBED), a page of
+eight cards (h3_workshop_draw draws their pictures, frames and rating pips over them), a card's details page - marks,
+the download, then here - the session ended - each downloaded item checked again, every map by the game's own check
+(custom_edition_cache_file_check, as the mods folder's), and moved into the mods folder (steam_workshop_install).
+1.1.3 plays a Workshop item's campaign maps (the mods folder's MCC mods, offline) and its multiplayer maps (the
+multiplayer map lists, offline and online: custom_edition_mods.c, workshop_maps.h; a joiner without the host's
+downloads it here, never from the host). Removing an item is a file operation of this Vita's alone (no Steam call):
+mods/<id> and its version record. Nothing is ever written to Steam (no subscribe, no vote) */
 #ifdef HALO_STEAM_WORKSHOP
+#define H3_WORKSHOP_CARDS 8
+#define H3_WORKSHOP_COLUMNS 4
+/* the cards' places (the menus' units: halo3/workshop.xml's), their pictures' inside them */
+#define H3_WORKSHOP_CARD_LEFT (-40)
+#define H3_WORKSHOP_CARD_TOP 86
+#define H3_WORKSHOP_CARD_WIDTH 172
+#define H3_WORKSHOP_CARD_HEIGHT 150
+#define H3_WORKSHOP_CARD_PITCH_X 182
+#define H3_WORKSHOP_CARD_PITCH_Y 158
+#define H3_WORKSHOP_PICTURE_INSET 4
+#define H3_WORKSHOP_PICTURE_WIDTH 164
+#define H3_WORKSHOP_PICTURE_HEIGHT 82
+/* the details page's picture and its description's lines */
+#define H3_WORKSHOP_LARGE_LEFT (-40)
+#define H3_WORKSHOP_LARGE_TOP 88
+#define H3_WORKSHOP_LARGE_WIDTH 384
+#define H3_WORKSHOP_LARGE_HEIGHT 192
+#define H3_WORKSHOP_DESCRIPTION_LINES 6
+#define H3_WORKSHOP_WRAPPED_LINES 120
+/* a swipe: this far across, a page (or a picture) */
+#define H3_WORKSHOP_SWIPE 60
+
+/* the tabs' lists */
+static int const h3_workshop_tab_lists[4] = { STEAM_WORKSHOP_SORT_TREND, STEAM_WORKSHOP_SORT_NEW,
+	STEAM_WORKSHOP_SORT_TOP, STEAM_WORKSHOP_LIST_SUBSCRIBED };
+
 static struct
 {
 	char marked[STEAM_WORKSHOP_CHOSEN_MAXIMUM][24];
@@ -12916,12 +12952,54 @@ static struct
 	boolean installed_seen;
 	int installed, refused;
 	char message[600];
-	int sort;
+	/* the tab (h3_workshop_tab_lists), the search ("" none), the card in focus, where the focus goes on the next
+	page (-1 keep, else a card) */
+	int tab;
 	char search[STEAM_WORKSHOP_SEARCH_SIZE];
-} h3_workshop;
+	int focus, focus_next_page;
+	/* the details page: open, of which item, its description's first line shown, Triangle's REMOVE asked once */
+	boolean details_open;
+	char details_id[24];
+	int description_line, description_lines;
+	char remove_armed[24];
+	/* a line said for a while (marked, removed, ...) */
+	char note[200];
+	unsigned long note_until;
+	/* the page's rows: installed (1), its version installed (0 unknown), for which page (the view's serial) */
+	int rows_serial;
+	int row_installed[H3_WORKSHOP_CARDS];
+	unsigned long long row_installed_gid[H3_WORKSHOP_CARDS];
+	int details_installed;
+	unsigned long long details_installed_gid;
+	char details_checked_id[24];
+	/* a finger on the screen: where it came down, a swipe taken */
+	boolean touching, swiped;
+	short touch_x, touch_y;
+	/* (the render thread's) the pictures' textures, of which serial; the page they are for */
+	struct bitmap_data card_textures[H3_WORKSHOP_CARDS];
+	unsigned int card_serials[H3_WORKSHOP_CARDS];
+	struct bitmap_data large_texture;
+	unsigned int large_serial;
+	int textures_page;
+	/* the screen's last update (its drawing stops a moment after it closes, the textures let go) */
+	unsigned long updated;
+	boolean grid_shown, details_shown;
+	/* the memory the browser costs (the C heap as the list opened, its most since; the job's pictures and the
+	decoder's most), logged as the list ends: docs/steam_download_security.md 9 */
+	boolean measuring;
+	unsigned long heap_start, heap_most, sampled_at;
+	unsigned int pictures_most, decoder_most;
+} h3_workshop = { .focus_next_page = -1 };
 
-/* (xbox_files.c's) */
+/* (xbox_files.c's, xbox_kernel.c's) */
 char const *platform_data_root(void);
+void platform_heap_usage(unsigned long *in_use, unsigned long *capacity);
+/* (menu_tags.c's) */
+boolean menu_tags_pixels_texture(unsigned char const *bgra, long width, long height, struct bitmap_data *bitmap);
+void menu_tags_texture_free(struct bitmap_data *bitmap);
+static boolean h3_dialog_too_wide(struct widget_instance *widget, char const *text, short width);
+static void h3_dialog_text(struct widget_instance *widget, char const *text);
+static short mouse_number_after(char const *name, char const *prefix);
 
 /* the data root (ux0:data/haloce-vita), without a trailing '/': the Workshop's workshop/ and mods/ are in it */
 static char const *h3_workshop_root(void)
@@ -12936,21 +13014,6 @@ static char const *h3_workshop_root(void)
 	return root;
 }
 
-static char const *h3_workshop_order_name(int sort)
-{
-	switch (sort)
-	{
-	case STEAM_WORKSHOP_SORT_NEW:
-		return T("newest");
-	case STEAM_WORKSHOP_SORT_TOP:
-		return T("most liked");
-	case STEAM_WORKSHOP_SORT_UPDATED:
-		return T("last updated");
-	default:
-		return T("trending");
-	}
-}
-
 static int h3_workshop_marked_index(char const *id)
 {
 	int index;
@@ -12959,6 +13022,31 @@ static int h3_workshop_marked_index(char const *id)
 		if (!strcmp(h3_workshop.marked[index], id))
 			return index;
 	return -1;
+}
+
+/* the browser's state as a new session begins (the marks, the tab, the focus, the details page) */
+static void h3_workshop_reset(void)
+{
+	h3_workshop.marked_count = 0;
+	h3_workshop.installed = h3_workshop.refused = 0;
+	h3_workshop.message[0] = 0;
+	h3_workshop.search[0] = 0;
+	h3_workshop.tab = 0;
+	h3_workshop.focus = 0;
+	h3_workshop.focus_next_page = -1;
+	h3_workshop.details_open = FALSE;
+	h3_workshop.details_id[0] = 0;
+	h3_workshop.remove_armed[0] = 0;
+	h3_workshop.note[0] = 0;
+	h3_workshop.rows_serial = -1;
+	h3_workshop.details_checked_id[0] = 0;
+	h3_workshop.installed_seen = FALSE;
+}
+
+static void h3_workshop_say(char const *text)
+{
+	snprintf(h3_workshop.note, sizeof(h3_workshop.note), "%s", text);
+	h3_workshop.note_until = system_milliseconds() + 4000;
 }
 
 /* the game's own map check of a downloaded map (the mods folder's: a Halo: CE Anniversary cache that passes the cache
@@ -13021,32 +13109,312 @@ static void h3_workshop_install_staged(void)
 		/* (the mods folder looked at again: the campaign's list and the MOD MANAGER) */
 		custom_edition_mods_look_again();
 		mod_manager_scan();
+		h3_workshop.rows_serial = -1;
+		h3_workshop.details_checked_id[0] = 0;
 	}
+}
+
+/* a decimal version (the manifest's gid) */
+static unsigned long long h3_workshop_number(char const *text)
+{
+	return text ? strtoull(text, NULL, 10) : 0;
+}
+
+/* an item's state on this Vita: 0 not here, 1 installed (this version or one not known), 2 an older version */
+static int h3_workshop_state(int installed, unsigned long long installed_gid, char const *version)
+{
+	unsigned long long latest = h3_workshop_number(version);
+
+	if (!installed)
+		return 0;
+	return installed_gid && latest && installed_gid != latest ? 2 : 1;
+}
+
+/* a line of text that fits the box (its own font): cut with "..." at a character's end if it does not */
+static void h3_workshop_fit(struct widget_instance *widget, char const *text, char *out, size_t size)
+{
+	short width = widget ? ui_widget_port_text_box_width(widget) : 0;
+	size_t length;
+
+	snprintf(out, size, "%s", text ? text : "");
+	if (!widget || width <= 0 || !h3_dialog_too_wide(widget, out, width))
+		return;
+	length = strlen(out);
+	while (length > 0)
+	{
+		char candidate[300];
+
+		/* (back to a character's start: never half a UTF-8 sequence) */
+		do
+			length--;
+		while (length > 0 && ((unsigned char)out[length] & 0xc0) == 0x80);
+		while (length > 0 && out[length - 1] == ' ')
+			length--;
+		snprintf(candidate, sizeof(candidate), "%.*s...", (int)length, out);
+		if (!h3_dialog_too_wide(widget, candidate, width))
+		{
+			snprintf(out, size, "%s", candidate);
+			return;
+		}
+	}
+	snprintf(out, size, "...");
+}
+
+/* a text broken into the box's lines (at spaces, its own line breaks kept); lines from `first`, at most `count`,
+shown; how many lines in all. Made again only when the text or the box changes */
+static int h3_workshop_wrapped(struct widget_instance *widget, char const *text, int first, int count)
+{
+	static struct
+	{
+		void const *widget;
+		long creation;
+		unsigned long hash;
+		int lines;
+		short starts[H3_WORKSHOP_WRAPPED_LINES], lengths[H3_WORKSHOP_WRAPPED_LINES];
+		char text[STEAM_WORKSHOP_DESCRIPTION_SIZE + 64];
+	} made[3];
+	static int next;
+	char shown[700];
+	unsigned long hash = 5381;
+	char const *cursor;
+	short width;
+	int slot, index, length = 0;
+
+	if (!widget || !text)
+		return 0;
+	for (cursor = text; *cursor; cursor++)
+		hash = hash * 33 + (unsigned char)*cursor;
+	for (slot = 0; slot < 3; slot++)
+		if (made[slot].widget == widget && made[slot].creation == widget->creation_time && made[slot].hash == hash &&
+			!strcmp(made[slot].text, text))
+			break;
+	if (slot == 3)
+	{
+		char line[700];
+		int start = 0, at = 0;
+
+		slot = next;
+		next = (next + 1) % 3;
+		made[slot].widget = widget;
+		made[slot].creation = widget->creation_time;
+		made[slot].hash = hash;
+		made[slot].lines = 0;
+		snprintf(made[slot].text, sizeof(made[slot].text), "%s", text);
+		width = ui_widget_port_text_box_width(widget);
+		/* (each line: its start and length in the text; a word wider than the box is a line of its own) */
+		while (made[slot].text[at] && made[slot].lines < H3_WORKSHOP_WRAPPED_LINES)
+		{
+			int word = (int)strcspn(made[slot].text + at, " \n"), line_length = at - start;
+
+			snprintf(line, sizeof(line), "%.*s%s%.*s", line_length, made[slot].text + start, line_length ? " " : "",
+				word, made[slot].text + at);
+			if (line_length && width > 0 && h3_dialog_too_wide(widget, line, width))
+			{
+				made[slot].starts[made[slot].lines] = (short)start;
+				made[slot].lengths[made[slot].lines++] = (short)(line_length > 0 ? line_length - 1 : 0);
+				start = at;
+				continue;
+			}
+			at += word;
+			if (made[slot].text[at] == '\n' || !made[slot].text[at])
+			{
+				made[slot].starts[made[slot].lines] = (short)start;
+				made[slot].lengths[made[slot].lines++] = (short)(at - start);
+				if (made[slot].text[at])
+					at++;
+				start = at;
+				continue;
+			}
+			at++;
+		}
+		if (start < at && made[slot].lines < H3_WORKSHOP_WRAPPED_LINES && !made[slot].text[at])
+		{
+			made[slot].starts[made[slot].lines] = (short)start;
+			made[slot].lengths[made[slot].lines++] = (short)(at - start);
+		}
+	}
+	shown[0] = 0;
+	for (index = first; index < made[slot].lines && index < first + count; index++)
+	{
+		int written = snprintf(shown + length, sizeof(shown) - (size_t)length, "%s%.*s", index > first ? "\n" : "",
+			made[slot].lengths[index], made[slot].text + made[slot].starts[index]);
+
+		if (written < 0 || length + written >= (int)sizeof(shown))
+			break;
+		length += written;
+	}
+	h3_dialog_text(widget, shown);
+	return made[slot].lines;
+}
+
+/* the size as the cards show it */
+static void h3_workshop_size(unsigned int kilobytes, char *out, size_t size)
+{
+	if (kilobytes >= 1024 * 1024)
+		snprintf(out, size, T("%.1f GB"), kilobytes / (1024.0 * 1024.0));
+	else if (kilobytes >= 1024)
+		snprintf(out, size, T("%.1f MB"), kilobytes / 1024.0);
+	else
+		snprintf(out, size, T("%u KB"), kilobytes ? kilobytes : 1);
+}
+
+static void h3_workshop_date(unsigned int seconds, char *out, size_t size)
+{
+	time_t when = (time_t)seconds;
+	struct tm parts;
+
+	if (!seconds || !gmtime_r(&when, &parts))
+	{
+		snprintf(out, size, "-");
+		return;
+	}
+	snprintf(out, size, "%04d-%02d-%02d", parts.tm_year + 1900, parts.tm_mon + 1, parts.tm_mday);
+}
+
+static char const *h3_workshop_kind(int tags)
+{
+	return (tags & STEAM_WORKSHOP_TAG_CAMPAIGN) ? T("CAMPAIGN") : (tags & STEAM_WORKSHOP_TAG_MULTIPLAYER) ?
+		T("MULTIPLAYER") : "";
+}
+
+/* an item marked or unmarked (its id, its title): TRUE if it changed */
+static boolean h3_workshop_toggle_mark(char const *id, char const *title, int downloadable)
+{
+	int marked = h3_workshop_marked_index(id);
+
+	if (marked >= 0)
+	{
+		memmove(h3_workshop.marked[marked], h3_workshop.marked[marked + 1],
+			(size_t)(h3_workshop.marked_count - marked - 1) * sizeof(h3_workshop.marked[0]));
+		memmove(h3_workshop.marked_titles[marked], h3_workshop.marked_titles[marked + 1],
+			(size_t)(h3_workshop.marked_count - marked - 1) * sizeof(h3_workshop.marked_titles[0]));
+		h3_workshop.marked_count--;
+		platform_log("menus: workshop: %s unmarked (%d)", id, h3_workshop.marked_count);
+		return TRUE;
+	}
+	if (!downloadable)
+		return FALSE;
+	if (h3_workshop.marked_count >= STEAM_WORKSHOP_CHOSEN_MAXIMUM)
+	{
+		char text[120];
+
+		snprintf(text, sizeof(text), T("At most %d items at a time."), STEAM_WORKSHOP_CHOSEN_MAXIMUM);
+		h3_workshop_say(text);
+		return FALSE;
+	}
+	snprintf(h3_workshop.marked[h3_workshop.marked_count], sizeof(h3_workshop.marked[0]), "%s", id);
+	snprintf(h3_workshop.marked_titles[h3_workshop.marked_count], sizeof(h3_workshop.marked_titles[0]), "%s", title);
+	h3_workshop.marked_count++;
+	platform_log("menus: workshop: %s marked (%d)", id, h3_workshop.marked_count);
+	return TRUE;
+}
+
+/* the page asked for: page, the tab's list, the search */
+static void h3_workshop_ask(int page)
+{
+	steam_job_workshop_ask(page, h3_workshop_tab_lists[h3_workshop.tab], h3_workshop.search);
+}
+
+/* the details page's next or last picture (wrapping): TRUE if there is another */
+static boolean h3_workshop_picture_step(int step)
+{
+	struct steam_job_workshop_details page;
+
+	steam_job_workshop_details(&page);
+	if (page.state != 2 || page.pictures < 2)
+		return FALSE;
+	steam_job_workshop_details_picture((page.picture_index + step + page.pictures) % page.pictures);
+	return TRUE;
 }
 #endif
 
-static void h3_workshop_update(struct widget_instance *list)
+static void h3_workshop_update(struct widget_instance *widget)
 {
 #ifdef HALO_STEAM_WORKSHOP
-	struct widget_instance *screen = screen_of(list);
-	struct widget_instance *child, *found;
+	struct widget_instance *screen = screen_of(widget);
+	struct widget_instance *found;
 	struct steam_job_workshop_view ws;
 	struct steam_job_view view;
-	char status_text[400], details[700], line[300];
-	int index = 0, focused = -1;
-	boolean browsing, idle;
+	struct steam_job_workshop_details page;
+	char status_text[400], details[700], line[400], message[300];
+	int index, pages;
+	boolean browsing, idle, grid, details_mode, ended, progress;
 
 	h3_steam.updated = system_milliseconds();
+	h3_workshop.updated = h3_steam.updated;
 	steam_job_view(&view);
 	steam_job_workshop_view(&ws);
 	browsing = view.phase == STEAM_JOB_BROWSING;
 	idle = view.phase == STEAM_JOB_IDLE;
-	status_text[0] = details[0] = 0;
+	ended = view.phase == STEAM_JOB_DONE || view.phase == STEAM_JOB_FAILED || view.phase == STEAM_JOB_CANCELLED;
+	progress = view.phase == STEAM_JOB_PREPARING || view.phase == STEAM_JOB_DOWNLOADING || view.phase == STEAM_JOB_PAUSED;
+	if (!browsing && h3_workshop.details_open)
+	{
+		/* (the list ended under the details page: a download chosen, or the session lost) */
+		h3_workshop.details_open = FALSE;
+		h3_workshop.remove_armed[0] = 0;
+	}
+	details_mode = browsing && h3_workshop.details_open;
+	grid = browsing && !details_mode;
+	h3_workshop.grid_shown = grid;
+	h3_workshop.details_shown = details_mode;
+	status_text[0] = details[0] = message[0] = 0;
 	if (!h3_steam_running(view.phase) && !h3_workshop.installed_seen)
 	{
 		/* (the session ended - or none ran: an earlier download not yet installed) */
 		h3_workshop.installed_seen = TRUE;
 		h3_workshop_install_staged();
+	}
+	pages = ws.total ? (ws.total + STEAM_WORKSHOP_PAGE_ITEMS - 1) / STEAM_WORKSHOP_PAGE_ITEMS : 1;
+	/* (the memory: sampled twice a second while the list is up, said as it ends) */
+	if (browsing && (!h3_workshop.measuring || h3_steam.updated - h3_workshop.sampled_at >= 500))
+	{
+		unsigned long in_use = 0, capacity = 0;
+		unsigned int held = 0, peak = 0;
+
+		platform_heap_usage(&in_use, &capacity);
+		steam_job_workshop_memory(&held, &peak);
+		if (!h3_workshop.measuring)
+		{
+			h3_workshop.measuring = TRUE;
+			h3_workshop.heap_start = h3_workshop.heap_most = in_use;
+			h3_workshop.pictures_most = h3_workshop.decoder_most = 0;
+			platform_log("menus: workshop: memory: the list opened with the C heap at %lu KB (of %lu)", in_use >> 10,
+				capacity >> 10);
+		}
+		h3_workshop.sampled_at = h3_steam.updated;
+		if (in_use > h3_workshop.heap_most)
+			h3_workshop.heap_most = in_use;
+		if (held > h3_workshop.pictures_most)
+			h3_workshop.pictures_most = held;
+		if (peak > h3_workshop.decoder_most)
+			h3_workshop.decoder_most = peak;
+	}
+	else if (!browsing && h3_workshop.measuring)
+	{
+		h3_workshop.measuring = FALSE;
+		platform_log("menus: workshop: memory: the C heap %lu KB as the list opened, at most %lu KB while it was up "
+			"(+%lu KB); the job's pictures at most %u KB, the decoder's at most %u KB at once", h3_workshop.heap_start >> 10,
+			h3_workshop.heap_most >> 10, (h3_workshop.heap_most - h3_workshop.heap_start) >> 10,
+			h3_workshop.pictures_most >> 10, h3_workshop.decoder_most >> 10);
+	}
+	/* a new page: the focus where it was asked to go, the rows' installed state looked at once */
+	if (browsing && !ws.loading && ws.serial != h3_workshop.rows_serial)
+	{
+		h3_workshop.rows_serial = ws.serial;
+		if (h3_workshop.focus_next_page >= 0)
+			h3_workshop.focus = h3_workshop.focus_next_page;
+		h3_workshop.focus_next_page = -1;
+		if (h3_workshop.focus >= ws.count)
+			h3_workshop.focus = ws.count ? ws.count - 1 : 0;
+		for (index = 0; index < ws.count && index < H3_WORKSHOP_CARDS; index++)
+		{
+			uint64_t id = 0, gid = 0;
+
+			h3_workshop.row_installed[index] = steam_workshop_id_parse(ws.rows[index].id, &id) &&
+				steam_workshop_installed(h3_workshop_root(), id, &gid);
+			h3_workshop.row_installed_gid[index] = gid;
+		}
 	}
 	switch (view.phase)
 	{
@@ -13068,25 +13436,28 @@ static void h3_workshop_update(struct widget_instance *list)
 		snprintf(status_text, sizeof(status_text), "%s", view.attempts > 1 ? T("The Steam session was lost. Connecting again: a new code to scan follows.") : T("Connecting to Steam..."));
 		break;
 	case STEAM_JOB_QR:
-		snprintf(status_text, sizeof(status_text), "%s", T("On your phone, open the Steam app, then Steam Guard, and scan this code.\n\nApprove only if you started this on your Vita just now.\n\nThe Vita never sees your password."));
+		snprintf(status_text, sizeof(status_text), "%s", T("Sign in"));
+		snprintf(details, sizeof(details), "%s", T("On your phone, open the Steam app, then Steam Guard, and scan this code.\n\nApprove only if you started this on your Vita just now.\n\nThe Vita never sees your password."));
 		break;
 	case STEAM_JOB_BROWSING:
 		if (ws.search[0])
-			snprintf(status_text, sizeof(status_text), T("Search \"%.40s\": page %d, %d items. Marked: %d of %d."), ws.search,
-				ws.page, ws.total, h3_workshop.marked_count, STEAM_WORKSHOP_CHOSEN_MAXIMUM);
+			snprintf(status_text, sizeof(status_text), T("Search \"%.30s\": %d items. Page %d of %d"), ws.search, ws.total,
+				ws.page, pages);
 		else
-			snprintf(status_text, sizeof(status_text), T("By %s: page %d of %d. Marked: %d of %d."),
-				h3_workshop_order_name(ws.sort), ws.page, ws.total ? (ws.total + 9) / 10 : 1, h3_workshop.marked_count,
-				STEAM_WORKSHOP_CHOSEN_MAXIMUM);
-		strncat(status_text, "\n", sizeof(status_text) - strlen(status_text) - 1);
-		strncat(status_text, ws.loading ? T("Asking Steam...") : ws.error[0] ? ws.error :
-			T("L R: page. Left Right: order."), sizeof(status_text) - strlen(status_text) - 1);
+			snprintf(status_text, sizeof(status_text), T("Page %d of %d"), ws.page, pages);
+		if (h3_workshop.marked_count)
+		{
+			snprintf(line, sizeof(line), T(". Marked: %d of %d"), h3_workshop.marked_count, STEAM_WORKSHOP_CHOSEN_MAXIMUM);
+			strncat(status_text, line, sizeof(status_text) - strlen(status_text) - 1);
+		}
 		break;
 	case STEAM_JOB_PREPARING:
 	case STEAM_JOB_DOWNLOADING:
 	case STEAM_JOB_PAUSED:
-		snprintf(status_text, sizeof(status_text), T("Item %d of %d: %.50s"), ws.item_index + 1, ws.item_count, ws.item_title);
-		snprintf(details, sizeof(details), T("%.1f of %.1f MB"), view.done_kb / 1024.0, view.total_kb / 1024.0);
+		snprintf(status_text, sizeof(status_text), T("Item %d of %d"), ws.item_index + 1, ws.item_count);
+		snprintf(details, sizeof(details), "%.100s\n\n", ws.item_title);
+		snprintf(line, sizeof(line), T("%.1f of %.1f MB"), view.done_kb / 1024.0, view.total_kb / 1024.0);
+		strncat(details, line, sizeof(details) - strlen(details) - 1);
 		if (view.phase == STEAM_JOB_PAUSED)
 			snprintf(line, sizeof(line), "\n%s", T("Paused: the battery is low. Plug in the charger."));
 		else if (view.rate_kb && view.seconds_left >= 0)
@@ -13094,7 +13465,7 @@ static void h3_workshop_update(struct widget_instance *list)
 		else
 			line[0] = 0;
 		strncat(details, line, sizeof(details) - strlen(details) - 1);
-		snprintf(line, sizeof(line), "\n%s", T("Circle stops it: what is in stays, and the next download resumes."));
+		snprintf(line, sizeof(line), "\n\n%s", T("Circle stops it: what is in stays, and the next download resumes."));
 		strncat(details, line, sizeof(details) - strlen(details) - 1);
 		break;
 	case STEAM_JOB_ENDING:
@@ -13104,14 +13475,15 @@ static void h3_workshop_update(struct widget_instance *list)
 	case STEAM_JOB_FAILED:
 	case STEAM_JOB_CANCELLED:
 		snprintf(status_text, sizeof(status_text), "%s", view.phase == STEAM_JOB_DONE ? T("Done. Signed out of Steam.") :
-			view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The Workshop stopped:"));
+			view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The Workshop stopped."));
+		details[0] = 0;
 		if (view.phase == STEAM_JOB_FAILED)
 		{
-			strncat(status_text, " ", sizeof(status_text) - strlen(status_text) - 1);
-			strncat(status_text, view.error, sizeof(status_text) - strlen(status_text) - 1);
+			snprintf(details, sizeof(details), "%.200s\n\n", view.error);
 		}
-		snprintf(details, sizeof(details), T("Installed in the mods folder: %d. Not installed: %d.\n"), h3_workshop.installed,
+		snprintf(line, sizeof(line), T("Installed in the mods folder: %d. Not installed: %d.\n"), h3_workshop.installed,
 			h3_workshop.refused);
+		strncat(details, line, sizeof(details) - strlen(details) - 1);
 		if (ws.items_failed)
 		{
 			snprintf(line, sizeof(line), T("Not downloaded: %d (%.150s)\n"), ws.items_failed, ws.failure);
@@ -13123,143 +13495,435 @@ static void h3_workshop_update(struct widget_instance *list)
 				sizeof(details) - strlen(details) - 1);
 		break;
 	}
-	for (child = list->child; child; child = child->next, index++)
+	/* the top line, the tabs (the one shown lit), the phases' text */
+	if ((found = named(screen, "status")) != NULL)
+		text_show(found, status_text);
+	for (index = 0; index < 4; index++)
 	{
-		boolean shown = FALSE;
-
-		line[0] = 0;
-		if (idle && index == 0)
+		snprintf(line, sizeof(line), "tab_%d", index);
+		if ((found = named(screen, line)) != NULL)
 		{
-			snprintf(line, sizeof(line), "%s", T("SIGN IN WITH THE STEAM APP"));
-			h3_capitals(line);
-			shown = TRUE;
+			widget_instance_set_visibility_recursive(found, grid);
+			found->animation.current_frame_index = index == h3_workshop.tab && !ws.search[0] ? 1 : 0;
 		}
-		else if (browsing && index < ws.count && !ws.loading)
-		{
-			struct steam_job_workshop_row const *row = &ws.rows[index];
+	}
+	if ((found = named(screen, "l_butn")) != NULL)
+		widget_instance_set_visibility_recursive(found, grid);
+	if ((found = named(screen, "r_butn")) != NULL)
+		widget_instance_set_visibility_recursive(found, grid);
+	if ((found = named(screen, "rule")) != NULL)
+		widget_instance_set_visibility_recursive(found, TRUE);
+	if ((found = named(screen, "qr_text")) != NULL)
+	{
+		widget_instance_set_visibility_recursive(found, view.phase == STEAM_JOB_QR);
+		h3_dialog_text_wrapped(found, view.phase == STEAM_JOB_QR ? details : "");
+	}
+	if ((found = named(screen, "notice")) != NULL)
+	{
+		boolean shown = idle || progress || ended || view.phase == STEAM_JOB_CONNECTING || view.phase == STEAM_JOB_ENDING;
 
-			snprintf(line, sizeof(line), "%s %.44s  %.1f MB%s", h3_workshop_marked_index(row->id) >= 0 ? "[X]" :
-				row->downloadable ? "[ ]" : " - ", row->title, row->size_kb / 1024.0,
-				(row->tags & STEAM_WORKSHOP_TAG_CAMPAIGN) ? T("  campaign") :
-				(row->tags & STEAM_WORKSHOP_TAG_MULTIPLAYER) ? T("  multiplayer") : "");
-			shown = TRUE;
-			if (child == list->focused_child)
-				focused = index;
-		}
-		widget_instance_set_visibility_recursive(child, shown);
-		child->disabled = !shown;
+		widget_instance_set_visibility_recursive(found, shown);
 		if (shown)
-			text_show(child, line);
-		child->animation.current_frame_index = child == list->focused_child ? 1 : 0;
+			h3_workshop_wrapped(found, idle || progress || ended ? details : status_text, 0, 16);
 	}
-	if (browsing && focused >= 0)
+	if ((found = named(screen, "signin")) != NULL)
 	{
-		struct steam_job_workshop_row const *row = &ws.rows[focused];
-
-		snprintf(details, sizeof(details), T("%s\nWorkshop item %s, %.1f MB%s\n%s"), row->title, row->id, row->size_kb / 1024.0,
-			(row->tags & STEAM_WORKSHOP_TAG_CAMPAIGN) ? T(", campaign") : (row->tags & STEAM_WORKSHOP_TAG_MULTIPLAYER) ?
-			T(", multiplayer") : "", row->downloadable ? T("Cross marks it; Square downloads the marked ones.") : row->reason);
+		widget_instance_set_visibility_recursive(found, idle);
+		snprintf(line, sizeof(line), "%s", T("SIGN IN WITH THE STEAM APP"));
+		h3_capitals(line);
+		text_show(found, line);
+		found->animation.current_frame_index = 1;
 	}
-	else if (browsing && !ws.loading && !ws.count && !ws.error[0])
-		snprintf(details, sizeof(details), "%s", T("No items on this page."));
+	/* the cards */
+	for (index = 0; index < H3_WORKSHOP_CARDS; index++)
 	{
-		/* (the end's report is long: the big text box, below the headline, the rows being hidden) */
-		boolean ended = view.phase == STEAM_JOB_DONE || view.phase == STEAM_JOB_FAILED || view.phase == STEAM_JOB_CANCELLED;
-		char const *big = view.phase == STEAM_JOB_QR ? status_text : ended ? details : "";
+		struct steam_job_workshop_row const *row = &ws.rows[index];
+		boolean shown = grid && index < ws.count && !ws.loading;
+		boolean focused = shown && index == h3_workshop.focus;
+		char name[32], text[300], size_text[32];
+		static char const *const parts[] = { "", "_title", "_author", "_meta" };
+		int part;
 
-		if ((found = named(screen, "status")) != NULL)
+		for (part = 0; part < 4; part++)
 		{
-			widget_instance_set_visibility_recursive(found, view.phase != STEAM_JOB_QR);
-			h3_dialog_text_wrapped(found, view.phase != STEAM_JOB_QR ? status_text : "");
-		}
-		if ((found = named(screen, "qr_text")) != NULL)
-		{
-			widget_instance_set_visibility_recursive(found, big[0] != 0);
-			h3_dialog_text_wrapped(found, big);
-		}
-		if ((found = named(screen, "details")) != NULL)
-			h3_dialog_text_wrapped(found, ended ? "" : details);
-	}
-	{
-		static char const *const browse_only[] = { "x_butn", "download", "y_butn", "search" };
-		int button;
+			snprintf(name, sizeof(name), "card_%d%s", index, parts[part]);
+			if ((found = named(screen, name)) == NULL)
+				continue;
+			widget_instance_set_visibility_recursive(found, shown);
+			found->animation.current_frame_index = focused && part < 2 ? 1 : 0;
+			if (!shown || !part)
+				continue;
+			if (part == 1)
+			{
+				h3_workshop_fit(found, row->title, text, sizeof(text));
+				text_show(found, text);
+			}
+			else if (part == 2)
+			{
+				char by[120];
 
-		for (button = 0; button < 4; button++)
-			if ((found = named(screen, browse_only[button])) != NULL)
-				widget_instance_set_visibility_recursive(found, browsing);
-		if ((found = named(screen, "a_butn")) != NULL)
-			widget_instance_set_visibility_recursive(found, browsing || idle);
-		if ((found = named(screen, "select")) != NULL)
-			widget_instance_set_visibility_recursive(found, browsing || idle);
+				if (row->author[0])
+					snprintf(by, sizeof(by), T("by %s"), row->author);
+				else
+					snprintf(by, sizeof(by), T("Item %s"), row->id);
+				h3_workshop_fit(found, by, text, sizeof(text));
+				text_show(found, text);
+			}
+			else
+			{
+				int state = h3_workshop_state(h3_workshop.row_installed[index], h3_workshop.row_installed_gid[index],
+					row->version);
+				char meta[160];
+
+				h3_workshop_size(row->size_kb, size_text, sizeof(size_text));
+				snprintf(meta, sizeof(meta), "%s%s%s", size_text, h3_workshop_kind(row->tags)[0] ? "  " : "",
+					h3_workshop_kind(row->tags));
+				if (state)
+				{
+					strncat(meta, "  ", sizeof(meta) - strlen(meta) - 1);
+					strncat(meta, state == 2 ? T("UPDATE") : T("INSTALLED"), sizeof(meta) - strlen(meta) - 1);
+				}
+				h3_workshop_fit(found, meta, text, sizeof(text));
+				text_show(found, text);
+			}
+		}
 	}
-	text_show(named(screen, "back"), h3_steam_running(view.phase) ? (browsing ? T("Sign out") : T("Cancel")) : T("Back"));
-	/* (the search typed: the first page of it) */
+	/* the line under the cards: the note, the error, the focused card's why */
+	if (h3_workshop.note[0] && system_milliseconds() < h3_workshop.note_until)
+		snprintf(message, sizeof(message), "%s", h3_workshop.note);
+	else if (browsing && ws.loading)
+		snprintf(message, sizeof(message), "%s", T("Asking Steam..."));
+	else if (browsing && ws.error[0])
+		snprintf(message, sizeof(message), "%.250s", ws.error);
+	else if (grid && !ws.count)
+		snprintf(message, sizeof(message), "%s", h3_workshop.tab == 3 && !ws.search[0] ?
+			T("You have no Halo CE Workshop subscriptions. Subscribe on a PC or in the Steam app, then look here.") :
+			T("No items here."));
+	else if (grid && h3_workshop.focus < ws.count)
+	{
+		struct steam_job_workshop_row const *row = &ws.rows[h3_workshop.focus];
+
+		if (!row->downloadable)
+			snprintf(message, sizeof(message), T("Can't be downloaded: %.100s"), T(row->reason));
+		else
+			snprintf(message, sizeof(message), "%.100s", row->title);
+	}
+	if ((found = named(screen, "message")) != NULL)
+	{
+		widget_instance_set_visibility_recursive(found, browsing);
+		h3_workshop_fit(found, message, line, sizeof(line));
+		text_show(found, line);
+	}
+	/* the details page */
+	steam_job_workshop_details(&page);
+	{
+		static char const *const parts[] = { "d_title", "d_author", "d_facts", "d_state", "d_maps", "d_desc" };
+		int part, state = 0;
+
+		for (part = 0; part < (int)NUMBEROF(parts); part++)
+			if ((found = named(screen, parts[part])) != NULL)
+				widget_instance_set_visibility_recursive(found, details_mode);
+		if (details_mode && page.state == 2 && strcmp(h3_workshop.details_checked_id, page.id))
+		{
+			uint64_t id = 0, gid = 0;
+
+			snprintf(h3_workshop.details_checked_id, sizeof(h3_workshop.details_checked_id), "%s", page.id);
+			h3_workshop.details_installed = steam_workshop_id_parse(page.id, &id) &&
+				steam_workshop_installed(h3_workshop_root(), id, &gid);
+			h3_workshop.details_installed_gid = gid;
+		}
+		if (details_mode && page.state == 2)
+			state = h3_workshop_state(h3_workshop.details_installed, h3_workshop.details_installed_gid, page.version);
+		if (details_mode)
+		{
+			char text[700], size_text[32], updated[24], created[24];
+
+			if ((found = named(screen, "d_title")) != NULL)
+				h3_workshop_wrapped(found, page.state == 2 ? page.title : page.state < 0 ? T("Steam gave no details of it") :
+					T("Asking Steam..."), 0, 2);
+			if ((found = named(screen, "d_author")) != NULL)
+			{
+				if (page.author[0])
+					snprintf(text, sizeof(text), T("by %s"), page.author);
+				else
+					snprintf(text, sizeof(text), T("Item %s"), page.id);
+				h3_workshop_fit(found, page.state == 2 ? text : "", line, sizeof(line));
+				text_show(found, line);
+			}
+			if ((found = named(screen, "d_facts")) != NULL)
+			{
+				text[0] = 0;
+				if (page.state == 2)
+				{
+					h3_workshop_size(page.size_kb, size_text, sizeof(size_text));
+					h3_workshop_date(page.time_updated, updated, sizeof(updated));
+					h3_workshop_date(page.time_created, created, sizeof(created));
+					if (page.score >= 0)
+						snprintf(line, sizeof(line), T("Rating: %d%% liked (%u votes)"), page.score,
+							page.votes_up + page.votes_down);
+					else
+						snprintf(line, sizeof(line), "%s", T("Rating: no votes yet"));
+					snprintf(text, sizeof(text), T("%s\nSize: %s\nType: %s\nUpdated: %s (made %s)\nWorkshop item %s"), line,
+						size_text, h3_workshop_kind(page.tags)[0] ? h3_workshop_kind(page.tags) : T("Other"), updated,
+						created, page.id);
+				}
+				else if (page.state < 0)
+					snprintf(text, sizeof(text), "%.150s", page.error);
+				h3_dialog_text(found, text);
+			}
+			if ((found = named(screen, "d_state")) != NULL)
+			{
+				if (page.state != 2)
+					text[0] = 0;
+				else if (!page.downloadable)
+					snprintf(text, sizeof(text), "%s", T("CAN'T BE DOWNLOADED"));
+				else if (state == 2)
+					snprintf(text, sizeof(text), "%s", T("UPDATE AVAILABLE"));
+				else if (state == 1)
+					snprintf(text, sizeof(text), "%s", T("INSTALLED"));
+				else if (h3_workshop_marked_index(page.id) >= 0)
+					snprintf(text, sizeof(text), "%s", T("MARKED FOR DOWNLOAD"));
+				else
+					snprintf(text, sizeof(text), "%s", T("NOT ON THIS VITA"));
+				text_show(found, text);
+				found->animation.current_frame_index = page.state == 2 ? 1 : 0;
+			}
+			if ((found = named(screen, "d_maps")) != NULL)
+			{
+				text[0] = 0;
+				if (page.state == 2 && !page.downloadable)
+					snprintf(text, sizeof(text), "%.100s", T(page.reason));
+				else if (page.state == 2 && page.contents == 0)
+					snprintf(text, sizeof(text), "%s", T("Reading what the item holds..."));
+				else if (page.state == 2 && page.contents < 0)
+					snprintf(text, sizeof(text), T("What it holds is not known: %.100s"), page.contents_why);
+				else if (page.state == 2)
+				{
+					int map;
+
+					if (page.refused)
+						snprintf(text, sizeof(text), T("Refused: %.100s"), T(page.contents_why));
+					else
+					{
+						snprintf(text, sizeof(text), T("Maps inside (%d):"), page.maps);
+						for (map = 0; map < page.maps && map < 5; map++)
+						{
+							snprintf(line, sizeof(line), "\n  %.40s", page.map_names[map]);
+							strncat(text, line, sizeof(text) - strlen(text) - 1);
+						}
+						if (page.maps > 5)
+						{
+							snprintf(line, sizeof(line), T("\n  and %d more"), page.maps - 5);
+							strncat(text, line, sizeof(text) - strlen(text) - 1);
+						}
+						if (page.skipped)
+						{
+							snprintf(line, sizeof(line), T("\n%d files of other kinds are left out."), page.skipped);
+							strncat(text, line, sizeof(text) - strlen(text) - 1);
+						}
+						if (!page.maps)
+							strncat(text, T("\nNo maps: it would not install."), sizeof(text) - strlen(text) - 1);
+					}
+				}
+				h3_dialog_text(found, text);
+			}
+			if ((found = named(screen, "d_desc")) != NULL)
+			{
+				if (page.state == 2)
+				{
+					h3_workshop.description_lines = h3_workshop_wrapped(found, page.description[0] ? page.description :
+						T("No description."), h3_workshop.description_line, H3_WORKSHOP_DESCRIPTION_LINES);
+					if (h3_workshop.description_line > 0 && h3_workshop.description_line >= h3_workshop.description_lines)
+						h3_workshop.description_line = 0;
+				}
+				else
+					h3_dialog_text(found, "");
+			}
+		}
+		/* the buttons: what each does here */
+		{
+			static char const *const glyphs[] = { "a_butn", "select", "x_butn", "mark", "y_butn", "search", "start_butn",
+				"download", "b_butn", "back" };
+			boolean shown[5];
+			char const *labels[5];
+			char download_label[64];
+			int button;
+
+			snprintf(download_label, sizeof(download_label), T("Download (%d)"), h3_workshop.marked_count);
+			shown[0] = idle || (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
+			labels[0] = idle ? T("Select") : grid ? T("Details") : state == 2 ? T("Update") : state == 1 ?
+				T("Download again") : T("Download");
+			shown[1] = (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
+			{
+				char const *id = details_mode ? page.id : grid && h3_workshop.focus < ws.count ? ws.rows[h3_workshop.focus].id : "";
+
+				labels[1] = id[0] && h3_workshop_marked_index(id) >= 0 ? T("Unmark") : T("Mark");
+			}
+			shown[2] = grid || (details_mode && state);
+			labels[2] = grid ? T("Search") : !strcmp(h3_workshop.remove_armed, page.id) ? T("Remove: sure?") : T("Remove");
+			shown[3] = browsing && h3_workshop.marked_count;
+			labels[3] = download_label;
+			shown[4] = TRUE;
+			labels[4] = details_mode ? T("Back") : h3_steam_running(view.phase) ? (browsing ? T("Sign out") : T("Cancel")) :
+				T("Back");
+			for (button = 0; button < 5; button++)
+			{
+				if ((found = named(screen, glyphs[button * 2])) != NULL)
+					widget_instance_set_visibility_recursive(found, shown[button]);
+				if ((found = named(screen, glyphs[button * 2 + 1])) != NULL)
+				{
+					widget_instance_set_visibility_recursive(found, shown[button]);
+					text_show(found, labels[button]);
+				}
+			}
+		}
+	}
+	/* the search typed: the first page of it (the tabs not lit: a search is a list of its own) */
 	{
 		char typed[STEAM_WORKSHOP_SEARCH_SIZE];
 
 		if (typing_done(_typing_workshop_search, typed, sizeof(typed)))
 		{
 			snprintf(h3_workshop.search, sizeof(h3_workshop.search), "%s", typed);
-			steam_job_workshop_ask(1, h3_workshop.sort, h3_workshop.search);
+			h3_workshop.focus_next_page = 0;
+			if (h3_workshop.tab == 3)
+				h3_workshop.tab = 0;
+			h3_workshop_ask(1);
 			platform_log("menus: workshop: search (%d characters)", (int)strlen(typed));
 		}
 	}
+	/* a finger's swipe across: a page (the grid) or a picture (the details page); a tap stays a tap */
+	{
+		short x, y;
+		boolean held;
+
+		if (ui_widget_port_pointer(&x, &y, &held) && held && (grid || details_mode))
+		{
+			if (!h3_workshop.touching)
+			{
+				h3_workshop.touching = TRUE;
+				h3_workshop.swiped = FALSE;
+				h3_workshop.touch_x = x;
+				h3_workshop.touch_y = y;
+			}
+			else if (!h3_workshop.swiped && ABS(x - h3_workshop.touch_x) > H3_WORKSHOP_SWIPE &&
+				ABS(x - h3_workshop.touch_x) > 2 * ABS(y - h3_workshop.touch_y))
+			{
+				int step = x < h3_workshop.touch_x ? 1 : -1;
+
+				h3_workshop.swiped = TRUE;
+				ui_widget_port_pointer_drag(TRUE);
+				if (grid && !ws.loading && ws.page + step >= 1 && ws.page + step <= pages)
+				{
+					h3_workshop.focus_next_page = 0;
+					steam_job_workshop_ask(ws.page + step, ws.sort, ws.search);
+					platform_log("menus: workshop: a swipe to page %d", ws.page + step);
+				}
+				else if (details_mode && h3_workshop_picture_step(step))
+					platform_log("menus: workshop: a swipe to another picture");
+			}
+		}
+		else if (h3_workshop.touching)
+		{
+			h3_workshop.touching = FALSE;
+			if (h3_workshop.swiped)
+				ui_widget_port_pointer_drag(FALSE);
+			h3_workshop.swiped = FALSE;
+		}
+	}
 #else
-	(void)list;
+	(void)widget;
 #endif
 }
 
-/* (port h3 workshop row: Cross) SIGN IN, or an item marked or unmarked */
+#ifdef HALO_STEAM_WORKSHOP
+/* the browsing session, with the page as it is now: TRUE if the list is up */
+static boolean h3_workshop_browsing(struct steam_job_workshop_view *ws)
+{
+	struct steam_job_view view;
+
+	steam_job_view(&view);
+	if (view.phase != STEAM_JOB_BROWSING)
+		return FALSE;
+	steam_job_workshop_touch();
+	steam_job_workshop_view(ws);
+	return TRUE;
+}
+
+/* the details page of the focused card opened */
+static boolean h3_workshop_details_open(struct steam_job_workshop_view const *ws)
+{
+	if (ws->loading || h3_workshop.focus >= ws->count)
+		return FALSE;
+	snprintf(h3_workshop.details_id, sizeof(h3_workshop.details_id), "%s", ws->rows[h3_workshop.focus].id);
+	h3_workshop.details_open = TRUE;
+	h3_workshop.description_line = 0;
+	h3_workshop.remove_armed[0] = 0;
+	h3_workshop.details_checked_id[0] = 0;
+	steam_job_workshop_details_ask(h3_workshop.details_id);
+	platform_log("menus: workshop: details of %s", h3_workshop.details_id);
+	return TRUE;
+}
+
+static void h3_workshop_details_close(void)
+{
+	h3_workshop.details_open = FALSE;
+	h3_workshop.remove_armed[0] = 0;
+	steam_job_workshop_details_ask("");
+	platform_log("menus: workshop: details closed");
+}
+
+/* the marked items downloaded (and this one, from its details page); the list ends */
+static boolean h3_workshop_download_marked(char const *also)
+{
+	char ids[STEAM_WORKSHOP_CHOSEN_MAXIMUM][24];
+	int count = 0, index;
+
+	if (also && also[0])
+		snprintf(ids[count++], sizeof(ids[0]), "%s", also);
+	for (index = 0; index < h3_workshop.marked_count && count < STEAM_WORKSHOP_CHOSEN_MAXIMUM; index++)
+		if (!also || strcmp(h3_workshop.marked[index], also))
+			snprintf(ids[count++], sizeof(ids[0]), "%s", h3_workshop.marked[index]);
+	if (!count)
+		return FALSE;
+	platform_log("menus: workshop: download %d items", count);
+	h3_workshop.details_open = FALSE;
+	steam_job_workshop_choose((const char (*)[24])ids, count);
+	return TRUE;
+}
+#endif
+
+/* (port h3 workshop row: Cross) SIGN IN; a card's details page; on it, its download (with the marked ones) */
 static boolean h3_workshop_row(struct widget_instance *widget)
 {
 #ifdef HALO_STEAM_WORKSHOP
 	struct steam_job_workshop_view ws;
 	struct steam_job_view view;
-	long row = h3_child_index(widget);
 
+	(void)widget;
 	steam_job_view(&view);
-	if (view.phase == STEAM_JOB_IDLE && row == 0)
+	if (view.phase == STEAM_JOB_IDLE)
 	{
 		int started;
 
-		h3_workshop.marked_count = 0;
-		h3_workshop.installed = h3_workshop.refused = 0;
-		h3_workshop.message[0] = 0;
-		h3_workshop.search[0] = 0;
-		h3_workshop.sort = STEAM_WORKSHOP_SORT_TREND;
-		h3_workshop.installed_seen = FALSE;
+		h3_workshop_reset();
 		started = steam_job_start_workshop(h3_workshop_root());
 		if (started < 0)
 			snprintf(h3_workshop.message, sizeof(h3_workshop.message), "%s", T("Charge the Vita to 30 percent or plug in the charger first."));
 		platform_log("menus: workshop: sign-in %s", started > 0 ? "begun" : started < 0 ? "refused (battery)" : "already running");
-		return started > 0;
+		return FALSE;
 	}
-	if (view.phase != STEAM_JOB_BROWSING)
+	if (!h3_workshop_browsing(&ws))
 		return FALSE;
-	steam_job_workshop_touch();
-	steam_job_workshop_view(&ws);
-	if (row < 0 || row >= ws.count || ws.loading)
-		return FALSE;
+	if (!h3_workshop.details_open)
+		return h3_workshop_details_open(&ws);
 	{
-		struct steam_job_workshop_row const *item = &ws.rows[row];
-		int marked = h3_workshop_marked_index(item->id);
+		struct steam_job_workshop_details page;
 
-		if (marked >= 0)
-		{
-			memmove(h3_workshop.marked[marked], h3_workshop.marked[marked + 1],
-				(size_t)(h3_workshop.marked_count - marked - 1) * sizeof(h3_workshop.marked[0]));
-			memmove(h3_workshop.marked_titles[marked], h3_workshop.marked_titles[marked + 1],
-				(size_t)(h3_workshop.marked_count - marked - 1) * sizeof(h3_workshop.marked_titles[0]));
-			h3_workshop.marked_count--;
-			return TRUE;
-		}
-		if (!item->downloadable || h3_workshop.marked_count >= STEAM_WORKSHOP_CHOSEN_MAXIMUM)
+		steam_job_workshop_details(&page);
+		if (page.state != 2 || !page.downloadable)
 			return FALSE;
-		snprintf(h3_workshop.marked[h3_workshop.marked_count], sizeof(h3_workshop.marked[0]), "%s", item->id);
-		snprintf(h3_workshop.marked_titles[h3_workshop.marked_count], sizeof(h3_workshop.marked_titles[0]), "%s", item->title);
-		h3_workshop.marked_count++;
-		platform_log("menus: workshop: %s marked (%d)", item->id, h3_workshop.marked_count);
-		return TRUE;
+		return h3_workshop_download_marked(page.id);
 	}
 #else
 	(void)widget;
@@ -13267,33 +13931,98 @@ static boolean h3_workshop_row(struct widget_instance *widget)
 #endif
 }
 
-/* (port h3 workshop download: Square) the marked items - or the one in focus - downloaded; the list ends */
-static boolean h3_workshop_download(void)
+/* (port h3 workshop mark: Square) the focused card (or the details page's item) marked or unmarked */
+static boolean h3_workshop_mark(void)
 {
 #ifdef HALO_STEAM_WORKSHOP
-	struct steam_job_view view;
+	struct steam_job_workshop_view ws;
+	boolean changed;
 
-	steam_job_view(&view);
-	if (view.phase != STEAM_JOB_BROWSING || !h3_workshop.marked_count)
+	if (!h3_workshop_browsing(&ws))
 		return FALSE;
-	platform_log("menus: workshop: download %d items", h3_workshop.marked_count);
-	steam_job_workshop_choose((const char (*)[24])h3_workshop.marked, h3_workshop.marked_count);
-	return TRUE;
+	h3_workshop.remove_armed[0] = 0;
+	if (h3_workshop.details_open)
+	{
+		struct steam_job_workshop_details page;
+
+		steam_job_workshop_details(&page);
+		if (page.state != 2)
+			return FALSE;
+		changed = h3_workshop_toggle_mark(page.id, page.title, page.downloadable);
+	}
+	else
+	{
+		if (ws.loading || h3_workshop.focus >= ws.count)
+			return FALSE;
+		changed = h3_workshop_toggle_mark(ws.rows[h3_workshop.focus].id, ws.rows[h3_workshop.focus].title,
+			ws.rows[h3_workshop.focus].downloadable);
+		if (!changed && !ws.rows[h3_workshop.focus].downloadable)
+			h3_workshop_say(T("This one can't be downloaded."));
+	}
+	return changed;
 #else
 	return FALSE;
 #endif
 }
 
-/* (port h3 workshop search: Triangle) the system keyboard for a search; empty: the list by its order again */
+/* (port h3 workshop download: Start) the marked items downloaded; the list ends */
+static boolean h3_workshop_download(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct steam_job_workshop_view ws;
+
+	if (!h3_workshop_browsing(&ws) || !h3_workshop.marked_count)
+		return FALSE;
+	return h3_workshop_download_marked(NULL);
+#else
+	return FALSE;
+#endif
+}
+
+/* (port h3 workshop search: Triangle) the grid: the system keyboard for a search (empty: the tab's list again); a
+details page of an installed item: REMOVE, asked once, done the second time (the mods folder's copy and its version
+record; nothing on Steam changes) */
 static boolean h3_workshop_search(void)
 {
 #ifdef HALO_STEAM_WORKSHOP
-	struct steam_job_view view;
+	struct steam_job_workshop_view ws;
 
-	steam_job_view(&view);
-	if (view.phase != STEAM_JOB_BROWSING)
+	if (!h3_workshop_browsing(&ws))
 		return FALSE;
-	steam_job_workshop_touch();
+	if (h3_workshop.details_open)
+	{
+		struct steam_job_workshop_details page;
+		uint64_t id = 0;
+		char text[200];
+
+		steam_job_workshop_details(&page);
+		if (page.state != 2 || !h3_workshop.details_installed || !steam_workshop_id_parse(page.id, &id))
+			return FALSE;
+		if (strcmp(h3_workshop.remove_armed, page.id))
+		{
+			snprintf(h3_workshop.remove_armed, sizeof(h3_workshop.remove_armed), "%s", page.id);
+			snprintf(text, sizeof(text), T("Triangle again removes %.60s from this Vita."), page.title);
+			h3_workshop_say(text);
+			return FALSE;
+		}
+		h3_workshop.remove_armed[0] = 0;
+		if (steam_workshop_uninstall(h3_workshop_root(), id))
+		{
+			custom_edition_mods_look_again();
+			mod_manager_scan();
+			snprintf(text, sizeof(text), T("Removed %.60s from this Vita."), page.title);
+			platform_log("menus: workshop: %s removed from mods", page.id);
+		}
+		else
+		{
+			snprintf(text, sizeof(text), "%s", T("It could not all be removed: use VitaShell."));
+			platform_log("menus: workshop: %s not removed whole", page.id);
+		}
+		h3_workshop_say(text);
+		h3_workshop.details_checked_id[0] = 0;
+		h3_workshop.rows_serial = -1;
+		return TRUE;
+	}
 	typing_begin(_typing_workshop_search, T("Search the Workshop"), h3_workshop.search, STEAM_WORKSHOP_SEARCH_SIZE - 1,
 		FALSE);
 	return TRUE;
@@ -13302,22 +14031,23 @@ static boolean h3_workshop_search(void)
 #endif
 }
 
-/* (port h3 workshop page previous/next: L, R) */
-static boolean h3_workshop_page(int step)
+/* (port h3 workshop tab previous/next: L, R) the grid: the tab before or after (a search let go); a details page: the
+picture before or after */
+static boolean h3_workshop_tab(int step)
 {
 #ifdef HALO_STEAM_WORKSHOP
 	struct steam_job_workshop_view ws;
-	struct steam_job_view view;
-	int pages;
 
-	steam_job_view(&view);
-	if (view.phase != STEAM_JOB_BROWSING)
+	if (!h3_workshop_browsing(&ws))
 		return FALSE;
-	steam_job_workshop_view(&ws);
-	pages = ws.total ? (ws.total + STEAM_WORKSHOP_PAGE_ITEMS - 1) / STEAM_WORKSHOP_PAGE_ITEMS : 1;
-	if (ws.loading || ws.page + step < 1 || ws.page + step > pages)
-		return FALSE;
-	steam_job_workshop_ask(ws.page + step, ws.sort, ws.search);
+	if (h3_workshop.details_open)
+		return h3_workshop_picture_step(step);
+	h3_workshop.tab = (h3_workshop.tab + step + 4) % 4;
+	h3_workshop.search[0] = 0;
+	h3_workshop.focus = 0;
+	h3_workshop.focus_next_page = 0;
+	h3_workshop_ask(1);
+	platform_log("menus: workshop: tab %d", h3_workshop.tab);
 	return TRUE;
 #else
 	(void)step;
@@ -13325,33 +14055,82 @@ static boolean h3_workshop_page(int step)
 #endif
 }
 
-/* (port h3 workshop order previous/next: Left, Right) trending, newest, most liked, last updated (a search: cleared) */
-static boolean h3_workshop_order(int step)
+/* (port h3 workshop left/right/up/down: the D-pad, the left stick) the grid: the focus a card over (past the edge:
+the next or the last page, the focus on its near side); a details page: Left and Right its pictures, Up and Down its
+description */
+static boolean h3_workshop_move(int dx, int dy)
 {
 #ifdef HALO_STEAM_WORKSHOP
-	struct steam_job_view view;
+	struct steam_job_workshop_view ws;
+	int column, row, pages, target;
 
-	steam_job_view(&view);
-	if (view.phase != STEAM_JOB_BROWSING)
+	if (!h3_workshop_browsing(&ws))
 		return FALSE;
-	h3_workshop.sort = (h3_workshop.sort + step + STEAM_WORKSHOP_SORT_COUNT) % STEAM_WORKSHOP_SORT_COUNT;
-	h3_workshop.search[0] = 0;
-	steam_job_workshop_ask(1, h3_workshop.sort, "");
+	if (h3_workshop.details_open)
+	{
+		h3_workshop.remove_armed[0] = 0;
+		if (dx)
+			return h3_workshop_picture_step(dx);
+		target = h3_workshop.description_line + dy * 3;
+		if (target > h3_workshop.description_lines - H3_WORKSHOP_DESCRIPTION_LINES)
+			target = h3_workshop.description_lines - H3_WORKSHOP_DESCRIPTION_LINES;
+		if (target < 0)
+			target = 0;
+		if (target == h3_workshop.description_line)
+			return FALSE;
+		h3_workshop.description_line = target;
+		return TRUE;
+	}
+	if (ws.loading || !ws.count)
+		return FALSE;
+	pages = ws.total ? (ws.total + STEAM_WORKSHOP_PAGE_ITEMS - 1) / STEAM_WORKSHOP_PAGE_ITEMS : 1;
+	column = h3_workshop.focus % H3_WORKSHOP_COLUMNS;
+	row = h3_workshop.focus / H3_WORKSHOP_COLUMNS;
+	if (dx)
+	{
+		column += dx;
+		if (column < 0 || column >= H3_WORKSHOP_COLUMNS || row * H3_WORKSHOP_COLUMNS + column >= ws.count)
+		{
+			/* (past the edge: the page before or after, the focus on its near side) */
+			if (ws.page + dx < 1 || ws.page + dx > pages)
+				return FALSE;
+			h3_workshop.focus_next_page = row * H3_WORKSHOP_COLUMNS + (dx > 0 ? 0 : H3_WORKSHOP_COLUMNS - 1);
+			steam_job_workshop_ask(ws.page + dx, ws.sort, ws.search);
+			platform_log("menus: workshop: page %d", ws.page + dx);
+			return TRUE;
+		}
+	}
+	else
+	{
+		row += dy;
+		if (row < 0 || row * H3_WORKSHOP_COLUMNS >= ws.count)
+			return FALSE;
+	}
+	target = row * H3_WORKSHOP_COLUMNS + column;
+	if (target >= ws.count)
+		target = ws.count - 1;
+	h3_workshop.focus = target;
 	return TRUE;
 #else
-	(void)step;
+	(void)dx;
+	(void)dy;
 	return FALSE;
 #endif
 }
 
-/* (port h3 workshop back: Circle) the list left (signing out), a download cancelled (the screen stays while it signs
-out), else the screen left */
+/* (port h3 workshop back: Circle) a details page closed; the list left (signing out); a download cancelled (the
+screen stays while it signs out); else the screen left */
 static boolean h3_workshop_back(void)
 {
 #ifdef HALO_STEAM_WORKSHOP
 	struct steam_job_view view;
 
 	steam_job_view(&view);
+	if (view.phase == STEAM_JOB_BROWSING && h3_workshop.details_open)
+	{
+		h3_workshop_details_close();
+		return FALSE;
+	}
 	if (view.phase == STEAM_JOB_BROWSING)
 	{
 		/* (nothing chosen: the session just ends) */
@@ -13370,6 +14149,29 @@ static boolean h3_workshop_back(void)
 #endif
 	return TRUE;
 }
+
+#ifdef HALO_STEAM_WORKSHOP
+/* (menu_functions_mouse_click) a finger on a card (its details page, the focus on it) or a tab */
+static void h3_workshop_click(char const *name)
+{
+	struct steam_job_workshop_view ws;
+	short number;
+
+	if (h3_workshop.swiped || !h3_workshop_browsing(&ws) || h3_workshop.details_open)
+		return;
+	if ((number = mouse_number_after(name, "card_")) != NONE && number < ws.count && !ws.loading)
+	{
+		h3_workshop.focus = number;
+		platform_log("menus: workshop: card %d tapped", number);
+		h3_workshop_details_open(&ws);
+	}
+	else if ((number = mouse_number_after(name, "tab_")) != NONE && number < 4 &&
+		(number != h3_workshop.tab || ws.search[0]))
+	{
+		h3_workshop_tab(number - h3_workshop.tab);
+	}
+}
+#endif
 
 /* (system_link_shortcut.c: the settings panel's Steam Workshop row, for every Menu style) the STEAM WORKSHOP screen
 opened over the active screen (the main menu), as DOWNLOAD FROM STEAM's row opens it: 1 if it opened */
@@ -13411,12 +14213,7 @@ int menu_functions_workshop_open_item(char const *id_text)
 			!active ? "no screen up" : "a bad number");
 		return -2;
 	}
-	h3_workshop.marked_count = 0;
-	h3_workshop.installed = h3_workshop.refused = 0;
-	h3_workshop.message[0] = 0;
-	h3_workshop.search[0] = 0;
-	h3_workshop.sort = STEAM_WORKSHOP_SORT_TREND;
-	h3_workshop.installed_seen = FALSE;
+	h3_workshop_reset();
 	started = steam_job_start_workshop(h3_workshop_root());
 	if (started <= 0)
 	{
@@ -13474,6 +14271,15 @@ static void h3_steam_qr_draw(void)
 		return;
 	module = area / (view.qr_size + 8);
 	left = 372 + (area - module * (view.qr_size + 8)) / 2;
+	/* (the overlays' units begin at the screen's left edge; the screens' 640 columns are centered on a wide screen,
+	the Vita's: the QR moved by half the margin, into the panel's right half as on a 4:3 one) */
+	{
+		long halo_screen_width(void);
+		long width = halo_screen_width();
+
+		if (width > 640)
+			left += (int)((width - 640) / 2);
+	}
 	top = 88;
 	bounds.x0 = (short)left;
 	bounds.y0 = (short)top;
@@ -13499,6 +14305,243 @@ static void h3_steam_qr_draw(void)
 		}
 	}
 	memset(view.qr, 0, sizeof(view.qr));
+#endif
+}
+
+#ifdef HALO_STEAM_WORKSHOP
+/* the menus' units the overlays are drawn in begin at the screen's left edge; the XML's 640 columns are centered on
+a wide screen (halo_screen_width() of them): the overlays moved by half the margin to meet the screen's widgets */
+static int h3_workshop_margin(void)
+{
+	long halo_screen_width(void);
+	long width = halo_screen_width();
+
+	return width > 640 ? (int)((width - 640) / 2) : 0;
+}
+
+/* a picture (a texture of ours) over a rectangle of the menus' units, its part (0,0)-(u,v) */
+static void h3_workshop_picture_quad(struct bitmap_data *bitmap, real x0, real y0, real x1, real y1, real u, real v)
+{
+	struct dynamic_screen_vertex vertices[4];
+	struct rasterizer_dynamic_screen_geometry_parameters parameters;
+	real margin = (real)h3_workshop_margin();
+	short k;
+
+	for (k = 0; k < 4; k++)
+	{
+		boolean right = k == 1 || k == 2, bottom = k > 1;
+
+		vertices[k].position.x = (right ? x1 : x0) + margin;
+		vertices[k].position.y = bottom ? y1 : y0;
+		vertices[k].texture_coordinates.x = right ? u : 0.f;
+		vertices[k].texture_coordinates.y = bottom ? v : 0.f;
+		vertices[k].color = (pixel32)0xFFFFFFFF;
+	}
+	csmemset(&parameters, 0, sizeof(parameters));
+	parameters.map_texture_scale[0].i = parameters.map_texture_scale[0].j = 1.f;
+	parameters.map_scale[0].i = parameters.map_scale[0].j = 1.f;
+	parameters.framebuffer_blend_function = 0;
+	parameters.map[0] = bitmap;
+	rasterizer_psuedo_dynamic_screen_quad_draw(&parameters, vertices);
+}
+
+static void h3_workshop_box(int x0, int y0, int x1, int y1, unsigned long color)
+{
+	void draw_quad(rectangle2d *rectangle, pixel32 color);
+	rectangle2d bounds;
+	int margin = h3_workshop_margin();
+
+	bounds.x0 = (short)(x0 + margin);
+	bounds.y0 = (short)y0;
+	bounds.x1 = (short)(x1 + margin);
+	bounds.y1 = (short)y1;
+	draw_quad(&bounds, (pixel32)color);
+}
+
+/* a frame of `width` round a rectangle */
+static void h3_workshop_frame(int x0, int y0, int x1, int y1, int width, unsigned long color)
+{
+	h3_workshop_box(x0 - width, y0 - width, x1 + width, y0, color);
+	h3_workshop_box(x0 - width, y1, x1 + width, y1 + width, color);
+	h3_workshop_box(x0 - width, y0, x0, y1, color);
+	h3_workshop_box(x1, y0, x1 + width, y1, color);
+}
+
+/* the textures let go (a page changed, the screen closed) */
+static void h3_workshop_textures_free(boolean cards, boolean large)
+{
+	int index;
+
+	for (index = 0; cards && index < H3_WORKSHOP_CARDS; index++)
+	{
+		menu_tags_texture_free(&h3_workshop.card_textures[index]);
+		h3_workshop.card_serials[index] = 0;
+	}
+	if (large)
+	{
+		menu_tags_texture_free(&h3_workshop.large_texture);
+		h3_workshop.large_serial = 0;
+	}
+}
+
+/* a picture of the job's (a card's slot, or -1 the details page's) as a texture: the one made, or made now */
+static struct bitmap_data *h3_workshop_texture(int slot)
+{
+	struct bitmap_data *bitmap = slot < 0 ? &h3_workshop.large_texture : &h3_workshop.card_textures[slot];
+	unsigned int *serial = slot < 0 ? &h3_workshop.large_serial : &h3_workshop.card_serials[slot];
+	int width = 0, height = 0;
+	unsigned int now = steam_job_workshop_picture(slot, NULL, 0, &width, &height);
+
+	if (!now)
+	{
+		if (*serial)
+			menu_tags_texture_free(bitmap);
+		*serial = 0;
+		return NULL;
+	}
+	if (now != *serial)
+	{
+		unsigned char *pixels = malloc((size_t)width * (size_t)height * 4);
+
+		menu_tags_texture_free(bitmap);
+		*serial = 0;
+		if (pixels && steam_job_workshop_picture(slot, pixels, width * height * 4, &width, &height) == now &&
+			menu_tags_pixels_texture(pixels, width, height, bitmap))
+		{
+			*serial = now;
+		}
+		free(pixels);
+	}
+	return *serial ? bitmap : NULL;
+}
+
+/* the rating's five pips (Steam's score 0-100), orange for each fifth */
+static void h3_workshop_pips(int x, int y, int score)
+{
+	int pip, lit = (score + 10) / 20;
+
+	if (score < 0)
+		return;
+	for (pip = 0; pip < 5; pip++)
+		h3_workshop_box(x + pip * 9, y, x + pip * 9 + 7, y + 7, pip < lit ? 0xFFE08A2EUL : 0x80506A90UL);
+}
+#endif
+
+/* (menu_functions_fade_draw, over the menus) STEAM WORKSHOP's pictures and marks: each card's picture (a dark
+square until it comes, or if it has none), the focused card's orange frame, a marked card's orange tab, the rating's
+pips; the details page's picture and its dots; the download's bar. The textures are made from the job's pictures as
+they come and let go as the page changes and when the screen is gone */
+static void h3_workshop_draw(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct steam_job_workshop_view ws;
+	struct steam_job_view view;
+	int index;
+
+	if (!h3_workshop.updated || system_milliseconds() - h3_workshop.updated > 250)
+	{
+		for (index = 0; index < H3_WORKSHOP_CARDS && !h3_workshop.card_serials[index]; index++)
+			;
+		if (index < H3_WORKSHOP_CARDS || h3_workshop.large_serial)
+			h3_workshop_textures_free(TRUE, TRUE);
+		h3_workshop.textures_page = 0;
+		return;
+	}
+	steam_job_view(&view);
+	steam_job_workshop_view(&ws);
+	/* (another page: its cards' pictures let go; the details page closed: its picture) */
+	if (ws.serial != h3_workshop.textures_page)
+	{
+		h3_workshop_textures_free(TRUE, FALSE);
+		h3_workshop.textures_page = ws.serial;
+	}
+	if (!h3_workshop.details_shown && h3_workshop.large_serial)
+		h3_workshop_textures_free(FALSE, TRUE);
+	if (h3_workshop.grid_shown && !ws.loading)
+	{
+		for (index = 0; index < ws.count && index < H3_WORKSHOP_CARDS; index++)
+		{
+			int x = H3_WORKSHOP_CARD_LEFT + (index % H3_WORKSHOP_COLUMNS) * H3_WORKSHOP_CARD_PITCH_X;
+			int y = H3_WORKSHOP_CARD_TOP + (index / H3_WORKSHOP_COLUMNS) * H3_WORKSHOP_CARD_PITCH_Y;
+			int px = x + H3_WORKSHOP_PICTURE_INSET, py = y + H3_WORKSHOP_PICTURE_INSET;
+			struct bitmap_data *bitmap = ws.rows[index].picture == 1 ? h3_workshop_texture(index) : NULL;
+
+			if (bitmap)
+				h3_workshop_picture_quad(bitmap, (real)px, (real)py, (real)(px + H3_WORKSHOP_PICTURE_WIDTH),
+					(real)(py + H3_WORKSHOP_PICTURE_HEIGHT), 1.f, 1.f);
+			else
+			{
+				/* (none yet, or none to be had: the card's own dark square, a faint mark in it) */
+				h3_workshop_box(px, py, px + H3_WORKSHOP_PICTURE_WIDTH, py + H3_WORKSHOP_PICTURE_HEIGHT, 0xC0081428UL);
+				if (ws.rows[index].picture < 0)
+					h3_workshop_frame(px + 70, py + 29, px + 94, py + 53, 1, 0x60A0B4CDUL);
+				else
+					h3_workshop_box(px + 62 + (int)(system_milliseconds() / 120 % 5) * 8, py + 39,
+						px + 66 + (int)(system_milliseconds() / 120 % 5) * 8, py + 43, 0xA0A0B4CDUL);
+			}
+			if (h3_workshop_marked_index(ws.rows[index].id) >= 0)
+			{
+				/* (marked: an orange tab with a light square at the picture's top left, an orange line under it) */
+				h3_workshop_box(px, py, px + 18, py + 18, 0xFFE08A2EUL);
+				h3_workshop_box(px + 5, py + 5, px + 13, py + 13, 0xFFF2F6FA);
+				h3_workshop_box(px, py + H3_WORKSHOP_PICTURE_HEIGHT - 3, px + H3_WORKSHOP_PICTURE_WIDTH,
+					py + H3_WORKSHOP_PICTURE_HEIGHT, 0xFFE08A2EUL);
+			}
+			h3_workshop_pips(x + H3_WORKSHOP_CARD_WIDTH - 50, y + 130, ws.rows[index].score);
+			if (index == h3_workshop.focus)
+				h3_workshop_frame(x, y, x + H3_WORKSHOP_CARD_WIDTH, y + H3_WORKSHOP_CARD_HEIGHT, 2, 0xFFE08A2EUL);
+			else
+				h3_workshop_frame(x, y, x + H3_WORKSHOP_CARD_WIDTH, y + H3_WORKSHOP_CARD_HEIGHT, 1, 0x40A0B4CDUL);
+		}
+	}
+	else
+	{
+		for (index = 0; index < H3_WORKSHOP_CARDS; index++)
+			if (h3_workshop.card_serials[index])
+			{
+				h3_workshop_textures_free(TRUE, FALSE);
+				break;
+			}
+	}
+	if (h3_workshop.details_shown)
+	{
+		struct steam_job_workshop_details page;
+		struct bitmap_data *bitmap;
+		int x0 = H3_WORKSHOP_LARGE_LEFT, y0 = H3_WORKSHOP_LARGE_TOP;
+		int x1 = x0 + H3_WORKSHOP_LARGE_WIDTH, y1 = y0 + H3_WORKSHOP_LARGE_HEIGHT;
+
+		steam_job_workshop_details(&page);
+		h3_workshop_box(x0, y0, x1, y1, 0xC0081428UL);
+		bitmap = page.state == 2 && page.picture == 1 ? h3_workshop_texture(-1) : NULL;
+		if (bitmap)
+			h3_workshop_picture_quad(bitmap, (real)x0, (real)y0, (real)x1, (real)y1, 1.f, 1.f);
+		else if (page.state == 1 || (page.state == 2 && page.picture == 0))
+			h3_workshop_box(x0 + 172 + (int)(system_milliseconds() / 120 % 5) * 8, y0 + 94,
+				x0 + 176 + (int)(system_milliseconds() / 120 % 5) * 8, y0 + 98, 0xA0A0B4CDUL);
+		else
+			h3_workshop_frame(x0 + 180, y0 + 84, x0 + 204, y0 + 108, 1, 0x60A0B4CDUL);
+		h3_workshop_frame(x0, y0, x1, y1, 1, 0x40A0B4CDUL);
+		/* (the pictures' dots under it, the one shown orange) */
+		if (page.state == 2 && page.pictures > 1)
+		{
+			int dot, left = x0 + H3_WORKSHOP_LARGE_WIDTH / 2 - page.pictures * 6;
+
+			for (dot = 0; dot < page.pictures; dot++)
+				h3_workshop_box(left + dot * 12, y1 + 6, left + dot * 12 + 7, y1 + 13,
+					dot == page.picture_index ? 0xFFE08A2EUL : 0x80A0B4CDUL);
+		}
+	}
+	if (view.phase == STEAM_JOB_DOWNLOADING || view.phase == STEAM_JOB_PREPARING || view.phase == STEAM_JOB_PAUSED)
+	{
+		/* (the item's bytes: a navy track, the orange done) */
+		int x0 = -36, x1 = 676, y0 = 224, filled = x0;
+
+		if (view.total_kb)
+			filled = x0 + (int)((long long)(x1 - x0) * (long long)view.done_kb / (long long)view.total_kb);
+		h3_workshop_box(x0, y0, x1, y0 + 8, 0xC0203458UL);
+		if (filled > x0)
+			h3_workshop_box(x0, y0, filled > x1 ? x1 : filled, y0 + 8, 0xFFE08A2EUL);
+	}
 #endif
 }
 
@@ -24753,14 +25796,20 @@ boolean pc_menu_event_function_invoke(
 		return h3_workshop_download();
 	case _function_h3_workshop_search:
 		return h3_workshop_search();
-	case _function_h3_workshop_page_previous:
-		return h3_workshop_page(-1);
-	case _function_h3_workshop_page_next:
-		return h3_workshop_page(1);
-	case _function_h3_workshop_order_previous:
-		return h3_workshop_order(-1);
-	case _function_h3_workshop_order_next:
-		return h3_workshop_order(1);
+	case _function_h3_workshop_tab_previous:
+		return h3_workshop_tab(-1);
+	case _function_h3_workshop_tab_next:
+		return h3_workshop_tab(1);
+	case _function_h3_workshop_left:
+		return h3_workshop_move(-1, 0);
+	case _function_h3_workshop_right:
+		return h3_workshop_move(1, 0);
+	case _function_h3_workshop_up:
+		return h3_workshop_move(0, -1);
+	case _function_h3_workshop_down:
+		return h3_workshop_move(0, 1);
+	case _function_h3_workshop_mark:
+		return h3_workshop_mark();
 	case _function_online_exit:
 		platform_log("menus: online EXIT: the game closes");
 		exit(EXIT_SUCCESS);
@@ -24844,8 +25893,7 @@ void pc_menu_game_data_function_invoke(
 			h3_steam_update(widget);
 		break;
 	case _input_h3_workshop:
-		if (widget->type == _ui_widget_type_column_list)
-			h3_workshop_update(widget);
+		h3_workshop_update(widget);
 		break;
 	case _input_forge_maps:
 		h3_forge_maps_update(widget);
@@ -25543,8 +26591,30 @@ static boolean mouse_on_screen(struct widget_instance *widget, char const *scree
 
 /* (ui_widget.c, a finger's drag) the open scoreboard scrolls its rows by a
 drag of its own */
+/* (ui_widget.c, as a screen draws) a screen that reaches into a wide screen's margins in every Menu style, as
+Menu style Online's do: STEAM WORKSHOP's browser (its cards across the Vita's 960 pixels) */
+boolean menu_functions_screen_wide(long tag_index)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	char const *name = tag_index != NONE ? tag_get_name(tag_index) : NULL;
+
+	return name && !strcmp(name, "pc\\h3\\workshop\\screen");
+#else
+	(void)tag_index;
+	return FALSE;
+#endif
+}
+
 boolean menu_functions_mouse_drag_own(void)
 {
+#ifdef HALO_STEAM_WORKSHOP
+	/* (STEAM WORKSHOP's grid and details page: a swipe across turns a page or a picture) */
+	if (h3_workshop.updated && system_milliseconds() - h3_workshop.updated < 250 &&
+		(h3_workshop.grid_shown || h3_workshop.details_shown))
+	{
+		return TRUE;
+	}
+#endif
 	return h3_scoreboard.open;
 }
 
@@ -25552,6 +26622,14 @@ int menu_functions_mouse_kind(struct widget_instance *widget)
 {
 	char const *name = widget ? widget->name : NULL;
 
+#ifdef HALO_STEAM_WORKSHOP
+	/* (STEAM WORKSHOP, any Menu style: its cards and tabs) */
+	if (name && h3_workshop.grid_shown && mouse_on_screen(widget, "pc\\h3\\workshop\\screen") &&
+		(mouse_number_after(name, "card_") != NONE || mouse_number_after(name, "tab_") != NONE))
+	{
+		return 1;
+	}
+#endif
 	if (!name || !halo_menu_style_online())
 		return 0;
 	if (!strcmp(name, "arrow_left") || !strcmp(name, "arrow_right"))
@@ -25589,6 +26667,13 @@ void menu_functions_mouse_click(struct widget_instance *widget)
 
 	if (!name)
 		return;
+#ifdef HALO_STEAM_WORKSHOP
+	if (mouse_on_screen(widget, "pc\\h3\\workshop\\screen"))
+	{
+		h3_workshop_click(name);
+		return;
+	}
+#endif
 	if (mouse_on_screen(widget, "pc\\online\\custom\\screen"))
 	{
 		struct player_profile *profile = player_ui_get_edit_player_profile();

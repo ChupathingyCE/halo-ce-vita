@@ -86,11 +86,16 @@ extern real draw_string_texel_size;
 /* the leftmost x a string's clip may reach: 0 (the centered 640 columns'
 left), or with Menu style Online the wide screen's left edge, where its
 menus' text sits (ui_widget.c widens their clip) */
+/* (ui_widget.c, while it draws a screen whose clip it widened in every Menu
+style: menu_functions.c menu_functions_screen_wide, STEAM WORKSHOP's browser) */
+int rasterizer_text_wide_screen;
+
 static short rasterizer_text_left_limit(void)
 {
 	extern int halo_menu_style_online(void);
 
-	return halo_menu_style_online() && halo_screen_width() > 640 ? (short)(-(halo_screen_width() - 640) / 2) : 0;
+	return (halo_menu_style_online() || rasterizer_text_wide_screen) && halo_screen_width() > 640 ?
+		(short)(-(halo_screen_width() - 640) / 2) : 0;
 }
 #endif
 

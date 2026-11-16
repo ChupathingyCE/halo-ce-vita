@@ -230,6 +230,21 @@ size_t steam_workshop_text(char *out, size_t size, const uint8_t *data, size_t l
 
 		if (data[at] == '[' && (tag = bbcode_tag(data, length, at)) != 0)
 		{
+			/* (a tag left out is a word's end: a list's item, a heading's or a paragraph's end a line's, with lines) */
+			static const char *const breaking[] = { "*", "/h1", "/h2", "/h3", "list", "/list", "olist", "/olist", "br",
+				"/p", "hr", "quote", "/quote", "/table", "tr" };
+			size_t name_length = 0, index;
+
+			while (at + 1 + name_length < at + tag - 1 && data[at + 1 + name_length] != '=' &&
+				data[at + 1 + name_length] != ']')
+				name_length++;
+			for (index = 0; index < sizeof(breaking) / sizeof(breaking[0]); index++)
+				if (strlen(breaking[index]) == name_length && !memcmp(breaking[index], data + at + 1, name_length))
+					break;
+			if (lines && index < sizeof(breaking) / sizeof(breaking[0]) && used)
+				breaks = breaks ? breaks : 1;
+			else if (used)
+				space = 1;
 			at += tag;
 			continue;
 		}

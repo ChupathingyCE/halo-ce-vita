@@ -171,6 +171,17 @@ def strip():
     return Image.new('RGBA', (64, 16), (2, 5, 10, alpha(.88)))
 
 
+def workshop_card(focused):
+    # STEAM WORKSHOP's cards (halo3/workshop.xml): a lighter navy than the
+    # panel they sit on, lighter still when focused (the orange frame round
+    # the focused card and the pictures are drawn over it: menu_functions.c)
+    top, bottom = ((44, 66, 108), (24, 40, 72)) if focused else ((32, 50, 86), (16, 28, 54))
+    return vertical_gradient((64, 64), [
+        (0.0, top + (alpha(.92),)),
+        (1.0, bottom + (alpha(.92),)),
+    ])
+
+
 def rule():
     image = horizontal_gradient((128, 2), [
         (0.0, (160, 180, 205, 0)),
@@ -1026,6 +1037,8 @@ ART = {
     'item_off.png': item_off,
     'row_on.png': row_on,
     'strip.png': strip,
+    'ws_card_off.png': lambda: workshop_card(False),
+    'ws_card_on.png': lambda: workshop_card(True),
     'rule.png': rule,
     'nameplate.png': nameplate,
     'server_plate.png': server_plate,

@@ -438,3 +438,86 @@ The joiner never opens a connection to anything but Steam's CM/CDN for this.
 2. A host can name any item id in a question (8.3): accepted, by design (the player decides, every check applies).
 3. The 32-bit identity is not a security boundary (8.2); it is the same as custom maps'.
 4. No new parser on the wire; the one new parser (the name) is bounded, fuzzed, and reads only the existing field.
+
+## 9. The Steam Workshop browser (feat/11x-steam-workshop-browser, Nov 16 2026: off by default, same switch)
+
+Owner decision (Nov 16): "Card grid + details page", Halo 3 / MCC style: cards (the item's preview picture, title,
+author, rating, size, CAMPAIGN or MULTIPLAYER), tabs POPULAR / NEWEST / TOP RATED / SUBSCRIBED, Cross opens a details
+page (the large picture and its extra pictures, the description, the maps it holds, when it was updated, whether it
+is installed) with Download / Update / Remove; several items still marked for one download. Same build switch as
+sections 7-8 (configure.py --steam-workshop). Everything of sections 3, 7 and 8 holds unchanged: one QR sign-in a
+session, the list and the downloads inside it, then revoke and log off; downloads staged, then installed through the
+game's own map check. What this section adds is what Steam and its image CDN now send that is new: pictures, more
+text, the subscriptions, the authors' names, an item's manifest read before a download.
+
+### 9.1 What is asked, of whom
+
+| What | Over | Fields (SteamDatabase/Protobufs; verified only against the fake: the live test, 9.7) |
+|---|---|---|
+| a page of a tab | the signed-in CM session, PublishedFile.QueryFiles#1 (POPULAR = trend 7 days, NEWEST = publication date, TOP RATED = votes) | as section 7, eight a page, plus 17 return_vote_data |
+| SUBSCRIBED | the same session, PublishedFile.GetUserFiles#1 | 1 steamid = **the session's own** (the logon's, never typed or taken from anything else), 2 app 976730, 4 page, 5 eight, 6 "mysubscriptions", 7 "subscriptiondate", 10 required tag Halo1, 19/20 votes and tags; response 1 total, 3 items. **Read only**: no subscribe, unsubscribe, vote or favourite is ever sent - nothing is written to Steam from the Vita |
+| the authors' names | the same session, Player.GetPlayerLinkDetails#1 | 1 the page's creators (at most eight a page); response accounts -> public_data 1 steamid, 10 persona_name |
+| a details page | the same session, PublishedFile.GetDetails#1 of one id | 3 includeadditionalpreviews, 6 includevotes, 15 strip_description_bbcode; the item's 11 preview_url, 17 file_description, 19 time_created, 51 previews (3 url, 7 type: only 0, an image, taken), 55 vote_data (1 score float, 2 up, 3 down) |
+| what the item holds | depot 976730's manifest of the item's hcontent_file, as section 7's download reads it (depot key, request code, a CDN of Steam's list - one try each, no waits) | the names put through section 7's name rule; nothing written |
+| the pictures | **Steam's image CDN only**, plain HTTPS GET, no session, no cookie, no token | 9.2 |
+
+### 9.2 The pictures (port/steamdl/steam_image.c)
+
+- **Only Steam's image CDN.** A picture's URL is the item's preview_url or a details page's preview URL as Steam gave
+  it, and it is a rule, not a lookup (steam_image_url): `https://` only; the host exactly `images.steamusercontent.com`
+  or `steamuserimages-a.akamaihd.net` (the older name of the same pictures) - a port, a user, another host and a host
+  that only ends like Steam's are refused; the path `/ugc/` and then only `[A-Za-z0-9/_.-]`, no `..`, no `//`, at
+  most 200 bytes; Steam's own query, if any, is left off and ours put on (`imw`/`imh`: the CDN's own resize to the
+  size we draw - 256x144 for a card, 512x288 for a details page - measured Nov 16: a 1920x1080 408 KB preview comes
+  as a 256x144 JPEG of 16 KB). A URL refused is never connected to. TLS as every Steam connection (steam_net.h:
+  the built-in authorities - images.steamusercontent.com chains to ISRG Root X1, steamuserimages-a.akamaihd.net to
+  DigiCert Global Root G3, both in update_roots.h - and the host's name checked); a test build's
+  HALO_STEAM_TEST_IMAGES alone sends the (checked) request to the fake. No redirect is followed, only a 200 is taken,
+  the body at most 2 MB (Steam takes previews of at most 1 MB).
+- **The bytes are decoded by a bounded decoder.** The type by its signature only (a JPEG's FF D8 FF, a PNG's eight
+  bytes; what the server calls it is not read); a picture cut short (no EOI / IEND at its end) is refused, not shown
+  half grey. stb_image v2.32 (port/third_party/stb, public domain/MIT, pinned commit), compiled with JPEG and PNG
+  alone, no stdio, no HDR, no SIMD, no thread-locals, STBI_MAX_DIMENSIONS 4096; its size read first
+  (stbi_info_from_memory) and refused above 4096 a side or 1920x1080 pixels; a 16-bit PNG refused; every allocation
+  it makes goes through a budget (10 MB held at once at most: a refused allocation fails the decode. Measured: Steam's
+  own 1920x1080 baseline preview 9,158 KB; the same as a progressive JPEG needs more and is refused; the CDN's 256x144
+  of it 288 KB). Then shrunk (an area average) to a card's 256x128 (its middle, filled) or a details page's 512x256
+  (all of it, fitted), B G R A. Only that made picture is kept or drawn.
+- **The cache.** The made pictures are kept in `<data root>/workshop/previews/<16 hex>.px` (the hex: FNV-1a 64 of the
+  URL and the size - never a name the server chose), at most 12 MB and 96 files (the oldest let go; only names of
+  that exact form are ever looked at or removed), read back only if the header (magic, version, width, height) and
+  the size are exactly a picture's. A picture refused is remembered for the session (by its URL's hash) and never
+  fetched again in it.
+- **Memory.** One decode at a time, on the job's thread. The job holds a page's pictures (eight of 128 KB) and a
+  details page's (512 KB) at most, and lets them go as the page changes and when the job ends; the screen makes
+  textures of them (menu_tags_pixels_texture: no mipmaps) and lets them go as the page changes, when the details
+  page closes and when the screen is gone. Measured: 9.6.
+
+### 9.3 The text
+
+Titles, authors' names and descriptions are anyone's bytes. steam_workshop_text makes them our font's: strict UTF-8
+(a bad sequence one '?'); ASCII's printable characters and Latin-1's letters kept; typographic quotes, dashes and
+the ellipsis made ASCII; control characters, C1, bidi overrides and isolates, zero-width and other format
+characters, variation selectors and tags dropped; every other character (emoji, CJK) one '?' for a run of them;
+blanks one space. **The game's own text code** - `|` and the character after it (draw_string.c: `|n` a line break;
+a `|` at the very end reads past the string's end) - is made `/`. BBCode's tags (`[b]`, `[url=...]`, `[*]`) are left
+out, their words kept (a list's items, headings and paragraphs on lines of their own): nothing is interpreted - no
+link followed, no picture fetched from a description. Every field is bounded (a title 128 bytes, a name 48, a
+description 1,600, a field read at most 16 KB) and cut at a character's end; the screen cuts a card's line with
+"..." (h3_workshop_fit) and wraps a description in its box, Up and Down through it.
+
+### 9.4 REMOVE, INSTALLED, UPDATE
+
+The browser shows an item INSTALLED if `mods/<id>` is a folder, UPDATE if the version installed - the item's manifest
+gid, kept in `<data root>/workshop/installed/<id>.gid` by steam_workshop_install - is not the one Steam lists now.
+REMOVE (Triangle, then Triangle again) removes `mods/<id>` (steam_workshop_remove_tree: plain names only, never a link
+followed, depth-bounded) and its record, then the mods folder is looked at again (the map lists and the MOD
+MANAGER). It is a file operation of this Vita's alone: nothing is sent to Steam (the subscription, if any, stays).
+
+### 9.5 Touch, input
+
+D-pad and left stick across the cards (past an edge: the next or the last page), L and R the tabs, a finger taps a
+card (its details page) or a tab, swipes a page (a details page: a picture). The swipe is the screen's own drag
+(menu_functions_mouse_drag_own): its moves are never also a tap. The screen's clip is the whole wide screen in every
+Menu style (ui_widget.c, as Menu style Online's screens), and the overlays meet the widgets on a wide screen (the
+QR of DOWNLOAD FROM STEAM too: it sat a margin's width left of its panel's right half on the Vita's 960 pixels).

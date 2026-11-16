@@ -489,8 +489,10 @@ static void workshop_authors(struct steam_session *session, const struct steam_w
 	for (index = 0; index < count && index < STEAM_WORKSHOP_PAGE_ITEMS; index++)
 		for (other = 0; other < unique; other++)
 			if (steamids[other] == items[index].creator)
-				snprintf(job.workshop.view.rows[index].author, sizeof(job.workshop.view.rows[index].author), "%s",
-					names[other]);
+			{
+				memcpy(job.workshop.view.rows[index].author, names[other], sizeof(job.workshop.view.rows[index].author));
+				job.workshop.view.rows[index].author[sizeof(job.workshop.view.rows[index].author) - 1] = 0;
+			}
 	pthread_mutex_unlock(&job.lock);
 }
 
@@ -932,7 +934,8 @@ void steam_job_workshop_details_ask(const char *id)
 	job.workshop.touched = now_seconds();
 	if (!id || !id[0])
 	{
-		/* (closed: what it held let go) */
+		/* (closed: what it held let go; a details call on its way is dropped as it comes) */
+		job.workshop.details_asked++;
 		job.workshop.details_served = job.workshop.details_asked;
 		memset(&job.workshop.details, 0, sizeof(job.workshop.details));
 		free(pictures.large);

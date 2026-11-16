@@ -7423,8 +7423,17 @@ void render_ui_widgets(
 
 					static short said_x1 = -1;
 
-					if (halo_menu_style_online() && bounds.x0 == 0 && halo_screen_width() > 640 &&
-						pc_menu_tag(widget_globals.active_widgets[widget_index]->definition_tag_index))
+					/* (and STEAM WORKSHOP's browser in every Menu style: menu_functions.c; its text's clip too,
+					rasterizer_text.c) */
+					extern boolean menu_functions_screen_wide(long tag_index);
+					extern int rasterizer_text_wide_screen;
+					long screen_tag = widget_globals.active_widgets[widget_index]->definition_tag_index;
+
+					rasterizer_text_wide_screen = halo_screen_width() > 640 && !halo_menu_style_online() &&
+						menu_functions_screen_wide(screen_tag);
+
+					if (bounds.x0 == 0 && halo_screen_width() > 640 &&
+						((halo_menu_style_online() && pc_menu_tag(screen_tag)) || menu_functions_screen_wide(screen_tag)))
 					{
 						if (said_x1 != bounds.x1)
 						{
@@ -7448,6 +7457,11 @@ void render_ui_widgets(
 					TRUE,
 					FALSE);
 #ifdef HALO_LINUX
+				{
+					extern int rasterizer_text_wide_screen;
+
+					rasterizer_text_wide_screen = 0;
+				}
 				ui_mouse_noting_targets = FALSE;
 #endif
 				/* port: co-op from the campaign's menus, the text the maps

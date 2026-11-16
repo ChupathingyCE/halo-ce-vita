@@ -103,10 +103,13 @@ static void *budget_realloc(void *pointer, size_t old_size, size_t new_size)
 #pragma GCC diagnostic ignored "-Wshadow"
 #pragma GCC diagnostic ignored "-Wcast-qual"
 #pragma GCC diagnostic ignored "-Wtype-limits"
+#pragma GCC diagnostic ignored "-Wunused-value"
 #endif
 #include "../third_party/stb/stb_image.h"
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
+/* (stb_image's declarations of what JPEG and PNG alone leave out: never defined, never used) */
+#pragma GCC diagnostic ignored "-Wunused-function"
 #endif
 
 /* ---------- the URL rule */

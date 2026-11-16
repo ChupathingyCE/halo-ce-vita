@@ -39,9 +39,11 @@ name of the same pictures) */
 #define STEAM_IMAGE_BYTES_MAXIMUM (2u << 20)
 /* a picture's sides and pixels (a 1920x1080 preview, should the CDN not resize it) */
 #define STEAM_IMAGE_SIDE_MAXIMUM 4096
-#define STEAM_IMAGE_PIXELS_MAXIMUM (1920u * 1200u)
-/* what the decoder may hold at once (the pixels at 3 bytes each and its own planes) */
-#define STEAM_IMAGE_DECODE_BYTES_MAXIMUM (16u << 20)
+#define STEAM_IMAGE_PIXELS_MAXIMUM (1920u * 1080u)
+/* what the decoder may hold at once (the pixels at 3 bytes each and its own planes): a baseline 1920x1080 JPEG takes
+about 9.4 MB, a progressive one more (refused); the CDN's resized pictures (256x144, 512x288) well under 1 MB. The
+Vita's C heap has about 12 MB free at the main menu (docs/steam_download_security.md 9.6) */
+#define STEAM_IMAGE_DECODE_BYTES_MAXIMUM (10u << 20)
 
 /* the pictures made: a card's and the details page's (powers of two: the menus' textures) */
 #define STEAM_IMAGE_CARD_WIDTH 256

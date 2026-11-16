@@ -488,8 +488,8 @@ static char const *const port_function_names[] =
 	"port h3 steam row", "port h3 steam back",
 	/* (1.1.3: STEAM WORKSHOP, halo3/workshop.xml) */
 	"port h3 workshop row", "port h3 workshop back", "port h3 workshop download", "port h3 workshop search",
-	"port h3 workshop page previous", "port h3 workshop page next", "port h3 workshop order previous",
-	"port h3 workshop order next",
+	"port h3 workshop tab previous", "port h3 workshop tab next", "port h3 workshop left", "port h3 workshop right",
+	"port h3 workshop up", "port h3 workshop down", "port h3 workshop mark",
 	/* (1.1.5: the Firefight lobby, START FIREFIGHT and PREPARING FIREFIGHT) */
 	"port firefight lobby init",
 	"port forge start firefight",
@@ -2744,6 +2744,64 @@ boolean menu_tags_png_texture(
 	bitmap->base_address = NULL;
 	free(pixels);
 	return TRUE;
+}
+
+/* (menu_functions.c: STEAM WORKSHOP's pictures) width x height B,G,R,A
+pixels (powers of two, at most 1024) made a texture of its own in `bitmap`,
+no mipmaps, kept by the caller until menu_tags_texture_free: no map's tags
+hold it. The pixels are copied. FALSE (and `bitmap` cleared) if it cannot be
+made. The render thread's, with the rasterizer up */
+boolean menu_tags_pixels_texture(
+	unsigned char const *bgra,
+	long width,
+	long height,
+	struct bitmap_data *bitmap)
+{
+	byte *pixels;
+	long total = width * height * 4;
+
+	memset(bitmap, 0, sizeof(*bitmap));
+	if (!bgra || width <= 0 || height <= 0 || width > 1024 || height > 1024 || (width & (width - 1)) ||
+		(height & (height - 1)))
+	{
+		return FALSE;
+	}
+	pixels = malloc(total);
+	if (!pixels)
+		return FALSE;
+	memcpy(pixels, bgra, total);
+	bitmap->signature = BITMAP_GROUP_TAG;
+	bitmap->width = (short)width;
+	bitmap->height = (short)height;
+	bitmap->depth = 1;
+	bitmap->type = _bitmap_type_2d;
+	bitmap->format = _bitmap_format_a8r8g8b8;
+	bitmap->flags = FLAG(_bitmap_has_power_of_two_dimensions_bit);
+	bitmap->mipmap_count = 0;
+	bitmap->tag_index = NONE;
+	bitmap->cache_block_index = NONE;
+	bitmap->pixels_size = total;
+	bitmap->base_address = pixels;
+	if (!rasterizer_bitmap_new(bitmap) || !bitmap->hardware_format)
+	{
+		free(pixels);
+		memset(bitmap, 0, sizeof(*bitmap));
+		return FALSE;
+	}
+	rasterizer_bitmap_changed(bitmap);
+	bitmap->base_address = NULL;
+	free(pixels);
+	return TRUE;
+}
+
+/* a texture of menu_tags_pixels_texture's let go (a cleared one: nothing) */
+void menu_tags_texture_free(
+	struct bitmap_data *bitmap)
+{
+	if (bitmap && bitmap->hardware_format)
+		rasterizer_bitmap_delete(bitmap);
+	if (bitmap)
+		memset(bitmap, 0, sizeof(*bitmap));
 }
 
 /* (scenario_tags_load, before ui.map's tags are read) the menus' XML read

@@ -756,6 +756,8 @@ static void test_browser(const char *fixtures)
 	CHECK(text_is("\xe6\x97\xa5\xe6\x9c\xac", 0, "?"));
 	CHECK(text_is("bad \xc3 \xff\xfe utf8 \xed\xa0\x80 \xc0\xaf", 0, "bad ? ? utf8 ? ?"));
 	CHECK(text_is("[b]bold[/b] [url=https://x.test/a]link[/url] [notatag here]", 0, "bold link [notatag here]"));
+	CHECK(text_is("[list][*]a[*]b[/list]after", 1, "a\nb\nafter"));
+	CHECK(text_is("[list][*]a[*]b[/list]after", 0, "a b after"));
 	CHECK(text_is("one\n\n\n\ntwo\r\nthree", 1, "one\n\ntwo\nthree"));
 	CHECK(text_is("one\ntwo", 0, "one two"));
 	CHECK(text_is("\n\nlead", 1, "lead"));
