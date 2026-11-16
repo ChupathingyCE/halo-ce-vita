@@ -3571,7 +3571,7 @@
 
 # ---------- DOWNLOAD FROM STEAM: STEAM WORKSHOP (halo3/workshop.xml, menu_functions.c h3_workshop_*)
 "STEAM WORKSHOP" = "STEAM WORKSHOP"
-"STEAM WORKSHOP: MCC CAMPAIGN MODS" = "STEAM WORKSHOP: MODS DE CAMPAÑA DE MCC"
+"STEAM WORKSHOP: MCC MODS AND MAPS" = "STEAM WORKSHOP: MODS Y MAPAS DE MCC"
 "Search" = "Buscar"
 "newest" = "más nuevos"
 "most liked" = "más valorados"
@@ -3580,7 +3580,7 @@
 "not in the game's folder" = "no está en la carpeta del juego"
 "Not installed (%llu): %s\n" = "No instalado (%llu): %s\n"
 "Halo CE items of MCC's Steam Workshop, on this Vita." = "Elementos de Halo CE del Steam Workshop de MCC, en esta Vita."
-"Unofficial: this signs in to your own Steam account with the Steam app's QR code, lists Halo CE's Workshop items, downloads the ones you pick, then signs out. Your account must own Halo: The Master Chief Collection. Campaign mods play from the mods folder, offline. No password is asked for or kept." = "No oficial: inicia sesión en tu propia cuenta de Steam con el código QR de la app de Steam, muestra los elementos de Halo CE del Workshop, descarga los que elijas y luego cierra la sesión. Tu cuenta debe tener Halo: The Master Chief Collection. Los mods de campaña se juegan desde la carpeta mods, sin conexión. No se pide ni se guarda ninguna contraseña."
+"Unofficial: this signs in to your own Steam account with the Steam app's QR code, lists Halo CE's Workshop items, downloads the ones you pick, then signs out. Your account must own Halo: The Master Chief Collection. Campaign mods play from the mods folder, offline; multiplayer maps are in the multiplayer map lists, offline and online. No password is asked for or kept." = "No oficial: inicia sesión en tu propia cuenta de Steam con el código QR de la app de Steam, muestra los elementos de Halo CE del Workshop, descarga los que elijas y luego cierra la sesión. Tu cuenta debe tener Halo: The Master Chief Collection. Los mods de campaña se juegan desde la carpeta mods, sin conexión; los mapas multijugador están en las listas de mapas multijugador, sin conexión y en línea. No se pide ni se guarda ninguna contraseña."
 "\n\nInstalled: %d. Not installed: %d." = "\n\nInstalados: %d. No instalados: %d."
 "Search \"%.40s\": page %d, %d items. Marked: %d of %d." = "Búsqueda \"%.40s\": página %d, %d elementos. Marcados: %d de %d."
 "By %s: page %d of %d. Marked: %d of %d." = "Por %s: página %d de %d. Marcados: %d de %d."
@@ -3602,6 +3602,23 @@
 "No items on this page." = "No hay elementos en esta página."
 "Sign out" = "Cerrar sesión"
 "Search the Workshop" = "Buscar en el Workshop"
+
+# ---------- Steam Workshop multiplayer maps (workshop_maps.h; custom_edition_maps.c, map_share.c, network_client_manager.c)
+"Steam Workshop\r\nitem %s" = "Steam Workshop\r\nelemento %s"
+"A multiplayer map's name doesn't fit: rename it shorter" = "El nombre de un mapa multijugador no cabe: acórtalo"
+"The host is playing %s, a map from the Steam Workshop (item %s), which you don't have. Players never send each other Workshop maps: download it from STEAM WORKSHOP (Game Manager, or the settings panel's Workshop row), then join again." = "El anfitrión juega %s, un mapa del Steam Workshop (elemento %s), que no tienes. Los jugadores nunca se envían mapas del Workshop: descárgalo desde STEAM WORKSHOP (Administrador de juegos, o la fila Workshop del panel de ajustes) y vuelve a unirte."
+"The host's Steam Workshop map %s isn't the same version as yours. Download the item again from STEAM WORKSHOP (the host may need to update it too), then join again." = "El mapa del Steam Workshop %s del anfitrión no es la misma versión que el tuyo. Descarga el elemento de nuevo desde STEAM WORKSHOP (puede que el anfitrión también deba actualizarlo) y vuelve a unirte."
+"The host is playing %s, a map from the Steam Workshop (item %s), which you don't have.\n\nThis map is from the Steam Workshop - download it from Steam? You sign in to your own Steam account with the Steam app's QR code; nothing comes from the host. Your account must own Halo: The Master Chief Collection." = "El anfitrión juega %s, un mapa del Steam Workshop (elemento %s), que no tienes.\n\nEste mapa es del Steam Workshop: ¿descargarlo desde Steam? Inicias sesión en tu propia cuenta de Steam con el código QR de la app de Steam; nada viene del anfitrión. Tu cuenta debe tener Halo: The Master Chief Collection."
+"\n\nThis is a public game: the host only named the item; it is checked like any Workshop download." = "\n\nEsta es una partida pública: el anfitrión solo nombró el elemento; se comprueba como cualquier descarga del Workshop."
+"Halo: Steam Workshop map" = "Halo: mapa del Steam Workshop"
+"Charge the Vita to 30 percent or plug in the charger first, then join again." = "Primero carga la Vita al 30 por ciento o conecta el cargador, y vuelve a unirte."
+"A Steam download is under way already: let it finish, then join again." = "Ya hay una descarga de Steam en curso: deja que termine y vuelve a unirte."
+"The Steam Workshop's copy of %s isn't the host's (0x%08lX here): the host may need to update the item." = "La copia del Steam Workshop de %s no es la del anfitrión (0x%08lX aquí): puede que el anfitrión deba actualizar el elemento."
+"The Steam download of %s was stopped." = "La descarga de Steam de %s se detuvo."
+"%s wasn't installed from the Steam Workshop." = "%s no se instaló desde el Steam Workshop."
+"The host's game had already started: download the item from STEAM WORKSHOP, then join again." = "La partida del anfitrión ya había empezado: descarga el elemento desde STEAM WORKSHOP y vuelve a unirte."
+"This version can't download Steam Workshop maps." = "Esta versión no puede descargar mapas del Steam Workshop."
+"The host is playing %s, a map from the Steam Workshop, which you don't have. You answered no to downloading it." = "El anfitrión juega %s, un mapa del Steam Workshop, que no tienes. Respondiste que no a descargarlo."
 
 # ---------- 1.1.5: FIREFIGHT (forge.c's forge_modes.inc: its HUD, banners and carnage report; the Firefight lobby and
 # PREPARING FIREFIGHT, menu_functions.c; halo3/forge_lobby.xml) - 1.2.0's words

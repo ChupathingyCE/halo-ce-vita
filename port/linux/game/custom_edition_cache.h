@@ -272,6 +272,12 @@ a Halo: CE Anniversary cache of a solo scenario this build loads (its
 header and tag index alone are read); logs why not. */
 boolean custom_edition_cache_mod_map_identify(
 	char const *path);
+/* (port) The same check of a mod's map file: the scenario type of a Halo: CE
+Anniversary cache this build loads (_scenario_type_solo, or
+_scenario_type_multiplayer: a Steam Workshop item's multiplayer map,
+workshop_maps.h), else NONE (logged). */
+short custom_edition_cache_mod_map_kind(
+	char const *path);
 /* (port) The loader the Halo content folder's map file at `path` asks for
 by its header (mcc_content.h's table: enum content_library_loader), and its
 game's index into `game_index` (may be NULL): none for a file that cannot

@@ -12822,7 +12822,7 @@ static void h3_steam_update(struct widget_instance *list)
 		{
 			/* (STEAM WORKSHOP: a build with the Workshop alone) */
 #ifdef HALO_STEAM_WORKSHOP
-			snprintf(line, sizeof(line), "%s", T("STEAM WORKSHOP: MCC CAMPAIGN MODS"));
+			snprintf(line, sizeof(line), "%s", T("STEAM WORKSHOP: MCC MODS AND MAPS"));
 #else
 			widget_instance_set_visibility_recursive(child, FALSE);
 			child->disabled = TRUE;
@@ -12904,7 +12904,8 @@ Halo: MCC's Steam Workshop items for Halo CE, through the player's own Steam sig
 (h3_steam_qr_draw: the same job's), then the list of a page (ten), marks, the download, then here - the session
 ended - each downloaded item checked again, every map by the game's own check (custom_edition_cache_file_check, as
 the mods folder's), and moved into the mods folder (steam_workshop_install). 1.1.3 plays a Workshop item's campaign
-maps (the mods folder's MCC mods, offline); multiplayer-only items are listed, not downloaded. */
+maps (the mods folder's MCC mods, offline) and its multiplayer maps (the multiplayer map lists, offline and online:
+custom_edition_mods.c, workshop_maps.h; a joiner without the host's downloads it here, never from the host). */
 #ifdef HALO_STEAM_WORKSHOP
 static struct
 {
@@ -12918,6 +12919,9 @@ static struct
 	int sort;
 	char search[STEAM_WORKSHOP_SEARCH_SIZE];
 } h3_workshop;
+
+/* (xbox_files.c's) */
+char const *platform_data_root(void);
 
 /* the data root (ux0:data/haloce-vita), without a trailing '/': the Workshop's workshop/ and mods/ are in it */
 static char const *h3_workshop_root(void)
@@ -13048,7 +13052,7 @@ static void h3_workshop_update(struct widget_instance *list)
 	{
 	case STEAM_JOB_IDLE:
 		snprintf(status_text, sizeof(status_text), "%s", T("Halo CE items of MCC's Steam Workshop, on this Vita."));
-		snprintf(details, sizeof(details), "%s", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code, lists Halo CE's Workshop items, downloads the ones you pick, then signs out. Your account must own Halo: The Master Chief Collection. Campaign mods play from the mods folder, offline. No password is asked for or kept."));
+		snprintf(details, sizeof(details), "%s", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code, lists Halo CE's Workshop items, downloads the ones you pick, then signs out. Your account must own Halo: The Master Chief Collection. Campaign mods play from the mods folder, offline; multiplayer maps are in the multiplayer map lists, offline and online. No password is asked for or kept."));
 		if (h3_workshop.installed || h3_workshop.refused)
 		{
 			snprintf(line, sizeof(line), T("\n\nInstalled: %d. Not installed: %d."), h3_workshop.installed, h3_workshop.refused);
@@ -13365,6 +13369,71 @@ static boolean h3_workshop_back(void)
 	h3_workshop.message[0] = 0;
 #endif
 	return TRUE;
+}
+
+/* (map_share.c: a joiner whose host plays a Steam Workshop map it lacks, the player having said yes) the Workshop's
+download of that one item begun - the sign-in, then the item straight away, no list - and the STEAM WORKSHOP screen
+opened over the game's lobby for its QR and progress (Circle cancels; Back after the end goes back to the lobby): 1,
+0 if a Steam job runs already or the screen cannot open, -1 if the battery is too low to start */
+int menu_functions_workshop_open_item(char const *id_text)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	long screen = menu_tags_ingame_screen("h3/workshop/screen");
+	struct widget_instance *active = ui_widget_port_active_screen(0);
+	char ids[1][24];
+	uint64_t id;
+	int started;
+
+	if (!id_text || !steam_workshop_id_parse(id_text, &id) || screen == NONE || !active)
+	{
+		platform_log("menus: workshop: item %s not begun (%s)", id_text ? id_text : "?", screen == NONE ? "no screen" :
+			!active ? "no screen up" : "a bad number");
+		return 0;
+	}
+	h3_workshop.marked_count = 0;
+	h3_workshop.installed = h3_workshop.refused = 0;
+	h3_workshop.message[0] = 0;
+	h3_workshop.search[0] = 0;
+	h3_workshop.sort = STEAM_WORKSHOP_SORT_TREND;
+	h3_workshop.installed_seen = FALSE;
+	started = steam_job_start_workshop(h3_workshop_root());
+	if (started <= 0)
+	{
+		platform_log("menus: workshop: item %s not begun: %s", id_text, started < 0 ? "the battery" : "a Steam job runs");
+		return started;
+	}
+	/* (the item chosen at once: the job takes it as the list opens, never showing one) */
+	snprintf(ids[0], sizeof(ids[0]), "%s", id_text);
+	steam_job_workshop_choose((const char (*)[24])ids, 1);
+	if (!ui_widget_load_by_name_or_tag(NULL, screen, NULL, active->local_player_index, active->definition_tag_index,
+		NONE, NONE))
+	{
+		steam_job_cancel();
+		platform_log("menus: workshop: item %s: the screen did not open; the session ends", id_text);
+		return 0;
+	}
+	platform_log("menus: workshop: item %s's download begun for the host's map (the screen over the lobby)", id_text);
+	return 1;
+#else
+	(void)id_text;
+	return 0;
+#endif
+}
+
+/* (map_share.c) the Workshop's downloaded items installed once its session ended (each checked, every map by the
+game's own check; once a job): how many were */
+int menu_functions_workshop_install(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	if (!h3_workshop.installed_seen)
+	{
+		h3_workshop.installed_seen = TRUE;
+		h3_workshop_install_staged();
+	}
+	return h3_workshop.installed;
+#else
+	return 0;
+#endif
 }
 
 /* (menu_functions_fade_draw, over the menus) the QR the Steam app scans: dark modules on a white square with its

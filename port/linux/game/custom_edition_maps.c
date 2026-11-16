@@ -74,6 +74,7 @@ in lines of about 20 characters.
 #include "cache_file_formats.h"
 #include "custom_edition_mods.h"
 #include "mcc_content.h"
+#include "workshop_maps.h"
 #include "text/unicode.h"
 #include "../src/lang.h"
 
@@ -174,6 +175,9 @@ struct custom_edition_map
 	frame, -1 for none */
 	boolean mcc;
 	short mcc_frame;
+	/* (port, --steam-workshop) a Steam Workshop item's multiplayer map
+	(workshop_maps.h; `mod` too: never shared, a PNG picture taken) */
+	boolean workshop;
 };
 
 struct custom_edition_maps_globals
@@ -593,6 +597,14 @@ static void custom_edition_map_add(
 			return;
 		}
 	}
+	/* (port: nor a name of a Steam Workshop item's multiplayer map,
+	workshop_maps.h, which is only ever looked for in the mods folder: a
+	host naming it means the item's map) */
+	if (workshop_map_name_parse(name, MAXIMUM_FILENAME_LENGTH + 1, NULL))
+	{
+		error(_error_silent, "custom edition: the maps folder's '%s' is not listed: that name is a Steam Workshop map's", name);
+		return;
+	}
 	if (custom_edition_map_disabled(name))
 	{
 		error(_error_silent, "custom edition: the map '%s' is turned off (HALO_MAPS_DISABLED)", name);
@@ -925,6 +937,75 @@ static void mcc_multiplayer_maps_add(
 	return;
 }
 
+#ifdef HALO_STEAM_WORKSHOP
+/* (port, --steam-workshop) Adds the Steam Workshop items' multiplayer maps
+(custom_edition_mods.c, workshop_maps.h), each not turned off
+(HALO_MAPS_DISABLED), after the maps folder's: named by its file's name,
+described as its item's ("Steam Workshop item 2915693904"), its picture
+<map>.bmp beside it. */
+static void workshop_multiplayer_maps_add(
+	void)
+{
+	struct custom_edition_maps_globals *globals = &custom_edition_maps_globals;
+	short count = custom_edition_mods_multiplayer_count();
+	short index;
+
+	for (index = 0; index < count; index++)
+	{
+		char const *name = custom_edition_mods_multiplayer_name(index);
+		char const *stem = custom_edition_mods_multiplayer_stem(index);
+		char const *folder = custom_edition_mods_multiplayer_folder(index);
+		char const *picture_path = custom_edition_mods_multiplayer_picture_path(index);
+		struct custom_edition_map *map;
+		char text[MAXIMUM_DESCRIPTION_LENGTH + 1];
+		short character;
+
+		if (!name || !stem || !folder)
+		{
+			break;
+		}
+		if (custom_edition_map_disabled(name))
+		{
+			error(_error_silent, "custom edition: the map '%s' is turned off (HALO_MAPS_DISABLED)", name);
+			continue;
+		}
+		if (globals->map_count == MAXIMUM_CUSTOM_EDITION_MAPS)
+		{
+			error(_error_silent, "custom edition: the map '%s' is not in a level list, which hold %d of them", name,
+				MAXIMUM_CUSTOM_EDITION_MAPS);
+			break;
+		}
+		/* (a multiplayer map this build loads, read as the loader reads it) */
+		if (!custom_edition_cache_multiplayer(name))
+		{
+			error(_error_silent, "custom edition: the Workshop map '%s' is not listed: not a multiplayer map this build loads", name);
+			continue;
+		}
+		map = &globals->maps[globals->map_count++];
+		csmemset(map, 0, sizeof(*map));
+		map->mod = TRUE;
+		map->workshop = TRUE;
+		map->mod_order = index;
+		csstrcpy(map->name, name);
+		csprintf(map->level_name, LEVEL_NAME_FORMAT, name, name);
+		if (picture_path && csstrlen(picture_path) < (long)sizeof(map->picture_path))
+		{
+			csstrcpy(map->picture_path, picture_path);
+		}
+		display_name_make(stem, map->display_name);
+		snprintf(text, sizeof(text), T("Steam Workshop\r\nitem %s"), folder);
+		for (character = 0; text[character] && character < MAXIMUM_DESCRIPTION_LENGTH; character++)
+		{
+			map->description[character] = (wchar_t)(unsigned char)text[character];
+		}
+		map->description[character] = 0;
+	}
+	error(_error_silent, "workshop: %d Steam Workshop multiplayer maps for the level list", count);
+
+	return;
+}
+#endif
+
 /* (port) Says what the Halo content folder holds, game by game (mcc_content.h's
 table): each game folder with maps, how many map files, and whether this
 build has their loader (those without one are not listed). */
@@ -1048,6 +1129,11 @@ static void custom_edition_maps_look_for(
 	{
 		custom_edition_mods_maps_add();
 	}
+#ifdef HALO_STEAM_WORKSHOP
+	/* (port: the Steam Workshop items' multiplayer maps, whatever PC maps,
+	MCC mods and the Halo content folder are) */
+	workshop_multiplayer_maps_add();
+#endif
 	qsort(globals->maps, globals->map_count, sizeof(globals->maps[0]), custom_edition_map_compare);
 	for (globals->multiplayer_count = 0;
 		globals->multiplayer_count < globals->map_count && !globals->maps[globals->multiplayer_count].campaign;
@@ -1524,10 +1610,22 @@ short custom_edition_maps_loadable(
 		missing[0] = 0;
 	}
 	/* (port: one of MCC's own maps, mcc_content.h: with the Halo content
-	folder, its file there, read as the loader reads it) */
+	folder, its file there, read as the loader reads it; or a Steam
+	Workshop item's multiplayer map, workshop_maps.h: its file in the mods
+	folder, the same) */
 	{
 		char mcc_stem[MCC_CONTENT_STEM_BYTES];
 
+		if (workshop_map_name_parse(name, MAXIMUM_FILENAME_LENGTH + 1, NULL))
+		{
+			if (!custom_edition_cache_multiplayer(name))
+			{
+				error(_error_silent, "custom maps: '%s' is a Steam Workshop map this machine cannot load (not installed, "
+					"or not a multiplayer map this build loads)", name);
+				return _custom_edition_maps_not_loadable;
+			}
+			return _custom_edition_maps_loadable;
+		}
 		if (mcc_content_name_stem(name, mcc_stem) != _mcc_content_none)
 		{
 			if (!custom_edition_cache_multiplayer(name))
@@ -1804,6 +1902,9 @@ boolean custom_edition_maps_shareable(
 	map_share_protocol.c) */
 	return !xbox_level_stock(name) &&
 		!custom_edition_mods_level_name(level_name) &&
+		/* (port: a Steam Workshop item's map never: every player downloads it
+		from Steam, workshop_maps.h) */
+		!workshop_map_name_parse(name, MAXIMUM_FILENAME_LENGTH + 1, NULL) &&
 		/* (port: MCC's own maps never, mcc_content.h: the player's own files) */
 		mcc_content_name_stem(name, mcc_stem) == _mcc_content_none &&
 		(custom_edition_maps_display_index(level_name) == NONE ||

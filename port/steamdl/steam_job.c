@@ -348,15 +348,12 @@ static void workshop_row(struct steam_job_workshop_row *row, const struct steam_
 	snprintf(row->title, sizeof(row->title), "%s", item->title[0] ? item->title : row->id);
 	row->size_kb = item->file_size >> 10 > 0xffffffffull ? 0xffffffffu : (unsigned int)(item->file_size >> 10);
 	row->tags = item->tags;
+	/* (campaign mods and multiplayer maps alike: a multiplayer item's maps are the multiplayer level list's, played
+	offline and online - every player with their own download, never one player's copy sent to another:
+	docs/steam_download_security.md section 8) */
 	row->downloadable = steam_workshop_item_ok(item, why, sizeof(why));
 	if (!row->downloadable)
 		snprintf(row->reason, sizeof(row->reason), "%s", why);
-	else if ((item->tags & STEAM_WORKSHOP_TAG_MULTIPLAYER) && !(item->tags & STEAM_WORKSHOP_TAG_CAMPAIGN))
-	{
-		/* (1.1.3 plays a Workshop item's campaign maps alone, offline: docs/mcc_cea_maps.md) */
-		row->downloadable = 0;
-		snprintf(row->reason, sizeof(row->reason), "Multiplayer maps: not in this version");
-	}
 }
 
 static int job_workshop_choose(void *context, struct steam_session *session, uint64_t *ids, int maximum)
