@@ -63,8 +63,8 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 	<widget name="h3/command/prepare/strip" left="120" top="310" width="400" height="20" bitmap="h3/strip"/>
 	<!-- (its words port command prepare's each frame: PREPARING COMMAND, or PREPARING FIREFIGHT for START FIREFIGHT -
 	a string list's text would be copied over them at every draw, ui_widget.c -; the paragraph, or a failed prepare's note) -->
-	<widget name="h3/command/prepare/title" type="text" left="132" top="146" width="376" height="22" font="h3/font_title" color="#FFEDEFEE"/>
-	<widget name="h3/command/prepare/text" type="text" left="132" top="180" width="376" height="76" font="h3/font_small" color="#FFB8C1B9"/>
+	<widget name="h3/command/prepare/title" type="text" left="132" top="146" width="376" height="22" font="h3/font_title" color="#FFF2F6FA"/>
+	<widget name="h3/command/prepare/text" type="text" left="132" top="180" width="376" height="76" font="h3/font_small" color="#FFCFD9E3"/>
 	<bitmap name="h3/prepare_fill">
 		<frame png="halo3/prepare_fill.png" width="8" height="8"/>
 	</bitmap>
@@ -92,7 +92,7 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 	<widget name="h3/command/prepare/bar19" left="493" top="262" width="18" height="8" bitmap="h3/prepare_fill"/>
 	<widget name="h3/command/prepare/progress" type="text" left="132" top="276" width="376" height="32" font="h3/font_item" color="#FFF0B070" text_y="1"/>
 	<widget name="h3/command/prepare/b_butn" left="132" top="312" width="16" height="16" bitmap="h3/glyph_circle"/>
-	<widget name="h3/command/prepare/back" type="text" left="152" top="311" width="120" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/forge_text" string_index="12"/>
+	<widget name="h3/command/prepare/back" type="text" left="152" top="311" width="120" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/forge_text" string_index="12"/>
 	<widget name="h3/command/prepare/screen" flags="pass_unhandled_to_focused_child">
 		<on event="b back" run="port command prepare cancel"/>
 		<on event="b back" back="true"/>
@@ -130,50 +130,50 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 	</widget>
 
 	<!-- the lobby -->
-	<widget name="h3/forge/title" type="text" left="16" top="18" width="240" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/forge_text" string_index="0"/>
-	<widget name="h3/forge/network_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="h3/forge/title" type="text" left="16" top="18" width="240" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/forge_text" string_index="0"/>
+	<widget name="h3/forge/network_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" open="h3/network/screen"/>
 	</widget>
 	<!-- (the connection's status under NETWORK, as the multiplayer lobby's) -->
-	<widget name="h3/forge/network_status" type="text" left="24" top="71" width="226" height="14" font="h3/font_small" color="#FF9AA59C">
+	<widget name="h3/forge/network_status" type="text" left="24" top="71" width="226" height="14" font="h3/font_small" color="#FF9FB6CC">
 		<data input="port h3 network status"/>
 	</widget>
-	<widget name="h3/forge/map_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="h3/forge/map_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" run="port cascade forge" open="h3/cascade/screen"/>
 	</widget>
-	<widget name="h3/forge/packs_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="h3/forge/packs_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" open="h3/forge/packs/screen"/>
 	</widget>
 	<!-- (START FORGE: LOCAL's, a local game; a network's, the live game's lobby - the profile screen
 	gives way to it, pc_menu_functions_profile_skip -, everyone in it into the Forge game; the other
 	network's row hidden, port forge lobby) -->
-	<widget name="h3/forge/start_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_text" string_index="2">
+	<widget name="h3/forge/start_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_text" string_index="2">
 		<on event="a start" run="port forge start"/>
 	</widget>
-	<widget name="h3/forge/start_live" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_text" string_index="2">
+	<widget name="h3/forge/start_live" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_text" string_index="2">
 		<on event="a start" run="port forge start live" open="ui\shell\main_menu\multiplayer_type_select\connected\4way_profile_select\4way_start2join_screen"/>
 	</widget>
 	<!-- (START COMMAND: a Command game, command mode's - port/linux/game/command.c -; a local game of
 	Blood Gulch for now, its row hidden on a network) -->
-	<widget name="h3/forge/command_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_text" string_index="9">
+	<widget name="h3/forge/command_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_text" string_index="9">
 		<on event="a start" run="port forge command prepare" open="h3/command/prepare/screen"/>
 		<on event="a start" run="port forge start command"/>
 	</widget>
 	<!-- (START FIREFIGHT: a FIREFIGHT game - port/linux/game/forge_modes.inc - on the map and map
 	variant chosen, its AI spawn zones (the map's built-in layout with none); a local game for now, its
 	row hidden on a network) -->
-	<widget name="h3/forge/firefight_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_text" string_index="13">
+	<widget name="h3/forge/firefight_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_text" string_index="13">
 		<on event="a start" run="port forge firefight prepare" open="h3/command/prepare/screen"/>
 		<on event="a start" run="port forge start firefight"/>
 	</widget>
 	<!-- (OBJECTIVE: the Command game's - territories and flag, territories, flag -, A the next; its words
 	port forge lobby's) -->
-	<widget name="h3/forge/objective_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="h3/forge/objective_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" run="port forge command objective"/>
 	</widget>
 	<!-- (AI COMMANDER: the Command game's AI commander's difficulty - Easy, Normal, Heroic, Legendary -,
 	A the next; its words port forge lobby's. The soldiers always fight on Legendary's rules) -->
-	<widget name="h3/forge/commander_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="h3/forge/commander_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" run="port command ai level"/>
 	</widget>
 	<widget name="h3/forge/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -186,26 +186,26 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 		<child widget="h3/forge/start_live" x="0" y="78"/>
 	</widget>
 	<widget name="h3/forge/rule2" left="8" top="172" width="250" height="2" bitmap="h3/rule"/>
-	<widget name="h3/forge/ready" type="text" left="16" top="177" width="240" height="18" font="h3/font_item" color="#FFD2D9D3" text_y="1"/>
-	<widget name="h3/forge/ready_sub" type="text" left="16" top="193" width="240" height="34" font="h3/font_small" color="#FF9AA59C" text_y="1"/>
+	<widget name="h3/forge/ready" type="text" left="16" top="177" width="240" height="18" font="h3/font_item" color="#FFE6ECF2" text_y="1"/>
+	<widget name="h3/forge/ready_sub" type="text" left="16" top="193" width="240" height="34" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
 	<widget name="h3/forge/map_picture" left="16" top="232" width="140" height="114" bitmap="h3/mp_maps"/>
 	<widget name="h3/forge/emblem" left="22" top="238" width="64" height="64" bitmap="h3/forge_emblem"/>
-	<widget name="h3/forge/caption" type="text" left="16" top="350" width="240" height="20" font="h3/font_item" color="#FFE4E8E5" text_y="1"/>
+	<widget name="h3/forge/caption" type="text" left="16" top="350" width="240" height="20" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
 	<!-- (the variant's words, or why START FORGE did not start: port forge lobby) -->
-	<widget name="h3/forge/note" type="text" left="16" top="372" width="240" height="60" font="h3/font_small" color="#FF9AA59C" text_y="1"/>
+	<widget name="h3/forge/note" type="text" left="16" top="372" width="240" height="60" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
 	<!-- (1.1.4: the Command lobby's, under its longer list - OBJECTIVE, AI COMMANDER, SIDE, START COMMAND -:
 	the Forge lobby's, lower; each found by its name as the Forge lobby's are) -->
 	<widget name="h3/command/rule2" left="8" top="192" width="250" height="2" bitmap="h3/rule"/>
-	<widget name="h3/command/ready" type="text" left="16" top="197" width="240" height="18" font="h3/font_item" color="#FFD2D9D3" text_y="1"/>
-	<widget name="h3/command/ready_sub" type="text" left="16" top="213" width="240" height="34" font="h3/font_small" color="#FF9AA59C" text_y="1"/>
+	<widget name="h3/command/ready" type="text" left="16" top="197" width="240" height="18" font="h3/font_item" color="#FFE6ECF2" text_y="1"/>
+	<widget name="h3/command/ready_sub" type="text" left="16" top="213" width="240" height="34" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
 	<widget name="h3/command/map_picture" left="16" top="252" width="140" height="114" bitmap="h3/mp_maps"/>
 	<widget name="h3/command/emblem" left="22" top="258" width="64" height="64" bitmap="h3/forge_emblem"/>
-	<widget name="h3/command/caption" type="text" left="16" top="370" width="240" height="20" font="h3/font_item" color="#FFE4E8E5" text_y="1"/>
-	<widget name="h3/command/note" type="text" left="16" top="392" width="240" height="32" font="h3/font_small" color="#FF9AA59C" text_y="1"/>
+	<widget name="h3/command/caption" type="text" left="16" top="370" width="240" height="20" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/command/note" type="text" left="16" top="392" width="240" height="32" font="h3/font_small" color="#FF9FB6CC" text_y="1"/>
 	<widget name="h3/forge/a_butn" left="16" top="447" width="16" height="16" bitmap="h3/glyph_cross"/>
-	<widget name="h3/forge/select" type="text" left="36" top="446" width="70" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/forge_text" string_index="5"/>
+	<widget name="h3/forge/select" type="text" left="36" top="446" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/forge_text" string_index="5"/>
 	<widget name="h3/forge/b_butn" left="110" top="447" width="16" height="16" bitmap="h3/glyph_circle"/>
-	<widget name="h3/forge/leave" type="text" left="130" top="446" width="70" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/forge_text" string_index="7"/>
+	<widget name="h3/forge/leave" type="text" left="130" top="446" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/forge_text" string_index="7"/>
 	<!-- (scene: its own camera in ui.map's unused new_campaign point, a narrower lens: the ring's
 	arc across the planet; in front of it (scene_object=, the menu_monitor and menu_campaign packs)
 	343 Guilty Spark behind a Warthog, looking at it) -->
@@ -253,7 +253,7 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 	</widget>
 	<!-- (1.2.0 menu rework, owner Nov 5; 1.1.5: the main menu's FIREFIGHT, its own lobby - the map and
 	START FIREFIGHT, a local game -, the Forge lobby's rows, panel and code: port firefight lobby init) -->
-	<widget name="h3/firefight/title" type="text" left="16" top="18" width="240" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/mode_text" string_index="0"/>
+	<widget name="h3/firefight/title" type="text" left="16" top="18" width="240" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/mode_text" string_index="0"/>
 	<widget name="h3/firefight/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
 		<on event="y" open="h3/friends/screen"/>
 		<child widget="h3/forge/map_row" x="0" y="0"/>
@@ -292,15 +292,15 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 	<!-- (1.2.0 menu rework, owner Nov 5; 1.1.4: the main menu's COMMAND, its own lobby - NETWORK, the map,
 	OBJECTIVE, AI COMMANDER, SIDE and START COMMAND -, the Forge lobby's rows and code: port command lobby
 	init) -->
-	<widget name="h3/command/title" type="text" left="16" top="18" width="240" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/mode_text" string_index="1"/>
+	<widget name="h3/command/title" type="text" left="16" top="18" width="240" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/mode_text" string_index="1"/>
 	<!-- (1.2.0 network Command: NETWORK as the Forge lobby's - LOCAL a local game; ONLINE, SYSTEM LINK, AD HOC
 	the lobby's live game, a network Command game, port/linux/game/command.c's command_net.inc -; SIDE, live:
 	this machine's commanders' team, red or blue, A or left and right the other, as the game's lobby's left and
 	right; START COMMAND on a network the live game's, its host's alone) -->
-	<widget name="h3/command/side_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="h3/command/side_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a left right" run="port command side"/>
 	</widget>
-	<widget name="h3/command/command_live" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_text" string_index="9">
+	<widget name="h3/command/command_live" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_text" string_index="9">
 		<on event="a start" run="port forge start live" open="ui\shell\main_menu\multiplayer_type_select\connected\4way_profile_select\4way_start2join_screen"/>
 	</widget>
 	<widget name="h3/command/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -362,44 +362,44 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 	list (port forge map pick: the map itself, then its map variants, twelve and more rows that
 	scroll, the triggers a page), A on one of them goes back to the lobby with it, B back to the
 	maps (port forge maps back) -->
-	<widget name="h3/forge/maps/title" type="text" left="52" top="46" width="400" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1"/>
-	<widget name="h3/forge/maps/item_0" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/title" type="text" left="52" top="46" width="400" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1"/>
+	<widget name="h3/forge/maps/item_0" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_1" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_1" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_2" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_2" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_3" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_3" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_4" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_4" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_5" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_5" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_6" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_6" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_7" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_7" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_8" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_8" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_9" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_9" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_10" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_10" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_11" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_11" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
-	<widget name="h3/forge/maps/item_12" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/maps/item_12" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge map pick" back="true"/>
 	</widget>
 	<widget name="h3/forge/maps/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -422,10 +422,10 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 		<child widget="h3/forge/maps/item_12" y="228"/>
 	</widget>
 	<widget name="h3/forge/maps/maps_picture" left="320" top="84" width="140" height="114" bitmap="h3/mp_maps"/>
-	<widget name="h3/forge/maps/maps_text" type="text" left="320" top="206" width="266" height="120" font="h3/font_small" color="#FFB8C1B9" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
+	<widget name="h3/forge/maps/maps_text" type="text" left="320" top="206" width="266" height="120" font="h3/font_small" color="#FFCFD9E3" string_list="ui\shell\main_menu\multiplayer_type_select\mp_map_select\map_data"/>
 	<!-- (a variant's details, in the description's place while the variants show) -->
-	<widget name="h3/forge/maps/variant_name" type="text" left="320" top="206" width="266" height="20" font="h3/font_item" color="#FFEDEFEE" text_y="1"/>
-	<widget name="h3/forge/maps/variant_text" type="text" left="320" top="228" width="266" height="100" font="h3/font_small" color="#FFB8C1B9"/>
+	<widget name="h3/forge/maps/variant_name" type="text" left="320" top="206" width="266" height="20" font="h3/font_item" color="#FFF2F6FA" text_y="1"/>
+	<widget name="h3/forge/maps/variant_text" type="text" left="320" top="228" width="266" height="100" font="h3/font_small" color="#FFCFD9E3"/>
 	<widget name="h3/forge/maps/screen" flags="pass_unhandled_to_focused_child">
 		<on event="b back" run="port forge maps back" back="true"/>
 		<child widget="h3/main/haze"/>
@@ -447,26 +447,26 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 	<!-- EXTRA OBJECTS: the scene packs Forge brings (port forge packs: each on or off, A to change;
 	built in the background from the player's own campaign maps while the lobby is open, its
 	progress and what stops one at the right) -->
-	<widget name="h3/forge/packs/title" type="text" left="52" top="46" width="400" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/forge_text" string_index="8"/>
-	<widget name="h3/forge/packs/item_0" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/packs/title" type="text" left="52" top="46" width="400" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/forge_text" string_index="8"/>
+	<widget name="h3/forge/packs/item_0" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge pack toggle"/>
 	</widget>
-	<widget name="h3/forge/packs/item_1" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/packs/item_1" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge pack toggle"/>
 	</widget>
-	<widget name="h3/forge/packs/item_2" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/packs/item_2" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge pack toggle"/>
 	</widget>
-	<widget name="h3/forge/packs/item_3" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/packs/item_3" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge pack toggle"/>
 	</widget>
-	<widget name="h3/forge/packs/item_4" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/packs/item_4" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge pack toggle"/>
 	</widget>
-	<widget name="h3/forge/packs/item_5" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/packs/item_5" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge pack toggle"/>
 	</widget>
-	<widget name="h3/forge/packs/item_6" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+	<widget name="h3/forge/packs/item_6" type="text" width="250" height="18" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" run="port forge pack toggle"/>
 	</widget>
 	<widget name="h3/forge/packs/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -479,8 +479,8 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 		<child widget="h3/forge/packs/item_5" y="95"/>
 		<child widget="h3/forge/packs/item_6" y="114"/>
 	</widget>
-	<widget name="h3/forge/packs/info_name" type="text" left="320" top="84" width="266" height="20" font="h3/font_item" color="#FFEDEFEE" text_y="1"/>
-	<widget name="h3/forge/packs/info_text" type="text" left="320" top="106" width="266" height="90" font="h3/font_small" color="#FFB8C1B9"/>
+	<widget name="h3/forge/packs/info_name" type="text" left="320" top="84" width="266" height="20" font="h3/font_item" color="#FFF2F6FA" text_y="1"/>
+	<widget name="h3/forge/packs/info_text" type="text" left="320" top="106" width="266" height="90" font="h3/font_small" color="#FFCFD9E3"/>
 	<widget name="h3/forge/packs/info_state" type="text" left="320" top="200" width="266" height="60" font="h3/font_small" color="#FF9FD8FF"/>
 	<widget name="h3/forge/packs/screen" flags="pass_unhandled_to_focused_child">
 		<on event="b back" back="true"/>
