@@ -753,9 +753,26 @@ static long tag_named(long group_tag, char const *name, char const *file, long l
 
 	if (strchr(name, '\\'))
 	{
-		/* (a picture a Halo PC ui.map has not, the Xbox's Y button: none shown) */
+		/* (a picture a Halo PC ui.map has not - MCC's has not the Xbox's Y button: ours drawn in its
+		place, classic/xbox_screens.xml's, for every widget that asks for it; any other: none shown.
+		The Xbox's ui.map has them all and never gets here) */
 		if (group_tag == BITMAP_GROUP_TAG && tag_loaded(group_tag, name) == NONE && !build.ingame)
 		{
+			static char const *const drawn[][2] = {
+				{ "ui\\shell\\bitmaps\\y_butn", XBOX_SCREEN_WIDGET_PREFIX "y_butn_art" },
+			};
+			long which;
+
+			for (which = 0; which < (long)NUMBEROF(drawn); which++)
+			{
+				if (!strcmp(name, drawn[which][0]) && build.halo_pc_ui &&
+					(index = find(drawn[which][1], build.menus->bitmap_count, bitmap_name)) != NONE)
+				{
+					platform_log("menus: %s:%ld: this ui.map has no bitmap %s: ours drawn in its place",
+						file, line, name);
+					return build.bitmap_tags[index];
+				}
+			}
 			platform_log("menus: %s:%ld: this ui.map has no bitmap %s: none shown", file, line, name);
 			return NONE;
 		}
