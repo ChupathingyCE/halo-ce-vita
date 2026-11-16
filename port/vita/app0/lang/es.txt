@@ -3224,6 +3224,7 @@
 "ADVANCE" = "AVANZAR"
 "FLAG" = "BANDERA"
 "Needs the barracks" = "Hace falta el cuartel"
+"The barracks is being built" = "El cuartel está en construcción"
 "No room for more troops" = "No caben más tropas"
 "Needs the barracks and the armory" = "Hacen falta el cuartel y la armería"
 "Already in the field" = "Ya está en el campo"

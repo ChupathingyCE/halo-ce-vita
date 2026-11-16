@@ -669,6 +669,9 @@ static char const *const command_reasons[] =
 	N_("Already in the field"), N_("Needs the armory"), N_("Already built"), N_("Being built"), N_("Can't afford"),
 	N_("Those troops can't come: their files are missing"), N_("No Spartan yet: the HQ sells one"),
 	N_("Your Spartan is respawning"), N_("Another commander is in your Spartan"),
+	/* (1.1.4 polish: the barracks bought but not up yet - the HQ's bar
+	shows it building - said so, not "Needs the barracks") */
+	N_("The barracks is being built"),
 };
 #define COMMAND_REASONS ((short)NUMBEROF(command_reasons))
 
@@ -5773,7 +5776,7 @@ static char const *command_buy_blocked(
 	if (buy->kind == _command_buy_squad)
 	{
 		if (buy->upgrade != NONE && !command_upgrade_built(side, buy->upgrade))
-			return N_("Needs the barracks");
+			return command_upgrade_done_time[side][buy->upgrade] ? N_("The barracks is being built") : N_("Needs the barracks");
 		if (command_ai_alive(side) + command_squads_coming(side) * COMMAND_SQUAD_SIZE + COMMAND_SQUAD_SIZE > COMMAND_AI_MAXIMUM_PER_TEAM)
 			return N_("No room for more troops");
 	}
