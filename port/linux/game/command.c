@@ -161,6 +161,7 @@ Each logs what it did ("command: ...").
 #include <string.h>
 
 void platform_log(const char *format, ...);
+void platform_memory_log(const char *when, const char *map_name);
 int halo_linux_mouse_look(short gamepad_index, float *yaw, float *pitch);
 unsigned long halo_linux_forge_keys(float *wheel_notches);
 long hud_get_font_index(void);
@@ -8082,6 +8083,11 @@ static void command_where_scores(
 		command_objectives.scores[0], command_objectives.scores[1], command_objectives.score_limit, command_globals.resources[0],
 		command_globals.resources[1], command_ai_alive(_command_side_red), command_ai_alive(_command_side_blue),
 		command_ai_squad_count(_command_side_red), command_ai_squad_count(_command_side_blue));
+	/* (the memory meanwhile: the C heap - the Vita's fixed 48 MB - and the
+	window; with HALO_HEAP_CENSUS=1 the sites that hold and grew: a Command
+	game on Danger Canyon under the Vita's budget filled the heap by its
+	first minute) */
+	platform_memory_log("command where", NULL);
 	/* (the match's lag, Ben's report: what piles up - bodies, dropped
 	weapons, projectiles - counted by type) */
 	{

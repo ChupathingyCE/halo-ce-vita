@@ -890,6 +890,9 @@ extern struct c_heap_information c_heap_information(void) __asm__("mallinfo");
 
 /* (the logs' C heap figures) 0 where the C library has no mallinfo: the
 Android guest's musl and the Windows C runtime */
+/* (the harness's heap census, below: the bytes it knows libraries hold) */
+static unsigned long platform_heap_library_bytes __attribute__((unused));
+
 void platform_heap_usage(unsigned long *in_use, unsigned long *capacity)
 {
 #ifdef HALO_VITA
@@ -904,6 +907,10 @@ void platform_heap_usage(unsigned long *in_use, unsigned long *capacity)
 	const char *setting = getenv("HALO_HEAP_LIMIT_KB");
 
 	*in_use = heap.uordblks + heap.hblkhd;
+	/* (the harness's census knows which bytes libraries allocated - on the
+	PC the GL driver's own copies of the textures, its shaders -: not the
+	game's, and not in the Vita's C heap) */
+	*in_use -= *in_use < platform_heap_library_bytes ? *in_use : platform_heap_library_bytes;
 	*capacity = setting ? (unsigned long)atol(setting) * 1024 : 0;
 #else
 	*in_use = 0;
@@ -929,10 +936,24 @@ extern void *__libc_malloc(size_t size);
 extern void *__libc_calloc(size_t count, size_t size);
 extern void *__libc_realloc(void *pointer, size_t size);
 
-static int heap_limit_refuses(size_t size)
+/* (an allocation is never refused to a caller outside the program's own
+code: a library's - Mesa does not check its malloc, and a Command game on
+Danger Canyon faulted inside libgallium at the limit; nor are its bytes
+counted, when HALO_HEAP_CENSUS=1 tells them apart: platform_heap_usage) */
+extern char __executable_start[], etext[];
+
+static int heap_caller_is_library(const void *caller)
+{
+	return (const char *)caller < __executable_start || (const char *)caller >= etext;
+}
+
+static int heap_limit_refuses(size_t size, const void *caller)
 {
 	static long limit_kb = -1;
 	unsigned long in_use, capacity;
+
+	if (heap_caller_is_library(caller))
+		return 0;
 
 	if (limit_kb < 0)
 	{
@@ -1110,6 +1131,8 @@ static void heap_census_add(void *pointer, size_t size)
 		heap_census.buckets[bucket] = node;
 		heap_census.sites[site].bytes += size;
 		heap_census.sites[site].count++;
+		if (heap_caller_is_library(heap_census.sites[site].frames[0]))
+			platform_heap_library_bytes += size;
 	}
 	pthread_mutex_unlock(&heap_census.lock);
 	heap_census_busy = 0;
@@ -1129,6 +1152,8 @@ static void heap_census_remove(void *pointer)
 			*link = node->next;
 			heap_census.sites[node->site].bytes -= node->size;
 			heap_census.sites[node->site].count--;
+			if (heap_caller_is_library(heap_census.sites[node->site].frames[0]))
+				platform_heap_library_bytes -= platform_heap_library_bytes < node->size ? platform_heap_library_bytes : node->size;
 			node->next = heap_census.free_nodes;
 			heap_census.free_nodes = node;
 			break;
@@ -1140,9 +1165,13 @@ static void heap_census_remove(void *pointer)
 void platform_heap_census_log(const char *when)
 {
 	enum { TOP = 24 };
-	unsigned long top[TOP], grown[TOP], index, slot, total = 0;
+	unsigned long top[TOP], grown[TOP], index, slot, total = 0, outside = 0;
 	long growth_total = 0;
 	int list;
+	/* (the program's own code: an allocation made from outside it is a
+	library's - on the PC the GL driver's textures and shaders, 7 MB of a
+	Command game's first minute on Danger Canyon -, which the Vita's C heap
+	never holds) */
 
 	if (heap_census.state <= 0)
 		return;
@@ -1157,6 +1186,8 @@ void platform_heap_census_log(const char *when)
 		if (!site->frames[0])
 			continue;
 		total += site->bytes;
+		if (heap_caller_is_library(site->frames[0]))
+			outside += site->bytes;
 		growth_total += growth;
 		for (slot = 0; slot < TOP; slot++)
 		{
@@ -1178,8 +1209,9 @@ void platform_heap_census_log(const char *when)
 			}
 		}
 	}
-	platform_log("heap census %s: %lu KB in %lu sites, %+ld KB since the last census", when, total / 1024,
-		heap_census.site_count, growth_total / 1024);
+	platform_log("heap census %s: %lu KB in %lu sites, %+ld KB since the last census; %lu KB the game's own, %lu KB "
+		"allocated by libraries (the PC's GL driver: not in the Vita's C heap)", when, total / 1024,
+		heap_census.site_count, growth_total / 1024, (total - outside) / 1024, outside / 1024);
 	for (list = 0; list < 2; list++)
 	{
 		unsigned long *sites = list ? grown : top;
@@ -1212,7 +1244,7 @@ void platform_heap_census_log(const char *when)
 
 void *malloc(size_t size)
 {
-	void *pointer = heap_limit_refuses(size) ? NULL : __libc_malloc(size);
+	void *pointer = heap_limit_refuses(size, __builtin_return_address(0)) ? NULL : __libc_malloc(size);
 
 	heap_census_add(pointer, size);
 	return pointer;
@@ -1221,7 +1253,7 @@ void *malloc(size_t size)
 void *calloc(size_t count, size_t size)
 {
 	void *pointer = count && size > (size_t)-1 / count ? NULL :
-		heap_limit_refuses(count * size) ? NULL : __libc_calloc(count, size);
+		heap_limit_refuses(count * size, __builtin_return_address(0)) ? NULL : __libc_calloc(count, size);
 
 	heap_census_add(pointer, count * size);
 	return pointer;
@@ -1231,7 +1263,7 @@ void *realloc(void *pointer, size_t size)
 {
 	void *result;
 
-	if (heap_limit_refuses(size))
+	if (heap_limit_refuses(size, __builtin_return_address(0)))
 		return NULL;
 	result = __libc_realloc(pointer, size);
 	if (result || !size)
