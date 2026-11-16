@@ -389,10 +389,10 @@ forge_case() {
 			[ -r "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" ] &&
 				cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$out/$name/save/u/UDATA/869079979327/"
 		done
-		# (the host: FORGE (down two, A); the lobby on MAP: up to NETWORK, A, the picker on LOCAL
+		# (the host: FORGE (down three - past 1.1.5's FIREFIGHT -, A); the lobby on MAP: up to NETWORK, A, the picker on LOCAL
 		# (OFFLINE): up two to SYSTEM LINK, A - the lobby live -; a while for the joiner; then
 		# down three to START FORGE, A: the game's lobby, its countdown at once)
-		local host_pad="wait:150:3000 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
+		local host_pad="wait:150:3000 down:150:600 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
 		host_pad="$host_pad $ups a:150:3000 @forge-lobby-$mode:0:300 wait:150:${HALO_TEST_LIVE_WAIT:-45000}"
 		host_pad="$host_pad @forge-lobby-joined:0:300 down:150:500 down:150:500 down:150:500 a:150:3000 @forge-countdown:0:300"
 		host_cmds="L300:forge net;L700:forge net"
@@ -670,7 +670,7 @@ forge_case() {
 		# (FORGE; NETWORK: up three from LOCAL to ONLINE; a while for the broker, the lobby live and
 		# the friendship; L, INVITE FRIENDS: Cross on the friend, Circle; a while for the friend;
 		# then down three to START FORGE, A)
-		local pad="wait:150:3000 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
+		local pad="wait:150:3000 down:150:600 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
 		pad="$pad up:150:500 up:150:500 up:150:500 a:150:3000 wait:150:${HALO_TEST_INVITE_WAIT:-35000} @forge-online-lobby:0:300"
 		pad="$pad lt wait:150:4000 @forge-online-invite:0:300 a wait:150:3000 b wait:150:30000 @forge-online-joined:0:300"
 		pad="$pad down:150:500 down:150:500 down:150:500 a:150:3000 @forge-online-countdown:0:300"
@@ -891,7 +891,7 @@ forge_case() {
 			for name in $(seq 1 8); do pad="$pad down:150:400"; done
 			pad="$pad a wait:150:5000" ;;
 		*)
-			pad="wait:150:3000 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
+			pad="wait:150:3000 down:150:600 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
 			pad="$pad up:150:500 up:150:500 up:150:500 a:150:3000 wait:150:$wait"
 			pad="$pad down:150:500 down:150:500 down:150:500 a:150:3000" ;;
 		esac
@@ -1086,7 +1086,7 @@ forge_case() {
 		else
 			# (h3forgeonline's: FORGE; NETWORK up three from LOCAL to ONLINE: the Forge lobby live; a
 			# while for the friend; down three to START FORGE, A)
-			pad="wait:150:3000 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
+			pad="wait:150:3000 down:150:600 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
 			pad="$pad up:150:500 up:150:500 up:150:500 a:150:3000 wait:150:${HALO_TEST_LIVE_WAIT:-60000} @friend-forge-joined:0:300"
 			pad="$pad down:150:500 down:150:500 down:150:500 a:150:3000 @friend-forge-countdown:0:300"
 		fi
@@ -1151,7 +1151,7 @@ forge_case() {
 		[ -r "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" ] &&
 			cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$out/host/save/u/UDATA/869079979327/"
 		# (h3forgeonline's pad: FORGE, ONLINE, INVITE FRIENDS, START FORGE)
-		local pad="wait:150:3000 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
+		local pad="wait:150:3000 down:150:600 down:150:600 down:150:600 a:150:3000 up:150:700 a:150:2000"
 		pad="$pad up:150:500 up:150:500 up:150:500 a:150:3000 wait:150:${HALO_TEST_INVITE_WAIT:-35000} @forge-slow-lobby:0:300"
 		pad="$pad lt wait:150:4000 a wait:150:3000 b wait:150:30000 @forge-slow-joined:0:300"
 		pad="$pad down:150:500 down:150:500 down:150:500 a:150:3000 @forge-slow-countdown:0:300"

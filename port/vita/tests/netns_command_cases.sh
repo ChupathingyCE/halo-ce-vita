@@ -194,10 +194,10 @@ command_case() {
 			[ -r "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" ] &&
 				cp "$(dirname "$HALO_TEST_PROFILE")/SaveMeta.xbx" "$out/$name/save/u/UDATA/869079979327/"
 		done
-		# (1.1.4, Halo CE alone - no hub: the host: COMMAND (down three, A); the lobby on NETWORK: A, the picker on LOCAL: up two to
+		# (1.1.4, Halo CE alone - no hub: the host: COMMAND (down four - past 1.1.5's FIREFIGHT -, A); the lobby on NETWORK: A, the picker on LOCAL: up two to
 		# SYSTEM LINK, A - the lobby live -; a while for the joiner; then down five to START COMMAND,
 		# A: the game's lobby, its countdown at once)
-		local host_pad="wait:150:3000 down:150:600 down:150:600 down:150:600 a:150:3000 a:150:2000"
+		local host_pad="wait:150:3000 down:150:600 down:150:600 down:150:600 down:150:600 a:150:3000 a:150:2000"
 		host_pad="$host_pad up:150:500 up:150:500 a:150:3000 @command-lobby:0:300 wait:150:${HALO_TEST_LIVE_WAIT:-45000}"
 		host_pad="$host_pad @command-lobby-joined:0:300 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500"
 		host_pad="$host_pad a:150:3000 @command-countdown:0:300"
