@@ -100,6 +100,9 @@ static void menu_tags_dump(long tag_index, int depth);
 game (halo3/forge.xml, whatever the Menu style) */
 #define XBOX_PAUSE_SCREEN "ui\\shell\\solo_game\\pause_game\\pause_game"
 #define FORGE_PAUSE_SCREEN "h3/forge/pause/screen"
+/* (1.1.5) a FIREFIGHT game's: RESUME and LEAVE FIREFIGHT alone (forge.c's
+forge_modes.inc) */
+#define FIREFIGHT_PAUSE_SCREEN "h3/firefight/pause/screen"
 /* a network game's pause screens (ui_widget.c ui_check_for_pause_game opens
 one of them by the machine's players): a network Forge game's Start opens
 the Forge menu in their place too, the host's and every joiner's, whatever
@@ -481,6 +484,10 @@ static char const *const port_function_names[] =
 	"port forge command objective",
 	"port forge command prepare",
 	"port h3 mods tab games", "port h3 mods tab mods", "port h3 mods tab next",
+	/* (1.1.5: the Firefight lobby, START FIREFIGHT and PREPARING FIREFIGHT) */
+	"port firefight lobby init",
+	"port forge start firefight",
+	"port forge firefight prepare",
 };
 
 /* the port's game data functions (menu_functions.c), from
@@ -3323,11 +3330,14 @@ long menu_tags_screen(
 		}
 		if (pause)
 		{
-			long forge_menu = menu_tags_ingame_screen(FORGE_PAUSE_SCREEN);
+			/* (a FIREFIGHT game: its own pause; Forge's with none) */
+			long forge_menu = forge_modes_game_running() ? menu_tags_ingame_screen(FIREFIGHT_PAUSE_SCREEN) : NONE;
 
+			if (forge_menu == NONE)
+				forge_menu = menu_tags_ingame_screen(FORGE_PAUSE_SCREEN);
 			if (forge_menu != NONE)
 			{
-				platform_log("menus: the Forge menu for %s", pause);
+				platform_log("menus: the %s menu for %s", forge_modes_game_running() ? "Firefight" : "Forge", pause);
 				return forge_menu;
 			}
 		}

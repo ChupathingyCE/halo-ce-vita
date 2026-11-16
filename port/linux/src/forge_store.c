@@ -190,6 +190,20 @@ static void forge_store_entry_fill(
 	snprintf(entry->date, sizeof(entry->date), "%s", layout->date);
 	entry->objects = layout->record_count;
 	entry->packs = layout->pack_count;
+	{
+		int index;
+
+		for (index = 0; index < layout->record_count && index < FORGE_FILE_MAXIMUM_RECORDS; index++)
+		{
+			struct forge_file_record const *record = &layout->records[index];
+
+			if (record->kind == _forge_record_ai_zone && record->team != FORGE_MODE_TEAM_BLUE &&
+				(!record->game_types || (record->game_types & FORGE_FILE_GAME_TYPE_FIREFIGHT)))
+			{
+				entry->firefight_zones++;
+			}
+		}
+	}
 }
 
 /* a map's folder's map variants added to the list */

@@ -489,7 +489,8 @@ touch_check() {
 # then zoom: neither flips), Select + D-pad up (the monitor); Start, down
 # ten times (past SAVE MAP VARIANT, UNDO, REDO, SNAP, ALL AI, CLEAR DEAD AI,
 # CLEAR ALL AI, DELETE ALL, NEW ROUND), A (LEAVE FORGE), A (leave))
-v1pad="wait:150:3000 @00-main-menu:0:300 down:150:600 down:150:600 a:150:2500 @01-lobby:0:300"
+# (1.1.5: FORGE is the main menu's fourth row - CAMPAIGN, MULTIPLAYER, FIREFIGHT, FORGE -: three down)
+v1pad="wait:150:3000 @00-main-menu:0:300 down:150:600 down:150:600 down:150:600 a:150:2500 @01-lobby:0:300"
 v1pad="$v1pad a:150:2000 @02-map-picker:0:300 down:150:700 a:150:2000 @02b-wizard-chosen:0:300"
 v1pad="$v1pad a:150:2000 up:150:700 a:150:2000"
 v1pad="$v1pad @03-lobby-blood-gulch:0:300 down:150:600 down:150:600 a:150:1500 level:150:2500 @04-monitor:0:300"
@@ -510,7 +511,7 @@ v1pad="$v1pad @19-leave-forge:0:300 a:150:9000 @20-main-menu-again:0:300"
 # variant); a Warthog from VEHICLES, dropped; Start, SAVE MAP VARIANT (its
 # name typed), B; a boulder from SCENERY, dropped; Start, SAVE MAP VARIANT
 # (the same name: the file replaced), down to LEAVE FORGE, leave)
-lobby="wait:150:3000 down:150:600 down:150:600 a:150:2500"
+lobby="wait:150:3000 down:150:600 down:150:600 down:150:600 a:150:2500"
 savepad="$lobby down:150:600 down:150:600 a:150:1500 level:150:2500 x:150:1500 a:150:1200 down:150:600 down:150:600"
 savepad="$savepad a:150:1500 rt:150:2000 start:150:2000 down:150:600 down:150:600 a:150:2500 @00-saved:0:300 b:150:1500"
 savepad="$savepad x:150:1500 rt:150:800 rt:150:800 rt:150:1200 a:150:1500 rt:150:2000 start:150:2000 down:150:600"

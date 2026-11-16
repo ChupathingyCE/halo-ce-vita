@@ -77,6 +77,9 @@ the fonts). The left of the list sits in the wide screen's margin (x below 0 of 
 	<widget name="online/main/multiplayer" type="text" width="226" height="18" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="7" text_y="2" string_list="online/main_items" string_index="16">
 		<on event="a start" open="ui\shell\main_menu\multiplayer_type_select\multiplayer_type_select_screen" label="multiplayer"/>
 	</widget>
+	<widget name="online/main/firefight" type="text" width="226" height="18" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="7" text_y="2" string_list="online/main_items" string_index="17">
+		<on event="a start" open="h3/firefight/lobby"/>
+	</widget>
 	<widget name="online/main/forge" type="text" width="226" height="18" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="7" text_y="2" string_list="online/main_items" string_index="18">
 		<on event="a start" open="h3/forge/lobby"/>
 	</widget>
@@ -92,9 +95,10 @@ the fonts). The left of the list sits in the wide screen's margin (x below 0 of 
 		<data input="port online main"/>
 		<child widget="online/main/campaign" x="0" y="0"/>
 		<child widget="online/main/multiplayer" x="0" y="19"/>
-		<child widget="online/main/forge" x="0" y="38"/>
-		<child widget="online/main/command" x="0" y="57"/>
-		<child widget="online/main/exit" x="0" y="76"/>
+		<child widget="online/main/firefight" x="0" y="38"/>
+		<child widget="online/main/forge" x="0" y="57"/>
+		<child widget="online/main/command" x="0" y="76"/>
+		<child widget="online/main/exit" x="0" y="95"/>
 	</widget>
 	<!-- (the focused row's line) -->
 	<widget name="online/main/row_text" type="text" left="-44" top="374" width="219" height="26" font="online/font_small" color="#FFB8C6D6"/>

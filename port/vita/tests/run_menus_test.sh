@@ -816,8 +816,9 @@ for case in $cases; do
 			"$out/h3online/run.log" || fail h3online "the three fullest games were not shown" ;;
 	h3touch)
 		skip_null h3touch "taps" && continue
-		# (FORGE's row on the main menu, then the Forge lobby's Leave: icon and label)
-		run h3touch "$menus_data" 20 "wait:150:12000" HALO_MENU_STYLE=halo3 "HALO_TEST_TAPS=4000:60,318 8000:140,455"
+		# (FORGE's row on the main menu - the fourth since 1.1.5's CAMPAIGN, MULTIPLAYER, FIREFIGHT, FORGE -,
+		# then the Forge lobby's Leave: icon and label)
+		run h3touch "$menus_data" 20 "wait:150:12000" HALO_MENU_STYLE=halo3 "HALO_TEST_TAPS=4000:60,338 8000:140,455"
 		check_h3 h3touch halo3
 		grep -aq "ui: screen pc.h3.forge.lobby" "$out/h3touch/run.log" || fail h3touch "a tap on FORGE did not open the Forge lobby"
 		[ "$(grep -ac 'ui: screen pc.h3.main.screen' "$out/h3touch/run.log")" -ge 2 ] ||

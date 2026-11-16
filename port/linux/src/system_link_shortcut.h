@@ -31,11 +31,12 @@ enum
 };
 
 /* (SYSTEM_LINK_REQUEST_FORGE, halo_forge_request_mode) the game the panel's
-Forge page asks for: Forge's, or (1.1.4) a Command game (port/linux/game/
-command.c); 1 stays 1.2.0's FIREFIGHT */
+Forge page asks for: Forge's, (1.1.5) a FIREFIGHT game (port/linux/game/
+forge_modes.inc) or (1.1.4) a Command game (port/linux/game/command.c) */
 enum
 {
 	HALO_FORGE_REQUEST_MODE_FORGE = 0,
+	HALO_FORGE_REQUEST_MODE_FIREFIGHT = 1,
 	HALO_FORGE_REQUEST_MODE_COMMAND = 2,
 };
 /* (SYSTEM_LINK_REQUEST_FORGE, halo_forge_request_network) a network Forge

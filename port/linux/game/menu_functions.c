@@ -506,6 +506,10 @@ enum
 	_function_h3_mods_tab_games,
 	_function_h3_mods_tab_mods,
 	_function_h3_mods_tab_next,
+	/* (1.1.5: the Firefight lobby, START FIREFIGHT and PREPARING FIREFIGHT) */
+	_function_firefight_lobby_init,
+	_function_forge_start_firefight,
+	_function_forge_firefight_prepare,
 };
 
 /* in port_game_data_input_names' order */
@@ -873,6 +877,7 @@ static boolean h3_live_forge_live(void);
 /* (1.1.4: the Command lobby) */
 static boolean h3_forge_command_startable(void);
 static boolean h3_forge_command_start(void);
+static boolean h3_forge_firefight_start(void);
 static char const *h3_command_side_text(void);
 
 static struct widget_instance *named(struct widget_instance *widget, char const *name)
@@ -3215,9 +3220,67 @@ static struct
 	Command, command.c's command_net.inc) */
 	short command_network;
 	boolean command_network_set;
+	/* (1.1.5, the Firefight lobby: its maps) each map with a saved map
+	variant that has Firefight zones of its own - a Firefight layout made
+	in Forge on a map with no built-in layout -, found as the lobby opens
+	(bit = the map's index) */
+	unsigned long firefight_maps;
 } h3_forge;
 
-/* (1 stays 1.2.0's FIREFIGHT, not in 1.1.4) */
+/* (the Firefight lobby) whether a map is one of its: a built-in Firefight
+layout, or a saved layout with Firefight zones (h3_forge.firefight_maps) */
+static boolean h3_forge_firefight_map(short map)
+{
+	return forge_modes_builtin_of(forge_map_short(map)) != NONE ||
+		(map >= 0 && map < 32 && (h3_forge.firefight_maps & (1UL << map)));
+}
+
+static void h3_forge_firefight_maps_find(void)
+{
+	static struct forge_store_entry entries[FORGE_STORE_MAXIMUM_LISTED];
+	short map;
+
+	h3_forge.firefight_maps = 0;
+	for (map = 0; map < forge_map_count() && map < 32; map++)
+	{
+		int count, index;
+
+		if (forge_modes_builtin_of(forge_map_short(map)) != NONE || forge_map_state(map, NULL, 0) == _map_check_missing)
+			continue;
+		count = forge_store_list(forge_map_short(map), entries, FORGE_STORE_MAXIMUM_LISTED);
+		for (index = 0; index < count; index++)
+		{
+			if (!entries[index].damaged && entries[index].firefight_zones > 0)
+			{
+				h3_forge.firefight_maps |= 1UL << map;
+				platform_log("menus: firefight lobby: %s has a Firefight layout of its own (%s, %d zones)", forge_map_short(map),
+					entries[index].title, (int)entries[index].firefight_zones);
+				break;
+			}
+		}
+	}
+}
+
+/* (START FIREFIGHT) a map with no built-in layout plays a layout with
+Firefight zones alone (a layout without them would get zones at the map's
+own starts: not a Firefight of anyone's making); the note says so */
+static boolean h3_forge_firefight_layout_ok(void)
+{
+	static struct forge_store_entry entries[FORGE_STORE_MAXIMUM_LISTED];
+	int count, index;
+
+	if (forge_modes_builtin_of(forge_map_short(h3_forge.map)) != NONE)
+		return TRUE;
+	count = h3_forge.variant_file[0] ? forge_store_list(forge_map_short(h3_forge.map), entries, FORGE_STORE_MAXIMUM_LISTED) : 0;
+	for (index = 0; index < count; index++)
+	{
+		if (!entries[index].damaged && !strcmp(entries[index].file_name, h3_forge.variant_file))
+			return entries[index].firefight_zones > 0;
+	}
+	return FALSE;
+}
+
+/* (1.1.5: FIREFIGHT - forge.c's forge_modes.inc; 1.1.4: COMMAND) */
 enum { H3_FORGE_MODE_FORGE, H3_FORGE_MODE_FIREFIGHT, H3_FORGE_MODE_COMMAND };
 
 static void h3_forge_variant_check(void);
@@ -3342,6 +3405,8 @@ static void h3_forge_lobby_update(struct widget_instance *widget)
 	}
 	if (h3_forge.mode == H3_FORGE_MODE_COMMAND)
 		snprintf(text, sizeof(text), T("Command on %s"), T(forge_map_name(h3_forge.map)));
+	else if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT && !h3_forge.variant_file[0])
+		snprintf(text, sizeof(text), T("Firefight on %s"), T(forge_map_name(h3_forge.map)));
 	else if (h3_forge.variant_file[0])
 		snprintf(text, sizeof(text), T("%s on %s"), h3_forge.variant_title, T(forge_map_name(h3_forge.map)));
 	else
@@ -3804,7 +3869,9 @@ static void h3_forge_title_update(struct widget_instance *widget)
 		forge_level_name(level, (short)sizeof(level));
 		name = level;
 	}
-	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", T("FORGE"), name);
+	/* (1.1.5: a FIREFIGHT game's pause - h3/firefight/pause/screen - is
+	titled the mode's) */
+	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", forge_modes_game_running() ? T("FIREFIGHT") : T("FORGE"), name);
 	h3_capitals(text);
 	text_show(widget, text);
 	snprintf(text, sizeof(text), "%s", forge_monitor_active() ? T("PLAY AS SPARTAN") : T("MONITOR"));
@@ -15142,12 +15209,15 @@ static boolean h3_carnage_network(void)
 }
 
 /* (a local Command game - a Forge game's, no server -: its report goes on
-to the main menu, as Forge's leave does: command.c) */
+to the main menu, as Forge's leave does: command.c; 1.1.5: a local FIREFIGHT
+game's the same - forge_modes.inc -: its report said "Waiting for the host"
+for ever, no host there being) */
 void main_goto_main_menu(void);
 
 static boolean h3_carnage_local_command(void)
 {
-	return !global_network_game_server_get() && game_connection() == _game_connection_local && command_game_running();
+	return !global_network_game_server_get() && game_connection() == _game_connection_local &&
+		(command_game_running() || forge_modes_game_reported());
 }
 
 static boolean h3_carnage_hosting(void)
@@ -15319,7 +15389,11 @@ static void h3_carnage_update(struct widget_instance *lines)
 	h3_capitals(text);
 	text_show(named(screen, "game"), text);
 	/* the result: the winner, or a tie */
-	if (report->teams && report->winning_team != NONE)
+	/* (a FIREFIGHT game's: survived, or the game over - forge.c's
+	forge_modes.inc) */
+	if (report->type == CARNAGE_REPORT_TYPE_FIREFIGHT)
+		snprintf(text, sizeof(text), "%s", report->winning_team != NONE ? T("SURVIVED") : T("GAME OVER"));
+	else if (report->teams && report->winning_team != NONE)
 	{
 		for (index = 0; index < report->row_count; index++)
 			if (report->rows[index].team_row && report->rows[index].team == report->winning_team)
@@ -15514,7 +15588,7 @@ static void h3_carnage_frame(boolean main_menu_loaded)
 		else if (!server && h3_carnage_local_command() && game_engine_showing_postgame() && !h3_carnage.gone_on)
 		{
 			h3_carnage.gone_on = TRUE;
-			platform_log("menus: h3 carnage: a local Command game goes on: the main menu");
+			platform_log("menus: h3 carnage: a local %s game goes on: the main menu", command_game_running() ? "Command" : "Firefight");
 			main_goto_main_menu();
 		}
 		return;
@@ -18511,7 +18585,8 @@ the Forge lobby's own NETWORK */
 /* the lobby's game type and map as said (the Forge lobby's: Forge, its map) */
 static char const *h3_live_gametype_name(void)
 {
-	return h3_live.forge && h3_forge.mode == H3_FORGE_MODE_COMMAND ? T("Command") : h3_live.forge ? T("Forge") :
+	return h3_live.forge && h3_forge.mode == H3_FORGE_MODE_COMMAND ? T("Command") :
+		h3_live.forge && h3_forge.mode == H3_FORGE_MODE_FIREFIGHT ? T("Firefight") : h3_live.forge ? T("Forge") :
 		h3_mp_gametype_name();
 }
 
@@ -18636,7 +18711,32 @@ static boolean h3_forge_command_start(void)
 	return TRUE;
 }
 
-/* (PREPARING COMMAND, h3/command/prepare/screen) the builds' state, each
+/* (START FIREFIGHT) the Firefight game started: a local Forge game of the
+lobby's map and map variant that is the mode's (forge.c's forge_modes.inc) */
+static boolean h3_forge_firefight_start(void)
+{
+	if (forge_map_state(h3_forge.map, h3_forge.note, sizeof(h3_forge.note)) != _map_check_playable)
+		return FALSE;
+	if (!h3_forge_firefight_layout_ok())
+	{
+		snprintf(h3_forge.note, sizeof(h3_forge.note), "%s", T("Choose a layout of this map with Firefight zones."));
+		platform_log("menus: forge lobby: START FIREFIGHT: %s has no built-in layout and the layout has no Firefight zones",
+			forge_map_short(h3_forge.map));
+		return FALSE;
+	}
+	platform_log("menus: forge lobby: START FIREFIGHT on %s%s%s", forge_map_path(h3_forge.map),
+		h3_forge.variant_file[0] ? " with the map variant " : "", h3_forge.variant_file);
+	forge_modes_game_request(FORGE_MODE_REQUEST_FIREFIGHT);
+	if (!forge_game_start(h3_forge.map, h3_forge.variant_file, h3_forge.note, sizeof(h3_forge.note)))
+	{
+		forge_modes_game_request(FORGE_MODE_REQUEST_NONE);
+		platform_log("menus: forge lobby: not started: %s", h3_forge.note);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/* (PREPARING COMMAND (FIREFIGHT), h3/command/prepare/screen) the builds' state, each
 frame (the game thread's: pc_menu_functions_update); done, the game started
 (its screen goes with the main menu's) */
 static struct
@@ -18664,7 +18764,7 @@ static void h3_command_prepare_frame(void)
 	{
 		command_prepare_cancel();
 		snprintf(h3_command_prepare.line, sizeof(h3_command_prepare.line), "%s", T("Starting..."));
-		if (!h3_forge_command_start())
+		if (!(command_prepare_firefight() ? h3_forge_firefight_start() : h3_forge_command_start()))
 			snprintf(h3_command_prepare.line, sizeof(h3_command_prepare.line), "%s", h3_forge.note);
 	}
 }
@@ -18678,7 +18778,7 @@ static void h3_command_prepare_update(struct widget_instance *widget)
 
 	/* (the render thread's, perhaps: what the game thread's frame left) */
 	text_show(named(screen, "progress"), h3_command_prepare.line);
-	text_show(named(screen, "title"), T("PREPARING COMMAND"));
+	text_show(named(screen, "title"), command_prepare_firefight() ? T("PREPARING FIREFIGHT") : T("PREPARING COMMAND"));
 	for (piece = 0; piece < 20; piece++)
 	{
 		char name[16];
@@ -18779,6 +18879,12 @@ static void h3_forge_lobby_network_update(struct widget_instance *screen)
 	}
 	/* (START COMMAND: a local game; on a network the live game's row) */
 	if ((found = named(screen, "command_row")) != NULL)
+	{
+		widget_instance_set_visibility_recursive(found, local);
+		found->disabled = !local;
+	}
+	/* (START FIREFIGHT: a local game for now) */
+	if ((found = named(screen, "firefight_row")) != NULL)
 	{
 		widget_instance_set_visibility_recursive(found, local);
 		found->disabled = !local;
@@ -21189,6 +21295,7 @@ static struct
 {
 	{ "campaign", N_("Play the story of Halo CE.") },
 	{ "multiplayer", N_("Host a game, or browse games to join.") },
+	{ "firefight", N_("Survive waves of the Covenant together.") },
 	{ "forge", N_("Change a map's objects, then play it.") },
 	{ "command", N_("Lead squads in battle on Blood Gulch.") },
 	{ "exit", N_("Close Halo CE.") },
@@ -21345,6 +21452,11 @@ static int cascade_forge_groups(void)
 
 	for (map = 0; map < forge_map_count() && count < CASCADE_MAXIMUM_GROUPS; map++)
 	{
+		/* (the Firefight lobby's: the maps with a built-in Firefight layout -
+		forge_modes.inc -, each its own and its map variants; a map variant of
+		another map is played from the Forge lobby's START FIREFIGHT) */
+		if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT && !h3_forge_firefight_map(map))
+			continue;
 		if (forge_map_state(map, NULL, 0) != _map_check_missing)
 			cascade_forge_maps[count++] = map;
 	}
@@ -21419,6 +21531,8 @@ static void cascade_forge_panel(struct widget_instance *screen, int group, int i
 		cascade_panel_words(screen, NULL, NULL, h3_forge.mode == H3_FORGE_MODE_COMMAND ?
 			(forge_map_short(map) && !strcmp(forge_map_short(map), "bloodgulch") ? T("Command's own layout.") :
 			T("Command mode plays on Blood Gulch for now.")) :
+			h3_forge.mode == H3_FORGE_MODE_FIREFIGHT ? (forge_modes_builtin_of(forge_map_short(map)) != NONE ?
+			T("Firefight's own layout.") : T("Choose a layout of this map with Firefight zones.")) :
 			item == 0 ? T("The original map: nothing placed yet.") : NULL);
 		return;
 	}
@@ -22810,21 +22924,32 @@ boolean pc_menu_event_function_invoke(
 		return TRUE;
 	/* (1.1.4: the main menu's COMMAND - its own lobby, the Forge lobby's code:
 	the Forge lobby's NETWORK kept for it; Command's map Blood Gulch, the one
-	it plays on for now) */
+	it plays on for now. 1.1.5: FIREFIGHT's lobby the same way, a local game) */
+	case _function_firefight_lobby_init:
 	case _function_command_lobby_init:
 		{
 			short was = h3_forge.mode;
 
 			if (h3_forge.mode == H3_FORGE_MODE_FORGE)
 				h3_forge.network_kept = h3_forge.network_set ? h3_forge.network : _h3_network_offline;
-			h3_forge.mode = H3_FORGE_MODE_COMMAND;
+			h3_forge.mode = function_index == _function_command_lobby_init ? H3_FORGE_MODE_COMMAND : H3_FORGE_MODE_FIREFIGHT;
 			/* (Command's NETWORK its own - LOCAL until chosen, as its picker
-			left it when the lobby opens again from it) */
-			if (was != H3_FORGE_MODE_COMMAND || !h3_forge.network_set)
+			left it when the lobby opens again from it -; Firefight a local
+			game) */
+			if (h3_forge.mode != H3_FORGE_MODE_COMMAND)
+				h3_forge.network = _h3_network_offline;
+			else if (was != H3_FORGE_MODE_COMMAND || !h3_forge.network_set)
 				h3_forge.network = h3_forge.command_network_set ? h3_forge.command_network : _h3_network_offline;
 			h3_forge.network_set = TRUE;
 		}
 		h3_forge_lobby_initialize();
+		/* (Firefight's maps: those with a built-in layout - forge_modes.inc -,
+		or with a saved Firefight layout; another lobby's map not one of them,
+		Blood Gulch) */
+		if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT)
+			h3_forge_firefight_maps_find();
+		if (h3_forge.mode == H3_FORGE_MODE_COMMAND ||
+			(h3_forge.mode == H3_FORGE_MODE_FIREFIGHT && !h3_forge_firefight_map(h3_forge.map)))
 		{
 			short map;
 
@@ -22842,10 +22967,10 @@ boolean pc_menu_event_function_invoke(
 				}
 			}
 		}
-		platform_log("menus: command lobby");
+		platform_log("menus: %s lobby", h3_forge.mode == H3_FORGE_MODE_COMMAND ? "command" : "firefight");
 		/* (the mode's packs begun now, at the lobby's pace: START then
 		rarely waits) */
-		command_packs_prebuild(FALSE);
+		command_packs_prebuild(h3_forge.mode == H3_FORGE_MODE_FIREFIGHT);
 		{
 			struct widget_instance *list = named(screen_of(widget), "list");
 
@@ -22876,6 +23001,26 @@ boolean pc_menu_event_function_invoke(
 		if (!h3_forge_command_startable())
 			return FALSE;
 		return h3_forge_command_start();
+	/* (START FIREFIGHT: a FIREFIGHT game, a Forge game of the map and map
+	variant chosen that is the mode's - forge.c's forge_modes.inc -; a local
+	game alone for now) */
+	case _function_forge_start_firefight:
+		if (h3_forge.network != _h3_network_offline)
+			return FALSE;
+		/* (its packs being built: started from PREPARING FIREFIGHT) */
+		if (command_prepare_needed_for(TRUE))
+			return FALSE;
+		return h3_forge_firefight_start();
+	/* (START FIREFIGHT, its packs not built yet: PREPARING FIREFIGHT opened,
+	their builds wanted now - the game started from it -) */
+	case _function_forge_firefight_prepare:
+		if (h3_forge.network != _h3_network_offline || !command_prepare_needed_for(TRUE) ||
+			forge_map_state(h3_forge.map, h3_forge.note, sizeof(h3_forge.note)) != _map_check_playable)
+		{
+			return FALSE;
+		}
+		platform_log("menus: forge lobby: START FIREFIGHT: its packs to build first");
+		return command_prepare_begin_for(TRUE);
 	/* (OBJECTIVE: the Command game's next, command.c) */
 	case _function_forge_command_objective:
 		command_objective_next();
