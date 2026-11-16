@@ -2632,8 +2632,10 @@ PY
 		# (Start, then taps - MOD MANAGER is Start > MEDIA > GAME MANAGER since 1.1.3 -: GAME MANAGER's
 		# row; mygulch's row, the third; the screen's Back: icon and label, Start again; B: the main menu)
 		mods_data "$out/h3mods-data"
-		run h3modstouch "$out/h3mods-data" 25 "wait:150:16000" HALO_MENU_STYLE=halo3 HALO_TEST_GAME_MANAGER_TAB=1 \
-			"HALO_TEST_TAPS=4000:60,358 8000:200,142 12000:560,452"
+		# (Start at 3 s: MEDIA's GAME MANAGER row, the fourth of its list at 60,100 - halo3/start.xml -, tapped at
+		# 6 s; Back at 14 s is back on START, whose B at 18 s is the main menu)
+		run h3modstouch "$out/h3mods-data" 25 "wait:150:3000 start:150:15000 b:150:3000" HALO_MENU_STYLE=halo3 \
+			HALO_TEST_GAME_MANAGER_TAB=1 "HALO_TEST_TAPS=6000:120,166 10000:200,142 14000:560,452"
 		check_h3 h3modstouch halo3
 		log=$out/h3modstouch/run.log
 		grep -aq "ui: screen pc.h3.mods.screen" "$log" || fail h3modstouch "a tap on MOD MANAGER did not open it"
@@ -3602,15 +3604,16 @@ PY
 		grep -aq "pause menu: restart at checkpoint" "$log" && fail msgboxes "campaign, Halo CE: Circle reverted" ;;
 	ceplusmain)
 		# (the main menu's rows under SETTINGS, 1.1.3's: down three to MEDIA - its FILE SHARE, FRIENDS
-		# and MOD MANAGER, rows of the main menu until 1.1.3 -, four to FORGE; each in the original
-		# look; A, then B back - B twice from MEDIA's rows)
+		# and MOD MANAGER, rows of the main menu until 1.1.3 -, four to EXTRAS - FORGE, COMMAND and
+		# FIREFIGHT, classic/modes.xml: FORGE its first; each in the original look; A, then B back - B
+		# twice from MEDIA's and EXTRAS' rows)
 		d="down:150:500"
 		for row in "4:0 forge pc.cp.forge.lobby" "3:1 friends pc.classic.friends.screen" "3:0 fileshare pc.ce.fileshare.screen" \
 			"3:2 mods pc.ce.mods.screen"; do
 			set -- $row
 			downs="" media=""
 			for i in $(seq "${1%%:*}"); do downs="$downs $d"; done
-			if [ "${1%%:*}" = 3 ]; then
+			if [ "${1%%:*}" -ge 3 ]; then
 				media=" a:150:3000"
 				for i in $(seq 0 "$((${1##*:} - 1))"); do [ "${1##*:}" -gt 0 ] && media="$media $d"; done
 			fi
@@ -3791,10 +3794,11 @@ PY
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- ceplusforge"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
-		# (FORGE, the fifth row since 1.1.3's MEDIA; up to NETWORK, A, down past LOCAL - the picker goes
-		# round - to ONLINE, down to SYSTEM LINK, A; down three to START FORGE, A: the profile, A, A)
+		# (EXTRAS, the fifth row since 1.1.3's MEDIA, A: FORGE, its first row, A; up to NETWORK, A, down
+		# past LOCAL - the picker goes round - to ONLINE, down to SYSTEM LINK, A; down three to START
+		# FORGE, A: the profile, A, A)
 		d="down:150:600"
-		profile_from=$HALO_TEST_PROFILE run ceplusforge "$menus_data" 45 "wait:150:3000 $d $d $d $d a:150:4000 up:150:600 a:150:2500 $d $d a:150:3000 $d $d $d a:150:4000 a:150:2500 a:150:2500 a:150:6000" \
+		profile_from=$HALO_TEST_PROFILE run ceplusforge "$menus_data" 48 "wait:150:3000 $d $d $d $d a:150:3000 a:150:4000 up:150:600 a:150:2500 $d $d a:150:3000 $d $d $d a:150:4000 a:150:2500 a:150:2500 a:150:6000" \
 			HALO_NET_ONLINE=false
 		log=$out/ceplusforge/run.log
 		echo "--- ceplusforge"

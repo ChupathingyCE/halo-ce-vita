@@ -503,15 +503,15 @@ PY
 		# the Halo 3 set's: CAMPAIGN's SELECT PROFILE, LOAD LEVEL, CHOOSE DIFFICULTY; MULTIPLAYER, its
 		# SPLIT SCREEN's START TO JOIN, SELECT MAP (another map picked), SELECT GAMETYPE and lobby;
 		# SETTINGS' SELECT PROFILE TO EDIT, EDIT PROFILE SETTINGS and each of its pages (CONTROLLER
-		# SETUP, ADVANCED CONTROLS, CHANGE COLOR, MORE OPTIONS); MEDIA; FORGE, its START FORGE
-		# playing MCC's Blood Gulch. Each backed out of to the main menu. The profile: campaign's.
+		# SETUP, ADVANCED CONTROLS, CHANGE COLOR, MORE OPTIONS); MEDIA; EXTRAS' FORGE (its first row since
+		# 1.1.4's EXTRAS: FORGE, COMMAND, FIREFIGHT), its START FORGE playing MCC's Blood Gulch. Each backed out of to the main menu. The profile: campaign's.
 		pad="wait:150:4000 a:150:3500 a:150:3500 a:150:3500 b:150:2500 b:150:2500 b:150:2500"
 		pad="$pad down:150:700 a:150:3500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500"
 		pad="$pad a:150:4000 start:150:2500 a:150:3000 a:150:4000 right:150:1500 a:150:4000 a:150:4000"
 		pad="$pad b:150:2500 b:150:2500 b:150:2500 b:150:2500 b:150:2500"
 		pad="$pad down:150:700 a:150:3000 a:150:3000 down:150:600 a:150:3000 b:150:2500 down:150:600 a:150:3000"
 		pad="$pad b:150:2500 down:150:600 a:150:3000 b:150:2500 down:150:600 a:150:3000 b:150:2500 b:150:2500 b:150:2500"
-		pad="$pad down:150:700 a:150:3000 b:150:2500 down:150:700 a:150:4000 down:150:600 down:150:600 a:150:3000"
+		pad="$pad down:150:700 a:150:3000 b:150:2500 down:150:700 a:150:3500 a:150:4000 down:150:600 down:150:600 a:150:3000"
 		pad="$pad level:150:5000"
 		rm -rf "$out/mcccplus_save"
 		cp -a "$out/campaign/save" "$out/mcccplus_save" 2> /dev/null
