@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Menu style Online: the Command lobby (halo3/forge_lobby.xml's h3/command/lobby, its rows' handlers
+and its functions - port command lobby init, port forge lobby: they find the rows by their last
+names -) in the other lobbies' geometry (1.1.3, the ElDewrito look after Halo 3's and ODST's
+lobbies: the title above the full-height panel, the rows on the bar, a rule, the status, the
+map's picture and its words, the button key at its foot), over the live backdrop as the Forge
+lobby's: its spot, the Warthog and 343 Guilty Spark (the scene its Halo 3 screen asks for), and
+its camera's shots. It stands for h3/command/lobby in the Online style (menu_tags.c: online/ for
+h3/). -->
+<menus>
+	<widget name="online/command/network_row" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+		<on event="a" open="h3/network/screen"/>
+	</widget>
+	<widget name="online/command/network_status" type="text" left="96" top="69" width="186" height="14" font="online/font_small" color="#FF9AA59C" align="right">
+		<data input="port h3 network status"/>
+	</widget>
+	<widget name="online/command/map_row" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+		<on event="a" run="port cascade forge" open="h3/cascade/screen"/>
+	</widget>
+	<widget name="online/command/objective_row" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+		<on event="a" run="port forge command objective"/>
+	</widget>
+	<widget name="online/command/commander_row" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+		<on event="a" run="port command ai level"/>
+	</widget>
+	<widget name="online/command/side_row" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2">
+		<on event="a left right" run="port command side"/>
+	</widget>
+	<widget name="online/command/command_row" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/forge_text" string_index="9">
+		<on event="a start" run="port forge command prepare" open="h3/command/prepare/screen"/>
+		<on event="a start" run="port forge start command"/>
+	</widget>
+	<widget name="online/command/command_live" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/forge_text" string_index="9">
+		<on event="a start" run="port forge start live" open="ui\shell\main_menu\multiplayer_type_select\connected\4way_profile_select\4way_start2join_screen"/>
+	</widget>
+	<widget name="online/command/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<on event="y" open="h3/friends/screen"/>
+		<on event="left_trigger" run="port h3 invite ask" open="h3/invite/screen"/>
+		<child widget="online/command/network_row" x="0" y="0"/>
+		<child widget="online/command/map_row" x="0" y="22"/>
+		<child widget="online/command/objective_row" x="0" y="40"/>
+		<child widget="online/command/commander_row" x="0" y="58"/>
+		<child widget="online/command/side_row" x="0" y="76"/>
+		<child widget="online/command/command_row" x="0" y="98"/>
+		<child widget="online/command/command_live" x="0" y="98"/>
+	</widget>
+	<widget name="online/command/title" type="text" left="-52" top="26" width="400" height="34" font="online/font_header" color="#FFEDEFEE" text_y="1" string_list="h3/mode_text" string_index="1"/>
+	<widget name="online/command/rule1" left="-54" top="86" width="344" height="1" bitmap="online/rule"/>
+	<widget name="online/command/rule2" left="-54" top="160" width="344" height="1" bitmap="online/rule"/>
+	<widget name="online/command/band" left="-54" top="186" width="344" height="1" bitmap="online/rule"/>
+	<widget name="online/command/ready" type="text" left="-46" top="190" width="328" height="18" font="online/font_item" color="#FFD2D9D3" text_y="1"/>
+	<widget name="online/command/ready_sub" type="text" left="-46" top="207" width="328" height="34" font="online/font_small" color="#FF9AA59C" text_y="1"/>
+	<widget name="online/command/card" left="-54" top="244" width="344" height="116" bitmap="online/card"/>
+	<widget name="online/command/map_picture" left="-48" top="249" width="140" height="114" bitmap="h3/mp_maps"/>
+	<widget name="online/command/emblem" left="-42" top="255" width="64" height="64" bitmap="h3/forge_emblem"/>
+	<widget name="online/command/note" type="text" left="102" top="250" width="182" height="110" font="online/font_small" color="#FF9AA59C" text_y="1"/>
+	<widget name="online/command/caption" type="text" left="-46" top="368" width="328" height="20" font="online/font_item" color="#FFE4E8E5" text_y="1"/>
+	<widget name="online/command/lobby" flags="pass_unhandled_to_focused_child" scene="new_campaign -10 -20 5 40 20 0 40"
+		backdrop="new_campaign 37.606 -69.115 60.674 54.28 -14.00 0 70 | 37.35 -66.93 60.75 11 -7.8 60 | 36.2 -70.19 61.5 51.3 -12.1 60"
+		backdrop_object="menu_campaign:warthog at=40.62,-67.14,60.6 yaw=-196.7 suspension=0.5 ground=0.38 slope=0.45,0.35; menu_monitor:monitor at=40.68,-66.26,60.6 yaw=0 ground=1.05 look=1 bob=0.04,3; menu_multiplayer:sniper_rifle at=40.405,-67.662,60.0 yaw=33.3 pitch=78 roll=60 ground=0.15; menu_forge:active_camouflage at=39.29,-67.45,60.0 yaw=0 ground=0.08"
+		scene_object="menu_campaign:warthog 3.4 0.77 -0.42 235 suspension=0.5;
+			menu_monitor:monitor 4.2 0.0 0.22 0 look=1">
+		<on event="created" run="port command lobby init"/>
+		<on event="created" run="port h3 scene"/>
+		<on event="b back" run="port h3 live leave"/>
+		<on event="b back" back="true"/>
+		<on event="start" run="port settings panel"/>
+		<data input="port forge lobby"/>
+		<child widget="online/main/haze"/>
+		<child widget="online/forge/panel"/>
+		<child widget="online/command/rule1"/>
+		<child widget="online/command/rule2"/>
+		<child widget="online/command/band"/>
+		<child widget="online/command/card"/>
+		<child widget="online/forge/foot"/>
+		<child widget="online/command/title"/>
+		<child widget="online/command/network_status"/>
+		<child widget="online/command/ready"/>
+		<child widget="online/command/ready_sub"/>
+		<child widget="online/command/map_picture"/>
+		<child widget="online/command/emblem"/>
+		<child widget="online/command/note"/>
+		<child widget="online/command/caption"/>
+		<child widget="online/forge/start_butn"/>
+		<child widget="online/forge/settings"/>
+		<child widget="online/forge/a_butn"/>
+		<child widget="online/forge/select"/>
+		<child widget="online/forge/b_butn"/>
+		<child widget="online/forge/back"/>
+		<child widget="online/mp/players"/>
+		<child widget="online/mp/l_butn"/>
+		<child widget="online/mp/invite"/>
+		<child widget="online/lobby/main/nameplate"/>
+		<child widget="online/lobby/main/party_plates"/>
+		<child widget="online/lobby/friends/lobby_panel"/>
+		<child widget="h3/pregame/row_1" x="486" y="48"/>
+		<child widget="h3/pregame/row_2" x="486" y="66"/>
+		<child widget="h3/pregame/row_3" x="486" y="84"/>
+		<child widget="h3/pregame/row_4" x="486" y="102"/>
+		<child widget="h3/pregame/row_5" x="486" y="120"/>
+		<child widget="h3/pregame/row_6" x="486" y="138"/>
+		<child widget="h3/pregame/row_7" x="486" y="156"/>
+		<child widget="h3/pregame/row_8" x="486" y="174"/>
+		<child widget="online/command/list" x="-54" y="66"/>
+	</widget>
+</menus>
