@@ -14,6 +14,8 @@
 #              the log, the files, the journals or the marker, nothing written
 #              outside the card folder (the manifests list ../ and absolute
 #              names), the files' bytes the fake's
+#   browse     the Workshop browser's job (pages, tabs, SUBSCRIBED, authors, pictures - the fake's hostile ones -,
+#              a details page) against the same fake, its image server on the CDN's port
 #   manifests  every local depotcache manifest of depots 976733-976736
 #              (STEAM_DEPOTCACHE, default ~/.local/share/Steam/depotcache,
 #              read only): steam_manifest_dump's list against
@@ -49,7 +51,8 @@ steam="$root/port/steamdl/steam_pb.c $root/port/steamdl/steam_crypto.c $root/por
 	$root/port/steamdl/steam_manifest.c $root/port/steamdl/steam_chunk.c $root/port/steamdl/steam_file.c
 	$root/port/steamdl/steam_kv.c $root/port/steamdl/steam_ws.c $root/port/steamdl/steam_http.c
 	$root/port/steamdl/steam_cm.c $root/port/steamdl/steam_plan.c $root/port/steamdl/steam_session.c
-	$root/port/steamdl/steam_download.c $root/port/steamdl/steam_job.c $root/port/steamdl/steam_workshop.c"
+	$root/port/steamdl/steam_download.c $root/port/steamdl/steam_job.c $root/port/steamdl/steam_workshop.c
+	$root/port/steamdl/steam_image.c"
 export ASAN_OPTIONS=detect_leaks=1:exitcode=99 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:exitcode=98
 bits=-m32
 echo 'int main(void) { return 0; }' > "$out/probe.c"
@@ -192,8 +195,11 @@ echo "  ws-items: $n files in mods"
 [ "$n" = 8 ] || { echo "FAIL ws-items: $n files in mods (8 expected)"; status=1; }
 find "$w/card" -name 'setup.exe' -o -name 'link.map' -o -name '*.part*' -o -name '*.journal' -o -name '.json' -o -name '*Screenshot*' | grep . && \
 	{ echo "FAIL ws-items: a file that must not be written"; status=1; }
-[ -z "$(ls -A "$w/card/haloce-vita/workshop" 2>/dev/null)" ] || \
+# (staging empty; workshop/installed/ holds the versions installed - the browser's UPDATE - and nothing else)
+[ -z "$(ls -A "$w/card/haloce-vita/workshop" 2>/dev/null | grep -v -x -e installed)" ] || \
 	{ echo "FAIL ws-items: workshop staging not empty: $(ls "$w/card/haloce-vita/workshop")"; status=1; }
+[ "$(ls "$w/card/haloce-vita/workshop/installed" 2>/dev/null | tr '\n' ' ')" = "2900000001.gid 2900000002.gid " ] || \
+	{ echo "FAIL ws-items: installed versions: $(ls "$w/card/haloce-vita/workshop/installed")"; status=1; }
 for id in 2900000003 2900000004 2900000005 2900000006 2900000007 2900000008; do
 	[ ! -e "$w/card/haloce-vita/mods/$id" ] || { echo "FAIL ws-items: $id installed"; status=1; }
 done
@@ -204,7 +210,7 @@ grep -q "cm: workshop query page 1 sort 3 search ''" "$w/transcript.txt" && \
 	grep -q "cm: workshop query page 1 sort 12 search 'rebalanced'" "$w/transcript.txt" && \
 	grep -q "workshop list: search: 1 (Fake Rebalanced Campaign" "$w/log.txt" || \
 	{ echo "FAIL ws-items: the list's pages"; status=1; }
-grep -q "workshop list: page 1: 10 of 11" "$w/log.txt" || { echo "FAIL ws-items: page 1"; status=1; }
+grep -q "workshop list: page 1: 8 of 19" "$w/log.txt" || { echo "FAIL ws-items: page 1"; status=1; }
 grep -q "cm: depot key 976730" "$w/transcript.txt" || { echo "FAIL ws-items: no Workshop depot key"; status=1; }
 grep -q "cm: call PublishedFile.GetDetails#1 (signed in)" "$w/transcript.txt" || { echo "FAIL ws-items: no details"; status=1; }
 grep -E "cm: depot key (976733|976734)" "$w/transcript.txt" && { echo "FAIL ws-items: a game depot asked for"; status=1; }
@@ -242,6 +248,39 @@ grep -q "attempts=2" "$out/flow-job-lost/line" || { echo "FAIL job-lost: not sig
 grep -q "resumed\|already there" "$out/flow-job-lost/log.txt" || { echo "FAIL job-lost: nothing kept"; status=1; }
 flow job-outage outage 1 ok
 grep -q "waits=[1-9]" "$out/flow-job-outage/line" || { echo "FAIL job-outage: no wait for the network"; status=1; }
+sub=
+
+echo "--- the Workshop browser (steam_job.c: pages, tabs, SUBSCRIBED, authors, the cards' pictures, a details page;"
+echo "    steam_image.c: the URL rule, the bounded decode, the cache)"
+sub=browse
+flow ws-browse normal 0 ok
+w=$out/flow-ws-browse
+for want in "pages=6 " "subscribed=3 " "details=1 " "maps=2 " "details_pictures=3 " "held_after=0 "; do
+	grep -q "$want" "$w/line" || { echo "FAIL ws-browse: not $want"; status=1; }
+done
+refused=$(sed -n 's/.* refused=\([0-9]*\).*/\1/p' "$w/line")
+most=$(sed -n 's/.* most_held=\([0-9]*\).*/\1/p' "$w/line")
+[ "${refused:-0}" -ge 8 ] || { echo "FAIL ws-browse: $refused hostile pictures refused (8 at least)"; status=1; }
+[ "${most:-0}" -le $((8 * 256 * 128 * 4 + 512 * 256 * 4)) ] || { echo "FAIL ws-browse: $most bytes of pictures held"; status=1; }
+# (a picture's URL not Steam's image CDN's is never fetched; each picture fetched once - the cache after - and
+# always the CDN's resized one)
+grep -E "img: (2900000015|2900000001 9)" "$w/transcript.txt" && { echo "FAIL ws-browse: a picture fetched from a URL not Steam's"; status=1; }
+grep "img: " "$w/transcript.txt" | grep -v "resized" | grep . && { echo "FAIL ws-browse: a picture asked for whole"; status=1; }
+dup=$(grep "img: " "$w/transcript.txt" | sort | uniq -d | head -1)
+[ -z "$dup" ] || { echo "FAIL ws-browse: fetched twice: $dup"; status=1; }
+grep -q "cm: workshop subscribed page 1" "$w/transcript.txt" || { echo "FAIL ws-browse: SUBSCRIBED not asked"; status=1; }
+grep -q "cm: subscriptions of another account" "$w/transcript.txt" && { echo "FAIL ws-browse: another account's"; status=1; }
+grep -q "cm: names of" "$w/transcript.txt" || { echo "FAIL ws-browse: no authors asked"; status=1; }
+grep -q "cm: workshop details 2900000001 (a page)" "$w/transcript.txt" || { echo "FAIL ws-browse: no details page"; status=1; }
+grep -q 'by "Ñandú Mapper"' "$w/log.txt" || { echo "FAIL ws-browse: the Latin-1 author"; status=1; }
+grep -q "browse description: Fake Rebalanced Campaign" "$w/log.txt" || { echo "FAIL ws-browse: the description"; status=1; }
+grep "browse row 2900000016" "$w/log.txt" | head -1 | grep -q 'by "Evil/nName' || { echo "FAIL ws-browse: the hostile author"; status=1; }
+n=$(ls "$w/card/haloce-vita/workshop/previews" | grep -c '^[0-9a-f]\{16\}\.px$')
+echo "  ws-browse: $(cat "$w/line" | cut -c1-200); $n pictures in the cache"
+[ "$n" -ge 10 ] && [ "$n" -le 96 ] || { echo "FAIL ws-browse: the cache holds $n"; status=1; }
+[ -z "$(ls "$w/card/haloce-vita" | grep -v -x -e workshop)" ] || { echo "FAIL ws-browse: something but workshop/"; status=1; }
+[ -z "$(ls "$w/card/haloce-vita/workshop" | grep -v -x -e previews)" ] || \
+	{ echo "FAIL ws-browse: something in workshop/ but previews"; status=1; }
 sub=
 
 echo "--- TLS (the test's own authority built into a test build; never in a game build)"
@@ -325,7 +364,7 @@ if [ "$seconds" != 0 ]; then
 	done
 	clang -g -O1 $fsan -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 $include $config "$here/steam_fuzz.c" $steam \
 		"$found"/obj/*.o -lpthread -o "$found/steam_fuzz"
-	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list ws_list ws_names; do
+	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list ws_list ws_names ws_image ws_text; do
 		mkdir -p "$found/$target"
 		seeds=$out/fixtures/seeds/$target
 		[ -d "$seeds" ] || seeds=
@@ -334,7 +373,7 @@ if [ "$seconds" != 0 ]; then
 			> "$found/$target.log" 2>&1 &
 	done
 	wait
-	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list ws_list ws_names; do
+	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list ws_list ws_names ws_image ws_text; do
 		runs=$(grep -E 'stat::number_of_executed_units' "$found/$target.log" | awk '{print $2}')
 		cov=$(grep -E '^#[0-9]+.*cov:' "$found/$target.log" | tail -1 | sed 's/.*cov: \([0-9]*\).*/\1/')
 		bad=$(ls "$found/$target" | grep -c -E '^(crash|leak|timeout|oom)-' || true)

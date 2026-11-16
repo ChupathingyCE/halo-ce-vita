@@ -13,6 +13,13 @@ The Steam download's tests on the PC (run_steam_download_test.sh), no Steam:
                      a search), the chosen items downloaded, then each staged
                      item installed into the mods folder by
                      steam_workshop_install with the test's map check
+  browse <cm port> <cdn port> <out>
+                     the Workshop browser's job against the fake (steam_job.c as
+                     the STEAM WORKSHOP screen drives it): the pages, the tabs
+                     (SUBSCRIBED too), the authors, the cards' pictures (the
+                     fake's hostile ones refused), a details page (its pictures,
+                     what its files are), the memory held, then signed out with
+                     nothing chosen; prints one result line
   flow <cm port> <cdn port> <out> <games> [cancel after n progress calls]
                      the whole download against steam_fake_server.py on
                      127.0.0.1; prints one result line; the log goes to
@@ -24,6 +31,7 @@ The Steam download's tests on the PC (run_steam_download_test.sh), no Steam:
 #include "steam_crypto.h"
 #include "steam_download.h"
 #include "steam_file.h"
+#include "steam_image.h"
 #include "steam_job.h"
 #include "steam_kv.h"
 #include "steam_manifest.h"
@@ -596,7 +604,7 @@ static void test_workshop(const char *folder)
 		steam_pb_put_bytes(&writer, 2, item_bytes, detail.size);
 		CHECK(steam_workshop_parse_query(body, writer.size, items, 4, &total) == 1 && total == 33 &&
 			items[0].id == 2915693904ull && items[0].hcontent == 777 && items[0].tags == STEAM_WORKSHOP_TAG_HALO1 &&
-			items[0].consumer_app == 976730 && !strcmp(items[0].title, "Ruby?s "));
+			items[0].consumer_app == 976730 && !strcmp(items[0].title, "Ruby-s"));
 		CHECK(steam_workshop_item_ok(&items[0], why, sizeof(why)));
 		items[1] = items[0];
 		items[1].consumer_app = 976731;
@@ -682,6 +690,283 @@ static void test_workshop(const char *folder)
 }
 
 /* ---------- chunks */
+
+/* ---------- the browser (steam_image.c, steam_workshop.c's text and parsers; docs/steam_download_security.md 9) */
+
+static int text_is(const char *raw, int lines, const char *expected)
+{
+	char out[256];
+
+	steam_workshop_text(out, sizeof(out), (const uint8_t *)raw, strlen(raw), lines);
+	if (strcmp(out, expected))
+		fprintf(stderr, "  text: \"%s\" gave \"%s\", not \"%s\"\n", raw, out, expected);
+	return !strcmp(out, expected);
+}
+
+static int url_ok(const char *url)
+{
+	char host[256], path[512], why[160];
+
+	return steam_image_url(url, 256, 144, host, sizeof(host), path, sizeof(path), why, sizeof(why));
+}
+
+static int picture_ok(const char *fixtures, const char *kind, int fit, char *why, size_t why_size)
+{
+	char path[600];
+	size_t size = 0;
+	uint8_t *data, *pixels = malloc(STEAM_IMAGE_LARGE_WIDTH * STEAM_IMAGE_LARGE_HEIGHT * 4);
+	int ok;
+
+	snprintf(path, sizeof(path), "%s/pictures/%s", fixtures, kind);
+	data = read_file(path, &size);
+	ok = data && pixels && steam_image_decode(data, size, fit == STEAM_IMAGE_FILL ? STEAM_IMAGE_CARD_WIDTH :
+		STEAM_IMAGE_LARGE_WIDTH, fit == STEAM_IMAGE_FILL ? STEAM_IMAGE_CARD_HEIGHT : STEAM_IMAGE_LARGE_HEIGHT, fit, pixels,
+		why, why_size);
+	/* (a picture made: opaque and not all black in its middle) */
+	if (ok)
+	{
+		int width = fit == STEAM_IMAGE_FILL ? STEAM_IMAGE_CARD_WIDTH : STEAM_IMAGE_LARGE_WIDTH;
+		int height = fit == STEAM_IMAGE_FILL ? STEAM_IMAGE_CARD_HEIGHT : STEAM_IMAGE_LARGE_HEIGHT;
+		const uint8_t *middle = pixels + ((size_t)(height / 2) * (size_t)width + (size_t)(width / 2)) * 4;
+
+		ok = middle[3] == 0xff && (middle[0] | middle[1] | middle[2]) != 0;
+	}
+	free(data);
+	free(pixels);
+	return ok;
+}
+
+static void test_browser(const char *fixtures)
+{
+	static const char *const good_pictures[] = { "jpeg", "progressive", "png" };
+	static const char *const bad_pictures[] = { "huge", "toomany", "png16", "truncated", "gif", "html", "big" };
+	char why[160], root[600], path[700], cache[700];
+	uint8_t body[1024], *pixels;
+	size_t size;
+	int index;
+
+	/* Steam's text made ours */
+	CHECK(text_is("Plain title", 0, "Plain title"));
+	CHECK(text_is("  spaced \t\t out  ", 0, "spaced out"));
+	CHECK(text_is("a|nb", 0, "a/nb"));
+	CHECK(text_is("\xc3\x91" "and\xc3\xba \xc2\xbfs\xc3\xad?", 0, "\xc3\x91" "and\xc3\xba \xc2\xbfs\xc3\xad?"));
+	CHECK(text_is("\xe2\x80\x9cq\xe2\x80\x9d \xe2\x80\x93 x\xe2\x80\xa6", 0, "\"q\" - x..."));
+	CHECK(text_is("\xe2\x80\xae" "evil\xe2\x80\xac zero\xe2\x80\x8bwidth \x07" "bell", 0, "evil zerowidth bell"));
+	CHECK(text_is("emoji \xf0\x9f\x98\x80\xf0\x9f\x9a\x80 end", 0, "emoji ? end"));
+	CHECK(text_is("\xe6\x97\xa5\xe6\x9c\xac", 0, "?"));
+	CHECK(text_is("bad \xc3 \xff\xfe utf8 \xed\xa0\x80 \xc0\xaf", 0, "bad ? ? utf8 ? ?"));
+	CHECK(text_is("[b]bold[/b] [url=https://x.test/a]link[/url] [notatag here]", 0, "bold link [notatag here]"));
+	CHECK(text_is("one\n\n\n\ntwo\r\nthree", 1, "one\n\ntwo\nthree"));
+	CHECK(text_is("one\ntwo", 0, "one two"));
+	CHECK(text_is("\n\nlead", 1, "lead"));
+	{
+		char small[7];
+
+		/* (cut at a character's end: never half a UTF-8 sequence) */
+		CHECK(steam_workshop_text(small, sizeof(small), (const uint8_t *)"abcde\xc3\x91" "f", 9, 0) == 5 &&
+			!strcmp(small, "abcde"));
+		CHECK(steam_workshop_text(small, 1, (const uint8_t *)"abc", 3, 0) == 0 && !small[0]);
+	}
+	/* the pictures' URL rule */
+	CHECK(url_ok("https://images.steamusercontent.com/ugc/5115557831229079503/731D34F896397D581799E92441C11FFC211F6A2C/"));
+	CHECK(url_ok("https://steamuserimages-a.akamaihd.net/ugc/1/ABC/"));
+	CHECK(url_ok("https://images.steamusercontent.com/ugc/1/ABC/?imw=5000&x=1"));
+	{
+		static const char *const refused[] = {
+			"http://images.steamusercontent.com/ugc/1/ABC/",
+			"https://images.steamusercontent.com:8443/ugc/1/ABC/",
+			"https://u@images.steamusercontent.com/ugc/1/ABC/",
+			"https://images.steamusercontent.com.evil.test/ugc/1/ABC/",
+			"https://evilimages.steamusercontent.com/ugc/1/ABC/",
+			"https://IMAGES.steamusercontent.com/ugc/1/ABC/",
+			"https://images.steamusercontent.com/ugc/../../etc/passwd",
+			"https://images.steamusercontent.com/ugc/1//ABC/",
+			"https://images.steamusercontent.com/other/1/ABC/",
+			"https://images.steamusercontent.com/ugc/1/A%2e%2e/",
+			"https://images.steamusercontent.com/ugc/1/A B/",
+			"https://images.steamusercontent.com",
+			"https://evil.example.com/ugc/1/ABC/",
+			"file:///etc/passwd",
+			"",
+		};
+		for (index = 0; index < (int)(sizeof(refused) / sizeof(refused[0])); index++)
+		{
+			if (url_ok(refused[index]))
+				fprintf(stderr, "  url taken: %s\n", refused[index]);
+			CHECK(!url_ok(refused[index]));
+		}
+		memset(path, 'a', sizeof(path));
+		memcpy(path, "https://images.steamusercontent.com/ugc/", 40);
+		path[400] = 0;
+		CHECK(!url_ok(path));
+	}
+	{
+		char host[256], asked[512];
+
+		CHECK(steam_image_url("https://images.steamusercontent.com/ugc/1/ABC/?evil=1", 512, 288, host, sizeof(host), asked,
+			sizeof(asked), why, sizeof(why)) && !strcmp(host, "images.steamusercontent.com") &&
+			!strncmp(asked, "/ugc/1/ABC/?imw=512&imh=288&", 28) && !strstr(asked, "evil"));
+	}
+	/* the decode: a JPEG (baseline, progressive) and a PNG made; the hostile ones refused */
+	for (index = 0; index < (int)(sizeof(good_pictures) / sizeof(good_pictures[0])); index++)
+	{
+		CHECK(picture_ok(fixtures, good_pictures[index], STEAM_IMAGE_FILL, why, sizeof(why)));
+		CHECK(picture_ok(fixtures, good_pictures[index], STEAM_IMAGE_FIT, why, sizeof(why)));
+	}
+	for (index = 0; index < (int)(sizeof(bad_pictures) / sizeof(bad_pictures[0])); index++)
+	{
+		int ok = picture_ok(fixtures, bad_pictures[index], STEAM_IMAGE_FILL, why, sizeof(why));
+
+		fprintf(stderr, "  picture %s: %s\n", bad_pictures[index], ok ? "MADE" : why);
+		CHECK(!ok);
+	}
+	CHECK(steam_image_decode_peak() <= STEAM_IMAGE_DECODE_BYTES_MAXIMUM);
+	/* the cache: kept, read back only at its size, trimmed to its caps (the oldest first), other names left */
+	pixels = malloc(STEAM_IMAGE_CARD_WIDTH * STEAM_IMAGE_CARD_HEIGHT * 4);
+	snprintf(root, sizeof(root), "%s/browser-cache", fixtures);
+	mkdir(root, 0777);
+	memset(pixels, 0x5a, STEAM_IMAGE_CARD_WIDTH * STEAM_IMAGE_CARD_HEIGHT * 4);
+	CHECK(steam_image_cache_path(root, "https://images.steamusercontent.com/ugc/1/A/", 256, 128, cache, sizeof(cache)));
+	CHECK(steam_image_cache_save(root, cache, 256, 128, pixels));
+	memset(pixels, 0, STEAM_IMAGE_CARD_WIDTH * STEAM_IMAGE_CARD_HEIGHT * 4);
+	CHECK(steam_image_cache_load(cache, 256, 128, pixels) && pixels[1000] == 0x5a);
+	CHECK(!steam_image_cache_load(cache, 128, 128, pixels));
+	snprintf(path, sizeof(path), "%s/workshop/previews/keep-me.txt", root);
+	write_test_file(path, "x", 1);
+	for (index = 0; index < 6; index++)
+	{
+		char url[128];
+
+		snprintf(url, sizeof(url), "https://images.steamusercontent.com/ugc/%d/A/", index + 2);
+		CHECK(steam_image_cache_path(root, url, 256, 128, cache, sizeof(cache)));
+		CHECK(steam_image_cache_save(root, cache, 256, 128, pixels));
+	}
+	CHECK(steam_image_cache_trim(root, 3u * (12 + 256 * 128 * 4), 100) == 4);
+	CHECK(access(path, F_OK) == 0);
+	{
+		/* (a cache file cut short is not taken) */
+		FILE *file = fopen(cache, "r+b");
+
+		if (file)
+		{
+			CHECK(ftruncate(fileno(file), 100) == 0);
+			fclose(file);
+		}
+		CHECK(!steam_image_cache_load(cache, 256, 128, pixels));
+	}
+	free(pixels);
+	/* the requests */
+	size = steam_workshop_subscribed_request(body, sizeof(body), 76561198000000000ull, 2);
+	CHECK(size > 0 && memmem(body, size, "mysubscriptions", 15) && memmem(body, size, "Halo1", 5));
+	CHECK(steam_workshop_subscribed_request(body, sizeof(body), 0, 1) == 0);
+	{
+		uint64_t ids[2] = { 76561198000000001ull, 76561198000000002ull };
+
+		CHECK(steam_workshop_names_request(body, sizeof(body), ids, 2) > 0);
+		CHECK(steam_workshop_names_request(body, sizeof(body), ids, 0) == 0);
+	}
+	CHECK(steam_workshop_page_request(body, sizeof(body), 2900000001ull) > 0);
+	/* a details page, the names, a subscribed list: built here, read back */
+	{
+		struct steam_pb_writer writer, item, votes, preview;
+		uint8_t item_bytes[2048], votes_bytes[64], preview_bytes[512], reply[4096];
+		struct steam_workshop_details *details = calloc(1, sizeof(*details));
+		struct steam_workshop_item items[2];
+		char names[3][STEAM_WORKSHOP_AUTHOR_SIZE];
+		uint64_t steamids[3] = { 11, 22, 33 };
+		uint32_t total = 0;
+		float score = 0.75f;
+		uint32_t bits;
+
+		memcpy(&bits, &score, sizeof(bits));
+		steam_pb_writer_init(&votes, votes_bytes, sizeof(votes_bytes));
+		steam_pb_put_fixed32(&votes, 1, bits);
+		steam_pb_put_varint(&votes, 2, 30);
+		steam_pb_put_varint(&votes, 3, 10);
+		steam_pb_writer_init(&item, item_bytes, sizeof(item_bytes));
+		steam_pb_put_varint(&item, 1, 1);
+		steam_pb_put_varint(&item, 2, 2900000001ull);
+		steam_pb_put_fixed64(&item, 3, 11);
+		steam_pb_put_varint(&item, 5, STEAM_WORKSHOP_APP);
+		steam_pb_put_string(&item, 11, "https://images.steamusercontent.com/ugc/1/A/");
+		steam_pb_put_string(&item, 16, "T|nitle");
+		steam_pb_put_string(&item, 17, "[b]Hi[/b]\n\n\n\nthere");
+		steam_pb_put_bytes(&item, 55, votes_bytes, votes.size);
+		/* (pictures: a video's entry left out, a URL repeated once, the preview first) */
+		steam_pb_writer_init(&preview, preview_bytes, sizeof(preview_bytes));
+		steam_pb_put_string(&preview, 3, "https://images.steamusercontent.com/ugc/1/B/");
+		steam_pb_put_varint(&preview, 7, 0);
+		steam_pb_put_bytes(&item, 51, preview_bytes, preview.size);
+		steam_pb_put_bytes(&item, 51, preview_bytes, preview.size);
+		steam_pb_writer_init(&preview, preview_bytes, sizeof(preview_bytes));
+		steam_pb_put_string(&preview, 3, "https://www.youtube.com/watch?v=x");
+		steam_pb_put_varint(&preview, 7, 1);
+		steam_pb_put_bytes(&item, 51, preview_bytes, preview.size);
+		steam_pb_writer_init(&writer, reply, sizeof(reply));
+		steam_pb_put_bytes(&writer, 1, item_bytes, item.size);
+		CHECK(details && steam_workshop_parse_page(reply, writer.size, 2900000001ull, details) == 1);
+		if (details)
+		{
+			CHECK(details->item.score == 75 && details->item.votes_up == 30 && details->item.votes_down == 10 &&
+				details->item.creator == 11 && !strcmp(details->item.title, "T/nitle"));
+			CHECK(!strcmp(details->description, "Hi\n\nthere"));
+			CHECK(details->preview_count == 2 && !strcmp(details->previews[0], "https://images.steamusercontent.com/ugc/1/A/") &&
+				!strcmp(details->previews[1], "https://images.steamusercontent.com/ugc/1/B/"));
+			CHECK(steam_workshop_parse_page(reply, writer.size, 5, details) == 0);
+			CHECK(steam_workshop_parse_page(reply, writer.size - 2, 2900000001ull, details) == -1);
+		}
+		free(details);
+		/* GetUserFiles: items in field 3 */
+		steam_pb_writer_init(&writer, reply, sizeof(reply));
+		steam_pb_put_varint(&writer, 1, 3);
+		steam_pb_put_varint(&writer, 2, 0);
+		steam_pb_put_bytes(&writer, 3, item_bytes, item.size);
+		CHECK(steam_workshop_parse_subscribed(reply, writer.size, items, 2, &total) == 1 && total == 3 &&
+			items[0].id == 2900000001ull);
+		/* names: a public name read through the text rule; an account not asked for ignored */
+		steam_pb_writer_init(&writer, reply, sizeof(reply));
+		{
+			struct steam_pb_writer account, details_writer;
+			uint8_t account_bytes[256], details_bytes[300];
+			int which;
+
+			for (which = 0; which < 2; which++)
+			{
+				steam_pb_writer_init(&account, account_bytes, sizeof(account_bytes));
+				steam_pb_put_fixed64(&account, 1, which ? 99 : 22);
+				steam_pb_put_string(&account, 10, which ? "Not asked" : "Ev|nil\xe2\x80\xae");
+				steam_pb_writer_init(&details_writer, details_bytes, sizeof(details_bytes));
+				steam_pb_put_bytes(&details_writer, 1, account_bytes, account.size);
+				steam_pb_put_bytes(&writer, 1, details_bytes, details_writer.size);
+			}
+		}
+		CHECK(steam_workshop_parse_names(reply, writer.size, steamids, 3, names) == 1 && !names[0][0] &&
+			!strcmp(names[1], "Ev/nil") && !names[2][0]);
+		CHECK(steam_workshop_parse_names(reply, writer.size - 1, steamids, 3, names) == -1);
+	}
+	/* installed, its version, removed */
+	{
+		uint64_t gid = 0;
+
+		snprintf(root, sizeof(root), "%s/browser-installed", fixtures);
+		mkdir(root, 0777);
+		snprintf(path, sizeof(path), "%s/mods", root);
+		mkdir(path, 0777);
+		CHECK(!steam_workshop_installed(root, 2900000001ull, &gid));
+		snprintf(path, sizeof(path), "%s/mods/2900000001", root);
+		mkdir(path, 0777);
+		snprintf(path, sizeof(path), "%s/workshop", root);
+		mkdir(path, 0777);
+		snprintf(path, sizeof(path), "%s/workshop/installed", root);
+		mkdir(path, 0777);
+		snprintf(path, sizeof(path), "%s/workshop/installed/2900000001.gid", root);
+		write_test_file(path, "777\n", 4);
+		CHECK(steam_workshop_installed(root, 2900000001ull, &gid) && gid == 777);
+		CHECK(steam_workshop_uninstall(root, 2900000001ull) && !steam_workshop_installed(root, 2900000001ull, &gid) &&
+			access(path, F_OK) != 0);
+		CHECK(!steam_workshop_uninstall(root, 1234567890123ull));
+	}
+}
 
 static void test_chunks(const char *fixtures)
 {
@@ -1174,6 +1459,228 @@ static int job(int argc, char **argv)
 	return 0;
 }
 
+/* ---------- BROWSE: the browser's job against the fake */
+
+static int browse_wait(int (*ready)(void), int seconds)
+{
+	int step;
+
+	for (step = 0; step < seconds * 50; step++)
+	{
+		struct timespec wait = { 0, 20 * 1000 * 1000 };
+
+		if (ready())
+			return 1;
+		nanosleep(&wait, NULL);
+	}
+	return 0;
+}
+
+static int browse_page_here(void)
+{
+	struct steam_job_workshop_view ws;
+
+	steam_job_workshop_view(&ws);
+	return ws.phase == STEAM_JOB_BROWSING && !ws.loading && ws.serial > 0;
+}
+
+static int browse_pictures_here(void)
+{
+	struct steam_job_workshop_view ws;
+	int index;
+
+	steam_job_workshop_view(&ws);
+	for (index = 0; index < ws.count; index++)
+		if (!ws.rows[index].picture)
+			return 0;
+	return !ws.loading;
+}
+
+static int browse_details_here(void)
+{
+	struct steam_job_workshop_details details;
+
+	steam_job_workshop_details(&details);
+	return details.state == -1 || (details.state == 2 && details.contents && details.picture);
+}
+
+static int browse_ended(void)
+{
+	struct steam_job_status status;
+
+	steam_job_get(&status);
+	return status.phase == STEAM_JOB_DONE || status.phase == STEAM_JOB_FAILED || status.phase == STEAM_JOB_CANCELLED;
+}
+
+static void browse_print_page(const char *name, int *made, int *refused, unsigned int *most_held)
+{
+	struct steam_job_workshop_view ws;
+	unsigned int held = 0, peak = 0;
+	int index;
+
+	steam_job_workshop_view(&ws);
+	steam_job_workshop_memory(&held, &peak);
+	if (held > *most_held)
+		*most_held = held;
+	fprintf(log_file, "browse %s: page %d list %d: %d of %d%s%s\n", name, ws.page, ws.sort, ws.count, ws.total,
+		ws.error[0] ? ": " : "", ws.error);
+	for (index = 0; index < ws.count; index++)
+	{
+		const struct steam_job_workshop_row *row = &ws.rows[index];
+		unsigned char *pixels = malloc(STEAM_IMAGE_CARD_WIDTH * STEAM_IMAGE_CARD_HEIGHT * 4);
+		int width = 0, height = 0;
+		unsigned int serial = steam_job_workshop_picture(index, pixels, STEAM_IMAGE_CARD_WIDTH * STEAM_IMAGE_CARD_HEIGHT * 4,
+			&width, &height);
+
+		fprintf(log_file, "browse row %s \"%s\" by \"%s\" score %d votes %u picture %d serial %u %dx%d\n", row->id,
+			row->title, row->author, row->score, row->votes, row->picture, serial, width, height);
+		CHECK(row->picture != 1 || (serial && width == STEAM_IMAGE_CARD_WIDTH && height == STEAM_IMAGE_CARD_HEIGHT));
+		CHECK(!strchr(row->title, '|') && !strchr(row->author, '|'));
+		if (row->picture == 1)
+			(*made)++;
+		else if (row->picture == -1)
+			(*refused)++;
+		free(pixels);
+	}
+	fprintf(log_file, "browse memory: %u bytes of pictures, decoder peak %u\n", held, peak);
+	fflush(log_file);
+}
+
+static int browse(int argc, char **argv)
+{
+	struct steam_job_options options;
+	struct steam_job_platform hooks;
+	struct steam_job_status status;
+	struct steam_job_workshop_details details;
+	char log_path[600];
+	int made = 0, refused = 0, pages = 0, subscribed = 0, details_ok = 0, maps = 0, details_pictures = 0;
+	unsigned int most_held = 0;
+
+	if (argc < 5)
+		return 2;
+	snprintf(log_path, sizeof(log_path), "%s/log.txt", argv[4]);
+	log_file = fopen(log_path, "a");
+	if (!log_file)
+		return 2;
+	memset(&hooks, 0, sizeof(hooks));
+	hooks.log = job_log;
+	steam_job_set_platform(&hooks);
+	memset(&options, 0, sizeof(options));
+	options.workshop = 1;
+	snprintf(options.cm_url, sizeof(options.cm_url), "ws://127.0.0.1:%s/cmsocket/", argv[2]);
+	snprintf(options.cdn_override, sizeof(options.cdn_override), "http://127.0.0.1:%s", argv[3]);
+	snprintf(options.images_override, sizeof(options.images_override), "http://127.0.0.1:%s", argv[3]);
+	snprintf(options.ce_root, sizeof(options.ce_root), "%s/card/haloce-vita", argv[4]);
+	snprintf(options.app_root, sizeof(options.app_root), "%s/card/haloce-vita", argv[4]);
+	snprintf(options.marker_path, sizeof(options.marker_path), "%s/steam-session.txt", argv[4]);
+	snprintf(log_path, sizeof(log_path), "%s/card", argv[4]);
+	mkdir(log_path, 0777);
+	mkdir(options.ce_root, 0777);
+	if (!steam_job_start(&options))
+	{
+		printf("result the job did not start\n");
+		return 1;
+	}
+	if (browse_wait(browse_page_here, 60))
+	{
+		int page, list;
+
+		/* POPULAR's pages, then NEWEST, TOP RATED, SUBSCRIBED: each page's pictures waited for */
+		for (list = 0; list <= STEAM_WORKSHOP_LIST_SUBSCRIBED; list++)
+		{
+			if (list == STEAM_WORKSHOP_SORT_UPDATED)
+				continue;
+			for (page = 1; page <= (list == 0 ? 3 : 1); page++)
+			{
+				char name[32];
+
+				if (list || page > 1)
+				{
+					steam_job_workshop_ask(page, list, "");
+					browse_wait(browse_page_here, 30);
+				}
+				browse_wait(browse_pictures_here, 60);
+				snprintf(name, sizeof(name), "list%d-page%d", list, page);
+				browse_print_page(name, &made, &refused, &most_held);
+				pages++;
+				if (list == STEAM_WORKSHOP_LIST_SUBSCRIBED)
+				{
+					struct steam_job_workshop_view ws;
+
+					steam_job_workshop_view(&ws);
+					subscribed = ws.count;
+				}
+			}
+		}
+		/* a details page: its pictures one after another (the video's entry and the other host's not among them),
+		what its files are */
+		steam_job_workshop_details_ask("2900000001");
+		if (browse_wait(browse_details_here, 60))
+		{
+			unsigned char *pixels = malloc(STEAM_IMAGE_LARGE_WIDTH * STEAM_IMAGE_LARGE_HEIGHT * 4);
+			int index;
+
+			steam_job_workshop_details(&details);
+			details_ok = details.state == 2;
+			maps = details.maps;
+			fprintf(log_file, "browse details: \"%s\" by \"%s\" %u KB score %d pictures %d maps %d files %d skipped %d "
+				"refused %d: %s %s\n", details.title, details.author, details.size_kb, details.score, details.pictures,
+				details.maps, details.files, details.skipped, details.refused, details.map_names[0], details.map_names[1]);
+			fprintf(log_file, "browse description: %s\n", details.description);
+			for (index = 0; index < details.pictures; index++)
+			{
+				int width = 0, height = 0;
+
+				if (index)
+				{
+					steam_job_workshop_details_picture(index);
+					browse_wait(browse_details_here, 30);
+				}
+				steam_job_workshop_details(&details);
+				if (details.picture == 1 && steam_job_workshop_picture(-1, pixels,
+					STEAM_IMAGE_LARGE_WIDTH * STEAM_IMAGE_LARGE_HEIGHT * 4, &width, &height) && width == STEAM_IMAGE_LARGE_WIDTH)
+				{
+					details_pictures++;
+				}
+				fprintf(log_file, "browse details picture %d: %d\n", index, details.picture);
+			}
+			free(pixels);
+			{
+				unsigned int held = 0, peak = 0;
+
+				steam_job_workshop_memory(&held, &peak);
+				if (held > most_held)
+					most_held = held;
+			}
+		}
+		/* a hostile one's page: its pictures all refused */
+		steam_job_workshop_details_ask("2900000015");
+		browse_wait(browse_details_here, 60);
+		steam_job_workshop_details(&details);
+		fprintf(log_file, "browse details 2900000015: state %d pictures %d picture %d\n", details.state, details.pictures,
+			details.picture);
+		CHECK(details.state == 2 && details.picture == -1);
+		steam_job_workshop_details_ask("");
+	}
+	/* nothing chosen: the session just ends */
+	steam_job_workshop_choose(NULL, 0);
+	browse_wait(browse_ended, 60);
+	steam_job_get(&status);
+	{
+		unsigned int held = 0, peak = 0;
+
+		steam_job_workshop_memory(&held, &peak);
+		printf("result ok=%d cancelled=%d pages=%d pictures=%d refused=%d subscribed=%d details=%d maps=%d "
+			"details_pictures=%d held_after=%u most_held=%u revoked=%d logged_off=%d error=%s\n",
+			status.phase == STEAM_JOB_DONE, status.phase == STEAM_JOB_CANCELLED, pages, made, refused, subscribed,
+			details_ok, maps, details_pictures, held, most_held, status.revoked, status.logged_off,
+			status.error[0] ? status.error : "-");
+	}
+	CHECK(steam_job_forget());
+	fclose(log_file);
+	return failures != 0;
+}
+
 /* ---------- LIVE: the real Steam, the owner's own account, by his hand alone (docs/steam_download_live_test.md)
 
 steam_download_test live <folder> [games]: the job as the Vita runs it, against Steam's own CM (from ISteamDirectory)
@@ -1324,7 +1831,9 @@ static int live(int argc, char **argv)
 
 steam_download_test live-workshop <folder>: the Workshop job as the Vita's STEAM WORKSHOP screen runs it, against
 Steam's own CM and CDN: the QR in the terminal, then the list - Halo CE's Workshop items, ten a page - driven by typed
-commands (n, p: page; o: order; s TEXT: search; m N: mark row N; d: download the marked; q: sign out); the items into
+commands (n, p: page; o: the list - trending, newest, most liked, updated, SUBSCRIBED; s TEXT: search; i N: row N's
+details page - its author, votes, pictures made, description, the maps its manifest holds; m N: mark row N; d:
+download the marked; q: sign out); the items into
 <folder>/data/workshop/<id> (the game's staging folder: the game checks every map and moves them into mods/ the next
 time its STEAM WORKSHOP screen opens); the log (no secret) to <folder>/live-log.txt. Never run by an agent. */
 
@@ -1340,12 +1849,14 @@ static void live_workshop_page(const struct steam_job_workshop_view *ws)
 	{
 		const struct steam_job_workshop_row *row = &ws->rows[index];
 
-		printf("  %2d %-12s %8.1f MB  %-30.30s %s%s%s\n", index + 1, row->id, row->size_kb / 1024.0, row->title,
+		printf("  %2d %-12s %8.1f MB  %-30.30s by %-16.16s %3d%% pic %2d %s%s%s\n", index + 1, row->id,
+			row->size_kb / 1024.0, row->title, row->author, row->score, row->picture,
 			(row->tags & STEAM_WORKSHOP_TAG_CAMPAIGN) ? "campaign " : "",
 			(row->tags & STEAM_WORKSHOP_TAG_MULTIPLAYER) ? "multiplayer " : "",
 			row->downloadable ? "" : row->reason);
 	}
-	printf("commands: n next, p previous, o order, s TEXT search, m N mark row N, d download the marked, q sign out\n");
+	printf("commands: n next, p previous, o list, s TEXT search, i N details, m N mark row N, d download the marked, "
+		"q sign out\n");
 	fflush(stdout);
 }
 
@@ -1414,7 +1925,7 @@ static int live_workshop(int argc, char **argv)
 					steam_job_workshop_ask(ws.page + (line[0] == 'n' ? 1 : -1), ws.sort, ws.search);
 				else if (!strcmp(line, "o"))
 				{
-					sort = (sort + 1) % STEAM_WORKSHOP_SORT_COUNT;
+					sort = (sort + 1) % (STEAM_WORKSHOP_LIST_SUBSCRIBED + 1);
 					steam_job_workshop_ask(1, sort, "");
 				}
 				else if (line[0] == 's' && line[1] == ' ')
@@ -1431,6 +1942,34 @@ static int live_workshop(int argc, char **argv)
 					}
 					else
 						printf("not that row\n");
+				}
+				else if (line[0] == 'i' && line[1] == ' ')
+				{
+					int row = atoi(line + 2) - 1;
+
+					if (row >= 0 && row < ws.count)
+					{
+						struct steam_job_workshop_details details;
+						int step;
+
+						steam_job_workshop_details_ask(ws.rows[row].id);
+						for (step = 0; step < 600; step++)
+						{
+							struct timespec pause = { 0, 50 * 1000 * 1000 };
+
+							steam_job_workshop_details(&details);
+							if (details.state < 0 || (details.state == 2 && details.contents && details.picture))
+								break;
+							nanosleep(&pause, NULL);
+						}
+						printf("-- %s by %s, score %d (%u up, %u down), %u KB, %d pictures (the first: %s)\n%s\n"
+							"   maps %d (%s %s ...), files %d, skipped %d, refused %d %s\n", details.title, details.author,
+							details.score, details.votes_up, details.votes_down, details.size_kb, details.pictures,
+							details.picture == 1 ? "made" : "not made", details.description, details.maps,
+							details.map_names[0], details.map_names[1], details.files, details.skipped, details.refused,
+							details.state < 0 ? details.error : details.contents_why);
+						steam_job_workshop_details_ask("");
+					}
 				}
 				else if (!strcmp(line, "d") && marked_count)
 					steam_job_workshop_choose((const char (*)[24])marked, marked_count);
@@ -1493,6 +2032,8 @@ int main(int argc, char **argv)
 {
 	if (argc >= 2 && !strcmp(argv[1], "job"))
 		return job(argc, argv);
+	if (argc >= 2 && !strcmp(argv[1], "browse"))
+		return browse(argc, argv);
 	if (argc >= 2 && !strcmp(argv[1], "live"))
 		return live(argc, argv);
 	if (argc >= 2 && !strcmp(argv[1], "live-workshop"))
@@ -1512,6 +2053,7 @@ int main(int argc, char **argv)
 		test_net();
 		test_qr();
 		test_workshop(argv[2]);
+		test_browser(argv[2]);
 		printf("-- %d of %d checks failed\n", failures, checks);
 		return failures != 0;
 	}

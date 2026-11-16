@@ -86,6 +86,9 @@ struct steam_job_options
 	/* the Steam Workshop (steam_workshop.h) instead of the game's depots: ce_root is the data root (its workshop
 	and mods folders) */
 	int workshop;
+	/* (the browser) the tests' image server instead of Steam's image CDN (http://127.0.0.1:port): "" in the game; a
+	test build's HALO_STEAM_TEST_IMAGES alone. Every picture's URL is checked first as ever (steam_image_url) */
+	char images_override[128];
 };
 
 struct steam_job_platform
@@ -174,18 +177,29 @@ void steam_job_workshop_choose(const char (*ids)[24], int count);
 struct steam_job_workshop_row
 {
 	char id[24];
-	char title[64];
+	/* (steam_workshop_text: our font's characters, UTF-8) */
+	char title[128];
+	/* the author's public name ("" until it came, or none) */
+	char author[48];
 	unsigned int size_kb;
 	int tags;
 	/* 1: may be downloaded; 0: why in reason (another game's, banned, multiplayer maps only, too large) */
 	int downloadable;
 	char reason[64];
+	/* Steam's score 0-100 (-1 none), its votes, when it was last updated (seconds since 1970) */
+	int score;
+	unsigned int votes, time_updated;
+	/* its version (the manifest's gid, decimal: no 64-bit field crosses) for INSTALLED and UPDATE */
+	char version[24];
+	/* the card's picture: 0 coming, 1 ready (steam_job_workshop_picture), -1 none (no preview, or refused) */
+	int picture;
 };
 
 struct steam_job_workshop_view
 {
 	int phase;
-	/* the page shown: its number, order, search, the list's total; loading while a page is asked */
+	/* the page shown: its number, list (steam_workshop_sort, or STEAM_WORKSHOP_LIST_SUBSCRIBED), search, the list's
+	total; loading while a page is asked */
 	int page, sort, total, count, loading, serial;
 	char search[64];
 	struct steam_job_workshop_row rows[10];
@@ -193,9 +207,49 @@ struct steam_job_workshop_view
 	char error[160];
 	/* the download: the item in hand (index of count) and its title, the items done and failed, the last failure */
 	int item_index, item_count, items_done, items_failed;
-	char item_title[64], failure[200];
+	char item_title[128], failure[200];
 };
 void steam_job_workshop_view(struct steam_job_workshop_view *view);
+
+/* ---------- the browser's details page and pictures (docs/steam_download_security.md section 9) */
+
+/* a details page asked for (the id a row's; "" closes it): its details, its first picture, then what its files are */
+void steam_job_workshop_details_ask(const char *id);
+/* the details page's picture asked for (0 the preview, then the extra pictures) */
+void steam_job_workshop_details_picture(int index);
+
+struct steam_job_workshop_details
+{
+	/* 0 none asked, 1 coming, 2 here, -1 failed (error) */
+	int state;
+	unsigned int serial;
+	char id[24];
+	char title[128], author[48];
+	/* (steam_workshop_text with its lines: '\n' between paragraphs) */
+	char description[1600];
+	unsigned int size_kb, time_updated, time_created, votes_up, votes_down;
+	int score, tags, downloadable;
+	char reason[64];
+	char version[24];
+	/* the pictures: how many, the one asked for, its state (0 coming, 1 here, -1 none) */
+	int pictures, picture_index, picture;
+	/* what its files are (the manifest by the name rule): 0 coming, 1 here, -1 not had (contents_why) */
+	int contents;
+	int maps, files, skipped, refused;
+	unsigned int contents_kb;
+	char map_names[12][48];
+	char contents_why[160];
+	char error[160];
+};
+void steam_job_workshop_details(struct steam_job_workshop_details *details);
+
+/* a picture of the browser's, copied: slot 0-9 a card of the page shown (its row), -1 the details page's; its serial
+(changes with each new picture; 0: none ready) and, with pixels (at least width * height * 4 bytes, capacity), its
+B, G, R, A, its size */
+unsigned int steam_job_workshop_picture(int slot, unsigned char *pixels, int capacity, int *width, int *height);
+/* the memory the browser's pictures hold in the job now, and the decoder's most at once (bytes; for the tests) */
+void steam_job_workshop_memory(unsigned int *pictures, unsigned int *decoder_peak);
+
 
 /* the QR of a text (for the tests): its size (0 if it does not fit), modules 1 dark */
 int steam_job_qr_encode(const char *text, uint8_t *modules, int maximum_size);
