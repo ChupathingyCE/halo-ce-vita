@@ -1016,6 +1016,59 @@ static int custom_edition_check(struct memory_file *map, struct custom_edition_r
 	return refused;
 }
 
+/* (--tags-only) a Halo: CE Anniversary map's tags loaded alone, as a scene
+pack's build loads them (scene_pack_ce.c: custom_edition_cache_load_tags into
+the tag data and 4 MB past it, not MCC's whole room for tags), into a buffer
+with an unmapped page right after it: a write past its end stops the check
+(Nov 16: the structure BSPs' check read each BSP at its slot, past the end) */
+static int tags_only_check;
+
+static int custom_edition_tags_only(char const *path)
+{
+	char const *name = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
+	struct memory_file map;
+	struct custom_edition_resources resources;
+	struct cache_file_identity identity;
+	struct custom_edition_load_report *report;
+	enum cache_file_status status;
+	unsigned long page = (unsigned long)sysconf(_SC_PAGESIZE);
+	unsigned long bytes, mapped;
+	unsigned char *memory;
+
+	if (!memory_file_open(&map, path))
+	{
+		printf("%s: cannot be read\n", name);
+		return 1;
+	}
+	if (cache_file_identify(&map.source, &identity) != _cache_file_status_ok ||
+		identity.format != _cache_file_format_mcc_cea_cache)
+	{
+		printf("%s: not a Halo: CE Anniversary map (--tags-only checks those)\n", name);
+		memory_file_close(&map);
+		return 1;
+	}
+	bytes = (identity.tag_data_size + 4UL * 1024 * 1024) & ~15UL;
+	mapped = (bytes + page - 1) & ~(page - 1);
+	memory = mmap(NULL, mapped + page, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+	report = calloc(1, sizeof(*report));
+	if (memory == MAP_FAILED || !report || mprotect(memory, mapped, PROT_READ | PROT_WRITE))
+	{
+		printf("%s: no room for its tags\n", name);
+		memory_file_close(&map);
+		return 1;
+	}
+	custom_edition_resources_open(&resources, path);
+	/* (its end against the unmapped page) */
+	status = custom_edition_cache_load_tags(&map.source, resources.maps, memory + (mapped - bytes), (uint32_t)bytes, 1, report);
+	printf("%s: tags alone in %lu bytes: %s (%ld structure bsps, the largest %lu bytes)\n", name, bytes,
+		cache_file_status_describe(status), (long)report->structure_bsp_count, (unsigned long)report->largest_structure_bsp_bytes);
+	custom_edition_resources_close(&resources);
+	memory_file_close(&map);
+	munmap(memory, mapped + page);
+	free(report);
+	return status != _cache_file_status_ok;
+}
+
 /* the Custom Edition map at path checked (custom_edition_check), or, with
 iterations, fuzzed as map_fuzz fuzzes an Xbox map, its file's words changed */
 static int custom_edition_validate(char const *path, unsigned char *tag_cache, long *corrections, unsigned long seed,
@@ -1279,6 +1332,11 @@ int main(int argc, char **argv)
 	{
 		long corrections;
 
+		if (!strcmp(argv[argument], "--tags-only"))
+		{
+			tags_only_check = 1;
+			continue;
+		}
 		if (!strcmp(argv[argument], "--strict"))
 		{
 			strict = 1;
@@ -1322,6 +1380,13 @@ int main(int argc, char **argv)
 			continue;
 		case _cache_file_format_custom_edition_cache:
 		case _cache_file_format_mcc_cea_cache:
+			if (tags_only_check)
+			{
+				if (custom_edition_tags_only(argv[argument]))
+					failed = 1;
+				fflush(stdout);
+				continue;
+			}
 			if (custom_edition_validate(argv[argument], custom_edition_tag_cache, &corrections, seed, fuzz_iterations))
 			{
 				if (!fuzz_iterations)
