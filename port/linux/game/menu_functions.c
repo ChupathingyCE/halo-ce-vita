@@ -25987,13 +25987,14 @@ static struct
 } menu_style_watch;
 
 /* (d3d8_gl.c screen_mode_choose) the narrowest the screen is drawn while
-the menus are up: Menu style ElDewrito's screens are laid out over 800
-columns (80 each side of the 640, as a 16:9 display shows them); on a
-narrower display (4:3) they are drawn that wide, letterboxed, nothing cut
-off. 640 otherwise (a game, the other styles) */
+the menus are up: Menu style ElDewrito's screens are laid out over 848
+columns (104 each side of the 640, as a 16:9 display shows them - the Vita's
+848, d3d8_gxm.c; 800 left the lobbies' FRIENDS column cut at the right); on a
+narrower display or window (4:3) they are drawn that wide, letterboxed,
+nothing cut off. 640 otherwise (a game, the other styles) */
 int halo_menus_minimum_width(void)
 {
-	return halo_menu_style_online() && halo_main_menu_loaded() ? 800 : 640;
+	return halo_menu_style_online() && halo_main_menu_loaded() ? 848 : 640;
 }
 
 void ui_widgets_close_all(void);

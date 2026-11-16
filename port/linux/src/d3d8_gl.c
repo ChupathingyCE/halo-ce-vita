@@ -135,8 +135,8 @@ static void vita_preview_picture(long width, int *left, int *top, int *picture_w
 	*top = (VITA_DISPLAY_HEIGHT - *picture_height) / 2;
 }
 
-/* (Menu style ElDewrito, port/linux/game: its screens laid out over 800
-columns - the 640 in the middle and 80 on each side, as a 16:9 display has
+/* (Menu style ElDewrito, port/linux/game: its screens laid out over 848
+columns - the 640 in the middle and 104 on each side, as a 16:9 display has
 them -) the narrowest the menus are drawn while they are up: a display
 narrower than that (4:3: 640) draws them that wide, letterboxed, so that
 nothing of them is off its edges; 640 otherwise */
@@ -199,6 +199,16 @@ static void screen_mode_choose(long *width, float scale[2])
 		if (*width != wanted && *width != (wanted & ~1L))
 			scale[0] = scale[1] = scale[0] < scale[1] ? scale[0] : scale[1];
 		screen_mode_minimum(width, scale, display_width, display_height);
+	}
+	else
+	{
+		/* (a window: 640 columns, as before, but Menu style ElDewrito's 800
+		while its menus are up, letterboxed in the window as at a 4:3
+		display - its lobbies' left parts were off a 640x480 window's edge) */
+		int window_width = 0, window_height = 0;
+
+		platform_video_drawable_size(&window_width, &window_height);
+		screen_mode_minimum(width, scale, window_width, window_height);
 	}
 #endif
 }
