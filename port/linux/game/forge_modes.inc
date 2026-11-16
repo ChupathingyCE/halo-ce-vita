@@ -2617,22 +2617,39 @@ static void forge_modes_draw(
 		/* (the score, the lives - in the bonus round its points) */
 		command_hud_draw_art(COMMAND_HUD_ART_PANEL, x, y, x + box, y + 16.f, 0.8f);
 		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x + 6.f, y + 1.f, x + box, 0, COMMAND_HUD_ITEM, T("SCORE"));
-		snprintf(line, sizeof(line), "%ld", forge_modes.score);
-		/* (the number after the word as drawn - PUNTOS is wider than SCORE -,
-		at least where SCORE's number stands) */
-		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, MAX(x + 60.f, x + 6.f + command_hud_measure_text(COMMAND_HUD_FONT_ITEM, T("SCORE")) + 10.f),
-			y + 1.f, x + box * 0.5f, 0, COMMAND_HUD_LIGHT, line);
-		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x + box * 0.5f + 6.f, y + 1.f, x + box, 0, COMMAND_HUD_ITEM,
-			bonus ? T("BONUS") : T("LIVES"));
-		/* (unlimited: a dash) */
+		/* (the lives - unlimited: a dash - or in the bonus round its points,
+		at the right edge, their word just before them: the score's number
+		after its word as drawn - PUNTOS is wider than SCORE - has the room
+		between, in the compact box of the corners too) */
 		if (bonus)
-			snprintf(line, sizeof(line), "%ld", forge_modes.bonus_score);
+			snprintf(right, sizeof(right), "%ld", forge_modes.bonus_score);
 		else if (forge_modes.lives == NONE)
-			snprintf(line, sizeof(line), "%s", "-");
+			snprintf(right, sizeof(right), "%s", "-");
 		else
-			snprintf(line, sizeof(line), "%d", forge_modes.lives);
+			snprintf(right, sizeof(right), "%d", forge_modes.lives);
+		{
+			real const number_x = MAX(x + 60.f, x + 6.f + command_hud_measure_text(COMMAND_HUD_FONT_ITEM, T("SCORE")) + 10.f);
+			char const *word = bonus ? T("BONUS") : T("LIVES");
+			real word_x;
+
+			snprintf(line, sizeof(line), "%ld", forge_modes.score);
+			/* (the bonus points' word where it has no room - BONIFICACIÓN in
+			the compact box -: their number alone, "+1100") */
+			if (bonus && number_x + command_hud_measure_text(COMMAND_HUD_FONT_ITEM, line) + 8.f + command_hud_measure_text(COMMAND_HUD_FONT_ITEM,
+					word) + 8.f + command_hud_measure_text(COMMAND_HUD_FONT_ITEM, right) > x + box - 6.f)
+			{
+				snprintf(right, sizeof(right), "+%ld", forge_modes.bonus_score);
+				word = NULL;
+			}
+			word_x = word ? MAX(number_x + command_hud_measure_text(COMMAND_HUD_FONT_ITEM, line) + 8.f, x + box - 6.f -
+				command_hud_measure_text(COMMAND_HUD_FONT_ITEM, right) - 8.f - command_hud_measure_text(COMMAND_HUD_FONT_ITEM, word)) :
+				x + box - 6.f - command_hud_measure_text(COMMAND_HUD_FONT_ITEM, right) - 4.f;
+			command_hud_draw_text(COMMAND_HUD_FONT_ITEM, number_x, y + 1.f, word_x - 4.f, 0, COMMAND_HUD_LIGHT, line);
+			if (word)
+				command_hud_draw_text(COMMAND_HUD_FONT_ITEM, word_x, y + 1.f, x + box, 0, COMMAND_HUD_ITEM, word);
+		}
 		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x, y + 1.f, x + box - 6.f, 1,
-			bonus ? COMMAND_HUD_ORANGE : forge_modes.lives != NONE && forge_modes.lives <= 1 ? COMMAND_HUD_RED : COMMAND_HUD_LIGHT, line);
+			bonus ? COMMAND_HUD_ORANGE : forge_modes.lives != NONE && forge_modes.lives <= 1 ? COMMAND_HUD_RED : COMMAND_HUD_LIGHT, right);
 		y += FORGE_MODES_HUD_ROW;
 		/* (the skulls on) */
 		if (forge_modes.skulls_on)
