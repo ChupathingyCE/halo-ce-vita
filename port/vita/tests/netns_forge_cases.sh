@@ -1536,6 +1536,29 @@ sys.exit(0 if len(h)==len(j)==6 and all(abs(a-b)<0.02 for a,b in zip(h,j)) else 
 		grep -aqE "forge: (Both flags|Red's spawns|Blue's spawns)" "$hl" || fail "the host did not say the flag warning"
 		grep -aqE "forge: (Both flags|Red's spawns|Blue's spawns)" "$jl" || fail "the joiner did not say the flag warning"
 		;;
+	forgeffnet)
+		# (1.1.5: FIREFIGHT is a local game - forge_modes.inc -: a Firefight asked of a network Forge game (the
+		# console's "forge mode firefight" before the map; here the tests' HALO_TEST_FIREFIGHT_GAME, which asks
+		# at every Forge map's load) is refused at the host's map load - no zones, no build-out, no waves, said
+		# once -, and the Forge game is played as ever: the joiner has the host's Warthog)
+		host_cmds="L150:forge camera 60 -100 1.6 130 0;L160:forge spawn warthog;L165:forge distance 8;L170:forge drop"
+		host_cmds="$host_cmds;L600:forge net;L620:forge mode where"
+		join_cmds="L300:forge net;L600:forge net"
+		forge_host "$host_cmds" HALO_TEST_FIREFIGHT_GAME=1
+		sleep 5
+		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join "HALO_TEST_COMMANDS=$join_cmds"
+		join_pid=$last_pid
+		wait $join_pid $host_pid 2>/dev/null
+		forge_check_clean "$hl" "$jl"
+		grep -a "forge modes" "$hl" | head -8
+		grep -aq "forge modes: a FIREFIGHT game is local: not begun in a network game" "$hl" ||
+			fail "the host did not refuse the Firefight game asked of its network Forge game"
+		grep -aqE "forge modes: .*loaded for a FIREFIGHT game|forge modes: FIREFIGHT begun|forge modes: build-out" "$hl" &&
+			fail "the host began a FIREFIGHT game (zones, build-out or waves) in a network Forge game"
+		grep -aq "forge modes: not running, state" "$hl" || fail "the host's mode is not 'not running' at tick 620"
+		grep -aq "forge modes: FIREFIGHT begun" "$jl" && fail "the joiner began a FIREFIGHT game"
+		forge_state "$jl" 600 | grep -aq "#1 warthog networked" || fail "the joiner did not have the host's Warthog: the Forge game not played as ever"
+		;;
 	forgeleave)
 		host_cmds="L150:forge camera 60 -100 1.6 130 0;L160:forge spawn warthog;L165:forge distance 8;L170:forge drop;L600:@menu"
 		join_cmds="L300:forge net"

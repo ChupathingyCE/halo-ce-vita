@@ -2365,6 +2365,17 @@ static void forge_modes_map_loaded(
 		forge_modes.requested = _forge_mode_none;
 		return;
 	}
+	/* (1.1.5: a FIREFIGHT game is a local game - its lives, spawns and waves
+	the local player's, no network step yet -: asked of a network Forge game
+	(the console's "forge mode firefight" before the map, the tests' env) it
+	is refused here, before its zones and build-out; the lobby's START
+	FIREFIGHT and the panel's never ask on a network) */
+	if (game_connection() != _game_connection_local)
+	{
+		platform_log("forge modes: a FIREFIGHT game is local: not begun in a network game");
+		forge_modes.requested = _forge_mode_none;
+		return;
+	}
 	forge_modes.pending = forge_modes.requested;
 	forge_modes.requested = _forge_mode_none;
 	/* (the map variant's Firefight zones, else the map's built-in layout:
@@ -2383,7 +2394,13 @@ static void forge_modes_update(
 	{
 		long player_index = forge_modes_local_player();
 
-		if (forge_globals.game_active && player_index != NONE && forge_modes_living_unit(player_get(player_index)->unit_index) &&
+		/* (the game gone on the network since its load: not begun) */
+		if (forge_globals.game_active && game_connection() != _game_connection_local)
+		{
+			platform_log("forge modes: a FIREFIGHT game is local: not begun in a network game");
+			forge_modes.pending = _forge_mode_none;
+		}
+		else if (forge_globals.game_active && player_index != NONE && forge_modes_living_unit(player_get(player_index)->unit_index) &&
 			!game_time_get_paused())
 		{
 			forge_modes_begin();
