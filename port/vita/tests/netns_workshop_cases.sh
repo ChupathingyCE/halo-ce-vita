@@ -132,7 +132,9 @@ workshop_case() {
 		grep -aq "map share: the Steam Workshop map '$ws_name' is installed and the host's" "$jd" ||
 			fail "the installed copy was not found the host's"
 		cmp -s "$ws_mcc" "$out/joiner/data/mods/$ws_id/maps/$ws_file" || fail "the map installed is not the item's bytes"
-		[ -z "$(ls -A "$out/joiner/data/workshop" 2>/dev/null)" ] || fail "the staging folder is not empty"
+		# (workshop/installed/ keeps the versions installed - the browser's UPDATE -: the staging is the rest)
+		[ -z "$(ls -A "$out/joiner/data/workshop" 2>/dev/null | grep -v -x -e installed)" ] || fail "the staging folder is not empty"
+		[ -f "$out/joiner/data/workshop/installed/$ws_id.gid" ] || fail "the item's installed version was not recorded"
 		grep -aq "cdn: workshop manifest $ws_id" "$fake_dir/transcript.txt" || fail "the fake Steam's CDN was not asked for the item"
 		grep -aqF "$fake_token" "$jl" "$hl" && fail "the token is in a log"
 		grep -raqF "$fake_token" "$out/joiner/data" "$out/joiner/save" && fail "the token is in a file written"
