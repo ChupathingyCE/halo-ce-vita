@@ -41,7 +41,12 @@ what the two share), called from the main loop every frame (main.c):
   logged and answered as the system's dialog would answer it in the tests).
 
 halo.log says each request and its answer, and each change of the state.
-(Debug) HALO_SYSTEM_LINK_TEST=host, join or campaign makes the request
+- (a build with the Steam Workshop) the panel's Steam Workshop row opens
+  the STEAM WORKSHOP screen over the main menu, in any Menu style (the
+  original menus too: the overlay holds every option), not in a level nor a
+  lobby (menu_functions.c menu_functions_workshop_open).
+
+(Debug) HALO_SYSTEM_LINK_TEST=host, join, campaign or workshop makes the request
 itself, as the panel would, 3 seconds after the main menu first loads: the automated
 runs (no panel there; triage/g110/run/run.sh with MAP=-) open the screen
 so; forge:<map index>[:<map variant file>] asks for Forge as the panel's
@@ -271,6 +276,12 @@ static void system_link_shortcut_test(
 		__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_FORGE, __ATOMIC_RELEASE);
 		return;
 	}
+	/* ("workshop": the panel's Steam Workshop row) */
+	if (!strcmp(test, "workshop"))
+	{
+		__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_WORKSHOP, __ATOMIC_RELEASE);
+		return;
+	}
 	__atomic_store_n(&halo_system_link_request, !strcmp(test, "join") ? SYSTEM_LINK_REQUEST_JOIN :
 		!strcmp(test, "campaign") ? SYSTEM_LINK_REQUEST_CAMPAIGN : SYSTEM_LINK_REQUEST_HOST, __ATOMIC_RELEASE);
 }
@@ -428,6 +439,28 @@ void system_link_shortcut_update(
 		return;
 	}
 	state = halo_multiplayer_status[SYSTEM_LINK_STATUS_STATE];
+	/* (the panel's Steam Workshop row: the STEAM WORKSHOP screen over the
+	main menu, whatever the Menu style - not in a level nor a lobby) */
+	if (request == SYSTEM_LINK_REQUEST_WORKSHOP)
+	{
+		extern int menu_functions_workshop_open(void);
+
+		if (main_menu_loaded && !ui_widget_port_active_screen(0))
+			return;
+		answer = !main_menu_loaded ? SYSTEM_LINK_ANSWER_IN_PLAY :
+			state == SYSTEM_LINK_STATE_JOINING || state == SYSTEM_LINK_STATE_HOSTING || state == SYSTEM_LINK_STATE_LOBBY ?
+				SYSTEM_LINK_ANSWER_IN_LOBBY :
+			menu_functions_workshop_open() ? SYSTEM_LINK_ANSWER_OPENED : SYSTEM_LINK_ANSWER_UNAVAILABLE;
+		platform_log("system link: the settings panel's Steam Workshop: %s", answer == SYSTEM_LINK_ANSWER_OPENED ?
+			"the STEAM WORKSHOP screen opened" : answer == SYSTEM_LINK_ANSWER_IN_PLAY ? "not at the menus" :
+			answer == SYSTEM_LINK_ANSWER_IN_LOBBY ? "in a lobby" : "not in this build, or the screen did not open");
+		if (answer == SYSTEM_LINK_ANSWER_IN_PLAY || answer == SYSTEM_LINK_ANSWER_IN_LOBBY)
+			platform_show_message(T("STEAM WORKSHOP"), answer == SYSTEM_LINK_ANSWER_IN_PLAY ?
+				T("Leave the level first: Start, then Quit") : T("Leave the network game's lobby first"));
+		halo_system_link_answer = answer;
+		__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_NONE, __ATOMIC_RELEASE);
+		return;
+	}
 	/* (the panel's Forge page: the Forge game, at the main menu) */
 	if (request == SYSTEM_LINK_REQUEST_FORGE)
 	{

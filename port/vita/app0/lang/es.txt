@@ -3618,6 +3618,8 @@
 "%s wasn't installed from the Steam Workshop." = "%s no se instaló desde el Steam Workshop."
 "The host's game had already started: download the item from STEAM WORKSHOP, then join again." = "La partida del anfitrión ya había empezado: descarga el elemento desde STEAM WORKSHOP y vuelve a unirte."
 "This version can't download Steam Workshop maps." = "Esta versión no puede descargar mapas del Steam Workshop."
+"Steam Workshop" = "Steam Workshop"
+"MCC's Halo CE mods and maps, from your own Steam" = "Mods y mapas de Halo CE de MCC, desde tu propio Steam"
 "The host is playing %s, a map from the Steam Workshop, which you don't have. You answered no to downloading it." = "El anfitrión juega %s, un mapa del Steam Workshop, que no tienes. Respondiste que no a descargarlo."
 
 # ---------- 1.1.5: FIREFIGHT (forge.c's forge_modes.inc: its HUD, banners and carnage report; the Firefight lobby and

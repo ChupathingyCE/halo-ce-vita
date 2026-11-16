@@ -13371,6 +13371,27 @@ static boolean h3_workshop_back(void)
 	return TRUE;
 }
 
+/* (system_link_shortcut.c: the settings panel's Steam Workshop row, for every Menu style) the STEAM WORKSHOP screen
+opened over the active screen (the main menu), as DOWNLOAD FROM STEAM's row opens it: 1 if it opened */
+int menu_functions_workshop_open(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	long screen = menu_tags_ingame_screen("h3/workshop/screen");
+	struct widget_instance *active = ui_widget_port_active_screen(0);
+
+	if (screen == NONE || !active || !ui_widget_load_by_name_or_tag(NULL, screen, NULL, active->local_player_index,
+		active->definition_tag_index, NONE, NONE))
+	{
+		platform_log("menus: workshop: the screen did not open (%s)", screen == NONE ? "no screen" : "no screen up");
+		return 0;
+	}
+	platform_log("menus: workshop: the screen opened (the settings panel's Steam Workshop)");
+	return 1;
+#else
+	return 0;
+#endif
+}
+
 /* (map_share.c: a joiner whose host plays a Steam Workshop map it lacks, the player having said yes) the Workshop's
 download of that one item begun - the sign-in, then the item straight away, no list - and the STEAM WORKSHOP screen
 opened over the game's lobby for its QR and progress (Circle cancels; Back after the end goes back to the lobby): 1,

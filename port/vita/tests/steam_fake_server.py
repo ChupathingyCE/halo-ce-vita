@@ -34,7 +34,8 @@ and log-off). --mode picks a failure to act out:
 times) shape a bigger test. --cert/--key serve both over TLS (the test's own certificates).
 
 --workshop-map <file>: Workshop item 2900000001's maps are that one file (a map of the player's own MCC, for a test
-of the game's own map check; never sent beyond 127.0.0.1).
+of the game's own map check; never sent beyond 127.0.0.1). --workshop-mp-map <file> [--workshop-mp-name <name>]: item
+2900000002 (multiplayer) is that one map, named so (a joiner's download of the host's Workshop map: the netns tests).
 
 The Workshop (app 976730's own depot): PublishedFile.QueryFiles#1 (ten a page, a search by title), GetDetails#1,
 depot 976730's key, each item's manifest and chunks; made-up items, some hostile (names that leave the folder, two
@@ -382,6 +383,14 @@ class State:
             files = {k: v for k, v in entries[0][5].items() if not k.startswith("maps\\")}
             files["maps\\" + os.path.basename(args.workshop_map)] = data
             entries[0] = entries[0][:5] + (files,) + entries[0][6:]
+        if args.workshop_mp_map:
+            # (a real multiplayer map of the player's own MCC, as Workshop item 2900000002's one map (its file's name
+            # as given): the joiner's download in run_netns_online_test.sh's workshop cases; never beyond 127.0.0.1)
+            with open(args.workshop_mp_map, "rb") as real:
+                data = real.read()
+            name = args.workshop_mp_name or os.path.basename(args.workshop_mp_map)
+            index = next(i for i, e in enumerate(entries) if e[0] == 2900000002)
+            entries[index] = entries[index][:5] + ({"maps\\" + name: data, "ModInfo.json": b"{}"},) + entries[index][6:]
         self.workshop = [WorkshopItem(entry, args.seed, workshop_key) for entry in entries]
         self.workshop_key = workshop_key
         self.workshop_chunks = {}
@@ -798,6 +807,8 @@ def main():
     parser.add_argument("--cert")
     parser.add_argument("--key")
     parser.add_argument("--workshop-map", help="a real MCC map file as Workshop item 2900000001's map (local tests)")
+    parser.add_argument("--workshop-mp-map", help="a real MCC multiplayer map as Workshop item 2900000002's (local tests)")
+    parser.add_argument("--workshop-mp-name", help="its file name in the item (default: the file's own)")
     args = parser.parse_args()
     if args.fixtures:
         write_fixtures(args.fixtures, args.seed)

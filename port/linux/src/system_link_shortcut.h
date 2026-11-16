@@ -28,6 +28,11 @@ enum
 	("" none), started as the Forge lobby's START FORGE starts it, at the
 	main menu (forge.c forge_game_start) */
 	SYSTEM_LINK_REQUEST_FORGE,
+	/* (a build with the Steam Workshop, configure.py --steam-workshop) the
+	STEAM WORKSHOP screen (menus/halo3/workshop.xml, GAME MANAGER's DOWNLOAD
+	FROM STEAM's) opened over the main menu, in any Menu style: the settings
+	panel's Steam Workshop row, for the original menus too */
+	SYSTEM_LINK_REQUEST_WORKSHOP,
 };
 
 /* (SYSTEM_LINK_REQUEST_FORGE, halo_forge_request_mode) the game the panel's

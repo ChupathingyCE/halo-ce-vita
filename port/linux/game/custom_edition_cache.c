@@ -2421,6 +2421,28 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 			}
 			sprintf(resource_path, "%.*s%s%s", (int)folder_length, path,
 				resource_map_type_describe((enum resource_map_type)type), MAP_FILE_EXTENSION);
+			/* (port: a mod's map without one beside it - a Steam Workshop
+			item keeps its own in its halo1\maps folder, mods\<id>\halo1\maps,
+			as MCC lays an item out -, else the player's own MCC's, the Halo
+			content folder's halo1\maps: read only, never written) */
+			if (!file_path_exists(resource_path) && from_mods && folder_length > 5 &&
+				!_strnicmp(path + folder_length - 5, "maps\\", 5) &&
+				folder_length - 5 + strlen("halo1\\maps\\") + strlen(resource_map_type_describe((enum resource_map_type)type)) +
+					strlen(MAP_FILE_EXTENSION) < MAP_PATH_SIZE)
+			{
+				sprintf(resource_path, "%.*shalo1\\maps\\%s%s", (int)(folder_length - 5), path,
+					resource_map_type_describe((enum resource_map_type)type), MAP_FILE_EXTENSION);
+				if (!file_path_exists(resource_path) && halo_content_library_found())
+				{
+					snprintf(resource_path, sizeof(resource_path), "%s%s%s", MCC_CONTENT_MAPS_DIRECTORY,
+						resource_map_type_describe((enum resource_map_type)type), MAP_FILE_EXTENSION);
+				}
+				if (file_path_exists(resource_path))
+				{
+					error(_error_silent, "custom edition: the mod map '%s' takes its %s from %s", path,
+						resource_map_type_describe((enum resource_map_type)type), resource_path);
+				}
+			}
 			if (!file_path_exists(resource_path))
 			{
 				continue;
