@@ -922,7 +922,7 @@ for case in $cases; do
 			halo3) reach="$h3mppad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:2000 a wait:150:2000 a wait:150:5000" ;;
 			# (online: the title's A; MULTIPLAYER, its lobby's BROWSE GAMES - the main menu's SERVER
 			# BROWSER until 1.1.3 -, the profile)
-			online) reach="wait:150:3000 a wait:150:3000 down:150:500 a wait:150:4000 down:150:400 down:150:400 down:150:400 down:150:400 down:150:400 down:150:400 a wait:150:3000 wait:150:3000" ;;
+			online) reach="wait:150:3000 a wait:150:3000 down:150:500 a wait:150:4000 down:150:400 down:150:400 down:150:400 down:150:400 down:150:400 a wait:150:3000 wait:150:3000" ;;
 			esac
 			run touchdrag_$style "$menus_data" 46 "$reach wait:150:28000" \
 				HALO_MENU_STYLE=$style $h3net HALO_TEST_BROWSER_GAMES=16 HALO_TEST_BROWSER_PC=1 \
@@ -3393,9 +3393,10 @@ PY
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "SKIP: msgboxes' campaign: no HALO_TEST_PROFILE (a blam.sav with every level)"; continue
 		fi
-		# (a level from the Halo 3 lobby, its pause: REVERT TO CHECKPOINT, Circle; again, down to
+		# (a level from the Halo 3 lobby - SELECT MISSION: HALO CE, A, down three, A, SELECT DIFFICULTY
+		# on Normal, A; down two to START GAME -, its pause: REVERT TO CHECKPOINT, Circle; again, down to
 		# REVERT TO CHECKPOINT, Cross; the pause, RESTART MISSION, Circle; SAVE AND QUIT)
-		profile_from=$HALO_TEST_PROFILE run msgboxes_campaign "$menus_data" 200 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 down:150:600 down:150:600 down:150:600 a wait:150:2500 down:150:600 down:150:600 a level:150:25000 start:150:3000 until/h3\\pause down:150:1200 a:150:1500 until/dlg\\revert @revert b:150:1500 until/h3\\pause @pause_again a:150:1500 until/dlg\\revert down:150:800 @revert_yes a:1000:8000 start:150:3000 until/h3\\pause down:150:800 down:150:800 a:150:1500 until/dlg\\restart @restart b:150:1500 until/h3\\pause down:150:800 a:150:1000 until/dlg\\savequit @saving wait:150:1000 until/h3\\main:150:3000 @menu" \
+		profile_from=$HALO_TEST_PROFILE run msgboxes_campaign "$menus_data" 200 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 a wait:150:1500 down:150:600 down:150:600 down:150:600 a wait:150:2500 a wait:150:2500 down:150:600 down:150:600 a level:150:25000 start:150:3000 until/h3\\pause down:150:1200 a:150:1500 until/dlg\\revert @revert b:150:1500 until/h3\\pause @pause_again a:150:1500 until/dlg\\revert down:150:800 @revert_yes a:1000:8000 start:150:3000 until/h3\\pause down:150:800 down:150:800 a:150:1500 until/dlg\\restart @restart b:150:1500 until/h3\\pause down:150:800 a:150:1000 until/dlg\\savequit @saving wait:150:1000 until/h3\\main:150:3000 @menu" \
 			HALO_MENU_STYLE=halo3 HALO_TEST_COMMANDS="L150:@skip;L300:@skip"
 		log=$out/msgboxes_campaign/run.log
 		echo "--- msgboxes (a level's pause)"
