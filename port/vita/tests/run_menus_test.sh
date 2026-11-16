@@ -1350,8 +1350,8 @@ for case in $cases; do
 			echo "--- h3scenes"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
 		# (CAMPAIGN, the profile: the campaign lobby; B, B: the main menu; down, A: MULTIPLAYER;
-		# B; down, A: FORGE; B)
-		scenes_pad="wait:150:3000 a wait:150:3000 a wait:150:4000 b wait:150:2500 b wait:150:3000 down:150:700 a wait:150:4000 b wait:150:3000 down:150:700 a wait:150:4000 b wait:150:3000"
+		# B; down twice (past FIREFIGHT, 1.1.5), A: FORGE; B)
+		scenes_pad="wait:150:3000 a wait:150:3000 a wait:150:4000 b wait:150:2500 b wait:150:3000 down:150:700 a wait:150:4000 b wait:150:3000 down:150:700 down:150:700 a wait:150:4000 b wait:150:3000"
 		profile_from=$HALO_TEST_PROFILE run h3scenes "$menus_data" 45 "$scenes_pad" HALO_MENU_STYLE=halo3
 		profile_from=$HALO_TEST_PROFILE run h3scenes_off "$menus_data" 45 "$scenes_pad" HALO_MENU_STYLE=halo3 HALO_MENU_SCENES=0
 		check_h3 h3scenes halo3
