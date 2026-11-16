@@ -117,6 +117,12 @@ int command_ai_level_index(
 	void);
 void command_ai_level_next(
 	void);
+/* (the Command lobby's note) the game's score limit (0: none) and time
+limit in minutes (0: none) */
+long command_score_limit(
+	void);
+long command_time_limit_minutes(
+	void);
 
 /* (source/game/game_globals.c, source/objects/damage.c) a Command game is
 played: every soldier, both sides', on Halo CE's Legendary rules (C13);
@@ -152,6 +158,13 @@ short command_prepare_update(
 void command_prepare_cancel(
 	void);
 boolean command_prepare_starts_game(
+	void);
+/* (the settings panel's Start Command, system_link_shortcut.c) its own
+prepare begun; whether the prepare under way is the panel's (the Command
+lobby's PREPARING COMMAND frame leaves it alone) */
+boolean command_prepare_begin_panel(
+	void);
+boolean command_prepare_panels(
 	void);
 boolean command_prepare_firefight(
 	void);

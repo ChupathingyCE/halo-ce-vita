@@ -347,6 +347,81 @@ static void system_link_shortcut_adhoc(
 #endif
 }
 
+
+/* (the panel's Start Command) Command's packs built before the game when
+they are not there yet: 1 while they build (the request stays, the panel's
+progress line over the menu says how far; Circle cancels), 2 when the build
+failed or was cancelled (why says it), 0 when the packs are ready - the
+game may start */
+static short system_link_shortcut_command_prepare(
+	char *why,
+	int why_size)
+{
+#ifdef HALO_VITA
+	extern void vita_settings_progress(const char *title, const char *text);
+	extern int vita_settings_progress_cancelled(void);
+#endif
+	static boolean began;
+	static long said_percent;
+	/* (the prepare's note, two lines when the card is full: command.c's size) */
+	char line[256];
+	char text[320];
+	real progress = 0.f;
+	short state;
+
+	if (!began)
+	{
+		if (!command_prepare_needed())
+			return 0;
+		command_prepare_begin_panel();
+		began = TRUE;
+		said_percent = -1;
+		platform_log("system link: the settings panel's Command: its packs to build first (PREPARING COMMAND)");
+	}
+	state = command_prepare_update(line, (int)sizeof(line), &progress);
+	if (state == 1 || state == 2) /* building, cancelling (command.c's _command_prepare_*) */
+	{
+#ifdef HALO_VITA
+		if (vita_settings_progress_cancelled())
+		{
+			command_prepare_cancel();
+			vita_settings_progress(NULL, NULL);
+			began = FALSE;
+			snprintf(why, (size_t)why_size, "%s", T("Cancelled: Command's soldiers go on being made while the menu is up."));
+			platform_log("system link: the settings panel's Command: PREPARING COMMAND cancelled (Circle)");
+			return 2;
+		}
+#endif
+		snprintf(text, sizeof(text), "%s\n\n%s", T("Command mode builds its soldiers, dropships and turrets\nfrom your Halo CE campaign maps once, and keeps them\non the memory card for every game after."),
+			line[0] ? line : T("Starting..."));
+#ifdef HALO_VITA
+		vita_settings_progress(T("PREPARING COMMAND"), text);
+#endif
+		/* (the Linux harness has no panel: the line in the log, at each new
+		tenth) */
+		if ((long)(progress * 10.f) != said_percent)
+		{
+			said_percent = (long)(progress * 10.f);
+			platform_log("system link: PREPARING COMMAND: %s", line[0] ? line : "starting");
+		}
+		return 1;
+	}
+#ifdef HALO_VITA
+	vita_settings_progress(NULL, NULL);
+#endif
+	began = FALSE;
+	said_percent = -1;
+	command_prepare_cancel();
+	if (state != 3) /* not done */
+	{
+		snprintf(why, (size_t)why_size, "%s", line[0] ? line : T("Your Halo CE campaign maps couldn't be read for this mode:"));
+		platform_log("system link: the settings panel's Command: PREPARING COMMAND failed: %s", why);
+		return 2;
+	}
+	platform_log("system link: the settings panel's Command: its packs ready (PREPARING COMMAND done)");
+	return 0;
+}
+
 void system_link_shortcut_update(
 	boolean main_menu_loaded)
 {
@@ -484,6 +559,7 @@ void system_link_shortcut_update(
 			/* (1.1.4: Start Command - a local Command game of the map, as the
 			Command lobby's START COMMAND: command.c plays on Blood Gulch) */
 			boolean command = halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_COMMAND;
+			short prepare;
 			/* (1.1.5: Start Firefight - a local FIREFIGHT game of the map and
 			layout, as the Firefight lobby's START FIREFIGHT: forge_modes.inc) */
 			boolean firefight = halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT;
@@ -492,6 +568,20 @@ void system_link_shortcut_update(
 				strcmp(forge_map_short((short)halo_forge_request_map), "bloodgulch")))
 			{
 				snprintf(why, sizeof(why), "%s", T("Command mode plays on Blood Gulch for now:\nchoose it under SELECT MAP."));
+				answer = SYSTEM_LINK_ANSWER_UNAVAILABLE;
+			}
+			/* (1.1.4 polish: the mode's packs - its soldiers, dropships and
+			Shades - not built yet: built first, the panel's progress line
+			over the main menu saying how far (PREPARING COMMAND, as the
+			Command lobby's; Circle cancels), the game started when they
+			are; before, the first Start Command built them behind the
+			loading screen - minutes on a Vita, with nothing moving) */
+			else if (command && (prepare = system_link_shortcut_command_prepare(why, sizeof(why))) != 0)
+			{
+				/* (still building: the request stays for the next frame;
+				failed or cancelled: said below) */
+				if (prepare == 1)
+					return;
 				answer = SYSTEM_LINK_ANSWER_UNAVAILABLE;
 			}
 			else
@@ -510,9 +600,11 @@ void system_link_shortcut_update(
 		}
 		platform_log("system link: the settings panel's %s: %s%s%s", halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_COMMAND ?
 			"Command" : halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT ? "Firefight" : "Forge", answer == SYSTEM_LINK_ANSWER_OPENED ? "started" : "not started", why[0] ? ": " : "", why);
-		halo_forge_request_mode = HALO_FORGE_REQUEST_MODE_FORGE;
+		/* (the box's title the mode's: COMMAND for Command's refusals, FIREFIGHT for Firefight's) */
 		if (answer != SYSTEM_LINK_ANSWER_OPENED)
-			platform_show_message(T("FORGE"), why);
+			platform_show_message(halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_COMMAND ? T("COMMAND") :
+				halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT ? T("FIREFIGHT") : T("FORGE"), why);
+		halo_forge_request_mode = HALO_FORGE_REQUEST_MODE_FORGE;
 		halo_system_link_answer = answer;
 		__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_NONE, __ATOMIC_RELEASE);
 		return;

@@ -153,6 +153,9 @@ Each logs what it did ("command: ...").
 #endif
 #include "halo_ui_pointer.h"
 #include "../src/lang.h"
+#include "../src/posix.h"
+
+void platform_translate_path(const char *xbox_path, char *host_path, unsigned long host_path_size);
 
 #include <math.h>
 #include <stdarg.h>
@@ -669,6 +672,9 @@ static char const *const command_reasons[] =
 	N_("Already in the field"), N_("Needs the armory"), N_("Already built"), N_("Being built"), N_("Can't afford"),
 	N_("Those troops can't come: their files are missing"), N_("No Spartan yet: the HQ sells one"),
 	N_("Your Spartan is respawning"), N_("Another commander is in your Spartan"),
+	/* (1.1.4 polish: the barracks bought but not up yet - the HQ's bar
+	shows it building - said so, not "Needs the barracks") */
+	N_("The barracks is being built"),
 };
 #define COMMAND_REASONS ((short)NUMBEROF(command_reasons))
 
@@ -5773,7 +5779,7 @@ static char const *command_buy_blocked(
 	if (buy->kind == _command_buy_squad)
 	{
 		if (buy->upgrade != NONE && !command_upgrade_built(side, buy->upgrade))
-			return N_("Needs the barracks");
+			return command_upgrade_done_time[side][buy->upgrade] ? N_("The barracks is being built") : N_("Needs the barracks");
 		if (command_ai_alive(side) + command_squads_coming(side) * COMMAND_SQUAD_SIZE + COMMAND_SQUAD_SIZE > COMMAND_AI_MAXIMUM_PER_TEAM)
 			return N_("No room for more troops");
 	}
@@ -7987,6 +7993,18 @@ int command_objective_index(
 		command_objectives.objectives == _command_objectives_flag ? 2 : 0;
 }
 
+long command_score_limit(
+	void)
+{
+	return command_objectives.score_limit;
+}
+
+long command_time_limit_minutes(
+	void)
+{
+	return command_objectives.time_limit_minutes;
+}
+
 /* (the console's "where") the scores, the resources, each side's AI */
 static void command_where_scores(
 	void)
@@ -8100,6 +8118,10 @@ static struct
 	short state;
 	boolean firefight;
 	real progress;
+	/* (the bar never steps back: three packs' builds share two maps'
+	reads, and a pack's own part begins at 0 when the read it shared ends -
+	the sum dipped 60% to 33% on the PC) */
+	real shown;
 	/* (the build's start and the progress then: the time left from the
 	rate since) */
 	unsigned long long started_us;
@@ -8107,6 +8129,9 @@ static struct
 	char note[256];
 	/* (the console's "command prepare": the packs alone, no game after) */
 	boolean no_game;
+	/* (the settings panel's Start Command, system_link_shortcut.c: its own
+	prepare - the Command lobby's PREPARING COMMAND frame leaves it alone) */
+	boolean panel;
 	/* (the Forge lobby's own packs - EXTRA OBJECTS, which these games load
 	too - still being built when it began: waited for as one more piece) */
 	boolean forge_packs;
@@ -8135,6 +8160,12 @@ void command_packs_prebuild(
 		platform_log("command: packs: %s wanted for the %s lobby: %s", names[index], firefight ? "Firefight" : "Command",
 			scene_packs_state_name(state));
 	}
+	/* (and the Forge lobby's own, which these games load too - EXTRA
+	OBJECTS' vehicles, dropships, the map's blocks -: wanted now as the Forge
+	lobby wants them, so that PREPARING COMMAND waits for them and the map's
+	load does not build them (b30 and b40 read again: minutes on a Vita);
+	the settings panel's Start Command never opened the Forge lobby) */
+	forge_packs_prebuild();
 }
 
 /* (a joiner of a network Command game, in its lobby: forge_net.inc) whether
@@ -8229,7 +8260,9 @@ boolean command_prepare_needed_for(
 			return TRUE;
 	}
 	/* (and the Forge lobby's packs these games load: never built as the
-	map loads, a Vita's minute behind the loading screen) */
+	map loads, a Vita's minute behind the loading screen; not wanted yet -
+	the panel's way in, no Forge lobby opened -: wanted now) */
+	forge_packs_prebuild();
 	return forge_packs_building(NULL, 0, NULL);
 }
 
@@ -8239,9 +8272,69 @@ boolean command_prepare_needed(
 	return command_prepare_needed_for(FALSE);
 }
 
+/* the packs' failure, as the note says it: the maps unread - or, a write's
+failure, the card: full when the pack's build says so ("no space left",
+scene_pack.c) */
+static void command_prepare_failed(
+	char const *name,
+	char const *why)
+{
+	char const *reason = why && why[0] ? why : "?";
+
+	if (strstr(reason, "no space left"))
+		snprintf(command_prepare.note, sizeof(command_prepare.note), "%s",
+			T("No space left for this mode's packs: they take up to 120 MB\n(70 MB from Halo MCC's maps). Free some and start again."));
+	else if (strstr(reason, "cannot be written") || strstr(reason, "cannot be put in its place"))
+		snprintf(command_prepare.note, sizeof(command_prepare.note), "%s %s", T("This mode's packs couldn't be written:"), reason);
+	else
+		snprintf(command_prepare.note, sizeof(command_prepare.note), "%s %s",
+			T("Your Halo CE campaign maps couldn't be read for this mode:"), reason);
+	command_prepare.state = _command_prepare_failed;
+	platform_log("command: prepare: %s failed: %s", name, reason);
+}
+
+/* (a first build: no pack of the mode's on the card yet) whether the card
+has no room for even the smallest set of them (MCC's 53 MB, the Xbox maps'
+107, and the pixels' own file beside the largest while it is made): told
+before minutes of reading end in a failed write; free_mb the room found */
+enum { COMMAND_PACKS_SPACE_FLOOR_MB = 64 };
+
+static boolean command_prepare_space_short(
+	char const *const *names,
+	short count,
+	long *free_mb)
+{
+	char path[1024];
+	posix_ulong free_low = 0, free_high = 0, total_low = 0, total_high = 0;
+	short index;
+
+	*free_mb = -1;
+	for (index = 0; index < count; index++)
+		if (scene_packs_file_current(names[index]))
+			return FALSE;
+	platform_translate_path("t:\\packs", path, sizeof(path));
+	if (posix_disk_space(path, &free_low, &free_high, &total_low, &total_high) != 0)
+	{
+		platform_translate_path("t:\\", path, sizeof(path));
+		if (posix_disk_space(path, &free_low, &free_high, &total_low, &total_high) != 0)
+			return FALSE;
+	}
+	*free_mb = free_high ? 0x7fffffffL : (long)(free_low / (1024UL * 1024UL));
+#ifndef HALO_RELEASE
+	/* (the test's card: HALO_TEST_FREE_MB stands in for the room found) */
+	if (getenv("HALO_TEST_FREE_MB"))
+		*free_mb = atol(getenv("HALO_TEST_FREE_MB"));
+#endif
+	return *free_mb < COMMAND_PACKS_SPACE_FLOOR_MB;
+}
+
 boolean command_prepare_begin_for(
 	boolean firefight)
 {
+	char const *const *names;
+	short count;
+	long free_mb;
+
 	if (command_prepare.state == _command_prepare_building)
 		return TRUE;
 	csmemset(&command_prepare, 0, sizeof(command_prepare));
@@ -8252,6 +8345,12 @@ boolean command_prepare_begin_for(
 	command_prepare.started_progress = -1;
 	command_prepare.forge_packs = forge_packs_building(NULL, 0, NULL);
 	platform_log("command: prepare: the %s packs' builds wanted now", firefight ? "Firefight" : "Command");
+	command_mode_packs_get(firefight, &names, &count);
+	if (command_prepare_space_short(names, count, &free_mb))
+	{
+		command_prepare_failed(names[0], "no space left before the build");
+		platform_log("command: prepare: %ld MB free where the packs go, none of them built yet: not begun", free_mb);
+	}
 	return TRUE;
 }
 
@@ -8265,6 +8364,23 @@ boolean command_prepare_starts_game(
 	void)
 {
 	return !command_prepare.no_game;
+}
+
+boolean command_prepare_begin_panel(
+	void)
+{
+	/* (one under way - the Command lobby's, the panel opened over it -
+	taken over, not begun again) */
+	if (command_prepare.state != _command_prepare_building)
+		command_prepare_begin_for(FALSE);
+	command_prepare.panel = TRUE;
+	return TRUE;
+}
+
+boolean command_prepare_panels(
+	void)
+{
+	return command_prepare.panel && command_prepare.state != _command_prepare_idle;
 }
 
 boolean command_prepare_firefight(
@@ -8317,12 +8433,7 @@ short command_prepare_update(
 				done += 100;
 			}
 			else if (state == _scene_pack_state_failed)
-			{
-				snprintf(command_prepare.note, sizeof(command_prepare.note), "%s %s",
-					T("Your Halo CE campaign maps couldn't be read for this mode:"), why[0] ? why : "?");
-				command_prepare.state = _command_prepare_failed;
-				platform_log("command: prepare: %s failed: %s", names[index], why[0] ? why : "?");
-			}
+				command_prepare_failed(names[index], why);
 			else
 			{
 				done += PIN(pack_progress, 0, 99);
@@ -8348,6 +8459,9 @@ short command_prepare_update(
 				}
 			}
 			command_prepare.progress = (real)done / (real)(total * 100);
+			if (command_prepare.progress < command_prepare.shown)
+				command_prepare.progress = command_prepare.shown;
+			command_prepare.shown = command_prepare.progress;
 			if (ready == total)
 			{
 				command_prepare.state = _command_prepare_done;
@@ -11028,6 +11142,10 @@ static void command_hud_hq(
 	command_hud_art(_command_art_panel, x, y, right, y + height, 0.92f);
 	command_hud_text(command_hud.font_title, x + 8.f, y + 4.f, right, 0, COMMAND_HUD_LIGHT, T("HQ"));
 	snprintf(text, sizeof(text), T("RESOURCES %ld"), command_globals.resources[command_globals.side]);
+	/* (a long title - Spanish's "Cuartel general" - ran into the resources:
+	the number alone then) */
+	if (command_hud_text_width(command_hud.font_title, T("HQ")) + command_hud_text_width(command_hud.font_item, text) > width - 28.f)
+		snprintf(text, sizeof(text), "%ld", command_globals.resources[command_globals.side]);
 	command_hud_text(command_hud.font_item, x, y + 7.f, right - 8.f, 1, COMMAND_HUD_ORANGE, text);
 	command_hud_art(_command_art_rule, x + 6.f, y + 27.f, right - 6.f, y + 29.f, 1.f);
 	y += 30.f;

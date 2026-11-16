@@ -2583,6 +2583,7 @@ static enum cache_file_status mcc_cea_structure_bsps_verify(
 		uint32_t tag_handle = read_u32(reference + STRUCTURE_BSP_REFERENCE_TAG_INDEX_OFFSET);
 		uint32_t tag_index = tag_handle & ABSOLUTE_INDEX_MASK;
 		uint8_t *bsp = state->tag_cache + slot_offset;
+		uint8_t *temporary;
 		uint32_t bsp_pointer;
 		uint32_t vertices_size;
 		uint32_t vertices_offset;
@@ -2610,8 +2611,35 @@ static enum cache_file_status mcc_cea_structure_bsps_verify(
 		{
 			return load_fail(state, _cache_file_status_bad_structure_bsp_range, (uint32_t)file_offset);
 		}
+		/* (port: the tags alone - a scene pack's build, its buffer the tag
+		data and a few MB past it, not MCC's whole room for tags -: the BSP
+		is only checked here, never used from the buffer (the build reads it
+		again, scene_pack_ce_structure_bsp), so it is read where it fits:
+		past the tag data within the buffer, else in a block of its own. Read
+		at its slot it went past the buffer's end - a30's into whatever lay
+		after the build's 14.6 MB in the memory window, or the C heap's next
+		block) */
+		temporary = NULL;
+		if (state->tags_only && (slot_offset > state->buffer_bytes || (uint32_t)size > state->buffer_bytes - slot_offset))
+		{
+			uint32_t spare = (state->used_bytes + 15) & ~(uint32_t)15;
+
+			if (spare >= state->used_bytes && spare <= state->buffer_bytes && (uint32_t)size <= state->buffer_bytes - spare)
+			{
+				bsp = state->tag_cache + spare;
+			}
+			else if ((temporary = malloc((size_t)size)) != NULL)
+			{
+				bsp = temporary;
+			}
+			else
+			{
+				return load_fail(state, _cache_file_status_tag_cache_overflow, (uint32_t)file_offset);
+			}
+		}
 		if (!source_read_crc(state->map, (uint32_t)file_offset, (uint32_t)size, bsp, &crc, &crc_taken))
 		{
+			free(temporary);
 			return load_fail(state, _cache_file_status_read_failed, (uint32_t)file_offset);
 		}
 		bsp_pointer = read_u32(bsp + STRUCTURE_BSP_HEADER_BSP_OFFSET);
@@ -2624,9 +2652,11 @@ static enum cache_file_status mcc_cea_structure_bsps_verify(
 			(vertices_offset < CACHE_FILE_HEADER_BYTES ||
 			!range_fits(vertices_offset, vertices_size, state->file_length))))
 		{
+			free(temporary);
 			return load_fail(state, _cache_file_status_bad_structure_bsp_header, (uint32_t)file_offset);
 		}
 		status = mcc_cea_structure_bsp_geometry_verify(state, bsp, (uint32_t)size, bsp_address, vertices_size);
+		free(temporary);
 		if (status != _cache_file_status_ok)
 		{
 			return status;

@@ -603,6 +603,8 @@ enum
 	_input_cascade,
 	/* (1.1.4) */
 	_input_command_prepare,
+	/* (1.1.4 polish: the Forge menu's LEAVE screen in a Command game) */
+	_input_forge_leave_text,
 };
 
 /* what a line of typing is for */
@@ -3397,6 +3399,21 @@ static void h3_forge_lobby_update(struct widget_instance *widget)
 				snprintf(line + length, sizeof(line) - length, T("Waiting for %s to copy... (copy %ld%%)"), T(map), copied);
 			}
 		}
+		else if (h3_forge.mode == H3_FORGE_MODE_COMMAND)
+		{
+			/* (the Command lobby: the Command game's own limits, not the
+			Forge game's none - 1.1.4 polish) */
+			long score = command_score_limit(), minutes = command_time_limit_minutes();
+
+			if (score > 0 && minutes > 0)
+				snprintf(line, sizeof(line), T("First to %ld, or the most after %ld minutes."), score, minutes);
+			else if (score > 0)
+				snprintf(line, sizeof(line), T("First to %ld."), score);
+			else if (minutes > 0)
+				snprintf(line, sizeof(line), T("The most after %ld minutes."), minutes);
+			else
+				snprintf(line, sizeof(line), "%s", T("No score or time limit."));
+		}
 		else
 			snprintf(line, sizeof(line), "%s", T("No score or time limit."));
 		text_show(named(screen, "note"), line);
@@ -3798,6 +3815,7 @@ static void h3_forge_group_question_update(struct widget_instance *widget)
 /* the Forge menu's title (FORGE · <map>) and its monitor row's words */
 static boolean typing_done(short typing, char *text, int size);
 static void h3_forge_save(void);
+static void h3_forge_leave_text_update(struct widget_instance *widget);
 
 static void h3_forge_title_update(struct widget_instance *widget)
 {
@@ -3873,14 +3891,56 @@ static void h3_forge_title_update(struct widget_instance *widget)
 		name = level;
 	}
 	/* (1.1.5: a FIREFIGHT game's pause - h3/firefight/pause/screen - is
-	titled the mode's) */
-	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", forge_modes_game_running() ? T("FIREFIGHT") : T("FORGE"), name);
+	titled the mode's; 1.1.4: a Command game's, Command's) */
+	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", forge_modes_game_running() ? T("FIREFIGHT") : command_active() ? T("COMMAND") : T("FORGE"), name);
 	h3_capitals(text);
 	text_show(widget, text);
 	snprintf(text, sizeof(text), "%s", forge_monitor_active() ? T("PLAY AS SPARTAN") : T("MONITOR"));
 	text_show(named(screen, "toggle"), text);
 	snprintf(text, sizeof(text), "%s", command_active() ? T("LEAVE COMMAND") : T(COMMAND_MODE_NAME));
 	text_show(named(screen, "command"), text);
+	/* (1.1.4 polish: a Command game's pause is this screen - its title
+	COMMAND, its rows RESUME and LEAVE COMMAND alone: the monitor, the map
+	variant's save, undo, snap, the AI rows, DELETE ALL and NEW ROUND are
+	Forge's editing, not a commander's; the status line (the last save) too) */
+	{
+		static char const *const forge_rows[] =
+		{
+			"toggle", "save", "undo", "redo", "snap", "magnets", "nudge", "allai", "cleardead", "clearall", "deleteall", "newround",
+		};
+		boolean command = command_active();
+		struct widget_instance *found;
+		short index;
+
+		for (index = 0; index < (short)NUMBEROF(forge_rows); index++)
+		{
+			if ((found = named(screen, forge_rows[index])) != NULL)
+			{
+				widget_instance_set_visibility_recursive(found, !command);
+				found->disabled = command;
+			}
+		}
+		if ((found = named(screen, "leave")) != NULL)
+		{
+			found->vertical_offset = command ? 20 : 260;
+			text_show(found, command ? T("LEAVE COMMAND") : T("LEAVE FORGE"));
+		}
+		if (command)
+			text_show(named(screen, "status"), "");
+	}
+}
+
+/* (port forge leave text: the LEAVE screen's title and text) a Command
+game's words, or Forge's own (the string list's) */
+static void h3_forge_leave_text_update(struct widget_instance *widget)
+{
+	struct widget_instance *screen = screen_of(widget);
+	boolean title = widget == named(screen, "title");
+
+	if (command_active())
+		text_show(widget, title ? T("LEAVE COMMAND?") : T("The Command game ends when you leave.\nNothing of it is kept."));
+	else
+		text_show(widget, title ? T("LEAVE FORGE?") : T("Anything not saved is lost when you leave.\nSAVE MAP VARIANT keeps what you placed."));
 }
 
 /* the Forge menu's controls: the Vita's buttons; on the desktop the
@@ -18765,13 +18825,20 @@ static struct
 {
 	short state;
 	real progress;
-	char line[96];
+	/* (the prepare's note too, two lines when the card is full: command.c's size) */
+	char line[256];
 } h3_command_prepare;
 
 static void h3_command_prepare_frame(void)
 {
 	real progress = 0.f;
-	short state = command_prepare_update(h3_command_prepare.line, (int)sizeof(h3_command_prepare.line), &progress);
+	short state;
+
+	/* (the settings panel's own prepare, system_link_shortcut.c: not this
+	screen's to drive or to start a game from) */
+	if (command_prepare_panels())
+		return;
+	state = command_prepare_update(h3_command_prepare.line, (int)sizeof(h3_command_prepare.line), &progress);
 
 	h3_command_prepare.progress = progress;
 
@@ -18799,7 +18866,20 @@ static void h3_command_prepare_update(struct widget_instance *widget)
 	short piece;
 
 	/* (the render thread's, perhaps: what the game thread's frame left) */
-	text_show(named(screen, "progress"), h3_command_prepare.line);
+	/* (1.1.4 polish: a failed prepare's note - the card full, the maps
+	unread - in the paragraph's place, where two lines fit; the progress
+	line under the bar holds one) */
+	if (h3_command_prepare.state == 4 && h3_command_prepare.line[0])
+	{
+		text_show(named(screen, "text"), h3_command_prepare.line);
+		text_show(named(screen, "progress"), "");
+	}
+	else
+	{
+		/* (1.1.5: the paragraph Command's and Firefight's, as forge_lobby.xml's string 11) */
+		text_show(named(screen, "text"), T("Command mode and Firefight build their soldiers, dropships\nand turrets from your Halo CE campaign maps once, and\nkeep them on the memory card for every game after."));
+		text_show(named(screen, "progress"), h3_command_prepare.line);
+	}
 	text_show(named(screen, "title"), command_prepare_firefight() ? T("PREPARING FIREFIGHT") : T("PREPARING COMMAND"));
 	for (piece = 0; piece < 20; piece++)
 	{
@@ -23951,6 +24031,9 @@ void pc_menu_game_data_function_invoke(
 		break;
 	case _input_forge_controls:
 		h3_forge_controls_update(widget);
+		break;
+	case _input_forge_leave_text:
+		h3_forge_leave_text_update(widget);
 		break;
 	case _input_h3_mp_lobby:
 		h3_mp_lobby_update(widget);
