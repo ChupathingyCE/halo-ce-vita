@@ -101,7 +101,7 @@ and the map's picture and description in a card at the right. The art is this fo
 	<widget name="online/mp/switch_row" type="text" string_list="online/lobby_text" string_index="0" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" width="344" height="18">
 		<on event="a start" run="port online switch open" />
 	</widget>
-	<widget name="online/mp/host_label" type="text" left="0" top="0" width="160" height="18" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="online/lobby_text" string_index="1" />
+	<widget name="online/mp/host_label" type="text" left="0" top="0" width="190" height="18" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="online/lobby_text" string_index="1" />
 	<widget name="online/mp/network_row" width="344" height="18" bitmap="online/item" flags="pass_unhandled_to_focused_child">
 		<on event="a" run="port host multiplayer" open="online/host/screen" />
 		<child widget="online/mp/host_label" />
@@ -574,7 +574,7 @@ and the map's picture and description in a card at the right. The art is this fo
 	<widget name="online/forge/switch_row" type="text" string_list="online/lobby_text" string_index="0" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" width="344" height="18">
 		<on event="a start" run="port online switch open" />
 	</widget>
-	<widget name="online/forge/host_label" type="text" left="0" top="0" width="160" height="18" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="online/lobby_text" string_index="1" />
+	<widget name="online/forge/host_label" type="text" left="0" top="0" width="190" height="18" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="online/lobby_text" string_index="1" />
 	<widget name="online/forge/network_row" width="344" height="18" bitmap="online/item" flags="pass_unhandled_to_focused_child">
 		<on event="a" run="port host forge" open="online/host/screen" />
 		<child widget="online/forge/host_label" />

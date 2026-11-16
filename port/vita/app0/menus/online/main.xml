@@ -101,7 +101,7 @@ the fonts). The left of the list sits in the wide screen's margin (x below 0 of 
 		<child widget="online/main/exit" x="0" y="95"/>
 	</widget>
 	<!-- (the focused row's line) -->
-	<widget name="online/main/row_text" type="text" left="-44" top="374" width="219" height="26" font="online/font_small" color="#FFA9B2AA"/>
+	<widget name="online/main/row_text" type="text" left="-44" top="372" width="219" height="28" font="online/font_small" color="#FFA9B2AA"/>
 
 	<!-- (Start: MEDIA | SETTINGS, halo3/start.xml and online/start.xml - CUSTOMIZATION as SETTINGS'
 	APPEARANCE, FRIENDS, FILE SHARE and GAME MANAGER under MEDIA -, 1.2.0 menu rework) -->

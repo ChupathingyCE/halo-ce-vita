@@ -88,7 +88,7 @@ def grade(width, height, ellipse=True):
         # (the fog: none above the middle, most at three quarters down)
         fog = max(0.0, min(1.0, (t - .45) / .30)) * (1.0 - max(0.0, (t - .85) / .15) * .5)
         colour = lerp(GRADE, FOG, fog * .55)
-        base = .68 + .05 * t
+        base = .62 + .05 * t
         for x in range(width):
             edge = 1.0 - mask[x, y] / 255.0
             a = base + (.93 - base) * edge * .85

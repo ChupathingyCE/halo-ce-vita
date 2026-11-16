@@ -250,6 +250,25 @@ def dropdown():
     return flat_panel((70, 74, 70), (52, 56, 52), .92, lip=.03)
 
 
+def hazard():
+    # START's header strip, after ODST's start menu: a dark band, hazard
+    # stripes across its left half fading out to the right, a light edge
+    # under it
+    width, height = 512, 32
+    image = Image.new('RGBA', (width, height), (14, 15, 14, alpha(.94)))
+    pixels = image.load()
+    for y in range(height):
+        for x in range(width):
+            fade = max(0.0, min(1.0, (0.78 - x / width) / 0.38))
+            if fade > 0 and (x + y) % 22 < 11:
+                r, g, b, a = pixels[x, y]
+                t = .55 * fade
+                pixels[x, y] = (round(r + (112 - r) * t), round(g + (98 - g) * t), round(b + (50 - b) * t), a)
+    draw = ImageDraw.Draw(image)
+    draw.line([(0, height - 1), (width - 1, height - 1)], fill=LINE + (alpha(.45),))
+    return image
+
+
 ART = {
     'haze.png': haze,
     'haze_light.png': haze_light,
@@ -274,6 +293,7 @@ ART = {
     'plate.png': lambda: plate(None),
     'backing.png': backing,
     'dropdown.png': dropdown,
+    'hazard.png': hazard,
 }
 for _index, _colour in enumerate(PLAYER_COLOURS):
     ART['colour_%02d.png' % _index] = (lambda colour: lambda: colour_tile(colour))(_colour)

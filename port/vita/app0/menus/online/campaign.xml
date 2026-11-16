@@ -24,7 +24,7 @@ the Online style (menu_tags.c: online/ for h3/). -->
 	<widget name="online/campaign/switch_row" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="online/lobby_text" string_index="0">
 		<on event="a start" run="port online switch open"/>
 	</widget>
-	<widget name="online/campaign/host_label" type="text" left="0" top="0" width="160" height="18" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="online/lobby_text" string_index="1"/>
+	<widget name="online/campaign/host_label" type="text" left="0" top="0" width="190" height="18" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="online/lobby_text" string_index="1"/>
 	<widget name="online/campaign/network_status" type="text" left="150" top="3" width="186" height="14" font="online/font_small" color="#FF9AA59C" align="right">
 		<data input="port h3 network status"/>
 	</widget>
