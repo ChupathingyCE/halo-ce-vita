@@ -21,10 +21,15 @@ next time) and leaves. The text and the rows are menu_functions.c's (port h3 ste
 	<widget name="h3/steam/row_2" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a start" run="port h3 steam row"/>
 	</widget>
+	<!-- (the third row, STEAM WORKSHOP, in a build with the Workshop: its own screen, halo3/workshop.xml) -->
+	<widget name="h3/steam/row_3" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 steam row" open="h3/workshop/screen"/>
+	</widget>
 	<widget name="h3/steam/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
 		<data input="port h3 steam"/>
 		<child widget="h3/steam/row_1" y="0"/>
 		<child widget="h3/steam/row_2" y="22"/>
+		<child widget="h3/steam/row_3" y="44"/>
 	</widget>
 	<widget name="h3/steam/a_butn" left="52" top="422" width="16" height="16" bitmap="h3/glyph_cross"/>
 	<widget name="h3/steam/select" type="text" left="72" top="421" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/steam_text" string_index="1"/>
@@ -43,6 +48,6 @@ next time) and leaves. The text and the rows are menu_functions.c's (port h3 ste
 		<child widget="h3/steam/select"/>
 		<child widget="h3/steam/b_butn"/>
 		<child widget="h3/steam/back"/>
-		<child widget="h3/steam/list" x="52" y="350"/>
+		<child widget="h3/steam/list" x="52" y="334"/>
 	</widget>
 </menus>

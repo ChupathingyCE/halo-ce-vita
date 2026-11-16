@@ -242,6 +242,23 @@ static int service_call(struct steam_session *session, const char *method, int a
 	return 1;
 }
 
+int steam_session_call(struct steam_session *session, const char *method, const void *body, size_t body_size,
+	const uint8_t **reply, size_t *reply_size, char *error, int error_size)
+{
+	*reply = NULL;
+	*reply_size = 0;
+	if (!session->logged_on)
+	{
+		snprintf(error, (size_t)error_size, "%s: not signed in", method);
+		return 0;
+	}
+	if (!service_call(session, method, 1, body, body_size, error, error_size))
+		return 0;
+	*reply = session->reply;
+	*reply_size = session->reply_size;
+	return 1;
+}
+
 /* a client message sent as a job and its response: 1, or 0 */
 static int job_call(struct steam_session *session, uint32_t emsg, uint32_t response, const void *body, size_t body_size,
 	char *error, int error_size)

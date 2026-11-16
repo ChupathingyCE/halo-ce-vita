@@ -25,7 +25,7 @@ from .linux_build import (version_defines, MBEDTLS_DIR, GAME_FLAGS, PLATFORM_FLA
                           MUSL_MATH_DIR, LIBMSPACK_DIR, LIBMSPACK_SOURCES, LIBMSPACK_FLAGS,
                           ANDROID_VARIADIC_PROTOTYPE_FILES, xdk_headers, _quote,
                           STEAMDL_DIR, LZMA_DIR, ZSTD_DIR, QRCODEGEN_DIR, LIBDEFLATE_DIR, LIBDEFLATE_SOURCES,
-                          steam_download, steam_test_flags)
+                          steam_download, steam_test_flags, steam_workshop)
 
 LINUX_DIR = Path("port/linux")
 VITA_DIR = Path("port/vita")
@@ -275,6 +275,8 @@ def generate_vita_build(n: Writer, sln: Any) -> None:
                    test_defines +
                    # (configure.py --steam-download: GAME MANAGER's DOWNLOAD FROM STEAM; port/steamdl)
                    (["-DHALO_STEAM_DOWNLOAD=1"] if steam_download(sln) else []) +
+                   # (configure.py --steam-workshop: DOWNLOAD FROM STEAM's STEAM WORKSHOP)
+                   (["-DHALO_STEAM_WORKSHOP=1"] if steam_workshop(sln) else []) +
                    # (configure.py --vita-version: the version this build
                    # says it is, the PC builds' alike)
                    version_defines(sln))

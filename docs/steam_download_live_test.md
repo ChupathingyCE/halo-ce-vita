@@ -69,3 +69,27 @@ download, 3.1 GB on disk).
 
 It does not touch a Vita, does not write under the game's own folders, keeps nothing after the revoke but the
 downloaded Halo CE files (the owner's own, under the folder he chose) and the log.
+
+## The Workshop (feat/11x-steam-workshop, prepared Nov 16 2026; **not run**)
+
+Built by the same script (`sh port/vita/tests/steam_live_pc.sh`). The owner, and only the owner, runs:
+
+    ~/halo-test-out/steam11x-runs/live/steam_download_test live-workshop ~/halo-test-out/steam11x-runs/live/ws1
+
+1. The QR, as above: approve "Halo CE Vita (PS Vita)" in the Steam app.
+2. The first page of Halo CE's Workshop items is printed (ten rows: number, item id, MB, title, campaign or
+   multiplayer, or why it is not offered). Type `n` / `p` for the next / previous page, `o` for the next order
+   (trending, newest, most liked, last updated), `s TEXT` to search, `m N` to mark row N (campaign items; up to 8),
+   `d` to download the marked ones, `q` to sign out without downloading.
+3. A small campaign item first (Ruby's Rebalanced Halo: CE, 2915693904, is about 1 GB; a smaller one is better for
+   the first run). Watch for "== downloading", then "== done".
+4. The items land in `ws1/data/workshop/<id>/` (the game's staging folder). This test does not install them: the
+   game does, with its own map check, the next time its STEAM WORKSHOP screen opens. To try one in the PC build,
+   copy `ws1/data/workshop/<id>.done` and the folder `<id>` into the PC build's data root's `workshop/`, open GAME
+   MANAGER > DOWNLOAD FROM STEAM > STEAM WORKSHOP (a --steam-workshop build): it is checked and moved to mods/.
+5. Steam app > Steam Guard > Authorized devices: the device must be gone (as above).
+6. Send the lane `ws1/live-log.txt` (no secret) and the terminal's last lines.
+
+What it answers: whether QueryFiles with the required tag Halo1 lists Halo CE's items for a normal account; whether
+an MCC owner gets depot 976730's key and the request code for an item's hcontent_file (Chupathingy's client relies
+on both); the real items' names through our name rule (the log says "N files of other kinds left out"); the rate.

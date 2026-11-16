@@ -939,6 +939,12 @@ This port stands on a lot of other people's work:
   (CC0), the OpenCE fork: Custom Edition models of up to 64 nodes drawn a
   part's own nodes at a time, and other Custom Edition map fixes, brought
   over from it (each commit says which).
+- **[ChupathingyCE](https://github.com/ChupathingyCE/chupathingyce)** by Milenko
+  (Milenko x Horrible Dev) and contributors: its Steam content client (MIT)
+  showed how a Steam Workshop item is fetched straight from Steam (the item's
+  content as depot 976730's manifest, its key and request code, the CDN),
+  which the Steam Workshop download here follows (`port/steamdl/steam_workshop.c`,
+  our own code, written from Steam's published protobufs).
 - **[Invader](https://github.com/SnowyMouse/invader)** by SnowyMouse: the
   tag definitions `port/linux/src/tag_layouts.h` is generated from (by
   `tools/gen_tag_layouts.py`), which let the port relocate the maps' tags.

@@ -51,6 +51,11 @@ enum steam_plan_kind
 	STEAM_KIND_RESOURCE, /* custom_edition's bitmaps/sounds/loc.map */
 	STEAM_KIND_BANK, /* "FSB5" */
 	STEAM_KIND_LIST, /* u32 1 */
+	/* a Steam Workshop item's other files (steam_workshop.h): JSON or text (at most 1 MB, no NUL in its first bytes),
+	a PNG, a Windows bitmap (at most 16 MB each) */
+	STEAM_KIND_WORKSHOP_TEXT,
+	STEAM_KIND_WORKSHOP_PNG,
+	STEAM_KIND_WORKSHOP_BMP,
 };
 
 struct steam_plan_file

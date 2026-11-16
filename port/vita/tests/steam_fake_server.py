@@ -33,6 +33,14 @@ and log-off). --mode picks a failure to act out:
 --host (a LAN address for the dev Vita), --chunk-kb (Steam's are 1024) and --scale (the made-up maps' size,
 times) shape a bigger test. --cert/--key serve both over TLS (the test's own certificates).
 
+--workshop-map <file>: Workshop item 2900000001's maps are that one file (a map of the player's own MCC, for a test
+of the game's own map check; never sent beyond 127.0.0.1).
+
+The Workshop (app 976730's own depot): PublishedFile.QueryFiles#1 (ten a page, a search by title), GetDetails#1,
+depot 976730's key, each item's manifest and chunks; made-up items, some hostile (names that leave the folder, two
+names one file, another game's, banned, a map not version 13, one the game's check refuses, a drive, a control
+byte); modes ws_not_owned, ws_wrong_manifest, ws_hostile_list.
+
 --fixtures <dir> writes the chunk fixtures the C unit tests read and exits.
 
 The first line it prints is JSON: {"cm": port, "cdn": port, "token": ...}.
@@ -243,12 +251,13 @@ def depot_files(depot, rng):
 
 
 class Depot:
-    def __init__(self, depot, seed, encrypt=True):
-        rng = random.Random(seed * 7919 + depot)
+    def __init__(self, depot, seed, encrypt=True, files=None, gid=None, key=None, symlinks=()):
+        rng = random.Random(seed * 7919 + depot + (gid or 0))
         self.depot = depot
-        self.key = rng.randbytes(32)
-        self.gid = rng.randrange(1, 1 << 63)
-        self.files = depot_files(depot, rng)
+        self.key = key or rng.randbytes(32)
+        self.gid = gid or rng.randrange(1, 1 << 63)
+        self.files = files if files is not None else depot_files(depot, rng)
+        self.symlinks = set(symlinks)
         self.chunks = {}  # sha hex -> encrypted bytes
         mappings = b""
         unique = 0
@@ -266,7 +275,8 @@ class Depot:
                                     pb_varint(4, len(piece)) + pb_varint(5, len(encrypted)))
             name_bytes = name.encode()
             encrypted_name = base64.b64encode(symmetric_encrypt(self.key, name_bytes + b"\0")) if encrypt else name_bytes
-            mapping = (pb_bytes(1, encrypted_name) + pb_varint(2, len(data)) + pb_varint(3, 0) +
+            flags = 512 if name in self.symlinks else 0
+            mapping = (pb_bytes(1, encrypted_name) + pb_varint(2, len(data)) + pb_varint(3, flags) +
                        pb_bytes(4, hashlib.sha1(name.replace("/", "\\").lower().encode()).digest()) +
                        pb_bytes(5, hashlib.sha1(data).digest()) + b"".join(pb_bytes(6, c) for c in chunk_fields))
             mappings += pb_bytes(1, mapping)
@@ -280,6 +290,76 @@ class Depot:
         self.manifest = manifest
         self.manifest_zip = pkzip(manifest)
 
+# ------------------------------------------------------------------ the made-up Workshop (app 976730's own depot)
+
+WORKSHOP_DEPOT = 976730
+
+
+def workshop_png(rng):
+    return b"\x89PNG\r\n\x1a\n" + rng.randbytes(300)
+
+
+def workshop_items(seed):
+    """the made-up Workshop items: (id, title, tags, consumer app, banned, files, symlinks); the ids are made up"""
+    rng = random.Random(seed * 31 + 7)
+    v13 = lambda size: map_bytes(rng, size)
+    campaign_info = json.dumps({"Title": {"Neutral": "Fake Campaign"}, "Missions": ["a10", "a30"]}).encode()
+    items = [
+        # (a campaign: two maps, its JSON and pictures, a file of another kind left out, a link skipped)
+        (2900000001, "Fake Rebalanced Campaign \u2013 \U0001F600", ["Halo1", "Campaign"], APP, False, {
+            "maps\\a10.map": v13(70000), "maps\\a30.map": v13(50000),
+            "CampaignInfo.json": campaign_info,
+            "campaign\\a10.json": b'{"Title":{"Neutral":"A10"},"ScenarioFile":"a10"}',
+            "assets\\a10.png": workshop_png(rng), "ModInfo.json": b'{"Title":{"Neutral":"Fake"}}',
+            "tools\\setup.exe": b"MZ not taken", "maps\\link.map": b"daeh" + struct.pack("<I", 13) + b"x" * 64,
+            # (names real items have, skipped - not written - with the item kept)
+            "images\\Halo  The Master Chief Collection Screenshot 2022.02.16 - 23.03.12.18.png": workshop_png(rng),
+            "campaign\\.json": b"{}",
+        }, ["maps\\link.map"]),
+        # (multiplayer)
+        (2900000002, "Fake Gulch Remix", ["Halo1", "Multiplayer"], APP, False,
+         {"maps\\fakegulch.map": v13(40000), "ModInfo.json": b"{}"}, []),
+        # (hostile: a name that leaves the folder)
+        (2900000003, "Fake Escape", ["Halo1", "Campaign"], APP, False,
+         {"maps\\a10.map": v13(20000), "..\\..\\evil.map": v13(1000)}, []),
+        # (two names one file on the Vita's card)
+        (2900000004, "Fake Twins", ["Halo1", "Campaign"], APP, False,
+         {"maps\\A10.map": v13(20000), "maps\\a10.map": v13(21000)}, []),
+        # (another game's item)
+        (2900000005, "Fake Halo 2 Item", ["Halo2"], APP, False, {"maps\\x.map": v13(9000)}, []),
+        # (banned)
+        (2900000006, "Fake Banned", ["Halo1", "Campaign"], APP, True, {"maps\\a10.map": v13(9000)}, []),
+        # (a .map that is not a version 13 cache: the header check)
+        (2900000007, "Fake Old Map", ["Halo1", "Campaign"], APP, False,
+         {"maps\\a10.map": b"daeh" + struct.pack("<I", 7) + b"x" * 5000}, []),
+        # (a map the game's own check refuses: the test's check refuses "badcheck")
+        (2900000008, "Fake Bad Check", ["Halo1", "Campaign"], APP, False, {"maps\\badcheck.map": v13(9000)}, []),
+        # (a drive letter, a control byte)
+        (2900000009, "Fake Drive", ["Halo1", "Campaign"], APP, False,
+         {"maps\\a10.map": v13(9000), "C:\\evil.map": v13(1000)}, []),
+        (2900000010, "Fake Control", ["Halo1", "Campaign"], APP, False,
+         {"maps\\a10.map": v13(9000), "maps\\a\x01.map": v13(1000)}, []),
+        # (an item with no maps: only text)
+        (2900000011, "Fake Notes", ["Halo1", "Campaign"], APP, False, {"readme.txt": b"hello"}, []),
+    ]
+    return items
+
+
+class WorkshopItem:
+    def __init__(self, entry, seed, key):
+        self.id, self.title, self.tags, self.app, self.banned, files, links = entry
+        self.depot = Depot(WORKSHOP_DEPOT, seed, files=files, gid=(self.id * 7) & ((1 << 63) - 1), key=key,
+                           symlinks=links)
+        self.size = sum(len(d) for d in files.values())
+
+    def details(self):
+        tags = b"".join(pb_bytes(52, pb_bytes(1, t)) for t in self.tags)
+        return (pb_varint(1, 1) + pb_varint(2, self.id) + pb_fixed64(3, 76561198000000001) + pb_varint(4, APP) +
+                pb_varint(5, self.app) + pb_varint(8, self.size) + pb_fixed64(14, self.depot.gid) +
+                pb_bytes(16, self.title.encode()) + pb_varint(20, 1760000000) + pb_varint(21, 0) +
+                pb_varint(28, int(self.banned)) + tags + pb_bytes(17, "a description, not read"))
+
+
 # ------------------------------------------------------------------ the server
 
 
@@ -292,6 +372,21 @@ class State:
         self.refresh_token = "eyJ0ZXN0.FAKE-REFRESH-" + os.urandom(12).hex()
         self.access_token = "eyJ0ZXN0.FAKE-ACCESS-" + os.urandom(12).hex()
         self.depots = {d: Depot(d, args.seed) for d in (976733, 976734, 976736)}
+        workshop_key = random.Random(args.seed * 13).randbytes(32)
+        entries = workshop_items(args.seed)
+        if args.workshop_map:
+            # (a real map of the player's own, read here and never sent beyond 127.0.0.1: item 2900000001's maps are
+            # then one the game's own map check takes - run_menus_test.sh h3workshop)
+            with open(args.workshop_map, "rb") as real:
+                data = real.read()
+            files = {k: v for k, v in entries[0][5].items() if not k.startswith("maps\\")}
+            files["maps\\" + os.path.basename(args.workshop_map)] = data
+            entries[0] = entries[0][:5] + (files,) + entries[0][6:]
+        self.workshop = [WorkshopItem(entry, args.seed, workshop_key) for entry in entries]
+        self.workshop_key = workshop_key
+        self.workshop_chunks = {}
+        for item in self.workshop:
+            self.workshop_chunks.update(item.depot.chunks)
         self.codes = {}
         self.tls = None
         if args.cert:
@@ -429,7 +524,25 @@ def cm_client(state, conn):
                 depot, gid = first(body, 2), first(body, 3)
                 code = random.randrange(1, 1 << 63)
                 state.codes[depot] = (gid, code)
+                state.codes[(depot, gid)] = code
                 reply = pb_varint(1, code)
+            elif name == "PublishedFile.QueryFiles#1":
+                assert logged_on and emsg == 151
+                page, per_page, search = first(body, 2, 1), first(body, 3, 1), first(body, 11, b"").decode()
+                assert first(body, 5) == APP and first(body, 6) == b"Halo1" and first(body, 37) == 1
+                state.log("cm: workshop query page %d sort %d search '%s'" % (page, first(body, 1, 0), search))
+                listed = [i for i in state.workshop if search.lower() in i.title.lower()]
+                if state.mode == "ws_hostile_list":
+                    # (a hostile list: an item whose tag runs past its message is malformed)
+                    reply = pb_varint(1, 3) + pb_bytes(2, pb_varint(2, 1) + b"\xa2\x03\x7f\x0a")
+                else:
+                    shown = listed[(page - 1) * per_page:page * per_page]
+                    reply = pb_varint(1, len(listed)) + b"".join(pb_bytes(2, i.details()) for i in shown)
+            elif name == "PublishedFile.GetDetails#1":
+                assert logged_on and emsg == 151
+                ids = [v for n, v in body if n == 1]
+                state.log("cm: workshop details %s" % " ".join(str(i) for i in ids))
+                reply = b"".join(pb_bytes(1, i.details()) for i in state.workshop if i.id in ids)
             elif name == "ContentServerDirectory.GetServersForSteamPipe#1":
                 server = (pb_bytes(1, "SteamCache") + pb_varint(3, 7) + pb_bytes(8, "cache1-fake.steamcontent.test") +
                           pb_bytes(9, "cache1-fake.steamcontent.test") + pb_bytes(12, "mandatory"))
@@ -487,7 +600,9 @@ def cm_client(state, conn):
             ws_send(conn, multi([cm_message(8904, pb_bytes(1, info), job_target=job)], zipped=False))
         elif emsg == 5438:
             depot = first(body, 1)
-            if state.mode == "not_owned" and depot == 976734 or depot not in state.depots:
+            if depot == WORKSHOP_DEPOT and state.mode != "ws_not_owned":
+                reply = pb_varint(1, 1) + pb_varint(2, depot) + pb_bytes(3, state.workshop_key)
+            elif state.mode == "not_owned" and depot == 976734 or depot not in state.depots:
                 reply = pb_varint(1, 2) + pb_varint(2, depot)
             else:
                 reply = pb_varint(1, 1) + pb_varint(2, depot) + pb_bytes(3, state.depots[depot].key)
@@ -521,7 +636,26 @@ def cdn_client(state, conn):
         status, body = 404, b"not found"
         try:
             depot = int(parts[1])
-            if parts[0] == "depot" and parts[2] == "manifest" and depot in state.depots:
+            if parts[0] == "depot" and depot == WORKSHOP_DEPOT and parts[2] == "manifest":
+                gid = int(parts[3])
+                item = next((i for i in state.workshop if i.depot.gid == gid), None)
+                if item and state.codes.get((depot, gid)) == int(parts[5]):
+                    status, body = 200, item.depot.manifest_zip
+                    if state.mode == "ws_wrong_manifest":
+                        # (another item's manifest under this one's gid)
+                        body = next(i for i in state.workshop if i is not item).depot.manifest_zip
+                    state.log("cdn: workshop manifest %d" % item.id)
+                else:
+                    status, body = 403, b"bad code"
+                    state.log("cdn: workshop manifest refused")
+            elif parts[0] == "depot" and depot == WORKSHOP_DEPOT and parts[2] == "chunk" and \
+                    parts[3] in state.workshop_chunks:
+                status, body = 200, state.workshop_chunks[parts[3]]
+                if state.mode == "corrupt_once" and parts[3] not in state.corrupted and len(state.corrupted) < 3:
+                    state.corrupted.add(parts[3])
+                    body = body[:40] + bytes([body[40] ^ 0x55]) + body[41:]
+                    state.log("cdn: chunk corrupted")
+            elif parts[0] == "depot" and parts[2] == "manifest" and depot in state.depots:
                 gid, code = state.codes.get(depot, (None, None))
                 if int(parts[3]) == gid and int(parts[5]) == code:
                     status, body = 200, state.depots[depot].manifest_zip
@@ -641,6 +775,15 @@ def write_fixtures(folder, seed):
     seed_file("cdn_list", "cms", b"\1" + b'{"response":{"serverlist":[{"endpoint":"cmp1-ord1.steamserver.net:443"}]}}')
     seed_file("journal", "j", b"steamdl-journal 1\ndepot 1\ngid 2\nsize 3000\nchunks 3\n0 " + b"0" * 40 + b"\n2 " +
               b"a" * 40 + b"\n")
+    workshop_key = random.Random(seed * 13).randbytes(32)
+    items = [WorkshopItem(entry, seed, workshop_key) for entry in workshop_items(seed)]
+    seed_file("ws_list", "query", pb_varint(1, len(items)) + b"".join(pb_bytes(2, i.details()) for i in items[:10]))
+    seed_file("ws_list", "details", b"".join(pb_bytes(1, i.details()) for i in items[:4]))
+    names = [name.encode("utf-8", "surrogateescape") for i in items for name in i.depot.files]
+    seed_file("ws_names", "items", b"\0".join(names[:8]))
+    seed_file("ws_names", "real", b"\0".join([b"maps\\AvalancheAIBattleground.map", b"ModInfo.json",
+                                              b"modded halo3.dll (REQUIRED)\\halo3.dll", b"images\\thumbnail.png",
+                                              b"multiplayer\\AvalancheAIBattleground.json"]))
 
 
 def main():
@@ -654,6 +797,7 @@ def main():
     parser.add_argument("--scale", type=int, default=1)
     parser.add_argument("--cert")
     parser.add_argument("--key")
+    parser.add_argument("--workshop-map", help="a real MCC map file as Workshop item 2900000001's map (local tests)")
     args = parser.parse_args()
     if args.fixtures:
         write_fixtures(args.fixtures, args.seed)

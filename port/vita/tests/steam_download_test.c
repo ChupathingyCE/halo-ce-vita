@@ -8,6 +8,11 @@ The Steam download's tests on the PC (run_steam_download_test.sh), no Steam:
                      (steam_fake_server.py's fixtures: VZa, VSZa, zip; each
                      damaged), a manifest with encrypted names, the file
                      writer and its journal (resume, a damaged .part)
+  workshop <cm port> <cdn port> <out> <id,...> [cancel after n progress calls]
+                     the Steam Workshop against the fake: the list (a page,
+                     a search), the chosen items downloaded, then each staged
+                     item installed into the mods folder by
+                     steam_workshop_install with the test's map check
   flow <cm port> <cdn port> <out> <games> [cancel after n progress calls]
                      the whole download against steam_fake_server.py on
                      127.0.0.1; prints one result line; the log goes to
@@ -26,6 +31,7 @@ The Steam download's tests on the PC (run_steam_download_test.sh), no Steam:
 #include "steam_pb.h"
 #include "steam_plan.h"
 #include "steam_session.h"
+#include "steam_workshop.h"
 #include "steam_ws.h"
 #include "steam_zip.h"
 
@@ -424,6 +430,257 @@ static void test_plan(void)
 	}
 }
 
+/* ---------- the Workshop's pieces */
+
+static void write_test_file(const char *path, const void *data, size_t size)
+{
+	FILE *file = fopen(path, "wb");
+
+	if (file)
+	{
+		fwrite(data, 1, size, file);
+		fclose(file);
+	}
+}
+
+static int test_map_check(void *context, const char *path, char *why, size_t why_size)
+{
+	uint8_t head[8];
+	FILE *file = fopen(path, "rb");
+	size_t got;
+
+	(void)context;
+	if (!file)
+	{
+		snprintf(why, why_size, "cannot open");
+		return 0;
+	}
+	got = fread(head, 1, sizeof(head), file);
+	fclose(file);
+	if (got < 8 || memcmp(head, "daeh", 4) || head[4] != 13)
+	{
+		snprintf(why, why_size, "not a version 13 cache");
+		return 0;
+	}
+	if (strstr(path, "badcheck"))
+	{
+		snprintf(why, why_size, "the test's check refused it");
+		return 0;
+	}
+	return 1;
+}
+
+static void test_workshop(const char *folder)
+{
+	char relative[200], root[600], path[1200], why[200];
+	enum steam_plan_kind kind;
+	uint64_t id, ids[4];
+	uint8_t body[512];
+	size_t size;
+
+	/* names: taken as written, '\\' made '/'; kinds by extension */
+	CHECK(steam_workshop_name("maps\\a10.map", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&
+		!strcmp(relative, "maps/a10.map") && kind == STEAM_KIND_MCC_MAP);
+	CHECK(steam_workshop_name("maps/Bitmaps.MAP", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&
+		kind == STEAM_KIND_RESOURCE);
+	CHECK(steam_workshop_name("CampaignInfo.json", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&
+		kind == STEAM_KIND_WORKSHOP_TEXT);
+	CHECK(steam_workshop_name("assets/Ruby's (1).png", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&
+		kind == STEAM_KIND_WORKSHOP_PNG);
+	CHECK(steam_workshop_name("tools/setup.exe", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_SKIP);
+	CHECK(steam_workshop_name("maps/a10.map.part", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_SKIP);
+	/* names refused (the whole item): leaving the folder, absolute, drives, control bytes, empty parts */
+	{
+		static const char *const refused[] = { "../evil.map", "..\\..\\evil.map", "/tmp/evil.map", "\\evil.map",
+			"C:\\evil.map", "c:evil.map", "maps/../../evil.map", "maps//a.map", "maps/./a.map", "maps/a\x01.map", "",
+			"maps/", "maps/a.map\x7f" };
+		/* names skipped (not written, the item kept): hidden, trimmed ends, odd characters, too deep, too long */
+		static const char *const skipped[] = { ".hidden/a.map", "maps/.a.map", "campaign/.json", "maps/a.map.",
+			"maps/a.map ", " maps/a.map", "maps/a%2e.map", "maps/a*.map", "maps/a?.map", "maps/a\"b.map", "maps/a<b.map",
+			"maps/a|b.map", "a/b/c/d/e.map", "maps/\xc3\xa9.map" };
+		size_t index;
+
+		for (index = 0; index < sizeof(refused) / sizeof(refused[0]); index++)
+		{
+			int verdict = steam_workshop_name(refused[index], relative, sizeof(relative), &kind);
+
+			CHECK(verdict == STEAM_WORKSHOP_NAME_REFUSE);
+			if (verdict != STEAM_WORKSHOP_NAME_REFUSE)
+				fprintf(stderr, "  (refused name %zu: %d)\n", index, verdict);
+		}
+		for (index = 0; index < sizeof(skipped) / sizeof(skipped[0]); index++)
+		{
+			int verdict = steam_workshop_name(skipped[index], relative, sizeof(relative), &kind);
+
+			CHECK(verdict == STEAM_WORKSHOP_NAME_SKIP);
+			if (verdict != STEAM_WORKSHOP_NAME_SKIP)
+				fprintf(stderr, "  (skipped name %zu: %d)\n", index, verdict);
+		}
+		/* (a real item's picture: "images/Halo  The Master Chief Collection Screenshot 2022.02.16 - ....png", 73) */
+		memset(path, 'a', 200);
+		memcpy(path + 196, ".map", 5);
+		CHECK(steam_workshop_name(path, relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_SKIP);
+		memset(path, 'a', 70);
+		memcpy(path + 66, ".map", 5);
+		CHECK(steam_workshop_name(path, relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_SKIP);
+		memset(path, 'a', 1100);
+		path[1100] = 0;
+		CHECK(steam_workshop_name(path, relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_REFUSE);
+		CHECK(steam_workshop_name("a/b/c/d.map", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE);
+		CHECK(steam_workshop_name("modded halo3.dll (REQUIRED)\\halo3.dll", relative, sizeof(relative), &kind) ==
+			STEAM_WORKSHOP_NAME_SKIP);
+	}
+	CHECK(steam_workshop_names_collide("maps/A10.map", "maps/a10.MAP"));
+	CHECK(!steam_workshop_names_collide("maps/a10.map", "maps/a100.map"));
+	/* ids: the mods folder's key */
+	CHECK(steam_workshop_id_parse("2915693904", &id) && id == 2915693904ull);
+	CHECK(!steam_workshop_id_parse("0123", &id) && !steam_workshop_id_parse("12a", &id) &&
+		!steam_workshop_id_parse("1234567890123", &id) && !steam_workshop_id_parse("", &id));
+	CHECK(steam_workshop_id_text(2915693904ull, relative, sizeof(relative)) && !strcmp(relative, "2915693904"));
+	CHECK(!steam_workshop_id_text(1234567890123ull, relative, sizeof(relative)) &&
+		!steam_workshop_id_text(0, relative, sizeof(relative)));
+	/* requests: the fields Steam's protobufs give */
+	size = steam_workshop_query_request(body, sizeof(body), 2, STEAM_WORKSHOP_SORT_NEW, "");
+	CHECK(size > 0);
+	{
+		struct steam_pb_reader reader;
+		struct steam_pb_field field;
+		int seen = 0;
+
+		steam_pb_reader_init(&reader, body, size);
+		while (steam_pb_next(&reader, &field) > 0)
+		{
+			if (field.number == 1)
+				seen |= field.value == 1 ? 1 : 0;
+			if (field.number == 2)
+				seen |= field.value == 2 ? 2 : 0;
+			if (field.number == 5)
+				seen |= field.value == 976730 ? 4 : 0;
+			if (field.number == 6)
+				seen |= field.size == 5 && !memcmp(field.data, "Halo1", 5) ? 8 : 0;
+			if (field.number == 37)
+				seen |= field.value == 1 ? 16 : 0;
+		}
+		CHECK(seen == 31);
+	}
+	CHECK(steam_workshop_query_request(body, sizeof(body), 0, STEAM_WORKSHOP_SORT_NEW, "") == 0);
+	memset(path, 'x', 100);
+	path[100] = 0;
+	CHECK(steam_workshop_query_request(body, sizeof(body), 1, STEAM_WORKSHOP_SORT_NEW, path) == 0);
+	ids[0] = 1;
+	ids[1] = 2;
+	CHECK(steam_workshop_details_request(body, sizeof(body), ids, 2) > 0);
+	CHECK(steam_workshop_details_request(body, sizeof(body), ids, 0) == 0);
+	/* responses: an item read, a title's bytes made printable, a malformed one refused */
+	{
+		struct steam_pb_writer writer, detail;
+		uint8_t item_bytes[256], tag[16];
+		struct steam_workshop_item items[4];
+		uint32_t total = 0;
+		size_t tag_size;
+		struct steam_pb_writer tag_writer;
+
+		steam_pb_writer_init(&tag_writer, tag, sizeof(tag));
+		steam_pb_put_string(&tag_writer, 1, "Halo1");
+		tag_size = tag_writer.size;
+		steam_pb_writer_init(&detail, item_bytes, sizeof(item_bytes));
+		steam_pb_put_varint(&detail, 1, 1);
+		steam_pb_put_varint(&detail, 2, 2915693904ull);
+		steam_pb_put_varint(&detail, 5, 976730);
+		steam_pb_put_varint(&detail, 8, 123456);
+		steam_pb_put_fixed64(&detail, 14, 777);
+		steam_pb_put_bytes(&detail, 16, "Ruby\xe2\x80\x93s\x01\x7f", 9);
+		steam_pb_put_bytes(&detail, 52, tag, tag_size);
+		steam_pb_writer_init(&writer, body, sizeof(body));
+		steam_pb_put_varint(&writer, 1, 33);
+		steam_pb_put_bytes(&writer, 2, item_bytes, detail.size);
+		CHECK(steam_workshop_parse_query(body, writer.size, items, 4, &total) == 1 && total == 33 &&
+			items[0].id == 2915693904ull && items[0].hcontent == 777 && items[0].tags == STEAM_WORKSHOP_TAG_HALO1 &&
+			items[0].consumer_app == 976730 && !strcmp(items[0].title, "Ruby?s "));
+		CHECK(steam_workshop_item_ok(&items[0], why, sizeof(why)));
+		items[1] = items[0];
+		items[1].consumer_app = 976731;
+		CHECK(!steam_workshop_item_ok(&items[1], why, sizeof(why)));
+		items[1] = items[0];
+		items[1].banned = 1;
+		CHECK(!steam_workshop_item_ok(&items[1], why, sizeof(why)));
+		items[1] = items[0];
+		items[1].hcontent = 0;
+		CHECK(!steam_workshop_item_ok(&items[1], why, sizeof(why)));
+		items[1] = items[0];
+		items[1].file_size = 5ull << 30;
+		CHECK(!steam_workshop_item_ok(&items[1], why, sizeof(why)));
+		items[1] = items[0];
+		items[1].tags = STEAM_WORKSHOP_TAG_CAMPAIGN;
+		CHECK(!steam_workshop_item_ok(&items[1], why, sizeof(why)));
+		/* (a details response reads field 1; a truncated one is malformed) */
+		{
+			uint8_t details[300];
+			struct steam_pb_writer details_writer;
+
+			steam_pb_writer_init(&details_writer, details, sizeof(details));
+			steam_pb_put_bytes(&details_writer, 1, item_bytes, detail.size);
+			steam_pb_put_bytes(&details_writer, 1, item_bytes, detail.size);
+			CHECK(steam_workshop_parse_details(details, details_writer.size, items, 4) == 2 && items[1].hcontent == 777);
+			CHECK(steam_workshop_parse_details(details, details_writer.size, items, 1) == 1);
+		}
+		CHECK(steam_workshop_parse_query(body, writer.size - 3, items, 4, &total) == -1);
+	}
+	/* the install: a staged item checked and moved; one with a stray file or a refused map removed */
+	snprintf(root, sizeof(root), "%s/workshop-install", folder);
+	mkdir(root, 0777);
+	snprintf(path, sizeof(path), "%s/workshop", root);
+	mkdir(path, 0777);
+	{
+		static const uint8_t map[16] = { 'd', 'a', 'e', 'h', 13 };
+		uint64_t staged[8];
+		int count;
+
+		snprintf(path, sizeof(path), "%s/workshop/2900000001", root);
+		mkdir(path, 0777);
+		snprintf(path, sizeof(path), "%s/workshop/2900000001/maps", root);
+		mkdir(path, 0777);
+		snprintf(path, sizeof(path), "%s/workshop/2900000001/maps/a10.map", root);
+		write_test_file(path, map, sizeof(map));
+		snprintf(path, sizeof(path), "%s/workshop/2900000001/CampaignInfo.json", root);
+		write_test_file(path, "{}", 2);
+		snprintf(path, sizeof(path), "%s/workshop/2900000001.done", root);
+		write_test_file(path, "1\n", 2);
+		snprintf(path, sizeof(path), "%s/workshop/2900000002/maps", root);
+		mkdir(path, 0777);
+		snprintf(path, sizeof(path), "%s/workshop/2900000002", root);
+		mkdir(path, 0777);
+		snprintf(path, sizeof(path), "%s/workshop/2900000002/maps", root);
+		mkdir(path, 0777);
+		snprintf(path, sizeof(path), "%s/workshop/2900000002/maps/a10.map", root);
+		write_test_file(path, map, sizeof(map));
+		snprintf(path, sizeof(path), "%s/workshop/2900000002/maps/a10.map.part", root);
+		write_test_file(path, map, sizeof(map));
+		snprintf(path, sizeof(path), "%s/workshop/2900000002.done", root);
+		write_test_file(path, "1\n", 2);
+		snprintf(path, sizeof(path), "%s/workshop/0123.done", root);
+		write_test_file(path, "1\n", 2);
+		count = steam_workshop_staged(root, staged, 8);
+		CHECK(count == 2);
+		CHECK(steam_workshop_install(root, 2900000001ull, test_map_check, NULL, why, sizeof(why)));
+		snprintf(path, sizeof(path), "%s/mods/2900000001/maps/a10.map", root);
+		CHECK(access(path, F_OK) == 0);
+		snprintf(path, sizeof(path), "%s/workshop/2900000001", root);
+		CHECK(access(path, F_OK) != 0);
+		CHECK(!steam_workshop_install(root, 2900000002ull, test_map_check, NULL, why, sizeof(why)) &&
+			strstr(why, "a10.map.part"));
+		snprintf(path, sizeof(path), "%s/workshop/2900000002", root);
+		CHECK(access(path, F_OK) != 0);
+		snprintf(path, sizeof(path), "%s/mods/2900000002", root);
+		CHECK(access(path, F_OK) != 0);
+		CHECK(steam_workshop_staged(root, staged, 8) == 0);
+		snprintf(path, sizeof(path), "%s/workshop/0123.done", root);
+		remove(path);
+		snprintf(path, sizeof(path), "%s", root);
+		CHECK(steam_workshop_remove_tree(path) && access(path, F_OK) != 0);
+	}
+}
+
 /* ---------- chunks */
 
 static void test_chunks(const char *fixtures)
@@ -729,6 +986,114 @@ static int flow(int argc, char **argv)
 	return 0;
 }
 
+/* ---------- the Workshop against the fake server */
+
+static uint64_t chosen_ids[STEAM_WORKSHOP_CHOSEN_MAXIMUM];
+static int chosen_count;
+
+static int workshop_choose(void *context, struct steam_session *session, uint64_t *ids, int maximum)
+{
+	struct steam_workshop_item items[STEAM_WORKSHOP_PAGE_ITEMS];
+	uint32_t total = 0;
+	char error[256];
+	int count, index;
+
+	(void)context;
+	/* (the player's pages: the first, the second, a search) */
+	count = steam_download_workshop_query(session, 1, STEAM_WORKSHOP_SORT_TREND, "", items, STEAM_WORKSHOP_PAGE_ITEMS,
+		&total, error, sizeof(error));
+	fprintf(log_file, "workshop list: page 1: %d of %u%s%s\n", count, (unsigned int)total, count < 0 ? ": " : "",
+		count < 0 ? error : "");
+	if (count < 0)
+		return 0;
+	for (index = 0; index < count; index++)
+		fprintf(log_file, "workshop list: %llu tags %d %s\n", (unsigned long long)items[index].id, items[index].tags,
+			items[index].title);
+	count = steam_download_workshop_query(session, 2, STEAM_WORKSHOP_SORT_TREND, "", items, STEAM_WORKSHOP_PAGE_ITEMS,
+		&total, error, sizeof(error));
+	fprintf(log_file, "workshop list: page 2: %d\n", count);
+	count = steam_download_workshop_query(session, 1, STEAM_WORKSHOP_SORT_TREND, "rebalanced", items,
+		STEAM_WORKSHOP_PAGE_ITEMS, &total, error, sizeof(error));
+	fprintf(log_file, "workshop list: search: %d (%s)\n", count, count > 0 ? items[0].title : "-");
+	steam_session_pump(session, 50);
+	for (index = 0; index < chosen_count && index < maximum; index++)
+		ids[index] = chosen_ids[index];
+	return index;
+}
+
+static void item_end(void *context, const struct steam_workshop_item *item, int ok, const char *why)
+{
+	(void)context;
+	fprintf(log_file, "workshop item %llu: %s%s\n", (unsigned long long)item->id, ok ? "downloaded" : "failed: ",
+		ok ? "" : why);
+}
+
+static int workshop(int argc, char **argv)
+{
+	struct steam_download_options options;
+	struct steam_download_callbacks callbacks;
+	struct steam_download_result result;
+	char cm[128], cdn[128], log_path[600], marker[600], ce_root[600], why[256];
+	const char *cdn_list[1];
+	char *list, *part;
+	uint64_t staged[16];
+	int count, index, installed = 0, refused = 0;
+
+	if (argc < 6)
+		return 2;
+	snprintf(cm, sizeof(cm), "ws://127.0.0.1:%s/cmsocket/", argv[2]);
+	snprintf(cdn, sizeof(cdn), "http://127.0.0.1:%s", argv[3]);
+	snprintf(log_path, sizeof(log_path), "%s/log.txt", argv[4]);
+	snprintf(marker, sizeof(marker), "%s/steam-session.txt", argv[4]);
+	snprintf(ce_root, sizeof(ce_root), "%s/card/haloce-vita", argv[4]);
+	if (argc > 6)
+		cancel_after = atoi(argv[6]);
+	list = strdup(argv[5]);
+	for (part = strtok(list, ","); part && chosen_count < STEAM_WORKSHOP_CHOSEN_MAXIMUM; part = strtok(NULL, ","))
+		chosen_ids[chosen_count++] = strtoull(part, NULL, 10);
+	free(list);
+	log_file = fopen(log_path, "a");
+	if (!log_file)
+		return 2;
+	cdn_list[0] = cdn;
+	memset(&options, 0, sizeof(options));
+	options.workshop = 1;
+	options.cm_url = cm;
+	options.cdn_override = cdn_list;
+	options.cdn_override_count = 1;
+	options.ce_root = ce_root;
+	options.app_root = ce_root;
+	options.marker_path = marker;
+	memset(&callbacks, 0, sizeof(callbacks));
+	callbacks.show_qr = show_qr;
+	callbacks.progress = progress;
+	callbacks.log = log_line;
+	callbacks.free_space = free_space;
+	callbacks.workshop_choose = workshop_choose;
+	callbacks.item_end = item_end;
+	steam_download_run(&options, &callbacks, &result);
+	/* (the game's part, after the session: each staged item checked and moved into the mods folder) */
+	count = steam_workshop_staged(ce_root, staged, 16);
+	for (index = 0; index < count; index++)
+	{
+		if (steam_workshop_install(ce_root, staged[index], test_map_check, NULL, why, sizeof(why)))
+		{
+			installed++;
+			fprintf(log_file, "workshop install %llu: installed\n", (unsigned long long)staged[index]);
+		}
+		else
+		{
+			refused++;
+			fprintf(log_file, "workshop install %llu: refused: %s\n", (unsigned long long)staged[index], why);
+		}
+	}
+	printf("result ok=%d cancelled=%d items=%u failed=%u installed=%d refused=%d files=%u revoked=%d logged_off=%d "
+		"error=%s\n", result.ok, result.cancelled, result.items_done, result.items_failed, installed, refused,
+		result.files_done, result.revoked, result.logged_off, result.error[0] ? result.error : "-");
+	fclose(log_file);
+	return 0;
+}
+
 /* ---------- the job (steam_job.c) against the fake server */
 
 static void job_log(const char *line)
@@ -848,6 +1213,14 @@ static void live_qr_print(const struct steam_job_status *status)
 	fflush(stdout);
 }
 
+static const char *live_phase_name(int phase)
+{
+	static const char *const names[] = { "idle", "connecting", "QR", "preparing", "browsing the Workshop", "downloading",
+		"paused", "ending", "done", "FAILED", "cancelled" };
+
+	return phase >= 0 && phase < (int)(sizeof(names) / sizeof(names[0])) ? names[phase] : "?";
+}
+
 static int live(int argc, char **argv)
 {
 	struct steam_job_options options;
@@ -914,11 +1287,8 @@ static int live(int argc, char **argv)
 			steam_job_get(&status);
 			if (status.phase != last_phase)
 			{
-				static const char *const names[] = { "idle", "connecting", "QR", "preparing", "downloading", "paused",
-					"ending", "done", "FAILED", "cancelled" };
-
 				last_phase = status.phase;
-				printf("== %s\n", status.phase >= 0 && status.phase < 10 ? names[status.phase] : "?");
+				printf("== %s\n", live_phase_name(status.phase));
 				fflush(stdout);
 			}
 			if (status.phase == STEAM_JOB_QR && status.qr_size && status.qr_serial != qr_serial)
@@ -949,6 +1319,166 @@ static int live(int argc, char **argv)
 	return status.phase == STEAM_JOB_DONE ? 0 : 1;
 }
 
+/* ---------- LIVE WORKSHOP: the real Steam Workshop, the owner's own account, by his hand alone
+(docs/steam_download_live_test.md, "The Workshop")
+
+steam_download_test live-workshop <folder>: the Workshop job as the Vita's STEAM WORKSHOP screen runs it, against
+Steam's own CM and CDN: the QR in the terminal, then the list - Halo CE's Workshop items, ten a page - driven by typed
+commands (n, p: page; o: order; s TEXT: search; m N: mark row N; d: download the marked; q: sign out); the items into
+<folder>/data/workshop/<id> (the game's staging folder: the game checks every map and moves them into mods/ the next
+time its STEAM WORKSHOP screen opens); the log (no secret) to <folder>/live-log.txt. Never run by an agent. */
+
+static void live_workshop_page(const struct steam_job_workshop_view *ws)
+{
+	int index;
+
+	printf("\n-- page %d (order %d%s%s%s), %d items in all\n", ws->page, ws->sort, ws->search[0] ? ", search \"" : "",
+		ws->search, ws->search[0] ? "\"" : "", ws->total);
+	if (ws->error[0])
+		printf("   error: %s\n", ws->error);
+	for (index = 0; index < ws->count; index++)
+	{
+		const struct steam_job_workshop_row *row = &ws->rows[index];
+
+		printf("  %2d %-12s %8.1f MB  %-30.30s %s%s%s\n", index + 1, row->id, row->size_kb / 1024.0, row->title,
+			(row->tags & STEAM_WORKSHOP_TAG_CAMPAIGN) ? "campaign " : "",
+			(row->tags & STEAM_WORKSHOP_TAG_MULTIPLAYER) ? "multiplayer " : "",
+			row->downloadable ? "" : row->reason);
+	}
+	printf("commands: n next, p previous, o order, s TEXT search, m N mark row N, d download the marked, q sign out\n");
+	fflush(stdout);
+}
+
+static int live_workshop(int argc, char **argv)
+{
+	struct steam_job_platform hooks;
+	struct steam_job_status status;
+	struct steam_job_workshop_view ws;
+	char log_path[600], data_root[600], marked[STEAM_WORKSHOP_CHOSEN_MAXIMUM][24];
+	unsigned int qr_serial = 0;
+	int last_phase = -1, last_serial = -1, marked_count = 0, sort = 0;
+
+	if (argc < 3)
+	{
+		fprintf(stderr, "usage: steam_download_test live-workshop <folder>\n");
+		return 2;
+	}
+	mkdir(argv[2], 0777);
+	snprintf(data_root, sizeof(data_root), "%s/data", argv[2]);
+	mkdir(data_root, 0777);
+	snprintf(log_path, sizeof(log_path), "%s/live-log.txt", argv[2]);
+	live_log = fopen(log_path, "a");
+	if (!live_log)
+	{
+		fprintf(stderr, "cannot write %s\n", log_path);
+		return 2;
+	}
+	memset(&hooks, 0, sizeof(hooks));
+	hooks.log = live_log_line;
+	steam_job_set_platform(&hooks);
+	printf("Steam Workshop LIVE test: Halo CE's Workshop items, with YOUR OWN Steam account, into %s/workshop\n"
+		"Unofficial. The QR below is for the Steam app on your phone (Steam Guard > scan). Approve only this one.\n"
+		"q (or Enter alone while downloading) signs out cleanly; Ctrl-C does not (then remove \"%s\" under\n"
+		"Authorized devices in the Steam app).\n\n", data_root, STEAM_DEVICE_NAME);
+	if (steam_job_start_workshop(data_root) <= 0)
+	{
+		printf("the job did not start\n");
+		return 1;
+	}
+	for (;;)
+	{
+		fd_set set;
+		struct timeval wait;
+
+		FD_ZERO(&set);
+		FD_SET(0, &set);
+		wait.tv_sec = 0;
+		wait.tv_usec = 200 * 1000;
+		steam_job_get(&status);
+		steam_job_workshop_view(&ws);
+		if (select(1, &set, NULL, NULL, &wait) > 0)
+		{
+			char line[128];
+
+			if (fgets(line, sizeof(line), stdin))
+			{
+				line[strcspn(line, "\r\n")] = 0;
+				if (status.phase != STEAM_JOB_BROWSING)
+				{
+					printf("cancelling: signing out...\n");
+					steam_job_cancel();
+				}
+				else if (!strcmp(line, "q"))
+					steam_job_workshop_choose(NULL, 0);
+				else if (!strcmp(line, "n") || !strcmp(line, "p"))
+					steam_job_workshop_ask(ws.page + (line[0] == 'n' ? 1 : -1), ws.sort, ws.search);
+				else if (!strcmp(line, "o"))
+				{
+					sort = (sort + 1) % STEAM_WORKSHOP_SORT_COUNT;
+					steam_job_workshop_ask(1, sort, "");
+				}
+				else if (line[0] == 's' && line[1] == ' ')
+					steam_job_workshop_ask(1, sort, line + 2);
+				else if (line[0] == 'm' && line[1] == ' ')
+				{
+					int row = atoi(line + 2) - 1;
+
+					if (row >= 0 && row < ws.count && ws.rows[row].downloadable &&
+						marked_count < STEAM_WORKSHOP_CHOSEN_MAXIMUM)
+					{
+						snprintf(marked[marked_count++], sizeof(marked[0]), "%s", ws.rows[row].id);
+						printf("marked %s (%d)\n", ws.rows[row].id, marked_count);
+					}
+					else
+						printf("not that row\n");
+				}
+				else if (!strcmp(line, "d") && marked_count)
+					steam_job_workshop_choose((const char (*)[24])marked, marked_count);
+				else
+					steam_job_workshop_touch();
+			}
+		}
+		if (status.phase != last_phase)
+		{
+			last_phase = status.phase;
+			printf("== %s\n", live_phase_name(status.phase));
+			fflush(stdout);
+		}
+		if (status.phase == STEAM_JOB_QR && status.qr_size && status.qr_serial != qr_serial)
+		{
+			qr_serial = status.qr_serial;
+			printf("Scan this with the Steam app (Steam Guard > scan a QR code)%s:\n",
+				qr_serial > 1 ? " - a new code, the last one expired" : "");
+			live_qr_print(&status);
+		}
+		if (status.phase == STEAM_JOB_BROWSING && !ws.loading && ws.serial != last_serial)
+		{
+			last_serial = ws.serial;
+			live_workshop_page(&ws);
+		}
+		if (status.phase == STEAM_JOB_DONE || status.phase == STEAM_JOB_FAILED || status.phase == STEAM_JOB_CANCELLED)
+			break;
+	}
+	steam_job_workshop_view(&ws);
+	{
+		uint64_t staged[16];
+		int count = steam_workshop_staged(data_root, staged, 16), index;
+
+		printf("\nresult: %s; items downloaded %d, failed %d%s%s; token revoked %d, logged off %d\n",
+			status.phase == STEAM_JOB_DONE ? "DONE" : status.phase == STEAM_JOB_CANCELLED ? "cancelled" : "FAILED",
+			ws.items_done, ws.items_failed, ws.failure[0] ? " (" : "", ws.failure[0] ? ws.failure : "", status.revoked,
+			status.logged_off);
+		for (index = 0; index < count; index++)
+			printf("  staged: %s/workshop/%llu (the game checks and installs it)\n", data_root,
+				(unsigned long long)staged[index]);
+	}
+	printf("Check the Steam app: Steam Guard > Authorized devices should NOT list \"%s\" any more.\n"
+		"The log (no secrets): %s\n", STEAM_DEVICE_NAME, log_path);
+	steam_job_forget();
+	fclose(live_log);
+	return status.phase == STEAM_JOB_DONE ? 0 : 1;
+}
+
 static void test_qr(void)
 {
 	uint8_t modules[57 * 57];
@@ -965,6 +1495,8 @@ int main(int argc, char **argv)
 		return job(argc, argv);
 	if (argc >= 2 && !strcmp(argv[1], "live"))
 		return live(argc, argv);
+	if (argc >= 2 && !strcmp(argv[1], "live-workshop"))
+		return live_workshop(argc, argv);
 	if (argc >= 3 && !strcmp(argv[1], "units"))
 	{
 		test_pb();
@@ -979,12 +1511,15 @@ int main(int argc, char **argv)
 		test_file(argv[2]);
 		test_net();
 		test_qr();
+		test_workshop(argv[2]);
 		printf("-- %d of %d checks failed\n", failures, checks);
 		return failures != 0;
 	}
 	if (argc >= 2 && !strcmp(argv[1], "flow"))
 		return flow(argc, argv);
+	if (argc >= 2 && !strcmp(argv[1], "workshop"))
+		return workshop(argc, argv);
 	fprintf(stderr, "usage: steam_download_test units <fixtures> | flow <cm port> <cdn port> <out> <games> [cancel] | "
-		"job ... | live <folder> [games]\n");
+		"job ... | live <folder> [games] | live-workshop <folder>\n");
 	return 2;
 }

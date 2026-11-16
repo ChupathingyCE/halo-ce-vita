@@ -19,6 +19,9 @@ STEAM_FUZZ_SECONDS, under AddressSanitizer and UBSan):
                 or zip) into exactly that size
   journal       a resume journal against three chunks
   cdn_list      byte 0 even: a GetServersForSteamPipe body; odd: CM list JSON
+  ws_list       the Workshop's QueryFiles and GetDetails responses (steam_workshop.c), each item checked
+  ws_names      a Workshop item's file names (NUL-separated) through the name rule: a taken name must be plain, of
+                our characters, inside the item's folder, and two taken names that collide caught
 Every input must only be taken or refused: no crash, no leak, no read or
 write out of bounds.
 */
@@ -34,6 +37,7 @@ write out of bounds.
 #include "steam_pb.h"
 #include "steam_plan.h"
 #include "steam_session.h"
+#include "steam_workshop.h"
 #include "steam_ws.h"
 #include "steam_zip.h"
 
@@ -218,6 +222,70 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		chunks[0].size = chunks[1].size = chunks[2].size = 1000;
 		if (steam_file_journal_parse((const char *)data, size, 1, 2, 3000, 3, chunks, marks) > 3)
 			abort();
+	}
+	else if (!strcmp(target, "ws_list"))
+	{
+		struct steam_workshop_item items[STEAM_WORKSHOP_ITEMS_MAXIMUM];
+		uint32_t total;
+		char why[160];
+		int count, index;
+
+		count = steam_workshop_parse_query(data, size, items, STEAM_WORKSHOP_ITEMS_MAXIMUM, &total);
+		if (count > STEAM_WORKSHOP_ITEMS_MAXIMUM)
+			abort();
+		for (index = 0; index < count; index++)
+		{
+			size_t length = strlen(items[index].title), at;
+
+			if (length >= STEAM_WORKSHOP_TITLE_SIZE)
+				abort();
+			for (at = 0; at < length; at++)
+				if (items[index].title[at] < 0x20 || items[index].title[at] > 0x7e)
+					abort();
+			steam_workshop_item_ok(&items[index], why, sizeof(why));
+		}
+		count = steam_workshop_parse_details(data, size, items, 3);
+		if (count > 3)
+			abort();
+	}
+	else if (!strcmp(target, "ws_names"))
+	{
+		char taken[8][STEAM_WORKSHOP_NAME_MAXIMUM + 1], name[1100];
+		size_t at = 0;
+		int count = 0, index;
+
+		while (at < size && count < 8)
+		{
+			size_t length = 0;
+			enum steam_plan_kind kind;
+			int verdict;
+
+			while (at < size && data[at] && length < sizeof(name) - 1)
+				name[length++] = (char)data[at++];
+			name[length] = 0;
+			at++;
+			verdict = steam_workshop_name(name, taken[count], sizeof(taken[count]), &kind);
+			if (verdict != STEAM_WORKSHOP_NAME_TAKE)
+				continue;
+			/* (a taken name: plain, no '\', no "..", relative, short, ours) */
+			{
+				const char *written = taken[count];
+				size_t written_length = strlen(written), index2;
+
+				if (!written_length || written_length > STEAM_WORKSHOP_NAME_MAXIMUM || written[0] == '/' ||
+					strstr(written, "..") == written || strstr(written, "/..") || strstr(written, "//") ||
+					strchr(written, '\\') || strchr(written, ':') || !steam_plan_name_plain(written))
+				{
+					abort();
+				}
+				for (index2 = 0; index2 < written_length; index2++)
+					if ((unsigned char)written[index2] < 0x20 || (unsigned char)written[index2] >= 0x7f)
+						abort();
+			}
+			for (index = 0; index < count; index++)
+				steam_workshop_names_collide(taken[index], taken[count]);
+			count++;
+		}
 	}
 	else if (!strcmp(target, "cdn_list"))
 	{

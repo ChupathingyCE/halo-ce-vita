@@ -49,7 +49,7 @@ steam="$root/port/steamdl/steam_pb.c $root/port/steamdl/steam_crypto.c $root/por
 	$root/port/steamdl/steam_manifest.c $root/port/steamdl/steam_chunk.c $root/port/steamdl/steam_file.c
 	$root/port/steamdl/steam_kv.c $root/port/steamdl/steam_ws.c $root/port/steamdl/steam_http.c
 	$root/port/steamdl/steam_cm.c $root/port/steamdl/steam_plan.c $root/port/steamdl/steam_session.c
-	$root/port/steamdl/steam_download.c $root/port/steamdl/steam_job.c"
+	$root/port/steamdl/steam_download.c $root/port/steamdl/steam_job.c $root/port/steamdl/steam_workshop.c"
 export ASAN_OPTIONS=detect_leaks=1:exitcode=99 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:exitcode=98
 bits=-m32
 echo 'int main(void) { return 0; }' > "$out/probe.c"
@@ -176,6 +176,62 @@ flow badmulti badmulti 1 ok
 flow slow slow 1 ok
 grep -q "cm: heartbeat" "$out/flow-slow/transcript.txt" || { echo "FAIL slow: no heartbeat during the download"; status=1; }
 
+echo "--- the Steam Workshop (the list, the chosen items into workshop/<id>, installed into mods/<id> after the session)"
+sub=workshop
+# (01 a campaign, 02 multiplayer: downloaded and installed; 03 a name leaving the folder, 04 two names one file,
+# 05 another game's, 06 banned, 07 a map not version 13: refused; 08 downloaded, refused by the map check)
+flow ws-items normal 2900000001,2900000002,2900000003,2900000004,2900000005,2900000006,2900000007,2900000008 ok
+w=$out/flow-ws-items
+grep -q "items=3 failed=5 installed=2 refused=1" "$w/line" || { echo "FAIL ws-items: counts"; status=1; }
+for f in maps/a10.map maps/a30.map CampaignInfo.json campaign/a10.json assets/a10.png ModInfo.json; do
+	[ -s "$w/card/haloce-vita/mods/2900000001/$f" ] || { echo "FAIL ws-items: mods/2900000001/$f missing"; status=1; }
+done
+[ -s "$w/card/haloce-vita/mods/2900000002/maps/fakegulch.map" ] || { echo "FAIL ws-items: 2900000002 missing"; status=1; }
+n=$(find "$w/card/haloce-vita/mods" -type f | wc -l)
+echo "  ws-items: $n files in mods"
+[ "$n" = 8 ] || { echo "FAIL ws-items: $n files in mods (8 expected)"; status=1; }
+find "$w/card" -name 'setup.exe' -o -name 'link.map' -o -name '*.part*' -o -name '*.journal' -o -name '.json' -o -name '*Screenshot*' | grep . && \
+	{ echo "FAIL ws-items: a file that must not be written"; status=1; }
+[ -z "$(ls -A "$w/card/haloce-vita/workshop" 2>/dev/null)" ] || \
+	{ echo "FAIL ws-items: workshop staging not empty: $(ls "$w/card/haloce-vita/workshop")"; status=1; }
+for id in 2900000003 2900000004 2900000005 2900000006 2900000007 2900000008; do
+	[ ! -e "$w/card/haloce-vita/mods/$id" ] || { echo "FAIL ws-items: $id installed"; status=1; }
+done
+grep -q "workshop install 2900000008: refused: maps/badcheck.map refused" "$w/log.txt" || \
+	{ echo "FAIL ws-items: the map check's refusal"; status=1; }
+grep -q "cm: workshop query page 1 sort 3 search ''" "$w/transcript.txt" && \
+	grep -q "cm: workshop query page 2" "$w/transcript.txt" && \
+	grep -q "cm: workshop query page 1 sort 12 search 'rebalanced'" "$w/transcript.txt" && \
+	grep -q "workshop list: search: 1 (Fake Rebalanced Campaign" "$w/log.txt" || \
+	{ echo "FAIL ws-items: the list's pages"; status=1; }
+grep -q "workshop list: page 1: 10 of 11" "$w/log.txt" || { echo "FAIL ws-items: page 1"; status=1; }
+grep -q "cm: depot key 976730" "$w/transcript.txt" || { echo "FAIL ws-items: no Workshop depot key"; status=1; }
+grep -q "cm: call PublishedFile.GetDetails#1 (signed in)" "$w/transcript.txt" || { echo "FAIL ws-items: no details"; status=1; }
+grep -E "cm: depot key (976733|976734)" "$w/transcript.txt" && { echo "FAIL ws-items: a game depot asked for"; status=1; }
+grep -q "cm: call PICS\|emsg 8903" "$w/transcript.txt" && { echo "FAIL ws-items: PICS asked"; status=1; }
+flow ws-names normal 2900000009,2900000010,2900000011 ok
+grep -q "items=1 failed=2 installed=0 refused=1" "$out/flow-ws-names/line" || { echo "FAIL ws-names: counts"; status=1; }
+grep -q "refused: the item has no maps" "$out/flow-ws-names/log.txt" || { echo "FAIL ws-names: no-maps refusal"; status=1; }
+flow ws-corrupt corrupt_once 2900000001 ok
+grep -q "items=1 failed=0 installed=1" "$out/flow-ws-corrupt/line" && grep -q "refused" "$out/flow-ws-corrupt/log.txt" || \
+	{ echo "FAIL ws-corrupt"; status=1; }
+flow ws-cancel normal 2900000001 cancel 3
+flow ws-resume normal 2900000001 ok "" ws-cancel
+grep -q "resumed\|already there" "$out/flow-ws-resume/log.txt" && grep -q "installed=1" "$out/flow-ws-resume/line" || \
+	{ echo "FAIL ws-resume: nothing resumed or not installed"; status=1; }
+flow ws-update normal 2900000001 ok "" ws-resume
+grep -q "installed=1" "$out/flow-ws-update/line" && [ -s "$out/flow-ws-update/card/haloce-vita/mods/2900000001/maps/a10.map" ] || \
+	{ echo "FAIL ws-update: the item not installed again"; status=1; }
+flow ws-not-owned ws_not_owned 2900000001 ok
+grep -q "items=0 failed=1" "$out/flow-ws-not-owned/line" || { echo "FAIL ws-not-owned"; status=1; }
+flow ws-wrong-manifest ws_wrong_manifest 2900000001 ok
+grep -q "items=0 failed=1" "$out/flow-ws-wrong-manifest/line" && \
+	grep -q "not the one asked for" "$out/flow-ws-wrong-manifest/log.txt" || { echo "FAIL ws-wrong-manifest"; status=1; }
+flow ws-hostile-list ws_hostile_list 2900000001 ok
+grep -q "items=0 failed=0" "$out/flow-ws-hostile-list/line" && \
+	grep -q "malformed" "$out/flow-ws-hostile-list/log.txt" || { echo "FAIL ws-hostile-list"; status=1; }
+sub=
+
 echo "--- the job (steam_job.c: the worker thread, the QR, the snapshot, a lost session started again)"
 sub=job
 flow job-ce normal 1 ok
@@ -241,6 +297,17 @@ if [ -d "$depotcache" ]; then
 		fi
 		"$out/steam_manifest_dump" -p "$manifest" | tail -1 | sed 's/^/  /'
 	done
+	# (the Workshop's own depot: every item manifest this PC keeps, through the name rule; none may crash, the
+	# verdicts are a report - an item with a REFUSE is refused whole)
+	n=0 taken=0 refused=0
+	for manifest in "$depotcache"/976730_*.manifest; do
+		[ -f "$manifest" ] || continue
+		n=$((n + 1))
+		line=$("$out/steam_manifest_dump" -w "$manifest" > "$out/ws_$(basename "$manifest").txt" 2>&1; echo $?)
+		[ "$line" = 0 ] || [ "$line" = 1 ] || { echo "FAIL workshop manifest $(basename "$manifest"): exit $line"; status=1; }
+		grep -q "^WORKSHOP .* 0 refused" "$out/ws_$(basename "$manifest").txt" && taken=$((taken + 1)) || refused=$((refused + 1))
+	done
+	[ "$n" = 0 ] || echo "  Workshop item manifests (depot 976730): $n, $taken with no name refused, $refused refused or unreadable"
 fi
 
 seconds=${STEAM_FUZZ_SECONDS:-0}
@@ -258,7 +325,7 @@ if [ "$seconds" != 0 ]; then
 	done
 	clang -g -O1 $fsan -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 $include $config "$here/steam_fuzz.c" $steam \
 		"$found"/obj/*.o -lpthread -o "$found/steam_fuzz"
-	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list; do
+	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list ws_list ws_names; do
 		mkdir -p "$found/$target"
 		seeds=$out/fixtures/seeds/$target
 		[ -d "$seeds" ] || seeds=
@@ -267,7 +334,7 @@ if [ "$seconds" != 0 ]; then
 			> "$found/$target.log" 2>&1 &
 	done
 	wait
-	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list; do
+	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list ws_list ws_names; do
 		runs=$(grep -E 'stat::number_of_executed_units' "$found/$target.log" | awk '{print $2}')
 		cov=$(grep -E '^#[0-9]+.*cov:' "$found/$target.log" | tail -1 | sed 's/.*cov: \([0-9]*\).*/\1/')
 		bad=$(ls "$found/$target" | grep -c -E '^(crash|leak|timeout|oom)-' || true)

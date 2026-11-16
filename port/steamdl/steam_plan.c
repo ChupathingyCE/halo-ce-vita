@@ -191,6 +191,12 @@ int steam_plan_header_ok(enum steam_plan_kind kind, const char *destination, con
 		return size <= (2ull << 30) && head_size >= 4 && !memcmp(head, "FSB5", 4);
 	case STEAM_KIND_LIST:
 		return size <= (2ull << 30) && head_size >= 4 && le32(head) == 1;
+	case STEAM_KIND_WORKSHOP_TEXT:
+		return size <= (1u << 20) && !memchr(head, 0, head_size < size ? head_size : (size_t)size);
+	case STEAM_KIND_WORKSHOP_PNG:
+		return size <= (16u << 20) && head_size >= 8 && !memcmp(head, "\x89PNG\r\n\x1a\n", 8);
+	case STEAM_KIND_WORKSHOP_BMP:
+		return size <= (16u << 20) && head_size >= 2 && head[0] == 'B' && head[1] == 'M';
 	case STEAM_KIND_RESOURCE:
 	{
 		/* (resource_map_ok: the type the name says, the names and index

@@ -17,6 +17,7 @@ secret), and may cancel at any callback.
 #define STEAM_DOWNLOAD_H
 
 #include "steam_session.h"
+#include "steam_workshop.h"
 
 #include <stdint.h>
 
@@ -40,6 +41,14 @@ struct steam_download_callbacks
 	/* nonzero while the download must pause (the Vita's battery low and not charging); NULL: never. progress is
 	still called meanwhile (file NULL), so the player can cancel */
 	int (*device_gate)(void *context);
+	/* (the Workshop, options->workshop) the list and the player's choice, with the session signed in: the callback
+	pages through steam_download_workshop_query as the player asks (and keeps the session alive meanwhile:
+	steam_session_pump) and gives the chosen items' ids: their count (0: none, the session ends), -1 cancels */
+	int (*workshop_choose)(void *context, struct steam_session *session, uint64_t *ids, int maximum);
+	/* (the Workshop) an item begun (index of count): nonzero cancels; NULL: none */
+	int (*item_start)(void *context, const struct steam_workshop_item *item, int index, int count);
+	/* (the Workshop) an item ended: ok, or the player's reason; NULL: none */
+	void (*item_end)(void *context, const struct steam_workshop_item *item, int ok, const char *why);
 };
 
 struct steam_download_options
@@ -53,6 +62,9 @@ struct steam_download_options
 	const char *ce_root; /* ux0:data/haloce-vita (Halo CE's files) */
 	const char *app_root; /* the app's own folder (1.1.x: the same; the marker, the free-space check) */
 	const char *marker_path; /* the no-secret marker, or NULL */
+	/* the Steam Workshop instead of the game's depots: the list (callbacks->workshop_choose), then each chosen item
+	into <ce_root>/workshop/<id> (steam_workshop.h; the install into the mods folder is the game's, after) */
+	int workshop;
 };
 
 struct steam_download_result
@@ -75,6 +87,8 @@ struct steam_download_result
 	size_t peak_chunk_buffer;
 	/* the CM connection's time (DNS, TCP, the TLS handshake and the WebSocket upgrade), ms */
 	unsigned int connect_ms;
+	/* (the Workshop) items downloaded whole (waiting for their install), items refused or failed */
+	unsigned int items_done, items_failed;
 };
 
 /* runs it all; result says how it went. Never leaves a session open */
@@ -84,6 +98,17 @@ void steam_download_run(const struct steam_download_options *options, const stru
 /* the part for one depot, with a session already signed in (exposed for
 the tests): 1, or 0 with result->error set */
 int steam_download_depot(struct steam_session *session, const struct steam_kv *app_info, uint32_t depot,
+	const struct steam_download_options *options, const struct steam_download_callbacks *callbacks,
+	const char *const *cdn, int cdn_count, struct steam_download_result *result);
+
+/* (the Workshop) one page of the list, from inside workshop_choose: the items read (at most maximum), -1 with a
+reason */
+int steam_download_workshop_query(struct steam_session *session, int page, enum steam_workshop_sort sort,
+	const char *search, struct steam_workshop_item *items, int maximum, uint32_t *total, char *error, int error_size);
+
+/* (the Workshop) one item, its details checked already, into <ce_root>/workshop/<id> with its .done mark: 1, or 0
+with result->error set (exposed for the tests) */
+int steam_download_workshop_item(struct steam_session *session, const struct steam_workshop_item *item,
 	const struct steam_download_options *options, const struct steam_download_callbacks *callbacks,
 	const char *const *cdn, int cdn_count, struct steam_download_result *result);
 

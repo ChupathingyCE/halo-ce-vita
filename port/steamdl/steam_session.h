@@ -138,6 +138,11 @@ first): their count, or -1 */
 int steam_session_cdn_servers(struct steam_session *session, struct steam_cdn_server *servers, int maximum, char *error,
 	int error_size);
 
+/* an authenticated service method call (the Workshop's PublishedFile.QueryFiles#1, GetDetails#1): 1 with the
+response's body (the session's buffer: read it before the next call), or 0 with a reason */
+int steam_session_call(struct steam_session *session, const char *method, const void *body, size_t body_size,
+	const uint8_t **reply, size_t *reply_size, char *error, int error_size);
+
 /* revoke, log off, close, wipe: on every path; harmless twice */
 void steam_session_end(struct steam_session *session);
 

@@ -30,6 +30,8 @@ enum steam_job_phase
 	STEAM_JOB_QR,
 	/* approved: signing in, the app's info, the depot's key and manifest */
 	STEAM_JOB_PREPARING,
+	/* (the Workshop) signed in: the list, the player choosing (steam_job_workshop_*) */
+	STEAM_JOB_BROWSING,
 	STEAM_JOB_DOWNLOADING,
 	/* the battery low and not charging */
 	STEAM_JOB_PAUSED,
@@ -81,6 +83,9 @@ struct steam_job_options
 	char cm_url[256];
 	/* the tests' CDN instead of Steam's directory: "" in the game */
 	char cdn_override[256];
+	/* the Steam Workshop (steam_workshop.h) instead of the game's depots: ce_root is the data root (its workshop
+	and mods folders) */
+	int workshop;
 };
 
 struct steam_job_platform
@@ -145,6 +150,52 @@ int steam_job_forget(void);
 int steam_job_marker_stale(const char *marker_path, char *date, size_t date_size);
 /* the player read the warning: the marker removed */
 void steam_job_marker_clear(const char *marker_path);
+
+/* ---------- the Steam Workshop (steam_workshop.h): one signed-in session, the list, the choice, the download
+
+The player signs in by QR as for the depots; then, while the phase is STEAM_JOB_BROWSING, the screen asks for pages
+(steam_job_workshop_ask) and reads them (steam_job_workshop_view), and ends the list with the items chosen
+(steam_job_workshop_choose; none: the session just ends). The chosen items go to <data root>/workshop/<id>; after the
+job, the game installs each into mods/<id> (steam_workshop_install with its own map check). The list is left after
+STEAM_JOB_WORKSHOP_IDLE_SECONDS without a key pressed (steam_job_workshop_ask or _touch). */
+
+#define STEAM_JOB_WORKSHOP_IDLE_SECONDS 600
+
+/* a Workshop job begun: data_root the game's (ux0:data/haloce-vita): 1, 0 if one runs, -1 if the battery is low */
+int steam_job_start_workshop(const char *data_root);
+/* the page asked for (1 the first), the order (steam_workshop_sort), the search ("" none) */
+void steam_job_workshop_ask(int page, int sort, const char *search);
+/* the player is still there (a key pressed on the list) */
+void steam_job_workshop_touch(void);
+/* the list ended: these ids (the view's id texts) downloaded, then the session ends (count 0: none) */
+void steam_job_workshop_choose(const char (*ids)[24], int count);
+
+/* (ints and bytes alone, as steam_job_view) */
+struct steam_job_workshop_row
+{
+	char id[24];
+	char title[64];
+	unsigned int size_kb;
+	int tags;
+	/* 1: may be downloaded; 0: why in reason (another game's, banned, multiplayer maps only, too large) */
+	int downloadable;
+	char reason[64];
+};
+
+struct steam_job_workshop_view
+{
+	int phase;
+	/* the page shown: its number, order, search, the list's total; loading while a page is asked */
+	int page, sort, total, count, loading, serial;
+	char search[64];
+	struct steam_job_workshop_row rows[10];
+	/* the list's last error ("" none) */
+	char error[160];
+	/* the download: the item in hand (index of count) and its title, the items done and failed, the last failure */
+	int item_index, item_count, items_done, items_failed;
+	char item_title[64], failure[200];
+};
+void steam_job_workshop_view(struct steam_job_workshop_view *view);
 
 /* the QR of a text (for the tests): its size (0 if it does not fit), modules 1 dark */
 int steam_job_qr_encode(const char *text, uint8_t *modules, int maximum_size);

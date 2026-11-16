@@ -155,6 +155,14 @@ parser.add_argument(
     "unannounced",
 )
 parser.add_argument(
+    "--steam-workshop",
+    action="store_true",
+    help="build the Steam Workshop (port/steamdl/steam_workshop.c; docs/steam_download_security.md section 7): "
+    "DOWNLOAD FROM STEAM's STEAM WORKSHOP row and screen, Halo CE's Workshop items listed and downloaded through the "
+    "player's own Steam sign-in into the mods folder (HALO_STEAM_WORKSHOP). Off by default until the owner's live Steam "
+    "test; implies --steam-download",
+)
+parser.add_argument(
     "--steam-test-ca",
     metavar="PEM",
     type=Path,
@@ -283,7 +291,8 @@ sln.port_pgo = args.pgo
 sln.port_pgo_profile = args.pgo_profile
 sln.vita_aligned = args.vita_aligned
 sln.vita_update_test_sources = args.vita_update_test_sources
-sln.steam_download = args.steam_download or args.steam_test_ca is not None
+sln.steam_download = args.steam_download or args.steam_workshop or args.steam_test_ca is not None
+sln.steam_workshop = args.steam_workshop
 sln.steam_test_ca = args.steam_test_ca
 if args.steam_test_ca and args.release:
     sys.exit("configure.py: --steam-test-ca is for test builds")

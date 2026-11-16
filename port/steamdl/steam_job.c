@@ -10,6 +10,7 @@ steam_job.h: the download's worker thread and its snapshot.
 #include "steam_download.h"
 #include "steam_plan.h"
 #include "steam_session.h"
+#include "steam_workshop.h"
 
 #include "qrcodegen.h"
 
@@ -46,7 +47,18 @@ static struct
 	double sample_time;
 	uint64_t sample_done;
 	int sample_valid;
-} job = { PTHREAD_MUTEX_INITIALIZER };
+	/* the Workshop: the page asked (serial) and the one shown, the choice, the player's last key */
+	struct
+	{
+		unsigned int asked, served;
+		int page, sort;
+		char search[STEAM_WORKSHOP_SEARCH_SIZE];
+		int chosen, chosen_count, lost;
+		char chosen_ids[STEAM_WORKSHOP_CHOSEN_MAXIMUM][24];
+		double touched;
+		struct steam_job_workshop_view view;
+	} workshop;
+} job = { PTHREAD_MUTEX_INITIALIZER, 0, 0, { 0 }, { 0 }, 0, 0, 0, { 0 } };
 
 /* ---------- the platform's side, and its defaults */
 
@@ -325,6 +337,202 @@ static int64_t free_space(void *context, const char *root)
 	return platform.free_space(root);
 }
 
+/* ---------- the Workshop's list (on the job's thread, the session signed in) */
+
+static void workshop_row(struct steam_job_workshop_row *row, const struct steam_workshop_item *item)
+{
+	char why[160];
+
+	memset(row, 0, sizeof(*row));
+	snprintf(row->id, sizeof(row->id), "%llu", (unsigned long long)item->id);
+	snprintf(row->title, sizeof(row->title), "%s", item->title[0] ? item->title : row->id);
+	row->size_kb = item->file_size >> 10 > 0xffffffffull ? 0xffffffffu : (unsigned int)(item->file_size >> 10);
+	row->tags = item->tags;
+	row->downloadable = steam_workshop_item_ok(item, why, sizeof(why));
+	if (!row->downloadable)
+		snprintf(row->reason, sizeof(row->reason), "%s", why);
+	else if ((item->tags & STEAM_WORKSHOP_TAG_MULTIPLAYER) && !(item->tags & STEAM_WORKSHOP_TAG_CAMPAIGN))
+	{
+		/* (1.1.3 plays a Workshop item's campaign maps alone, offline: docs/mcc_cea_maps.md) */
+		row->downloadable = 0;
+		snprintf(row->reason, sizeof(row->reason), "Multiplayer maps: not in this version");
+	}
+}
+
+static int job_workshop_choose(void *context, struct steam_session *session, uint64_t *ids, int maximum)
+{
+	(void)context;
+	pthread_mutex_lock(&job.lock);
+	job.status.phase = STEAM_JOB_BROWSING;
+	job.workshop.view.phase = STEAM_JOB_BROWSING;
+	job.workshop.touched = now_seconds();
+	/* (a session started again after a loss: the page asked again) */
+	job.workshop.served = job.workshop.asked - 1;
+	pthread_mutex_unlock(&job.lock);
+	say("steam job: workshop list open");
+	for (;;)
+	{
+		struct steam_workshop_item items[STEAM_WORKSHOP_PAGE_ITEMS];
+		char search[STEAM_WORKSHOP_SEARCH_SIZE], error[160];
+		unsigned int asked;
+		uint32_t total = 0;
+		int page, sort, count, index;
+
+		platform.keep_awake();
+		if (job.cancel)
+			return -1;
+		pthread_mutex_lock(&job.lock);
+		if (job.workshop.chosen)
+		{
+			count = 0;
+			for (index = 0; index < job.workshop.chosen_count && count < maximum; index++)
+				if (steam_workshop_id_parse(job.workshop.chosen_ids[index], &ids[count]))
+					count++;
+			job.status.phase = STEAM_JOB_PREPARING;
+			pthread_mutex_unlock(&job.lock);
+			say("steam job: workshop: %d items chosen", count);
+			return count;
+		}
+		if (now_seconds() - job.workshop.touched > STEAM_JOB_WORKSHOP_IDLE_SECONDS)
+		{
+			pthread_mutex_unlock(&job.lock);
+			say("steam job: workshop list left alone %d s: signing out", STEAM_JOB_WORKSHOP_IDLE_SECONDS);
+			return 0;
+		}
+		asked = job.workshop.asked;
+		if (asked == job.workshop.served)
+		{
+			pthread_mutex_unlock(&job.lock);
+			if (!steam_session_pump(session, 250) || session->kicked)
+			{
+				pthread_mutex_lock(&job.lock);
+				job.workshop.lost = 1;
+				pthread_mutex_unlock(&job.lock);
+				say("steam job: workshop: the session ended under the list");
+				return 0;
+			}
+			continue;
+		}
+		page = job.workshop.page;
+		sort = job.workshop.sort;
+		memcpy(search, job.workshop.search, sizeof(search));
+		job.workshop.view.loading = 1;
+		pthread_mutex_unlock(&job.lock);
+		count = steam_download_workshop_query(session, page, (enum steam_workshop_sort)sort, search, items,
+			STEAM_WORKSHOP_PAGE_ITEMS, &total, error, sizeof(error));
+		say("steam job: workshop page %d (order %d%s): %d items of %u", page, sort, search[0] ? ", a search" : "", count,
+			(unsigned int)total);
+		pthread_mutex_lock(&job.lock);
+		job.workshop.served = asked;
+		job.workshop.view.loading = 0;
+		job.workshop.view.serial++;
+		job.workshop.view.page = page;
+		job.workshop.view.sort = sort;
+		memcpy(job.workshop.view.search, search, sizeof(job.workshop.view.search));
+		if (count < 0)
+		{
+			job.workshop.view.count = 0;
+			snprintf(job.workshop.view.error, sizeof(job.workshop.view.error), "%s", error);
+		}
+		else
+		{
+			job.workshop.view.error[0] = 0;
+			job.workshop.view.total = (int)(total > 100000 ? 100000 : total);
+			job.workshop.view.count = count;
+			for (index = 0; index < count; index++)
+				workshop_row(&job.workshop.view.rows[index], &items[index]);
+		}
+		pthread_mutex_unlock(&job.lock);
+	}
+}
+
+static int job_item_start(void *context, const struct steam_workshop_item *item, int index, int count)
+{
+	(void)context;
+	pthread_mutex_lock(&job.lock);
+	job.workshop.view.item_index = index;
+	job.workshop.view.item_count = count;
+	snprintf(job.workshop.view.item_title, sizeof(job.workshop.view.item_title), "%s", item->title);
+	job.status.phase = STEAM_JOB_PREPARING;
+	job.status.done = job.status.total = 0;
+	job.status.rate = 0;
+	job.status.seconds_left = -1;
+	job.sample_valid = 0;
+	pthread_mutex_unlock(&job.lock);
+	return job.cancel;
+}
+
+static void job_item_end(void *context, const struct steam_workshop_item *item, int ok, const char *why)
+{
+	(void)context;
+	pthread_mutex_lock(&job.lock);
+	if (ok)
+		job.workshop.view.items_done++;
+	else
+	{
+		job.workshop.view.items_failed++;
+		snprintf(job.workshop.view.failure, sizeof(job.workshop.view.failure), "%.60s: %.130s",
+			item->title[0] ? item->title : "an item", why);
+	}
+	pthread_mutex_unlock(&job.lock);
+	say("steam job: workshop item %llu %s", (unsigned long long)item->id, ok ? "downloaded" : "failed");
+}
+
+int steam_job_start_workshop(const char *data_root)
+{
+	struct steam_job_options options;
+
+	if (!platform.battery_ok())
+		return -1;
+	job_options(&options, 0);
+	options.workshop = 1;
+	snprintf(options.ce_root, sizeof(options.ce_root), "%s", data_root);
+	return steam_job_start(&options);
+}
+
+void steam_job_workshop_ask(int page, int sort, const char *search)
+{
+	pthread_mutex_lock(&job.lock);
+	job.workshop.page = page < 1 ? 1 : page;
+	job.workshop.sort = sort >= 0 && sort < STEAM_WORKSHOP_SORT_COUNT ? sort : 0;
+	snprintf(job.workshop.search, sizeof(job.workshop.search), "%s", search ? search : "");
+	job.workshop.asked++;
+	job.workshop.view.loading = 1;
+	job.workshop.touched = now_seconds();
+	pthread_mutex_unlock(&job.lock);
+}
+
+void steam_job_workshop_touch(void)
+{
+	pthread_mutex_lock(&job.lock);
+	job.workshop.touched = now_seconds();
+	pthread_mutex_unlock(&job.lock);
+}
+
+void steam_job_workshop_choose(const char (*ids)[24], int count)
+{
+	int index;
+
+	pthread_mutex_lock(&job.lock);
+	job.workshop.chosen_count = 0;
+	for (index = 0; index < count && index < STEAM_WORKSHOP_CHOSEN_MAXIMUM; index++)
+	{
+		memcpy(job.workshop.chosen_ids[index], ids[index], 24);
+		job.workshop.chosen_ids[index][23] = 0;
+		job.workshop.chosen_count++;
+	}
+	job.workshop.chosen = 1;
+	pthread_mutex_unlock(&job.lock);
+}
+
+void steam_job_workshop_view(struct steam_job_workshop_view *view)
+{
+	pthread_mutex_lock(&job.lock);
+	*view = job.workshop.view;
+	view->phase = job.cancel && job.running ? STEAM_JOB_ENDING : job.status.phase;
+	pthread_mutex_unlock(&job.lock);
+}
+
 /* ---------- the thread */
 
 /* a CM from Steam's directory (no sign-in: the public list) */
@@ -363,6 +571,7 @@ static void *worker(void *unused)
 	options.ce_root = job.options.ce_root;
 	options.app_root = job.options.app_root;
 	options.marker_path = job.options.marker_path[0] ? job.options.marker_path : NULL;
+	options.workshop = job.options.workshop;
 	if (job.options.cdn_override[0])
 	{
 		cdn[0] = job.options.cdn_override;
@@ -377,6 +586,12 @@ static void *worker(void *unused)
 	callbacks.log = log_line;
 	callbacks.free_space = free_space;
 	callbacks.device_gate = device_gate;
+	if (job.options.workshop)
+	{
+		callbacks.workshop_choose = job_workshop_choose;
+		callbacks.item_start = job_item_start;
+		callbacks.item_end = job_item_end;
+	}
 	memset(&result, 0, sizeof(result));
 	for (attempt = 0; attempt <= JOB_RESTARTS; attempt++)
 	{
@@ -398,6 +613,11 @@ static void *worker(void *unused)
 		if (result.ok || result.cancelled || job.cancel || !result.session_lost)
 			break;
 		say("steam job: the session was lost: a new QR (the download resumes)");
+	}
+	if (job.options.workshop && result.ok && job.workshop.lost && !job.workshop.chosen)
+	{
+		result.ok = 0;
+		snprintf(result.error, sizeof(result.error), "The Steam session was lost");
 	}
 	final_phase = result.ok ? STEAM_JOB_DONE : result.cancelled || job.cancel ? STEAM_JOB_CANCELLED : STEAM_JOB_FAILED;
 	{
@@ -446,6 +666,9 @@ int steam_job_start(const struct steam_job_options *options)
 		return 0;
 	}
 	memset(&job.status, 0, sizeof(job.status));
+	memset(&job.workshop, 0, sizeof(job.workshop));
+	job.workshop.asked = 1;
+	job.workshop.page = 1;
 	job.options = *options;
 	job.status.games = options->games;
 	job.status.phase = STEAM_JOB_CONNECTING;
@@ -537,6 +760,7 @@ int steam_job_forget(void)
 	if (!job.running)
 	{
 		memset(&job.status, 0, sizeof(job.status));
+		memset(&job.workshop, 0, sizeof(job.workshop));
 		forgot = 1;
 	}
 	pthread_mutex_unlock(&job.lock);

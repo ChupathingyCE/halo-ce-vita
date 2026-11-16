@@ -240,3 +240,74 @@ PC test's "flow" mode writes the fake's challenge URL to its own log on purpose 
    Steam app (rule 3.2). Unchanged from 1.2.0; the owner's live test on a Vita is the only proof.
 6. **The test's `flow` mode logs the fake challenge URL** ("QR: ..."): test-only, the fake's. The live mode and the
    game never do. Left as it is, noted so nobody copies the line into the game.
+
+## 7. The Steam Workshop (feat/11x-steam-workshop, Nov 16 2026, for 1.1.3: off by default)
+
+Build switch: configure.py --steam-workshop (implies --steam-download; HALO_STEAM_WORKSHOP). Without it the binary
+has no STEAM WORKSHOP row or screen; port/steamdl/steam_workshop.c is compiled with the Steam download (the job's
+Workshop path is then unreachable: nothing calls steam_job_start_workshop).
+
+What it does: DOWNLOAD FROM STEAM's third row opens STEAM WORKSHOP (menus/halo3/workshop.xml). The player signs in
+by QR exactly as for the depots (3.1-3.3 hold unchanged: tokens and keys in RAM only, revoke + log off on every path,
+the marker, TLS always). Signed in, the list is PublishedFile.QueryFiles#1 over the same CM session (app 976730,
+required tag Halo1, ten a page, details and tags returned); the player marks up to 8 items; their details are
+PublishedFile.GetDetails#1; each item's content is depot 976730's manifest whose gid is the item's hcontent_file
+(depot key of 976730, request code, CDN), chunk-checked as any depot (3.6). Then the session ends. Only after that,
+on the game's thread, each item is checked again and moved into the mods folder (steam_workshop_install).
+
+Provenance: written from Steam's published protobufs (SteamDatabase/Protobufs, steammessages_publishedfile) and the
+UGC download sequence ChupathingyCE's MIT Steam content client shows (Milenko x Horrible Dev); no code text of
+ChupathingyCE or OpenCE (~/halo-test-out/workshop-runs/NOTES.md has the per-file table).
+
+**Rules (MUSTs) the Workshop adds**
+
+- **No web page, no site, no third party.** The list comes only from Steam's CM over the signed-in TLS session; no
+  steamcommunity.com page is read, no list of anyone else's, no image fetched. Nothing is downloaded from another
+  player, ever (a joiner who lacks a map is never sent one by a host: 1.1.3 plays Workshop maps offline only).
+- **What Steam says about an item is checked** (steam_workshop_item_ok): result OK, consumer app 976730, tag Halo1,
+  not banned, has content (hcontent_file != 0), size at most 4 GB, an id of at most 12 digits (the mods folder's key).
+  The manifest must name depot 976730 and that gid, its crc_clear must match.
+- **Names become paths here, so a name is a rule, not a lookup** (steam_workshop_name). A name that tries to leave the
+  item's folder - an empty, "." or ".." part, a leading '/', a drive, ':', a control byte, longer than 1024 - refuses
+  the WHOLE item. A name merely odd is skipped (never written, the item kept): deeper than 4 parts, a part over 64
+  bytes, the whole over 160, hidden (leading '.'), ending in '.' or ' ' (trimmed by Windows and the Vita's file
+  system), a character outside [A-Za-z0-9 _.-()+,'&!]. Only five kinds are ever written: .map, .json/.txt (1 MB),
+  .png/.bmp (16 MB); everything else (a DLL, an EXE, a script) is skipped. Symlinks and directory entries are never
+  made. Two names one file on a case-blind card refuse the item; at most 512 files. (Checked against the 147 real
+  Workshop manifests in this PC's Steam depotcache: 144 have no refused name; the 3 others only skipped names - a
+  73-byte screenshot name, "campaign/.json".)
+- **Header checks** before a file is renamed into place: a .map must be "daeh" + version 13 (bitmaps/sounds/loc.map:
+  the resource header, by name), a PNG its signature, a BMP "BM", text no NUL in its head.
+- **Staging, then the game's own check, then the mods folder.** Files go to <data root>/workshop/<id>/ (.part +
+  journal, resumable); <id>.gid names the version (another version starts over); <id>.done is written only when every
+  file is in and checked. The install walks the staged folder again (every name by the same rule, as written, no
+  stray .part, journal or link, no collision, the total size) and runs every map through
+  custom_edition_cache_file_check - the same check the mods folder's loader makes, with the CE/MCC loader caps of
+  sec/114 once merged - and needs at least one map. Only then is the folder renamed to mods/<id> (an older version
+  there removed first). A refused or failed item's staging is deleted: nothing of it is kept. A cancelled or lost
+  session keeps it for a resume.
+- **What plays**: the mods folder's MCC mods - Halo: CE Anniversary caches of solo scenarios, offline, for a game of
+  this machine's own (docs/mcc_cea_maps.md "Offline only"): unchanged. Multiplayer-only items are listed and not
+  offered for download ("Multiplayer maps: not in this version").
+
+**Fuzzed**: steam_fuzz.c ws_list (QueryFiles/GetDetails responses: titles printable ASCII, counts capped) and
+ws_names (the name rule: a taken name is plain, ours, inside the folder). **Fake-server flows**: ws-items (a campaign
+and a multiplayer item installed; names leaving the folder, two names one file, another game's, banned, a version 7
+map refused; a map refused by the map check), ws-names (a drive, a control byte, an item without maps), ws-corrupt,
+ws-cancel then ws-resume, ws-update (installed over), ws-not-owned, ws-wrong-manifest, ws-hostile-list (malformed),
+each ending revoke then log off, no token in the log or any file. **Menus (headless)**: run_menus_test.sh h3workshop
+(English and Spanish): sign-in, QR, pages, a typed search, the order, two items marked and downloaded, one real MCC
+map installed by the game's own check (its bytes compared), one made-up map refused.
+
+**Open for the live test** (docs/steam_download_live_test.md "The Workshop"): whether an account that owns MCC is
+given depot 976730's key and request codes for Workshop content (Chupathingy's client does exactly this); whether
+QueryFiles' required tag "Halo1" and its paging behave as the fake does; real items' sizes and names.
+
+**Findings of this review**
+1. Chupathingy keeps the refresh token on disk (a secret store or a file) to stay "linked": not ported (3.2).
+2. Chupathingy falls back to plain-HTTP CDN servers when none offers HTTPS: not ported (3.3: TLS always).
+3. Chupathingy lists from Steam's public browse page (HTML) or a site's list: not ported (no third-party list, no
+   HTML parser on the Vita).
+4. Real Workshop items carry DLLs ("modded halo3.dll (REQUIRED)/halo3.dll" in this PC's items): never written here.
+5. A name of a real item would have refused the whole item under a first, stricter rule (any odd name refused): the
+   rule now refuses only names that leave the folder and skips the rest.

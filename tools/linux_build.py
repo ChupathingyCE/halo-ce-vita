@@ -413,6 +413,11 @@ def steam_download(sln: Any) -> bool:
     return bool(getattr(sln, "steam_download", False))
 
 
+def steam_workshop(sln: Any) -> bool:
+    """configure.py --steam-workshop: the Steam Workshop's screen in the menus (it implies the Steam download)"""
+    return bool(getattr(sln, "steam_workshop", False))
+
+
 def steam_test_flags(sln: Any) -> List[str]:
     """configure.py --steam-test-ca (TEST builds only): the download takes a test server from the environment
     (env.txt on the Vita) and the PEM's authority is built in beside the real ones (posix_https.c's
@@ -507,6 +512,8 @@ def generate_linux_build(n: Writer, sln: Any) -> None:
                    + (["-DHALO_NET_AS_VITA=1"] if getattr(sln, "linux_net_vita", False) else [])
                    # (configure.py --steam-download: GAME MANAGER's DOWNLOAD FROM STEAM, menu_functions.c; port/steamdl)
                    + (["-DHALO_STEAM_DOWNLOAD=1"] if steam_download(sln) else [])
+                   # (configure.py --steam-workshop: DOWNLOAD FROM STEAM's STEAM WORKSHOP, menu_functions.c)
+                   + (["-DHALO_STEAM_WORKSHOP=1"] if steam_workshop(sln) else [])
                    # (configure.py --vita-version: the PC build says the
                    # version the Vita's does)
                    + version_defines(sln))

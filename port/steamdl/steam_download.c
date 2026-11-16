@@ -60,7 +60,8 @@ struct planned
 {
 	const struct steam_plan_file *plan;
 	char depot_path[160];
-	char destination[160];
+	/* (a Workshop item's: workshop/<id>/<its name>, at most STEAM_WORKSHOP_NAME_MAXIMUM of it) */
+	char destination[200];
 	enum steam_plan_kind kind;
 	enum steam_plan_root root;
 	struct steam_manifest_file *file; /* chunks copied into chunks */
@@ -516,6 +517,386 @@ done:
 	return ok;
 }
 
+/* ---------- a Workshop item */
+
+struct workshop_collected
+{
+	struct collected base;
+	char prefix[48];
+	int refused;
+	char why[200];
+	unsigned int skipped;
+	const struct steam_download_callbacks *callbacks;
+};
+
+/* a manifest's file of a Workshop item: its name by the rule (steam_workshop_name), kept or skipped, or the item
+refused */
+static int collect_workshop(void *context, const struct steam_manifest_file *file)
+{
+	struct workshop_collected *collected = context;
+	char relative[STEAM_WORKSHOP_NAME_MAXIMUM + 1];
+	enum steam_plan_kind kind = STEAM_KIND_WORKSHOP_TEXT;
+	struct planned *planned;
+	size_t index;
+	int taken;
+
+	if (collected->refused)
+		return 0;
+	if (file->flags & STEAM_FILE_FLAG_DIRECTORY)
+		return 0;
+	if (file->flags & STEAM_FILE_FLAG_SYMLINK)
+	{
+		collected->skipped++;
+		return 0;
+	}
+	taken = steam_workshop_name(file->name, relative, sizeof(relative), &kind);
+	if (taken == STEAM_WORKSHOP_NAME_REFUSE)
+	{
+		/* (the name itself is the item maker's: kept out of the player's text, a short form in the log) */
+		collected->refused = 1;
+		snprintf(collected->why, sizeof(collected->why), "a file name that is not allowed");
+		say(collected->callbacks, "workshop: refused name (%u bytes)", (unsigned int)strnlen(file->name, 2048));
+		return 0;
+	}
+	if (taken == STEAM_WORKSHOP_NAME_SKIP)
+	{
+		collected->skipped++;
+		return 0;
+	}
+	for (index = 0; index < collected->base.count; index++)
+		if (steam_workshop_names_collide(collected->base.files[index].depot_path, relative))
+		{
+			collected->refused = 1;
+			snprintf(collected->why, sizeof(collected->why), "two files of one name");
+			return 0;
+		}
+	if (collected->base.count >= STEAM_WORKSHOP_FILES_MAXIMUM)
+	{
+		collected->refused = 1;
+		snprintf(collected->why, sizeof(collected->why), "too many files");
+		return 0;
+	}
+	if ((kind == STEAM_KIND_WORKSHOP_TEXT && file->size > STEAM_WORKSHOP_TEXT_BYTES_MAXIMUM) ||
+		((kind == STEAM_KIND_WORKSHOP_PNG || kind == STEAM_KIND_WORKSHOP_BMP) &&
+			file->size > STEAM_WORKSHOP_PICTURE_BYTES_MAXIMUM) || file->size > STEAM_FILE_MAXIMUM || !file->size)
+	{
+		collected->refused = 1;
+		snprintf(collected->why, sizeof(collected->why), "a file too large (or empty) for its kind");
+		return 0;
+	}
+	if (collected->base.count == collected->base.capacity)
+	{
+		size_t capacity = collected->base.capacity ? collected->base.capacity * 2 : 32;
+		struct planned *grown = realloc(collected->base.files, capacity * sizeof(*grown));
+
+		if (!grown)
+			return -1;
+		collected->base.files = grown;
+		collected->base.capacity = capacity;
+	}
+	planned = &collected->base.files[collected->base.count];
+	memset(planned, 0, sizeof(*planned));
+	/* (depot_path: the relative name, for the collision check; destination: under the CE root) */
+	snprintf(planned->depot_path, sizeof(planned->depot_path), "%s", relative);
+	if ((size_t)snprintf(planned->destination, sizeof(planned->destination), "%s/%s", collected->prefix, relative) >=
+		sizeof(planned->destination))
+	{
+		collected->refused = 1;
+		snprintf(collected->why, sizeof(collected->why), "a file name too long");
+		return 0;
+	}
+	planned->kind = kind;
+	planned->root = STEAM_ROOT_CE;
+	if (!keep_file(planned, file))
+	{
+		free_planned(planned);
+		return -1;
+	}
+	collected->base.count++;
+	return 0;
+}
+
+static int write_text_file(const char *path, const char *text)
+{
+	FILE *file = fopen(path, "wb");
+	int ok;
+
+	if (!file)
+		return 0;
+	ok = fputs(text, file) >= 0;
+	return fclose(file) == 0 && ok;
+}
+
+static int read_gid_file(const char *path, uint64_t *gid)
+{
+	char text[40];
+	FILE *file = fopen(path, "rb");
+	size_t length;
+
+	*gid = 0;
+	if (!file)
+		return 0;
+	length = fread(text, 1, sizeof(text) - 1, file);
+	fclose(file);
+	text[length] = 0;
+	*gid = strtoull(text, NULL, 10);
+	return *gid != 0;
+}
+
+int steam_download_workshop_item(struct steam_session *session, const struct steam_workshop_item *item,
+	const struct steam_download_options *options, const struct steam_download_callbacks *callbacks,
+	const char *const *cdn_servers, int cdn_count, struct steam_download_result *result)
+{
+	struct workshop_collected collected;
+	struct steam_manifest_metadata metadata;
+	struct cdn cdn;
+	const uint8_t *key;
+	uint8_t *zipped = NULL, *manifest = NULL;
+	size_t zipped_size = 0, manifest_size = 0, index;
+	uint64_t code = 0, done = 0, total, staged_gid;
+	char path[128], error[256], id_text[24], staging[512], gid_path[512], done_path[512], text[96], folder[512];
+	int ok = 0;
+
+	memset(&collected, 0, sizeof(collected));
+	memset(&cdn, 0, sizeof(cdn));
+	cdn.servers = cdn_servers;
+	cdn.count = cdn_count;
+	cdn.session = session;
+	cdn.callbacks = callbacks;
+	cdn.result = result;
+	if (!steam_workshop_id_text(item->id, id_text, sizeof(id_text)) ||
+		!steam_workshop_paths(options->ce_root, item->id, staging, gid_path, done_path, NULL, sizeof(staging)))
+	{
+		fail(result, "the item's number is too long");
+		return 0;
+	}
+	/* (a staging folder of another version of the item: begun again) */
+	if (read_gid_file(gid_path, &staged_gid) && staged_gid != item->hcontent)
+	{
+		say(callbacks, "workshop %s: a new version: the old download dropped", id_text);
+		steam_workshop_remove_tree(staging);
+	}
+	remove(done_path);
+	snprintf(folder, sizeof(folder), "%s/workshop", options->ce_root);
+	make_parents(staging);
+	mkdir(folder, 0777);
+	snprintf(text, sizeof(text), "%llu\n", (unsigned long long)item->hcontent);
+	if (!write_text_file(gid_path, text))
+	{
+		fail(result, "cannot write in %s", folder);
+		return 0;
+	}
+	key = steam_session_depot_key(session, STEAM_WORKSHOP_APP, STEAM_WORKSHOP_DEPOT, error, sizeof(error));
+	if (!key)
+	{
+		fail(result, "%s", error);
+		return 0;
+	}
+	if (!steam_session_manifest_code(session, STEAM_WORKSHOP_APP, STEAM_WORKSHOP_DEPOT, item->hcontent, "public", &code,
+		error, sizeof(error)))
+	{
+		fail(result, "%s", error);
+		return 0;
+	}
+	snprintf(path, sizeof(path), "/depot/%u/manifest/%llu/5/%llu", (unsigned int)STEAM_WORKSHOP_DEPOT,
+		(unsigned long long)item->hcontent, (unsigned long long)code);
+	zipped = cdn_get(&cdn, path, STEAM_MANIFEST_ZIPPED_MAXIMUM, &zipped_size, error, sizeof(error), MANIFEST_TIMEOUT_MS);
+	steam_wipe(path, sizeof(path));
+	code = 0;
+	if (!zipped)
+	{
+		fail(result, "item %s's manifest: %s", id_text, error);
+		goto done;
+	}
+	if (!steam_zip_entry_size(zipped, zipped_size, STEAM_MANIFEST_MAXIMUM, &manifest_size) ||
+		!(manifest = malloc(manifest_size + 1)) ||
+		!steam_zip_extract(zipped, zipped_size, manifest, manifest_size, error, sizeof(error)))
+	{
+		fail(result, "item %s's manifest is not a zip of one file", id_text);
+		goto done;
+	}
+	snprintf(collected.prefix, sizeof(collected.prefix), "workshop/%s", id_text);
+	collected.callbacks = callbacks;
+	if (steam_manifest_parse(manifest, manifest_size, key, &metadata, collect_workshop, &collected, error,
+		sizeof(error)) != 0)
+	{
+		fail(result, "item %s's manifest refused: %s", id_text, error[0] ? error : "malformed");
+		goto done;
+	}
+	if (metadata.depot_id != STEAM_WORKSHOP_DEPOT || metadata.gid != item->hcontent ||
+		!steam_manifest_crc_ok(manifest, manifest_size, &metadata))
+	{
+		fail(result, "item %s's manifest is not the one asked for", id_text);
+		goto done;
+	}
+	if (collected.refused)
+	{
+		fail(result, "item %s refused: %s", id_text, collected.why);
+		goto done;
+	}
+	if (collected.skipped)
+		say(callbacks, "workshop %s: %u files of other kinds left out", id_text, collected.skipped);
+	total = (uint64_t)planned_needed(&collected.base);
+	if (!collected.base.count || total > STEAM_WORKSHOP_ITEM_BYTES_MAXIMUM)
+	{
+		fail(result, "item %s: %s", id_text, collected.base.count ? "too large" : "no files to take");
+		goto done;
+	}
+	if (callbacks->free_space)
+	{
+		int64_t free_bytes = callbacks->free_space(callbacks->context, options->ce_root);
+
+		if (free_bytes >= 0 && (uint64_t)free_bytes < total + total / 20)
+		{
+			fail(result, "not enough free space: %.1f GB needed, %.1f GB free", (total + total / 20) / 1e9,
+				free_bytes / 1e9);
+			goto done;
+		}
+	}
+	say(callbacks, "workshop %s: %u files, %.1f MB", id_text, (unsigned int)collected.base.count, total / 1e6);
+	for (index = 0; index < collected.base.count; index++)
+	{
+		if (!download_file(session, &collected.base.files[index], STEAM_WORKSHOP_DEPOT, item->hcontent, key, &cdn,
+			options, callbacks, result, &done, total))
+		{
+			goto done;
+		}
+	}
+	snprintf(text, sizeof(text), "%llu\n%u\n", (unsigned long long)item->hcontent, (unsigned int)collected.base.count);
+	if (!write_text_file(done_path, text))
+	{
+		fail(result, "cannot write in %s", folder);
+		goto done;
+	}
+	ok = 1;
+done:
+	steam_http_close(&cdn.http);
+	for (index = 0; index < collected.base.count; index++)
+		free_planned(&collected.base.files[index]);
+	free(collected.base.files);
+	free(zipped);
+	free(manifest);
+	return ok;
+}
+
+int steam_download_workshop_query(struct steam_session *session, int page, enum steam_workshop_sort sort,
+	const char *search, struct steam_workshop_item *items, int maximum, uint32_t *total, char *error, int error_size)
+{
+	uint8_t body[256];
+	const uint8_t *reply;
+	size_t size = steam_workshop_query_request(body, sizeof(body), page, sort, search), reply_size;
+	int count;
+
+	if (!size)
+	{
+		snprintf(error, (size_t)error_size, "a search too long");
+		return -1;
+	}
+	if (!steam_session_call(session, "PublishedFile.QueryFiles#1", body, size, &reply, &reply_size, error, error_size))
+		return -1;
+	count = steam_workshop_parse_query(reply, reply_size, items, maximum, total);
+	if (count < 0)
+		snprintf(error, (size_t)error_size, "the Workshop's list was malformed");
+	return count;
+}
+
+/* the chosen items' details (one call), each checked, then each downloaded */
+static int workshop_flow(struct steam_session *session, const struct steam_download_options *options,
+	const struct steam_download_callbacks *callbacks, const char *const *cdn, int cdn_count, const uint64_t *ids,
+	int count, struct steam_download_result *result)
+{
+	struct steam_workshop_item items[STEAM_WORKSHOP_CHOSEN_MAXIMUM];
+	uint8_t body[256];
+	const uint8_t *reply;
+	size_t size, reply_size;
+	char error[256];
+	int found, index;
+
+	size = steam_workshop_details_request(body, sizeof(body), ids, count);
+	if (!size || !steam_session_call(session, "PublishedFile.GetDetails#1", body, size, &reply, &reply_size, error,
+		sizeof(error)))
+	{
+		fail(result, "%s", size ? error : "too many items");
+		return 0;
+	}
+	found = steam_workshop_parse_details(reply, reply_size, items, STEAM_WORKSHOP_CHOSEN_MAXIMUM);
+	if (found < 0)
+	{
+		fail(result, "the items' details were malformed");
+		return 0;
+	}
+	for (index = 0; index < count; index++)
+	{
+		const struct steam_workshop_item *item = NULL;
+		char why[160];
+		int other;
+
+		for (other = 0; other < found; other++)
+			if (items[other].id == ids[index])
+				item = &items[other];
+		if (!item)
+		{
+			struct steam_workshop_item missing;
+
+			memset(&missing, 0, sizeof(missing));
+			missing.id = ids[index];
+			result->items_failed++;
+			if (callbacks->item_end)
+				callbacks->item_end(callbacks->context, &missing, 0, "Steam gave no details of it");
+			continue;
+		}
+		if (callbacks->item_start && callbacks->item_start(callbacks->context, item, index, count))
+		{
+			result->cancelled = 1;
+			fail(result, "cancelled");
+			return 0;
+		}
+		if (!steam_workshop_item_ok(item, why, sizeof(why)))
+		{
+			say(callbacks, "workshop %llu: %s", (unsigned long long)item->id, why);
+			result->items_failed++;
+			if (callbacks->item_end)
+				callbacks->item_end(callbacks->context, item, 0, why);
+			continue;
+		}
+		result->error[0] = 0;
+		if (steam_download_workshop_item(session, item, options, callbacks, cdn, cdn_count, result))
+		{
+			result->items_done++;
+			if (callbacks->item_end)
+				callbacks->item_end(callbacks->context, item, 1, "");
+			continue;
+		}
+		/* (a cancel or a lost session ends them all, its download kept for a resume; a refused or failed item: its
+		staging folder removed - nothing of it kept - and the next one goes on) */
+		if (result->cancelled || result->session_lost || session->kicked)
+			return 0;
+		{
+			char staging[512], gid_path[512], done_path[512];
+
+			if (steam_workshop_paths(options->ce_root, item->id, staging, gid_path, done_path, NULL, sizeof(staging)))
+			{
+				steam_workshop_remove_tree(staging);
+				remove(gid_path);
+				remove(done_path);
+			}
+		}
+		result->items_failed++;
+		if (callbacks->item_end)
+		{
+			/* (the player's words: the card's folder left out of the reason) */
+			char why_shown[256], *at;
+			size_t root_length = strlen(options->ce_root);
+
+			snprintf(why_shown, sizeof(why_shown), "%s", result->error);
+			while (root_length && (at = strstr(why_shown, options->ce_root)) != NULL)
+				memmove(at, at + root_length + (at[root_length] == '/'), strlen(at + root_length + (at[root_length] == '/')) + 1);
+			callbacks->item_end(callbacks->context, item, 0, why_shown);
+		}
+	}
+	return 1;
+}
+
 /* ---------- the whole flow */
 
 void steam_download_run(const struct steam_download_options *options, const struct steam_download_callbacks *callbacks,
@@ -530,7 +911,8 @@ void steam_download_run(const struct steam_download_options *options, const stru
 	uint32_t depots[4];
 	size_t depot_count, index;
 	float interval = 5.0f;
-	int cdn_count = 0, state;
+	int cdn_count = 0, state, workshop_count = 0;
+	uint64_t workshop_ids[STEAM_WORKSHOP_CHOSEN_MAXIMUM];
 
 	memset(result, 0, sizeof(*result));
 	memset(&app_info, 0, sizeof(app_info));
@@ -584,8 +966,38 @@ void steam_download_run(const struct steam_download_options *options, const stru
 			goto cancelled;
 	}
 	steam_wipe(url, sizeof(url));
-	if (!steam_session_logon(&session, error, sizeof(error)) ||
-		!steam_session_app_info(&session, STEAM_APP_MCC, &app_info, error, sizeof(error)))
+	if (!steam_session_logon(&session, error, sizeof(error)))
+	{
+		fail(result, "%s", error);
+		goto end;
+	}
+	if (options->workshop)
+	{
+		/* (the list and the choice first; the CDN's servers after) */
+		if (!callbacks->workshop_choose)
+		{
+			fail(result, "no Workshop list");
+			goto end;
+		}
+		workshop_count = callbacks->workshop_choose(callbacks->context, &session, workshop_ids,
+			STEAM_WORKSHOP_CHOSEN_MAXIMUM);
+		if (workshop_count < 0)
+			goto cancelled;
+		if (session.kicked)
+		{
+			result->session_lost = 1;
+			fail(result, "the Steam session ended");
+			goto end;
+		}
+		if (workshop_count == 0)
+		{
+			result->ok = 1;
+			goto end;
+		}
+		if (workshop_count > STEAM_WORKSHOP_CHOSEN_MAXIMUM)
+			workshop_count = STEAM_WORKSHOP_CHOSEN_MAXIMUM;
+	}
+	else if (!steam_session_app_info(&session, STEAM_APP_MCC, &app_info, error, sizeof(error)))
 	{
 		fail(result, "%s", error);
 		goto end;
@@ -609,6 +1021,13 @@ void steam_download_run(const struct steam_download_options *options, const stru
 			snprintf(urls[index], sizeof(urls[index]), "https://%.253s", servers[index].host);
 			cdn[cdn_count++] = urls[index];
 		}
+	}
+	if (options->workshop)
+	{
+		if (!workshop_flow(&session, options, callbacks, cdn, cdn_count, workshop_ids, workshop_count, result))
+			goto end;
+		result->ok = 1;
+		goto end;
 	}
 	depot_count = steam_plan_depots(options->games, depots);
 	for (index = 0; index < depot_count; index++)

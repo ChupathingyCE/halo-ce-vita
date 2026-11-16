@@ -42,6 +42,8 @@ The owner, and only the owner, runs the live test, in a terminal, with his phone
     $out/steam_download_test live $out/run1 1       # Halo CE's maps, PC files, sounds_adpcm.fsb + lists (~470 MB)
     $out/steam_download_test live $out/run1 3       # the same plus the dialogue/music/stream banks (~2 GB)
 
+    $out/steam_download_test live-workshop $out/ws1      # the Steam Workshop: list, search, mark, download
+
 It prints a QR in the terminal (make the window tall; a dark theme reads best). Steam app > Steam Guard >
 scan a QR code > approve "$(grep -o 'STEAM_DEVICE_NAME "[^"]*"' "$root/port/steamdl/steam_session.h" | cut -d'"' -f2)".
 Enter cancels cleanly (revoke + log off). At the end check Steam app > Steam Guard > Authorized devices: the

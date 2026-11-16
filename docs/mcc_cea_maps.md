@@ -300,6 +300,11 @@ harness tests otherwise run with no content folder (`test_out.sh`:
 
 ## Playing a mod natively
 
+A build with the Steam Workshop (configure.py --steam-workshop, off by default until it is tested against Steam)
+downloads a campaign mod straight to the Vita: GAME MANAGER > DOWNLOAD FROM STEAM > STEAM WORKSHOP, signed in with
+your own Steam account's QR code; each map is checked by the game before the mod lands in `mods/<workshop id>`
+(docs/steam_download_security.md section 7). Otherwise:
+
 Copy the mod's whole folder (Steam keeps it in
 `steamapps/workshop/content/976730/<workshop id>`) into the data root's
 `mods` folder, under a short name of your own:
