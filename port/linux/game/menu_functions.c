@@ -13309,6 +13309,15 @@ static boolean h3_workshop_toggle_mark(char const *id, char const *title, int do
 	return TRUE;
 }
 
+/* a footer's word: the Vita's and the Xbox's button names stay English in a translation (Select, Back), its own
+key the footer's word ("{footer}Select": Spanish "Elegir"; menu_tags.c's XML strings do the same) */
+static char const *h3_workshop_footer_word(char const *key, char const *plain)
+{
+	char const *translated = T(key);
+
+	return translated && strcmp(translated, key) ? translated : plain;
+}
+
 /* the page asked for: page, the tab's list, the search */
 static void h3_workshop_ask(int page)
 {
@@ -13751,7 +13760,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 
 			snprintf(download_label, sizeof(download_label), T("Download (%d)"), h3_workshop.marked_count);
 			shown[0] = idle || (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
-			labels[0] = idle ? T("Select") : grid ? T("Details") : state == 2 ? T("Update") : state == 1 ?
+			labels[0] = idle ? h3_workshop_footer_word("{footer}Select", "Select") : grid ? T("Details") : state == 2 ? T("Update") : state == 1 ?
 				T("Download again") : T("Download");
 			shown[1] = (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
 			{
@@ -13764,8 +13773,8 @@ static void h3_workshop_update(struct widget_instance *widget)
 			shown[3] = browsing && h3_workshop.marked_count;
 			labels[3] = download_label;
 			shown[4] = TRUE;
-			labels[4] = details_mode ? T("Back") : h3_steam_running(view.phase) ? (browsing ? T("Sign out") : T("Cancel")) :
-				T("Back");
+			labels[4] = details_mode || !h3_steam_running(view.phase) ? h3_workshop_footer_word("{footer}Back", "Back") :
+				browsing ? T("Sign out") : T("Cancel");
 			for (button = 0; button < 5; button++)
 			{
 				if ((found = named(screen, glyphs[button * 2])) != NULL)

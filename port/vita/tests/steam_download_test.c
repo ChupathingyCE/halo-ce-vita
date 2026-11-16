@@ -20,6 +20,8 @@ The Steam download's tests on the PC (run_steam_download_test.sh), no Steam:
                      fake's hostile ones refused), a details page (its pictures,
                      what its files are), the memory held, then signed out with
                      nothing chosen; prints one result line
+  pictures <file...>  each file through the picture decoder both ways (the
+                     fuzzer's past findings: steam_image_cases/)
   flow <cm port> <cdn port> <out> <games> [cancel after n progress calls]
                      the whole download against steam_fake_server.py on
                      127.0.0.1; prints one result line; the log goes to
@@ -2036,6 +2038,30 @@ int main(int argc, char **argv)
 		return job(argc, argv);
 	if (argc >= 2 && !strcmp(argv[1], "browse"))
 		return browse(argc, argv);
+	if (argc >= 2 && !strcmp(argv[1], "pictures"))
+	{
+		/* (the fuzzer's past findings, steam_image_cases/: each decoded both ways under the sanitizers) */
+		static uint8_t card[STEAM_IMAGE_CARD_WIDTH * STEAM_IMAGE_CARD_HEIGHT * 4];
+		static uint8_t large[STEAM_IMAGE_LARGE_WIDTH * STEAM_IMAGE_LARGE_HEIGHT * 4];
+		int index, made = 0;
+
+		for (index = 2; index < argc; index++)
+		{
+			size_t size = 0;
+			uint8_t *data = read_file(argv[index], &size);
+			char why[160];
+
+			if (!data)
+				continue;
+			made += steam_image_decode(data, size, STEAM_IMAGE_CARD_WIDTH, STEAM_IMAGE_CARD_HEIGHT, STEAM_IMAGE_FILL, card,
+				why, sizeof(why));
+			steam_image_decode(data, size, STEAM_IMAGE_LARGE_WIDTH, STEAM_IMAGE_LARGE_HEIGHT, STEAM_IMAGE_FIT, large, why,
+				sizeof(why));
+			free(data);
+		}
+		printf("pictures: %d files, %d made, no crash\n", argc - 2, made);
+		return 0;
+	}
 	if (argc >= 2 && !strcmp(argv[1], "live"))
 		return live(argc, argv);
 	if (argc >= 2 && !strcmp(argv[1], "live-workshop"))

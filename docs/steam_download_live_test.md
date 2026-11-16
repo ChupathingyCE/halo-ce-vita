@@ -124,3 +124,25 @@ What it answers: real multiplayer items' layout (their resource maps in halo1/ma
 right pixels; the online join with the download from Steam in the middle of a lobby (does the QR on the lobby screen
 read well; does the host's 180 s start hold suffice for a real download); the identity matching across two real
 downloads of one item.
+
+## The Workshop browser (feat/11x-steam-workshop-browser, prepared Nov 16 2026; **not run**)
+
+Docs: docs/steam_download_security.md section 9. Two parts; only the owner signs in.
+
+A. On the PC, the terminal browser (the same `live-workshop` as above, its commands now also `o` through the five
+   lists - trending, newest, most liked, updated, SUBSCRIBED - and `i N` for row N's details page): sign in, then
+   1. `o` four times: SUBSCRIBED lists the items this account subscribed to on a PC or the Steam app (Halo CE ones
+      only). If it says an error or lists none while the account has some, the GetUserFiles fields are wrong.
+   2. Each page's rows print "by <author>" and a score: the authors' names (Player.GetPlayerLinkDetails) and the
+      votes (return_vote_data). Names empty everywhere = the names call's fields are wrong.
+   3. `i N` on a few rows: the title, author, votes, the number of pictures, "made" for the first picture (fetched
+      from Steam's image CDN, decoded, shrunk), the description, the maps the item's manifest holds. Pictures "not
+      made" on every row = the image CDN's host or TLS chain differs from 9.2's (ws1/live-log.txt says why).
+   4. `q`. Send ws1/live-log.txt and the terminal's last lines.
+B. In a --steam-workshop build (PC or the Vita test build): GAME MANAGER > DOWNLOAD FROM STEAM > STEAM WORKSHOP, sign
+   in. Check by eye: the cards' pictures, titles and authors as on Steam's own pages; L/R through the four tabs
+   (SUBSCRIBED: the same items as in the Steam app); a card's details page (Cross: its pictures with Left/Right, the
+   description with Up/Down); a finger: tap a card, tap Back, swipe a page. Mark two (Square), Start: they download
+   and install; open one's details again: INSTALLED; Triangle twice removes it. Then Circle, Circle: signed out;
+   Authorized devices empty again. Send halo.log (its "menus: workshop: memory:" lines are the C heap the browser
+   cost on the real device).

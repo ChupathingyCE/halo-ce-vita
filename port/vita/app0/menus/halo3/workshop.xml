@@ -82,15 +82,15 @@ pips are drawn over the cards by menu_functions.c (h3_workshop_draw); the text i
 	<widget name="h3/workshop/message" type="text" left="-40" top="399" width="720" height="17" font="h3/font_small" color="#FFCFD9E3"/>
 	<widget name="h3/workshop/strip" left="-56" top="420" width="752" height="22" bitmap="h3/strip"/>
 	<widget name="h3/workshop/a_butn" left="-40" top="423" width="16" height="16" bitmap="h3/glyph_cross"/>
-	<widget name="h3/workshop/select" type="text" left="-20" top="422" width="110" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
-	<widget name="h3/workshop/x_butn" left="96" top="423" width="16" height="16" bitmap="h3/glyph_square"/>
-	<widget name="h3/workshop/mark" type="text" left="116" top="422" width="110" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
-	<widget name="h3/workshop/y_butn" left="232" top="423" width="16" height="16" bitmap="h3/glyph_triangle"/>
-	<widget name="h3/workshop/search" type="text" left="252" top="422" width="110" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
-	<widget name="h3/workshop/start_butn" left="368" top="423" width="16" height="16" bitmap="h3/glyph_start"/>
-	<widget name="h3/workshop/download" type="text" left="388" top="422" width="150" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
-	<widget name="h3/workshop/b_butn" left="544" top="423" width="16" height="16" bitmap="h3/glyph_circle"/>
-	<widget name="h3/workshop/back" type="text" left="564" top="422" width="130" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/workshop/select" type="text" left="-20" top="422" width="160" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/workshop/x_butn" left="146" top="423" width="16" height="16" bitmap="h3/glyph_square"/>
+	<widget name="h3/workshop/mark" type="text" left="166" top="422" width="110" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/workshop/y_butn" left="282" top="423" width="16" height="16" bitmap="h3/glyph_triangle"/>
+	<widget name="h3/workshop/search" type="text" left="302" top="422" width="130" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/workshop/start_butn" left="438" top="423" width="16" height="16" bitmap="h3/glyph_start"/>
+	<widget name="h3/workshop/download" type="text" left="458" top="422" width="110" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/workshop/b_butn" left="574" top="423" width="16" height="16" bitmap="h3/glyph_circle"/>
+	<widget name="h3/workshop/back" type="text" left="594" top="422" width="100" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
 	<widget name="h3/workshop/cards">
 		<data input="port h3 workshop"/>
 		<child widget="h3/workshop/card_0"/>

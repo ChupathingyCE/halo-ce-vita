@@ -68,7 +68,8 @@ for source in $vendored; do
 	$cc $bits -O1 -g -w $sanitize $include -c "$source" -o "$out/obj/v_$(basename "$source" .c).o" &
 done
 wait
-flags="$bits -g -O1 -Wall -Wextra -Wno-unused-parameter -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 $sanitize $include $config"
+# (-fwrapv as the builds compile port/steamdl: stb_image's IDCT wraps on hostile coefficients, its pixels clamped after)
+flags="$bits -g -O1 -Wall -Wextra -Wno-unused-parameter -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -fwrapv $sanitize $include $config"
 $cc $flags "$here/steam_download_test.c" $steam "$root/port/steamdl/steam_net.c" "$root/port/linux/src/posix_https.c" \
 	"$root/port/linux/src/posix_net.c" "$out"/obj/*.o -lpthread -o "$out/steam_download_test"
 $cc $flags "$here/steam_manifest_dump.c" $steam "$root/port/steamdl/steam_net.c" "$root/port/linux/src/posix_https.c" \
@@ -77,6 +78,9 @@ $cc $flags "$here/steam_manifest_dump.c" $steam "$root/port/steamdl/steam_net.c"
 echo "--- units"
 python3 -I "$here/steam_fake_server.py" --fixtures "$out/fixtures" --seed 3
 "$out/steam_download_test" units "$out/fixtures" || status=1
+
+echo "--- pictures (steam_image_cases/: the ws_image fuzzer's past findings, under the sanitizers)"
+"$out/steam_download_test" pictures "$here"/steam_image_cases/* || { echo "FAIL pictures"; status=1; }
 
 echo "--- flows (a fake CM and CDN on 127.0.0.1)"
 # flow <name> <mode> <games> <expect: ok|fail|cancel> [cancel after] [keep: reuse the last run's card]
@@ -362,12 +366,14 @@ if [ "$seconds" != 0 ]; then
 		clang -O1 -g -w -fsanitize=fuzzer-no-link,address,undefined $include -c "$source" \
 			-o "$found/obj/v_$(basename "$source" .c).o"
 	done
-	clang -g -O1 $fsan -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 $include $config "$here/steam_fuzz.c" $steam \
+	clang -g -O1 $fsan -fwrapv -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 $include $config "$here/steam_fuzz.c" $steam \
 		"$found"/obj/*.o -lpthread -o "$found/steam_fuzz"
 	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list ws_list ws_names ws_image ws_text; do
 		mkdir -p "$found/$target"
 		seeds=$out/fixtures/seeds/$target
 		[ -d "$seeds" ] || seeds=
+		# (ws_image: its past findings too)
+		[ "$target" = ws_image ] && seeds="$seeds $here/steam_image_cases"
 		STEAM_FUZZ_TARGET=$target "$found/steam_fuzz" -max_total_time="$seconds" -max_len=200000 -timeout=20 \
 			-rss_limit_mb=2048 -print_final_stats=1 -artifact_prefix="$found/$target/" "$found/$target" $seeds \
 			> "$found/$target.log" 2>&1 &

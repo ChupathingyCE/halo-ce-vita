@@ -406,7 +406,8 @@ def generate_vita_build(n: Writer, sln: Any) -> None:
     # with the update check's Mbed TLS and HTTPS stream; its decoders, the LZMA SDK's LzmaDec (public domain),
     # zstd's decompressor (BSD) and libdeflate (MIT), and the QR maker (MIT)
     if steam_download(sln):
-        steam_flags = [host_cflags, *mbedtls_flags, f"-I{STEAMDL_DIR}", f"-I{LIBDEFLATE_DIR}", f"-I{LZMA_DIR}",
+        # (-fwrapv: stb_image's IDCT overflows int on hostile coefficients - wrapping is what it means; steam_image.c)
+        steam_flags = [host_cflags, "-fwrapv", *mbedtls_flags, f"-I{STEAMDL_DIR}", f"-I{LIBDEFLATE_DIR}", f"-I{LZMA_DIR}",
                        f"-I{ZSTD_DIR}", f"-I{QRCODEGEN_DIR}", *steam_test_flags(sln)]
         for source in sorted(STEAMDL_DIR.glob("*.c")):
             add(source, "vita_host_cc", " ".join(steam_flags))

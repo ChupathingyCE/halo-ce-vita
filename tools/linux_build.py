@@ -653,7 +653,9 @@ def generate_linux_build(n: Writer, sln: Any) -> None:
         # the Steam download (port/steamdl), with the host's ABI as posix_https.c, whose TLS stream it uses, and
         # its LZMA (public domain), zstd (BSD) and libdeflate (MIT) decoders and QR maker (MIT)
         if steam_download(sln):
-            steam_flags = " ".join([posix_cflags, mbedtls_include, f"-I{STEAMDL_DIR}", f"-I{LIBDEFLATE_DIR}",
+            # (-fwrapv: stb_image's IDCT, steam_image.c's, overflows int on hostile coefficients - wrapping is
+            # what it means, the pixels clamped after; UBSan found it in the ws_image fuzzer)
+            steam_flags = " ".join([posix_cflags, "-fwrapv", mbedtls_include, f"-I{STEAMDL_DIR}", f"-I{LIBDEFLATE_DIR}",
                                     f"-I{LZMA_DIR}", f"-I{ZSTD_DIR}", f"-I{QRCODEGEN_DIR}", *steam_test_flags(sln)])
             for source in sorted(STEAMDL_DIR.glob("*.c")):
                 add_object(source, steam_flags, posix=True)
