@@ -2500,7 +2500,10 @@ static void forge_modes_draw(
 		command_hud_draw_art(COMMAND_HUD_ART_PANEL, x, y, x + box, y + 16.f, 0.8f);
 		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x + 6.f, y + 1.f, x + box, 0, COMMAND_HUD_ITEM, T("SCORE"));
 		snprintf(line, sizeof(line), "%ld", forge_modes.score);
-		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x + 60.f, y + 1.f, x + box * 0.5f, 0, COMMAND_HUD_LIGHT, line);
+		/* (the number after the word as drawn - PUNTOS is wider than SCORE -,
+		at least where SCORE's number stands) */
+		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, MAX(x + 60.f, x + 6.f + command_hud_measure_text(COMMAND_HUD_FONT_ITEM, T("SCORE")) + 10.f),
+			y + 1.f, x + box * 0.5f, 0, COMMAND_HUD_LIGHT, line);
 		command_hud_draw_text(COMMAND_HUD_FONT_ITEM, x + box * 0.5f + 6.f, y + 1.f, x + box, 0, COMMAND_HUD_ITEM,
 			bonus ? T("BONUS") : T("LIVES"));
 		/* (unlimited: a dash) */
