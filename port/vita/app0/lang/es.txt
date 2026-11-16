@@ -3441,6 +3441,9 @@
 "FIREFIGHT LOBBY" = "SALA DE FIREFIGHT"
 "COMMAND LOBBY" = "SALA DE MANDO"
 "Command's own layout." = "La disposición del modo Mando."
+"First to %ld, or the most after %ld minutes." = "El primero en llegar a %ld, o el que más tenga a los %ld minutos."
+"First to %ld." = "El primero en llegar a %ld."
+"The most after %ld minutes." = "El que más tenga a los %ld minutos."
 "Command mode plays on Blood Gulch for now." = "Por ahora, el modo Mando se juega en Blood Gulch."
 "Command mode builds its soldiers, dropships and turrets\nfrom your Halo CE campaign maps once, and keeps them\non the memory card for every game after." = "El modo Mando crea sus soldados, naves y torretas\nuna vez a partir de tus mapas de campaña de Halo CE\ny los guarda en la tarjeta para cada partida."
 

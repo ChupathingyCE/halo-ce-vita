@@ -3331,6 +3331,21 @@ static void h3_forge_lobby_update(struct widget_instance *widget)
 				snprintf(line + length, sizeof(line) - length, T("Waiting for %s to copy... (copy %ld%%)"), T(map), copied);
 			}
 		}
+		else if (h3_forge.mode == H3_FORGE_MODE_COMMAND)
+		{
+			/* (the Command lobby: the Command game's own limits, not the
+			Forge game's none - 1.1.4 polish) */
+			long score = command_score_limit(), minutes = command_time_limit_minutes();
+
+			if (score > 0 && minutes > 0)
+				snprintf(line, sizeof(line), T("First to %ld, or the most after %ld minutes."), score, minutes);
+			else if (score > 0)
+				snprintf(line, sizeof(line), T("First to %ld."), score);
+			else if (minutes > 0)
+				snprintf(line, sizeof(line), T("The most after %ld minutes."), minutes);
+			else
+				snprintf(line, sizeof(line), "%s", T("No score or time limit."));
+		}
 		else
 			snprintf(line, sizeof(line), "%s", T("No score or time limit."));
 		text_show(named(screen, "note"), line);

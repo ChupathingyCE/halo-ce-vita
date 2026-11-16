@@ -7987,6 +7987,18 @@ int command_objective_index(
 		command_objectives.objectives == _command_objectives_flag ? 2 : 0;
 }
 
+long command_score_limit(
+	void)
+{
+	return command_objectives.score_limit;
+}
+
+long command_time_limit_minutes(
+	void)
+{
+	return command_objectives.time_limit_minutes;
+}
+
 /* (the console's "where") the scores, the resources, each side's AI */
 static void command_where_scores(
 	void)

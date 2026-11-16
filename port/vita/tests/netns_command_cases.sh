@@ -219,6 +219,9 @@ command_case() {
 		echo "--- joiner"; grep -aE "menus: h3 pregame|forge net: (the host|holding)|command: the host's|command net: the host's game had" "$jl" | head -20
 		grep -aq "menus: forge lobby: network SYSTEM LINK" "$hl" || fail "the Command lobby's NETWORK did not change to SYSTEM LINK"
 		grep -aq "menus: command lobby: hosting Command on Blood Gulch" "$hl" || fail "the Command lobby did not host a Command game"
+		# (1.1.4 polish: the lobby's note says the Command game's limits, not the Forge lobby's "No score or time limit.")
+		grep -aq "menus: forge lobby note at [0-9]* ms: First to 1000, or the most after 20 minutes\." "$hl" ||
+			fail "the Command lobby's note did not say the game's limits"
 		grep -aq "forge net: hosting a Command game of" "$hl" || fail "no network Command game was hosted"
 		grep -aq "system link: in another's lobby" "$jl" || fail "the joiner did not join the Command game from the browser"
 		grep -aqE "menus: h3 live lobby: .*; players: [^;]+, [^;]+; 2/" "$hl" || fail "the Command lobby did not show the joiner among its players"

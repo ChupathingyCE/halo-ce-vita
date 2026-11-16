@@ -117,6 +117,12 @@ int command_ai_level_index(
 	void);
 void command_ai_level_next(
 	void);
+/* (the Command lobby's note) the game's score limit (0: none) and time
+limit in minutes (0: none) */
+long command_score_limit(
+	void);
+long command_time_limit_minutes(
+	void);
 
 /* (source/game/game_globals.c, source/objects/damage.c) a Command game is
 played: every soldier, both sides', on Halo CE's Legendary rules (C13);
