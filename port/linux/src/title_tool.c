@@ -29,8 +29,10 @@ the letter itself are left out (the L's foot under a following A), and, for
 a character seen three times or more, the samples that differ from the
 shape by much (an odd neighbor's ink), and the shapes made a last time.
 3. (this port) A word is set: each letter after the one before it by the
-advance the titles show for that pair, else ink to ink the titles' median
-gap apart (a space the median gap across their spaces); X, which no title
+advance the titles show for that pair, else by the two letters' sides (a
+right and a left side for each letter, fitted to every pair the titles
+show), else ink to ink the titles' median gap apart; a space adds the
+median the titles' spaces add; X, which no title
 has, is Y's arms over its middle and the same mirrored under it. Each
 letter's shape is drawn where it is set, sharpened to an edge about one
 pixel wide (the field's 0.5 contour, by its gradient), over a plate made of
@@ -129,6 +131,11 @@ struct title_tool
 	letters' ink, and across a space; the titles' median baseline */
 	float pair_advance[PAIR_COUNT][PAIR_COUNT];
 	float gap, space, baseline;
+	/* (title_tool_set) each letter's right and left side (bit 1, 2: known),
+	and a space's width between sides (-1: none seen) */
+	float right_side[PAIR_COUNT], left_side[PAIR_COUNT];
+	unsigned char side_known[PAIR_COUNT];
+	float space_sides;
 };
 
 static unsigned long u32(const unsigned char *bytes)
@@ -969,25 +976,38 @@ static int letter_x_make(struct title_tool *tool)
 	return 1;
 }
 
-/* (title_tool_set) the advances, gaps and baseline the titles show */
+/* (title_tool_set) the advances, sides and baseline the titles show: each
+pair's advance seen side by side (pair_advance), and for each letter a
+right side and a left side whose sum gives the advance of a pair never
+seen - fitted to every pair seen (least squares, by turns), so a V before
+an A sits as the font sets its V and its A -; a space's width the median
+of what a space adds to that; the gap between two letters' ink, for a
+letter with no side known */
 static void spacing_measure(struct title_tool *tool)
 {
-	long count = tool->instance_count, i, gaps = 0, spaces = 0, baselines = 0;
+	long count = tool->instance_count, i, gaps = 0, spaces = 0, baselines = 0, pairs = 0, round;
 	float *gap_values = malloc((size_t)(count > 0 ? count : 1) * sizeof(float));
 	float *space_values = malloc((size_t)(count > 0 ? count : 1) * sizeof(float));
 	float *pair_values = malloc((size_t)(count > 0 ? count : 1) * sizeof(float));
+	int *pair_first = malloc((size_t)(count > 0 ? count : 1) * sizeof(int));
+	int *pair_second = malloc((size_t)(count > 0 ? count : 1) * sizeof(int));
+	unsigned char *pair_spaced = malloc((size_t)(count > 0 ? count : 1));
 	float baseline_values[512];
-	int first, second;
+	int first, second, character;
 
 	memset(tool->pair_advance, 0, sizeof(tool->pair_advance));
+	memset(tool->side_known, 0, sizeof(tool->side_known));
 	tool->gap = 2;
 	tool->space = 8;
 	tool->baseline = 0;
-	if (!gap_values || !space_values || !pair_values)
+	if (!gap_values || !space_values || !pair_values || !pair_first || !pair_second || !pair_spaced)
 	{
 		free(gap_values);
 		free(space_values);
 		free(pair_values);
+		free(pair_first);
+		free(pair_second);
+		free(pair_spaced);
 		return;
 	}
 	for (i = 0; i < tool->count; i++)
@@ -1016,6 +1036,15 @@ static void spacing_measure(struct title_tool *tool)
 				space_values[spaces++] = left - right;
 			else
 				gap_values[gaps++] = left - right;
+			if (a->character >= PAIR_FIRST && a->character < PAIR_FIRST + PAIR_COUNT &&
+				b->character >= PAIR_FIRST && b->character < PAIR_FIRST + PAIR_COUNT)
+			{
+				pair_first[pairs] = a->character - PAIR_FIRST;
+				pair_second[pairs] = b->character - PAIR_FIRST;
+				pair_spaced[pairs] = picture->spaced && picture->spaced[k];
+				pair_values[pairs] = (b->x + b->dx) - (a->x + a->dx);
+				pairs++;
+			}
 		}
 	}
 	if (gaps)
@@ -1029,32 +1058,79 @@ static void spacing_measure(struct title_tool *tool)
 		{
 			long values = 0;
 
-			for (i = 0; i < tool->count; i++)
+			for (i = 0; i < pairs; i++)
 			{
-				const struct picture *picture = &tool->pictures[i];
-				long k;
-
-				if (!picture->present)
-					continue;
-				for (k = 0; k + 1 < picture->letters; k++)
-				{
-					const struct instance *a = &tool->instances[picture->first + k];
-					const struct instance *b = &tool->instances[picture->first + k + 1];
-
-					if ((!picture->spaced || !picture->spaced[k]) && a->character == first + PAIR_FIRST &&
-						b->character == second + PAIR_FIRST)
-					{
-						pair_values[values++] = (b->x + b->dx) - (a->x + a->dx);
-					}
-				}
+				if (!pair_spaced[i] && pair_first[i] == first && pair_second[i] == second)
+					gap_values[values++] = pair_values[i];
 			}
 			if (values)
-				tool->pair_advance[first][second] = median(pair_values, values);
+				tool->pair_advance[first][second] = median(gap_values, values);
 		}
+	}
+	/* (the sides: right[a] + left[b] nearest every advance seen, by turns
+	from the left sides naught) */
+	memset(tool->right_side, 0, sizeof(tool->right_side));
+	memset(tool->left_side, 0, sizeof(tool->left_side));
+	for (round = 0; round < 24; round++)
+	{
+		float sums[PAIR_COUNT];
+		int counts[PAIR_COUNT];
+
+		memset(sums, 0, sizeof(sums));
+		memset(counts, 0, sizeof(counts));
+		for (i = 0; i < pairs; i++)
+		{
+			if (pair_spaced[i])
+				continue;
+			sums[pair_first[i]] += pair_values[i] - tool->left_side[pair_second[i]];
+			counts[pair_first[i]]++;
+		}
+		for (character = 0; character < PAIR_COUNT; character++)
+		{
+			if (counts[character])
+			{
+				tool->right_side[character] = sums[character] / counts[character];
+				tool->side_known[character] |= 1;
+			}
+		}
+		memset(sums, 0, sizeof(sums));
+		memset(counts, 0, sizeof(counts));
+		for (i = 0; i < pairs; i++)
+		{
+			if (pair_spaced[i])
+				continue;
+			sums[pair_second[i]] += pair_values[i] - tool->right_side[pair_first[i]];
+			counts[pair_second[i]]++;
+		}
+		for (character = 0; character < PAIR_COUNT; character++)
+		{
+			if (counts[character])
+			{
+				tool->left_side[character] = sums[character] / counts[character];
+				tool->side_known[character] |= 2;
+			}
+		}
+	}
+	/* (a space: what it adds to the sides, where they are known) */
+	{
+		long known = 0;
+
+		for (i = 0; i < pairs; i++)
+		{
+			if (pair_spaced[i] && (tool->side_known[pair_first[i]] & 1) && (tool->side_known[pair_second[i]] & 2))
+			{
+				space_values[known++] = pair_values[i] - tool->right_side[pair_first[i]] -
+					tool->left_side[pair_second[i]];
+			}
+		}
+		tool->space_sides = known ? median(space_values, known) : -1;
 	}
 	free(gap_values);
 	free(space_values);
 	free(pair_values);
+	free(pair_first);
+	free(pair_second);
+	free(pair_spaced);
 }
 
 struct title_tool *title_tool_new(const struct title_tool_title *titles, long count, unsigned char **texels,
@@ -1096,7 +1172,13 @@ struct title_tool *title_tool_new(const struct title_tool_title *titles, long co
 			shape_measure(&tool->shapes[character]);
 	}
 	spacing_measure(tool);
-	letter_x_make(tool);
+	/* (X, made of Y, spaced as Y) */
+	if (letter_x_make(tool) && !tool->side_known['X' - PAIR_FIRST])
+	{
+		tool->right_side['X' - PAIR_FIRST] = tool->right_side['Y' - PAIR_FIRST];
+		tool->left_side['X' - PAIR_FIRST] = tool->left_side['Y' - PAIR_FIRST];
+		tool->side_known['X' - PAIR_FIRST] = tool->side_known['Y' - PAIR_FIRST];
+	}
 	return tool;
 }
 
@@ -1289,7 +1371,14 @@ static long word_layout(const struct title_tool *tool, const char *text, float l
 				character >= PAIR_FIRST && character < PAIR_FIRST + PAIR_COUNT ?
 				tool->pair_advance[previous - PAIR_FIRST][character - PAIR_FIRST] : 0;
 
+			int a = previous - PAIR_FIRST, b = character - PAIR_FIRST;
+			int sides = a >= 0 && a < PAIR_COUNT && b >= 0 && b < PAIR_COUNT && (tool->side_known[a] & 1) &&
+				(tool->side_known[b] & 2) && (!spaced || tool->space_sides >= 0);
+
+			/* (a pair the titles have: as they set it; else by the letters'
+			sides; else ink to ink) */
 			x = pair > 0 ? x + pair :
+				sides ? x + tool->right_side[a] + tool->left_side[b] + (spaced ? tool->space_sides : 0) :
 				x + before->ink_right + (spaced ? tool->space : tool->gap) - shape->ink_left;
 		}
 		characters[count] = character;

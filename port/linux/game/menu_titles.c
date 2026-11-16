@@ -60,7 +60,7 @@ long menu_tags_generation(void);
 /* where a heading's first letter starts in its picture: the game's own
 headings' (29.75 of a 512 x 64 picture drawn at 35, 11) */
 #define HEADING_LEFT 29.75f
-#define TITLES_FILE_SIGNATURE 0x3154544DUL /* 'MTT1': made again when the way of making them changes */
+#define TITLES_FILE_SIGNATURE 0x3254544DUL /* 'MTT2': made again when the way of making them changes */
 
 /* ---------- the game's headings the letters are read from (ChupathingyCE's titles.json) */
 
