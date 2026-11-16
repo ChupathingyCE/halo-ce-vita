@@ -22,9 +22,9 @@ files for it.
 
 /* (a test may build as another version: run_vita_settings_test.sh) */
 #ifndef HALO_VITA_VERSION
-#define HALO_VITA_VERSION "1.1.4"
+#define HALO_VITA_VERSION "1.1.3"
 #endif
-#define HALO_VITA_APP_VER "01.14"
+#define HALO_VITA_APP_VER "01.13"
 
 /* the version as a build shows it (halo.log, the main menu, the window):
 a PC build's (Linux, Windows) with " (PC)" after it, "1.1.1-beta.1 (PC)",
