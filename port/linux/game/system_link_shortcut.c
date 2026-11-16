@@ -62,6 +62,7 @@ Forge page does (run_forge_test.sh panel).
 
 #include "../src/system_link_shortcut.h"
 #include "forge.h"
+#include "command.h"
 #include "../src/lang.h"
 #include "../src/port_config.h"
 #include "network_connection.h"
@@ -94,6 +95,9 @@ volatile int halo_forge_request_map = NONE;
 char halo_forge_request_variant[HALO_FORGE_VARIANT_SIZE];
 /* ... on the network: hosted, others joining (0: a local game) */
 volatile int halo_forge_request_network;
+/* ... a game mode's (HALO_FORGE_REQUEST_MODE_*: 1 FIREFIGHT, forge.c's
+forge_modes.inc; 2 Command, port/linux/game/command.c; 0 Forge) */
+volatile int halo_forge_request_mode;
 volatile int halo_forge_net_hosting;
 /* (the settings panel's Players page: network_anticheat.c) */
 volatile int halo_host_players_serial;
@@ -247,14 +251,21 @@ static void system_link_shortcut_test(
 		return;
 	done = TRUE;
 	platform_log("system link: HALO_SYSTEM_LINK_TEST=%s", test);
-	if (!strncmp(test, "forge:", 6) || !strncmp(test, "forgenet:", 9))
+	if (!strncmp(test, "forge:", 6) || !strncmp(test, "forgenet:", 9) || !strncmp(test, "command:", 8) ||
+		!strncmp(test, "firefight:", 10))
 	{
-		/* ("forgenet:<map>[:<variant>]": the network Forge game) */
+		/* ("forgenet:<map>[:<variant>]": the network Forge game; "command:<map>[:<layout>]":
+		the panel's Start Command, a local Command game; "firefight:<map>[:<layout>]":
+		the panel's Start Firefight, a local FIREFIGHT game) */
 		boolean network = !strncmp(test, "forgenet:", 9);
-		char const *map = test + (network ? 9 : 6);
+		boolean command = !strncmp(test, "command:", 8);
+		boolean firefight = !strncmp(test, "firefight:", 10);
+		char const *map = test + (network ? 9 : firefight ? 10 : command ? 8 : 6);
 		char const *file = strchr(map, ':');
 
 		halo_forge_request_network = network;
+		halo_forge_request_mode = command ? HALO_FORGE_REQUEST_MODE_COMMAND : firefight ? HALO_FORGE_REQUEST_MODE_FIREFIGHT :
+			HALO_FORGE_REQUEST_MODE_FORGE;
 		halo_forge_request_map = atoi(map);
 		snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s", file ? file + 1 : "");
 		__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_FORGE, __ATOMIC_RELEASE);
@@ -468,12 +479,38 @@ void system_link_shortcut_update(
 			else
 				answer = SYSTEM_LINK_ANSWER_UNAVAILABLE;
 		}
-		else if (forge_game_start((short)halo_forge_request_map, variant, why, sizeof(why)))
-			answer = SYSTEM_LINK_ANSWER_OPENED;
 		else
-			answer = SYSTEM_LINK_ANSWER_UNAVAILABLE;
-		platform_log("system link: the settings panel's Forge: %s%s%s", answer == SYSTEM_LINK_ANSWER_OPENED ? "started" :
-			"not started", why[0] ? ": " : "", why);
+		{
+			/* (1.1.4: Start Command - a local Command game of the map, as the
+			Command lobby's START COMMAND: command.c plays on Blood Gulch) */
+			boolean command = halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_COMMAND;
+			/* (1.1.5: Start Firefight - a local FIREFIGHT game of the map and
+			layout, as the Firefight lobby's START FIREFIGHT: forge_modes.inc) */
+			boolean firefight = halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT;
+
+			if (command && (!forge_map_short((short)halo_forge_request_map) ||
+				strcmp(forge_map_short((short)halo_forge_request_map), "bloodgulch")))
+			{
+				snprintf(why, sizeof(why), "%s", T("Command mode plays on Blood Gulch for now:\nchoose it under SELECT MAP."));
+				answer = SYSTEM_LINK_ANSWER_UNAVAILABLE;
+			}
+			else
+			{
+				if (command)
+					command_game_request();
+				if (firefight)
+					forge_modes_game_request(FORGE_MODE_REQUEST_FIREFIGHT);
+				answer = forge_game_start((short)halo_forge_request_map, variant, why, sizeof(why)) ?
+					SYSTEM_LINK_ANSWER_OPENED : SYSTEM_LINK_ANSWER_UNAVAILABLE;
+				if (command && answer != SYSTEM_LINK_ANSWER_OPENED)
+					command_game_cancel();
+				if (firefight && answer != SYSTEM_LINK_ANSWER_OPENED)
+					forge_modes_game_request(FORGE_MODE_REQUEST_NONE);
+			}
+		}
+		platform_log("system link: the settings panel's %s: %s%s%s", halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_COMMAND ?
+			"Command" : halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT ? "Firefight" : "Forge", answer == SYSTEM_LINK_ANSWER_OPENED ? "started" : "not started", why[0] ? ": " : "", why);
+		halo_forge_request_mode = HALO_FORGE_REQUEST_MODE_FORGE;
 		if (answer != SYSTEM_LINK_ANSWER_OPENED)
 			platform_show_message(T("FORGE"), why);
 		halo_system_link_answer = answer;

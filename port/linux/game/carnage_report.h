@@ -26,6 +26,14 @@ menu_functions.c ("port h3 carnage ...").
 #define CARNAGE_REPORT_MAXIMUM_ROWS (HALO_PORT_MAXIMUM_NETWORK_PLAYERS + CARNAGE_REPORT_MAXIMUM_TEAMS)
 /* a row's objective statistics (the game type's: carnage_report.c) */
 #define CARNAGE_REPORT_OBJECTIVE_STATISTICS 2
+/* (the report's type past the game's game types) a Command game's
+(command.c command_carnage_report: its sides' scores, captures and
+territory time) */
+#define CARNAGE_REPORT_TYPE_COMMAND 100
+/* (a FIREFIGHT game's: forge.c's forge_modes.inc forge_modes_carnage_report:
+the team's score, its waves cleared and its bonus rounds' points, each
+player's own) */
+#define CARNAGE_REPORT_TYPE_FIREFIGHT 101
 
 struct carnage_report_row
 {

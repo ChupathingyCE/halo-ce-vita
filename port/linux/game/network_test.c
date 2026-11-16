@@ -348,6 +348,13 @@ made one by network_test_forge once its map is set) */
 		forge_variant_build(variant);
 		return;
 	}
+	/* ("command": a network Command game, red's and blue's teams; the host's
+	game made one as its map is set) */
+	if (!strcmp(name, "command"))
+	{
+		forge_command_variant_build(variant);
+		return;
+	}
 	/* ("saved=<name>": the player's saved game type of that name - the
 	Halo 3 game type editor's, z:\saved\playlists -, read as the lobby's
 	GAME reads it; none, Slayer) */
@@ -2449,6 +2456,13 @@ void network_test_update(
 						if (!forge_net_host_begin(path, variant_file, why, (int)sizeof(why)))
 							platform_log("network test: the Forge game could not be hosted: %s", why);
 					}
+					else if (!strcmp(variant_name, "command"))
+					{
+						char why[160];
+
+						if (!forge_command_host_begin(path, why, (int)sizeof(why)))
+							platform_log("network test: the Command game could not be hosted: %s", why);
+					}
 					/* (HALO_NETWORK_TEST_MAP_VARIANT: the game plays that map
 					variant of the map, as the multiplayer lobby's MAP has it:
 					a "host:" game's joiners given its layout, a "local:" one's
@@ -2675,7 +2689,15 @@ void network_test_update(
 		{
 			network_test.joined_seconds += seconds;
 			if (network_test.joined_seconds >= 5.0f)
-				network_test.team_set = network_game_client_set_team(NONE);
+			{
+				/* (HALO_NETWORK_TEST_TEAM: that team, 0 red or 1 blue - a
+				Command game's co-op -; else the other team from the host's
+				player's) */
+				char const *team = getenv("HALO_NETWORK_TEST_TEAM");
+
+				network_test.team_set = network_game_client_set_team(team && (team[0] == '0' || team[0] == '1') ?
+					(char)(team[0] - '0') : NONE);
+			}
 		}
 		break;
 	}

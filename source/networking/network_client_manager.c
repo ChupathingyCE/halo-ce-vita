@@ -3044,6 +3044,12 @@ void network_game_client_rejected_by_game(
 		rejection_code,
 		reason);
 #ifdef HALO_LINUX
+	/* port: a party's follow refused: the party told why (friends_game.c) */
+	{
+		void friends_game_join_refused(int rejection_code);
+
+		friends_game_join_refused(rejection_code);
+	}
 	/* port: a full game says so in words (the game's own error, below, is
 	the one for a closed game) */
 	if (rejection_code == _rejection_code_game_is_full)
@@ -3665,6 +3671,7 @@ static boolean network_game_client_idle_joining(
 				struct message_client_join_game_request join_game_request;
 				message_header *message;
 				short join_request_padding;
+				unsigned char join_request_tail[NETWORK_WIRE_V42_JOIN_REQUEST_TAIL];
 
 				csmemset(&join_game_request, 0, sizeof(join_game_request));
 				network_game_generate_local_machine_name(join_game_request.machine_name);
@@ -3692,14 +3699,19 @@ static boolean network_game_client_idle_joining(
 					csmemcpy(join_game_request.hardware_id, hardware_id, csstrlen(hardware_id));
 				}
 
-				/* (port: to a host of 40 or more, 234 more bytes, all zero:
+				/* (port: to a host of 40 or more, 234 more bytes, all zero, and
+				to one of 42 or more 236, its network version in the last two:
 				the one message that differs by version, here and not in the
 				message table every other wire shares: network_messages.h) */
-				join_request_padding = (short)network_wire_join_request_padding();
+				join_request_padding = (short)network_wire_join_request_tail(join_request_tail,
+					(int)sizeof(join_request_tail));
+				if (join_request_padding < 0)
+					join_request_padding = 0;
 				message = join_request_padding ?
 					create_network_game_join_request_padded(
 						&join_game_request,
 						sizeof(join_game_request),
+						join_request_tail,
 						join_request_padding) :
 					create_network_game_message(
 						_message_client_join_game_request,

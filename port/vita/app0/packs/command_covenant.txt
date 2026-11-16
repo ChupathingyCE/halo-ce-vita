@@ -1,0 +1,16 @@
+# Command mode's Covenant soldiers (port/linux/game/command.c), built in
+# memory as a Command game loads, from the player's own campaign maps:
+# grunts, jackals, elites and hunters (their actor variants, so they fight
+# as the campaign's do), with their weapons, and the Shade turret the bases'
+# Grunts man. Both teams' armies have them. Nothing written anywhere.
+pack command_covenant
+map b40 b30 a50
+tag actv characters\grunt\grunt minor plasma pistol
+tag actv characters\grunt\grunt major needler
+tag actv characters\jackal\jackal minor plasma pistol
+tag actv characters\elite\elite minor\elite minor plasma rifle
+tag actv characters\elite\elite major\elite major needler
+tag actv characters\hunter\hunter
+tag vehi vehicles\c gun turret\c gun turret
+# the supply depot upgrade's Covenant supply containers (Halo CE has no UNSC crates)
+tag scen scenery\c_storage\c_storage

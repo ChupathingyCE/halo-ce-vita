@@ -104,6 +104,7 @@ symbols in this file:
 #include "tag_files.h"
 #include "cache_files.h"
 #include "scenario.h"
+#include "scenario_definitions.h"
 #include "main.h"
 #include "objects.h"
 #include "game_sound.h"
@@ -205,14 +206,17 @@ void halo_game_state_range(void **base, unsigned long *size)
 /* (debug) the arena's allocations in order, for tick_hash.c to hash one by
 one and name the first that two runs differ in */
 #define HALO_GAME_STATE_ALLOCATIONS_MAXIMUM 512
-static struct { const char *name, *type; long offset, size; } halo_game_state_allocations[HALO_GAME_STATE_ALLOCATIONS_MAXIMUM];
+/* (the name copied: some callers' names are their own stack buffers - cluster_partition_new's "cluster
+light" -, gone once the allocation is made, and tick_hash.c's .names file got whatever lay there later) */
+static struct { char name[48]; const char *type; long offset, size; } halo_game_state_allocations[HALO_GAME_STATE_ALLOCATIONS_MAXIMUM];
 static int halo_game_state_allocation_count;
 
 static void halo_game_state_note_allocation(const char *name, const char *type, long offset, long size)
 {
 	if (halo_game_state_allocation_count < HALO_GAME_STATE_ALLOCATIONS_MAXIMUM)
 	{
-		halo_game_state_allocations[halo_game_state_allocation_count].name = name;
+		snprintf(halo_game_state_allocations[halo_game_state_allocation_count].name,
+			sizeof(halo_game_state_allocations[halo_game_state_allocation_count].name), "%s", name ? name : "?");
 		halo_game_state_allocations[halo_game_state_allocation_count].type = type;
 		halo_game_state_allocations[halo_game_state_allocation_count].offset = offset;
 		halo_game_state_allocations[halo_game_state_allocation_count].size = size;
@@ -1081,6 +1085,28 @@ static boolean game_state_image_lruv_cache_valid(
 	return game_state_image_data_valid(image, blocks_live, allocation->maximum_count, sizeof(struct lruv_cache_block));
 }
 
+/* port: hs_runtime.c's and hs_globals_external.c's (game_state_image_valid) */
+extern struct data_array *hs_global_data;
+extern short const hs_external_global_count;
+
+/* port: whether a saved game's "hs globals" array (its count: one past the
+last datum) is laid out as this build lays it out for the map: the game's
+own globals first (hs_external_global_count), then the map's
+(hs_runtime_initialize_for_new_map). An image of another layout - a map
+file since replaced by a version with another number of globals, or a
+damaged save - passes every other check, and its scripts would read the
+map's globals at the wrong places, or past the last one (a crash in
+hs_global_evaluate). From ChupathingyCE (1eb0de6cb, "Saved games: refuse
+one whose script globals are another build's", MrMilenko;
+GPL-3.0-or-later) */
+static boolean game_state_image_hs_globals_valid(
+	long image_count,
+	long external_count,
+	long scenario_count)
+{
+	return image_count == external_count + scenario_count;
+}
+
 boolean game_state_image_valid(
 	void *image,
 	long size)
@@ -1128,6 +1154,22 @@ boolean game_state_image_accept(
 {
 	if (!game_state_image_valid(image, size))
 		return FALSE;
+	/* (the map the image is taken into is loaded: its globals' count is
+	known here, not where an image is only checked) */
+	if (global_scenario_index != NONE && hs_global_data && hs_global_data->valid)
+	{
+		struct data_array const *globals = game_state_image_pointer(image, hs_global_data);
+		long scenario_count = global_scenario_get()->hs_globals.count;
+
+		if (!game_state_image_hs_globals_valid(globals->count, hs_external_global_count, scenario_count))
+		{
+			error(2, "the saved game is not taken: its script globals take %d places, this map's %ld (%d of the "
+				"game's and %ld of the map's)", (int)globals->count, (long)hs_external_global_count + scenario_count,
+				(int)hs_external_global_count, scenario_count);
+
+			return FALSE;
+		}
+	}
 #ifdef HALO_VITA
 	memory_watch_prepare_write(game_state_globals.base_address, size);
 #endif

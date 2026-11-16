@@ -108,15 +108,16 @@ void network_event(
 	char *format,
 	...);
 
-/* port: a join request with zero_bytes zeros past its structure, as a host
-of OpenCE's network version 40 or more reads it (network_wire_join_request_padding).
-The message table stays 0x70: every older wire and this build's own hosts
-go on reading that, and a shared definition that grew would refuse them all
-with no word */
+/* port: a join request with tail_bytes bytes past its structure (tail's:
+zeros, and from OpenCE's 42 the host's version word: network_wire_join_request_tail),
+as a host of OpenCE's network version 40 or more reads it. The message table
+stays 0x70: every older wire and this build's own hosts go on reading that,
+and a shared definition that grew would refuse them all with no word */
 void *create_network_game_join_request_padded(
 	const void *message_struct,
 	short message_struct_size,
-	short zero_bytes);
+	const void *tail,
+	short tail_bytes);
 
 void *create_network_game_message(
 	enum network_game_message_type message_type,

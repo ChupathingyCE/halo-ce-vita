@@ -324,6 +324,11 @@ static boolean biped_unarmed_melee_allowed(
 	return game_variant_options_get()->loadout == _loadout_custom;
 }
 
+/* port: port/linux/game/network_distributed.c's (riders leave a vehicle on
+the ground whose up is below it: 0 but in a crossplay game of OpenCE's 43
+or more) */
+real network_distributed_rider_ejection_up(void);
+
 /* ---------- constants */
 
 enum
@@ -4305,8 +4310,11 @@ boolean biped_update(
 			if (TEST_FLAG(biped->unit.control_flags, _unit_control_action_bit))
 				unit_try_and_exit_seat(biped_index);
 
+			/* (port: below 0 as the Xbox's, but in a crossplay game of
+			OpenCE's 43 or more below 0.2, a vehicle on its side, as its host
+			plays it: network_distributed.c) */
 			if (rider_ejection &&
-				vehicle->object.up.k<0.f &&
+				vehicle->object.up.k<network_distributed_rider_ejection_up() &&
 				TEST_FLAG(vehicle->object.flags, _object_on_ground_bit))
 			{
 				unit_exit_seat_end(biped_index);

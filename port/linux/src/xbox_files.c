@@ -138,12 +138,32 @@ static int (*volatile io_background_stop)(void);
 
 unsigned long vita_host_thread_id(void);
 
-/* whether the calling thread is the background one */
-static int io_background_here(void)
+/* (port, Nov 15 2026) a second background thread, the checkpoint writer
+(game_state_xbox.c): its writes give the card way to the other threads'
+calls in the same pieces as a map copy's (io_background_piece), with no stop
+and not counted as a copy's progress. The Maw's reactor (O10, Goodie2_sho:
+stutter there and not in the Warthog run) checkpoints every few seconds
+while its explosions, fires and sounds are new: each checkpoint's 16 MB
+went to the card in 128 KB writes (write_at), and every texture and sound
+read the frame waited for queued behind one - ~170 ms at a card's ~750 KB/s
+write. */
+static volatile unsigned long io_quiet_thread;
+
+/* whether the calling thread is the map copy's */
+static int io_copy_here(void)
 {
 	unsigned long thread = __atomic_load_n(&io_background_thread, __ATOMIC_ACQUIRE);
 
 	return thread && thread == vita_host_thread_id();
+}
+
+/* whether the calling thread is a background one (the map copy's or the
+checkpoint writer's) */
+static int io_background_here(void)
+{
+	unsigned long thread = __atomic_load_n(&io_quiet_thread, __ATOMIC_ACQUIRE);
+
+	return io_copy_here() || (thread && thread == vita_host_thread_id());
 }
 
 static size_t background_piece_size(void)
@@ -169,7 +189,7 @@ void platform_file_background_begin(int (*stop)(void))
 
 void platform_file_background_end(void)
 {
-	if (io_background_here())
+	if (io_copy_here())
 	{
 		__atomic_store_n(&io_background_thread, 0, __ATOMIC_RELEASE);
 		io_background_stop = NULL;
@@ -179,6 +199,15 @@ void platform_file_background_end(void)
 /* the background calls' bytes written, all told (a map copy's progress
 within its large writes: cache_copy_progress) */
 static volatile unsigned long long io_background_written;
+
+/* the calling thread's file calls from now on give the card way to the
+other threads' (the checkpoint writer: io_quiet_thread); HALO_IO_BACKGROUND_PIECE_KB=0
+leaves them as any other's */
+void platform_file_quiet_thread_begin(void)
+{
+	if (background_piece_size() != 0)
+		__atomic_store_n(&io_quiet_thread, vita_host_thread_id(), __ATOMIC_RELEASE);
+}
 
 unsigned long long platform_file_background_written(void)
 {
@@ -207,7 +236,8 @@ its stop was asked for */
 static BOOL io_background_piece(void)
 {
 	unsigned long long waited = 0;
-	int (*stop)(void) = io_background_stop;
+	/* (the map copy's stop; the checkpoint writer has none) */
+	int (*stop)(void) = io_copy_here() ? io_background_stop : NULL;
 
 	if (stop && stop())
 	{
@@ -1091,6 +1121,18 @@ int platform_host_path_write_protected(const char *host_path)
 	if (directory_length < 4 || strncasecmp(slash - 4, "maps", 4) ||
 		(directory_length > 4 && slash[-5] != '/' && slash[-5] != ':'))
 		return 0;
+	/* (not a mod's own maps folder, mods/<mod>/maps: an MCC mod's maps/a10.map is the mod's file, which the
+	mod manager's DELETE takes away with the mod - refused, the mod could never be deleted) */
+	if (directory_length > 5 && slash[-5] == '/')
+	{
+		const char *mod_end = slash - 5, *mod_start = mod_end;
+
+		while (mod_start > host_path && mod_start[-1] != '/')
+			mod_start--;
+		if (mod_start - host_path >= 5 && mod_start[-1] == '/' && mod_end > mod_start &&
+			!strncasecmp(mod_start - 5, "mods", 4) && (mod_start - host_path == 5 || mod_start[-6] == '/' || mod_start[-6] == ':'))
+			return 0;
+	}
 	for (index = 0; index < sizeof(names) / sizeof(names[0]); index++)
 	{
 		if (!strcasecmp(name, names[index]))
@@ -1441,7 +1483,7 @@ static BOOL write_at(struct platform_file *file, LPCVOID buffer, DWORD count, LP
 		}
 		io_card_request_write((unsigned long long)result, 1);
 		total += (DWORD)result;
-		if (io_background_here())
+		if (io_copy_here())
 			__atomic_add_fetch(&io_background_written, (unsigned long long)result, __ATOMIC_RELAXED);
 	}
 	if (bytes_written)

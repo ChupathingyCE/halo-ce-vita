@@ -335,6 +335,7 @@ export HALO_BOTS_ONLINE=${HALO_BOTS_ONLINE:-off}
 unset DEBUGINFOD_URLS
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 expected_fail=${XPPC_EXPECTED_FAIL:-}
 mode=${1:-}
@@ -346,10 +347,10 @@ net29)
 	[ -n "${XPPC_OPENCE29:-}" ] && [ -x "$XPPC_OPENCE29" ] ||
 		{ echo "SKIP (net29): wants XPPC_OPENCE29 (an OpenCE of network version 29's binary: build_pc_crossplay.sh opence ... 8102e711)"; exit 0; } ;;
 h3pcjoin)
-	[ -r "${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}/maps/bitmaps.map" ] ||
+	[ -r "${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}/maps/bitmaps.map" ] ||
 		{ echo "SKIP (h3pcjoin): wants the Halo PC files (HALO_TEST_DATA_MENUS)"; exit 0; } ;;
 pclivelobby)
-	[ -r "${HALO_TEST_PROFILE:-}" ] && [ -r "${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}/maps/bitmaps.map" ] ||
+	[ -r "${HALO_TEST_PROFILE:-}" ] && [ -r "${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}/maps/bitmaps.map" ] ||
 		{ echo "SKIP (pclivelobby): wants HALO_TEST_PROFILE and the Halo PC files (HALO_TEST_DATA_MENUS)"; exit 0; } ;;
 pcversion)
 	[ -n "${XPPC_OLD_BUILDS:-}" ] && [ -x "$XPPC_OLD_BUILDS/opence/src/build/linux/halo" ] ||
@@ -467,7 +468,7 @@ plays_ours() { # plays_ours BINARY NAME: 0 if the build's version is one ours jo
 	return 1
 }
 vita=${HALO_TEST_VITA:-$root/build/linux/halo}
-data=${HALO_TEST_DATA:-$root/../data2276}
+data=${HALO_TEST_DATA:-$data_root/data2276}
 seconds=${XPPC_SECONDS:-240}
 server_seconds=${XPPC_SERVER_SECONDS:-150}
 start_delay=${XPPC_START:-4}
@@ -1991,7 +1992,7 @@ pclivelobby)
 	# GAME; MAP to Blood Gulch (down two, A, down nine, A), GAME to the next
 	# game type (up, A, down, A), START GAME (down two, A): the countdown,
 	# the game on Blood Gulch with the OpenCE client in it
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	subnet=$((subnet + 1)); n=$subnet
 	side "$n"; host_ns=$side_machine
 	lan_machine "$n" 3; client_ns=$held
@@ -2063,7 +2064,7 @@ h3pcjoin)
 	#            RC7: "it says it's not available", the game picked a second time joined - the
 	#            dialog had closed the browser, and the listings with it)
 	# Neither may fill the widgets' memory
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	h3join() { # h3join NAME VITA_HOST(0, 1) PAD_AFTER_THE_BROWSER [WHOLE_PAD] (h3_style: the Menu style, halo3;
 		# h3_client_env: the client's own settings)
 		local name=$1 vita_host=$2 after=$3 n host_ns client_ns client_ip vita_ns pids_here
@@ -2139,7 +2140,7 @@ h3pcjoin)
 	# picked from the games browser, the message, the Xbox's error dismissed (START), and the
 	# games browser again, not the main menu)
 	h3mapjoin() { # h3mapjoin NAME
-		local name=$1 vita_ns client_ns client_ip pids_here map=${XPPC_CE_MAP:-$root/../custom-maps-dl/extinction.map} level
+		local name=$1 vita_ns client_ns client_ip pids_here map=${XPPC_CE_MAP:-$data_root/custom-maps-dl/extinction.map} level
 		level=$(basename "$map" .map)
 		[ -r "$map" ] || { echo "--- $name: no Custom Edition map ($map): left out"; return; }
 		mkdir -p "$out/$name/host-maps"

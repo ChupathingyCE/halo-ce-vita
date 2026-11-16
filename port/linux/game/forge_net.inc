@@ -243,6 +243,9 @@ static struct
 	/* (the host's) the game plays a map variant, not Forge
 	(forge_play_host_begin: the hello's FORGE_NET_SESSION_PLAY) */
 	boolean host_play;
+	/* (the host's, 1.2.0) the game played is a Command game
+	(forge_command_host_begin: the hello's FORGE_NET_SESSION_COMMAND) */
+	boolean host_command;
 	/* (the host's, a map variant played) the map and the variant's file
 	its session is of */
 	char host_map[256];
@@ -275,6 +278,9 @@ static struct
 	/* (a joiner) the host's game plays its map variant, not Forge (its
 	hello's FORGE_NET_SESSION_PLAY) */
 	boolean client_play;
+	/* (a joiner) the host's game is a Command game (its hello's
+	FORGE_NET_SESSION_COMMAND) */
+	boolean client_command;
 	/* (a joiner) its packs and blocks to be prebuilt in the lobby */
 	boolean prebuild_wanted;
 	/* (a joiner) each hello pack's own pack (NONE: not brought), the hello's
@@ -403,7 +409,7 @@ static uint32_t forge_net_layout_features(
 		}
 	}
 
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		if (forge_spawn_is_teleporter(&forge_globals.spawns[index]))
 			features |= FORGE_NET_FEATURE_MARKERS;
@@ -692,6 +698,7 @@ static boolean forge_net_host_begin_as(
 	char const *map_path,
 	char const *variant_file,
 	boolean play,
+	boolean command,
 	char *why,
 	int why_size)
 {
@@ -754,7 +761,7 @@ static boolean forge_net_host_begin_as(
 	/* (another game than the one hosted - Forge for a map variant played,
 	or another map variant -: a session of its own, every machine asked
 	again) */
-	if (!forge_net.hosting || forge_net.host_play != play ||
+	if (!forge_net.hosting || forge_net.host_play != play || forge_net.host_command != command ||
 		(play && (_stricmp(forge_net.host_map, forge_globals.game_map) ||
 			strcmp(forge_net.host_variant, forge_globals.variant_file))))
 	{
@@ -765,6 +772,7 @@ static boolean forge_net_host_begin_as(
 	}
 	forge_net.hosting = TRUE;
 	forge_net.host_play = play;
+	forge_net.host_command = command;
 	snprintf(forge_net.host_map, sizeof(forge_net.host_map), "%s", forge_globals.game_map);
 	snprintf(forge_net.host_variant, sizeof(forge_net.host_variant), "%s", forge_globals.variant_file);
 	forge_net.client_session = FALSE;
@@ -775,7 +783,7 @@ static boolean forge_net_host_begin_as(
 	p2p_lobby_set_never_listed(play ? 0 : 1);
 	halo_forge_net_hosting = play ? 0 : 1;
 	platform_log("forge net: hosting a %s of %s%s%s (session %08x): joiners are asked to play it",
-		play ? "game of a map variant" : "Forge game", map_path, forge_globals.variant_title[0] ? ", map variant " : "",
+		command ? "Command game" : play ? "game of a map variant" : "Forge game", map_path, forge_globals.variant_title[0] ? ", map variant " : "",
 		forge_globals.variant_title, (unsigned)forge_net.session);
 	return TRUE;
 }
@@ -786,7 +794,7 @@ boolean forge_net_host_begin(
 	char *why,
 	int why_size)
 {
-	return forge_net_host_begin_as(map_path, variant_file, FALSE, why, why_size);
+	return forge_net_host_begin_as(map_path, variant_file, FALSE, FALSE, why, why_size);
 }
 
 boolean forge_play_host_begin(
@@ -801,7 +809,44 @@ boolean forge_play_host_begin(
 			snprintf(why, (size_t)why_size, "%s", T("No map variant chosen."));
 		return FALSE;
 	}
-	return forge_net_host_begin_as(map_path, variant_file, TRUE, why, why_size);
+	return forge_net_host_begin_as(map_path, variant_file, TRUE, FALSE, why, why_size);
+}
+
+/* (1.2.0: the Command lobby's network game, the network test's "command")
+the game this machine hosts is a Command game of the map: a game played, no
+map variant, its joiners told so (a build that does not play network Command
+is refused from it) */
+boolean forge_command_host_begin(
+	char const *map_path,
+	char *why,
+	int why_size)
+{
+	return forge_net_host_begin_as(map_path, NULL, TRUE, TRUE, why, why_size);
+}
+
+/* whether this machine's network game is a Command game: the host's, or a
+joiner's told so by the host's hello */
+boolean forge_net_command_session(
+	void)
+{
+	return (forge_net.hosting && forge_net.host_command) || (forge_net.client_session && forge_net.client_command);
+}
+
+/* (the host) whether a machine said it plays the hosted game (its answer to
+the hello, not refused) */
+boolean forge_net_machine_plays(
+	long machine_index)
+{
+	short index;
+
+	if (!forge_net.hosting)
+		return FALSE;
+	for (index = 0; index < FORGE_NET_MAXIMUM_MACHINES; index++)
+	{
+		if (forge_net.machines[index].known && forge_net.machines[index].machine_index == machine_index)
+			return forge_net.machines[index].answered && !forge_net.machines[index].refused;
+	}
+	return FALSE;
 }
 
 /* the game hosted is a Forge game no more (the lobby closed, another game) */
@@ -812,6 +857,7 @@ void forge_net_host_end(
 		return;
 	forge_net.hosting = FALSE;
 	forge_net.host_play = FALSE;
+	forge_net.host_command = FALSE;
 	forge_net_machines_forget();
 	p2p_lobby_set_never_listed(0);
 	halo_forge_net_hosting = 0;
@@ -834,7 +880,8 @@ static void forge_net_hello_fill(
 	message->command = _forge_net_lobby_hello;
 	message->version = FORGE_NET_HOST_VERSION;
 	message->session = forge_net.session;
-	message->flags = (in_progress ? FORGE_NET_SESSION_IN_PROGRESS : 0) | (forge_net.host_play ? FORGE_NET_SESSION_PLAY : 0);
+	message->flags = (in_progress ? FORGE_NET_SESSION_IN_PROGRESS : 0) | (forge_net.host_play ? FORGE_NET_SESSION_PLAY : 0) |
+		(forge_net.host_command ? FORGE_NET_SESSION_COMMAND : 0);
 	for (pack = 0; pack < FORGE_PACK_COUNT && message->pack_count < FORGE_NET_MAXIMUM_PACKS; pack++)
 	{
 		unsigned long long hash;
@@ -1045,8 +1092,10 @@ void forge_net_server_handle_lobby_message(
 	}
 	if (answer.command == _forge_net_lobby_building)
 	{
-		/* (after its answer only; the packs it brings only) */
-		uint32_t building = answer.packs_ready & forge_net.machines[slot].packs_ready;
+		/* (after its answer only; the packs it brings only - and a Command
+		game's own, its packs' bit) */
+		uint32_t building = answer.packs_ready & (forge_net.machines[slot].packs_ready |
+			(forge_net.host_command ? FORGE_NET_BUILDING_COMMAND_PACKS : 0));
 
 		if (!forge_net.machines[slot].answered)
 			return;
@@ -1219,6 +1268,7 @@ void forge_net_client_handle_lobby_message(
 		forge_net.refused_said = FALSE;
 		forge_net.hosting = FALSE;
 		forge_net.client_play = (hello.flags & FORGE_NET_SESSION_PLAY) != 0;
+		forge_net.client_command = (hello.flags & FORGE_NET_SESSION_COMMAND) != 0;
 		forge_net.host_version = hello.version;
 		snprintf(forge_net.host_title, sizeof(forge_net.host_title), "%s", hello.title);
 		forge_globals.packs_session = 0;
@@ -1292,8 +1342,12 @@ void forge_net_client_handle_lobby_message(
 	built yet when the map loads is built then - its load stops a prebuild's
 	pauses, scene_packs_load_now -) */
 	forge_net.prebuild_wanted = TRUE;
-	platform_log("forge net: the host's game is a Forge game (session %08x%s%s): playing it, packs %lx%s%s",
-		(unsigned)hello.session, hello.title[0] ? ", map variant " : "", hello.title, forge_globals.packs_session,
+	/* (a Command game's: its packs - soldiers, dropships, Shades - built
+	meanwhile, at the lobby's pace) */
+	if (forge_net.client_command)
+		command_packs_prebuild(FALSE);
+	platform_log("forge net: the host's game is a %s game (session %08x%s%s): playing it, packs %lx%s%s",
+		forge_net.client_command ? "Command" : "Forge", (unsigned)hello.session, hello.title[0] ? ", map variant " : "", hello.title, forge_globals.packs_session,
 		forge_net.missing_packs[0] ? ", missing: " : "", forge_net.missing_packs);
 }
 
@@ -1334,6 +1388,18 @@ static void forge_net_client_building_update(
 		}
 		else if (state == _scene_pack_state_ready || state == _scene_pack_state_loaded)
 			finished++;
+	}
+	/* (a Command game's own packs, its bit) */
+	if (forge_net.client_command)
+	{
+		short command_percent = 0;
+
+		if (command_packs_building(&command_percent))
+		{
+			building.packs_ready |= FORGE_NET_BUILDING_COMMAND_PACKS;
+			done_sum += PIN(command_percent, 0, 100);
+			count++;
+		}
 	}
 	/* (how far all of them are, not the average of those under way: that
 	fell back to 0% as each pack finished and the next began, and a build
@@ -1944,6 +2010,23 @@ static void forge_net_host_command(
 	}
 }
 
+/* (the host) a joiner's request's spawn point by its id: none for a game
+mode's marker, which the host keeps to itself until the modes' network step
+(forge_mode_markers.inc: the request is then refused as gone) */
+static struct forge_spawn *forge_net_host_spawn_of_id(
+	long id,
+	long machine_index)
+{
+	struct forge_spawn *spawn = forge_spawn_of_id(id);
+
+	if (spawn && forge_kind_is_mode_marker(spawn->kind))
+	{
+		platform_log("forge net: machine %ld asked for the game mode marker #%ld: refused (the host's own)", machine_index, id);
+		return NULL;
+	}
+	return spawn;
+}
+
 /* a machine's request, checked and made */
 static void forge_net_host_request(
 	struct forge_net_actor *actor,
@@ -2033,7 +2116,7 @@ static void forge_net_host_request(
 
 			/* (a teleporter's end: within the teleporters' most too, its channel
 			the host's choice, as its own browser makes one) */
-			if (forge_objects_counted() >= FORGE_MAXIMUM_OBJECTS || forge_globals.spawn_count >= FORGE_MAXIMUM_SPAWNS ||
+			if (forge_objects_counted() >= FORGE_MAXIMUM_OBJECTS || forge_spawn_points() >= FORGE_MAXIMUM_SPAWNS ||
 				!forge_marker_kind_room(request.aux, NONE, FALSE))
 			{
 				forge_net_refuse(actor, &request, _forge_net_refuse_budget, FORGE_MAXIMUM_OBJECTS, 0);
@@ -2226,7 +2309,7 @@ static void forge_net_host_request(
 		if (request.flags & FORGE_NET_FLAG_SPAWN)
 		{
 			struct forge_placed *placed = forge_placed_of_id((long)request.id);
-			struct forge_spawn *spawn = forge_spawn_of_id((long)request.id);
+			struct forge_spawn *spawn = forge_net_host_spawn_of_id((long)request.id, actor->machine_index);
 			struct forge_transform home;
 
 			/* (a player spawn point's: there, upright) */
@@ -2297,7 +2380,7 @@ static void forge_net_host_request(
 		/* (a player spawn point's, by its id) */
 		if (request.flags & FORGE_NET_FLAG_SPAWN)
 		{
-			struct forge_spawn *spawn = forge_spawn_of_id((long)request.id);
+			struct forge_spawn *spawn = forge_net_host_spawn_of_id((long)request.id, actor->machine_index);
 
 			if (!spawn)
 			{
@@ -2333,7 +2416,7 @@ static void forge_net_host_request(
 		marker's move's) */
 		if (request.flags & FORGE_NET_FLAG_SPAWN)
 		{
-			struct forge_spawn *spawn = forge_spawn_of_id((long)request.id);
+			struct forge_spawn *spawn = forge_net_host_spawn_of_id((long)request.id, actor->machine_index);
 
 			/* (a player spawn point's: the host's own steps, its yaw the
 			marker's move's) */
@@ -2665,10 +2748,14 @@ static void forge_net_host_broadcast(
 	/* (the player spawn points, to draw: a Forge game's, not a map variant
 	played; the teleporters any game's: they are drawn, and the netgame
 	flags of every machine's game) */
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
 		struct forge_net_record entry;
 
+		/* (a game mode's marker: the host's own, never sent - a joiner would
+		take it for a respawn point - until the modes' network step) */
+		if (forge_kind_is_mode_marker(forge_globals.spawns[index].kind))
+			continue;
 		if (forge_net.host_play && !forge_spawn_is_teleporter(&forge_globals.spawns[index]) &&
 			!forge_spawn_is_objective(&forge_globals.spawns[index]))
 		{
@@ -2825,8 +2912,11 @@ static void forge_net_host_sync(
 	}
 	/* (the player spawn points: entries, taken before the end of the sync;
 	the teleporters in a map variant played too) */
-	for (index = 0; index < forge_globals.spawn_count && index < FORGE_MAXIMUM_SPAWNS; index++)
+	for (index = 0; index < forge_globals.spawn_count && index < FORGE_SPAWN_TABLE; index++)
 	{
+		/* (a game mode's marker: never sent, above) */
+		if (forge_kind_is_mode_marker(forge_globals.spawns[index].kind))
+			continue;
 		if (forge_net.host_play && !forge_spawn_is_teleporter(&forge_globals.spawns[index]) &&
 			!forge_spawn_is_objective(&forge_globals.spawns[index]))
 		{
@@ -4856,6 +4946,41 @@ static void forge_net_log_state(
 		forge_net_request_send(&record);
 		forge_net_grant_wait(_forge_net_grant_grab);
 		platform_log("forge net: asked the host to grab #%lu, unchecked here", (unsigned long)record.id);
+		return;
+	}
+	/* (tests: "forge net spawnask delete|property|move #<id>", a client) a
+	spawn point's request for that id whatever this machine has of it, as a
+	client that guessed a game mode marker's id would send: the host refuses
+	one naming its markers (forge_net_host_spawn_of_id) */
+	if (arguments && !strncmp(arguments, "spawnask ", 9) && forge_net_client())
+	{
+		struct forge_net_record record;
+		char const *what = arguments + 9;
+		char const *hash = strchr(what, '#');
+		short op = !strncmp(what, "delete", 6) ? _forge_net_request_delete : !strncmp(what, "property", 8) ?
+			_forge_net_request_property : _forge_net_request_set;
+
+		if (!hash)
+			return;
+		forge_net_request_init(&record, op);
+		record.flags = FORGE_NET_FLAG_SPAWN;
+		record.id = (uint32_t)atol(hash + 1);
+		if (op == _forge_net_request_property)
+		{
+			record.aux = _forge_property_team;
+			record.step = 1;
+		}
+		else if (op == _forge_net_request_set)
+		{
+			struct forge_spawn const *any = forge_globals.spawn_count > 0 ? &forge_globals.spawns[0] : NULL;
+			real_point3d position = { 60.f, -100.f, 1.f };
+
+			if (any)
+				position = any->home.position;
+			forge_net_transform_from(&record.transform, &position, global_forward3d, global_up3d);
+		}
+		forge_net_request_send(&record);
+		platform_log("forge net: asked the host to %s the spawn point #%lu, unchecked here", what, (unsigned long)record.id);
 		return;
 	}
 #endif

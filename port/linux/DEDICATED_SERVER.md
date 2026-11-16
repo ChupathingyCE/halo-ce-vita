@@ -245,7 +245,7 @@ These commands work in `init.txt` and on the console. The names are
 | `sv_coop <level> [difficulty]` | Co-op on a campaign level (`a10`, `a30`...; difficulty 0 to 3, default 1) instead of the cycle; the server runs the AI and the scripts. `init.txt` only. |
 | `sv_bots_fill <0\|1>` | 1: bots fill the game to its most players less two, rounded down to an even total (16 most: 14), so two slots are always free and the teams come out equal, and leave as players join (see "Bots"). 0 (the default): no bots. |
 | `sv_bots_when_empty <0\|1>` | With `sv_bots_fill 1`: 1 (the default), the bots play while nobody is in too (the server plays its cycle with them and never looks empty); 0, only while people are in. |
-| `sv_bots_skill <easy\|normal\|heroic\|legendary>` | The bots' skill (default normal). |
+| `sv_bots_skill <easy\|normal\|heroic\|legendary>` | The bots' skill (default normal), scaled as Halo CE's campaign difficulty scales its AI: on Easy a bot deals players 0.3x damage and takes 1/0.6x, Legendary 1.8x and 1/1.4x (bot against bot unchanged), and reaction, aim, fire rate and grenades follow the same table. |
 | `add_bot [n]`, `add_bot_red [n]`, `add_bot_blue [n]` | A bot more (of that team: red the first, blue the second), joining at once, mid-game too. With `sv_bots_fill 1` never past its even total (two slots stay free: a full fill says no room); without the fill, bots added this way play anyway. `sv_` in front works too. |
 | `drop_bot [n]`, `drop_bot_red [n]`, `drop_bot_blue [n]` | A bot fewer (of that team). A team asked for in either is left as asked, not evened. |
 | `bots_reset` | The bots added or dropped by hand forgotten: the fill's own again. |

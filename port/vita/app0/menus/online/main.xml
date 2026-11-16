@@ -5,7 +5,7 @@ what that one does, laid out the online way: the list low at the left in a see-t
 with the orange bar, the version and the Settings button at its foot, the title large at the
 right over the live scene, a deeper blue cast over it. Every item of the Halo 3 main menu is here:
 CAMPAIGN, MULTIPLAYER (the multiplayer lobby, which hosts or BROWSE GAMES to join), FORGE (the
-Forge lobby), EXIT on a PC (1.1.3, 1.2.0's menu rework); Start Halo 3's
+Forge lobby), COMMAND (its lobby), EXIT on a PC (1.1.4, 1.2.0's menu rework); Start Halo 3's
 MEDIA | SETTINGS (CUSTOMIZATION, FRIENDS, FILE SHARE, the mod manager there), Triangle the friends
 list; the party's nameplates and the live servers at the top right. The art
 is this folder's own (tools/online_menu_art.py) and the Halo 3 set's (the title, the glyphs,
@@ -63,8 +63,8 @@ the fonts). The left of the list sits in the wide screen's margin (x below 0 of 
 		<string text="COMMAND"/>
 	</strings>
 
-	<!-- the rows (1.2.0 menu rework, owner Nov 5; 1.1.3: CAMPAIGN, MULTIPLAYER - the multiplayer lobby,
-	which hosts or BROWSE GAMES to join -, FORGE, EXIT on a PC (1.2.0's COMMAND is 1.1.4's); SERVER BROWSER
+	<!-- the rows (1.2.0 menu rework, owner Nov 5; 1.1.4: CAMPAIGN, MULTIPLAYER - the multiplayer lobby,
+	which hosts or BROWSE GAMES to join -, FORGE, COMMAND - its own lobby -, EXIT on a PC; SERVER BROWSER
 	is the lobby's BROWSE GAMES now, CUSTOMIZATION, the mod manager and the rest under Start; 1.2.0's
 	FIREFIGHT is 1.1.5's). One line under the list says what the focused row does (port online main), and the row
 	last focused is focused again as the menu comes back (port online main focus). -->
@@ -77,8 +77,14 @@ the fonts). The left of the list sits in the wide screen's margin (x below 0 of 
 	<widget name="online/main/multiplayer" type="text" width="226" height="18" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="7" text_y="2" string_list="online/main_items" string_index="16">
 		<on event="a start" open="ui\shell\main_menu\multiplayer_type_select\multiplayer_type_select_screen" label="multiplayer"/>
 	</widget>
+	<widget name="online/main/firefight" type="text" width="226" height="18" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="7" text_y="2" string_list="online/main_items" string_index="17">
+		<on event="a start" open="h3/firefight/lobby"/>
+	</widget>
 	<widget name="online/main/forge" type="text" width="226" height="18" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="7" text_y="2" string_list="online/main_items" string_index="18">
 		<on event="a start" open="h3/forge/lobby"/>
+	</widget>
+	<widget name="online/main/command" type="text" width="226" height="18" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="7" text_y="2" string_list="online/main_items" string_index="19">
+		<on event="a start" open="h3/command/lobby"/>
 	</widget>
 	<!-- (EXIT: the desktop's; hidden on the PS Vita, online_main_update) -->
 	<widget name="online/main/exit" type="text" width="226" height="18" bitmap="online/item" font="online/font_item" color="#FFF0F4F8" text_x="7" text_y="2" string_list="online/main_items" string_index="9">
@@ -89,8 +95,10 @@ the fonts). The left of the list sits in the wide screen's margin (x below 0 of 
 		<data input="port online main"/>
 		<child widget="online/main/campaign" x="0" y="0"/>
 		<child widget="online/main/multiplayer" x="0" y="19"/>
-		<child widget="online/main/forge" x="0" y="38"/>
-		<child widget="online/main/exit" x="0" y="57"/>
+		<child widget="online/main/firefight" x="0" y="38"/>
+		<child widget="online/main/forge" x="0" y="57"/>
+		<child widget="online/main/command" x="0" y="76"/>
+		<child widget="online/main/exit" x="0" y="95"/>
 	</widget>
 	<!-- (the focused row's line) -->
 	<widget name="online/main/row_text" type="text" left="-44" top="374" width="219" height="26" font="online/font_small" color="#FFB8C6D6"/>

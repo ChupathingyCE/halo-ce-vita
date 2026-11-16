@@ -537,8 +537,11 @@ def run(arguments):
 	# past our kinds, so the bounds check drops them as unknown, in the lobby
 	# (no game in progress) and in a game alike
 	share = {n: v for n, v in their_kinds.items() if n.startswith("_distributed_message_map_share")}
+	# (the handler, and since OpenCE 42's layout the inner one it strips a 42
+	# host's header for: distributed_handle_message)
 	handler = source_function(ours.text("port/linux/game/network_distributed.c"),
-		"void network_distributed_handle_message(")
+		"void network_distributed_handle_message(") + (source_function(ours.text("port/linux/game/network_distributed.c"),
+		"static void distributed_handle_message(") or "")
 	problems = [f"{v} is our {n}" for n, v in ours_kinds.items() if v in share.values()]
 	if our_kind_count is None or any(v < our_kind_count for v in share.values()):
 		problems.append(f"upstream's {sorted(share.values())} not past our {our_kind_count} kinds")

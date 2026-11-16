@@ -68,6 +68,7 @@ only look up and create stand-ins.
 #include "posix.h"
 #include "port_config.h"
 #include "p2p_internal.h"
+#include "p2p_party.h"
 #include "p2p_relay_protocol.h"
 #include "lang.h"
 #include "ikcp.h"
@@ -3985,6 +3986,8 @@ static void update_joining(void)
 		p2p_signal_stop_joining();
 		set_status(N_("no answer from the invite's host; it may have stopped hosting or quit"));
 		p2p_lobby_join_timed_out(p2p.join_host_hash);
+		/* (a party's follow: the party told, p2p_party.inc) */
+		p2p_party_follow_join_outcome(P2P_PARTY_FOLLOW_UNREACHABLE);
 	}
 }
 

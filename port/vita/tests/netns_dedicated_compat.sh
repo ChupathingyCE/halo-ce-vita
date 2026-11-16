@@ -15,8 +15,8 @@
 # (bot input, shooting now and then) until a round or more is over. Then
 # netns_compat_check.py reads every log and prints one line a check.
 
-compat_v110=${HALO_TEST_COMPAT_V110:-$root/../wt-v110client/build/linux/halo}
-compat_new=${HALO_TEST_COMPAT_NEW:-$root/../wt-i21client/build/linux/halo}
+compat_v110=${HALO_TEST_COMPAT_V110:-$data_root/wt-v110client/build/linux/halo}
+compat_new=${HALO_TEST_COMPAT_NEW:-$data_root/wt-i21client/build/linux/halo}
 compat_most=${HALO_TEST_BOTS_MAX:-16}
 
 # dedicated_compat_init FILE: the server's init.txt

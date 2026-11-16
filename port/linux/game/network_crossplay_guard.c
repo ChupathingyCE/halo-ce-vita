@@ -207,6 +207,18 @@ boolean network_crossplay_guard_record(
 		csmemcpy(network_crossplay_guard.record_map, map, sizeof(map));
 		network_crossplay_guard.record_seen = TRUE;
 	}
+	/* (a PC host's co-op of 42 or more: each checkpoint revert restarts the
+	game's objects under a new epoch, which this build does not follow yet
+	(network_wire_v42_rules): refused, said once, never tried again by
+	itself) */
+	if (coop && network_wire_v42_rules())
+	{
+		network_event("leaving the co-op PC game '%s': co-op with a host of network version %u is not played here",
+			name, network_wire_version());
+		platform_show_message(T("Halo: cannot join this game"),
+			T("Co-op with this PC host's version is not supported yet. Multiplayer games with it work."));
+		return FALSE;
+	}
 	verdict = crossplay_guard_judge(coop, game->player_count, game->maximum_players);
 	switch (verdict)
 	{

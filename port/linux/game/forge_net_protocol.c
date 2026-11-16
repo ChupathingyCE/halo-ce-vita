@@ -512,6 +512,12 @@ int forge_net_lobby_valid(
 	}
 	if (message->command != _forge_net_lobby_building && (message->flags & ~FORGE_NET_SESSION_FLAGS_KNOWN))
 		return 0;
+	/* (a Command game is a game played, never Forge edited) */
+	if (message->command == _forge_net_lobby_hello && (message->flags & FORGE_NET_SESSION_COMMAND) &&
+		!(message->flags & FORGE_NET_SESSION_PLAY))
+	{
+		return 0;
+	}
 	if (message->pack_count > FORGE_NET_MAXIMUM_PACKS)
 		return 0;
 	/* (an answer names no pack: its packs_ready are bits of the hello's) */

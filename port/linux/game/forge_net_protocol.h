@@ -187,6 +187,11 @@ one in ten seconds */
 waited for, to be held when it comes */
 #define FORGE_NET_SPAWN_HOLD_MILLISECONDS 5000
 
+/* (a joiner's _forge_net_lobby_building in a Command game: hello's pack
+bits below it) Command's own packs - its soldiers, dropships, Shades - still
+being built from its campaign maps */
+#define FORGE_NET_BUILDING_COMMAND_PACKS 0x80u
+
 /* the lobby message's commands */
 enum
 {
@@ -248,7 +253,13 @@ enum
 	no monitor; a build without this bit drops the hello as invalid and is
 	refused from the game, as one that does not play network Forge */
 	FORGE_NET_SESSION_PLAY = 1 << 1,
-	FORGE_NET_SESSION_FLAGS_KNOWN = FORGE_NET_SESSION_IN_PROGRESS | FORGE_NET_SESSION_PLAY,
+	/* (1.2.0) the game played is a Command game (command.c's network play:
+	command_net_protocol.h), with FORGE_NET_SESSION_PLAY: a build without
+	this bit drops the hello as invalid and is refused from the game, as one
+	that does not play network Forge; a joiner that plays it begins the
+	host's Command game as its map loads */
+	FORGE_NET_SESSION_COMMAND = 1 << 2,
+	FORGE_NET_SESSION_FLAGS_KNOWN = FORGE_NET_SESSION_IN_PROGRESS | FORGE_NET_SESSION_PLAY | FORGE_NET_SESSION_COMMAND,
 };
 
 /* a record's operation: a client's request, or the host's update */

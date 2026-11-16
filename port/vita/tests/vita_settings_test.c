@@ -219,6 +219,11 @@ int forge_panel_map_count(void) { return 3; }
 const char *forge_panel_map_name(int map_index) { return map_index >= 0 && map_index < 3 ? test_forge_maps[map_index][0] : ""; }
 const char *forge_panel_map_short(int map_index) { return map_index >= 0 && map_index < 3 ? test_forge_maps[map_index][1] : ""; }
 int forge_panel_map_available(int map_index) { return map_index == 1 || map_index == 2; }
+/* (1.1.5: Battle Creek and Blood Gulch have built-in Firefight layouts, Chill Out none) */
+int forge_panel_map_firefight(int map_index) { return map_index == 0 || map_index == 1; }
+/* (1.1.5: Firefight's packs - ready, or being built and how far) */
+static int test_firefight_packs = -1;
+int command_panel_packs_progress(int firefight) { (void)firefight; return test_firefight_packs; }
 /* (port/linux/game/map_checks.c: the map lists' looks forgotten as a map is deleted) */
 void map_checks_forget(void) { }
 /* (a Forge game played, with its placed characters alive and dead; what
@@ -244,6 +249,13 @@ int forge_panel_group_placed(int category) { return category >= 0 && category < 
 void forge_panel_delete_group(int category) { test_forge_group_deleted = category; }
 static int test_forge_magnets = 1, test_forge_nudge = 5;
 int forge_panel_magnets(void) { return test_forge_magnets; }
+/* (1.1.4: the Command page's rows, port/linux/game/command.c's) */
+static int test_command_objective, test_command_ai_level = 2;
+int command_objective_index(void) { return test_command_objective % 3; }
+void command_objective_next(void) { test_command_objective++; }
+int command_ai_level_index(void) { return test_command_ai_level % 4; }
+void command_ai_level_next(void) { test_command_ai_level++; }
+volatile int halo_forge_request_mode;
 void forge_panel_magnets_set(int on) { test_forge_magnets = on; }
 int forge_panel_nudge_centimetres(void) { return test_forge_nudge; }
 void forge_panel_nudge_step(int step) { test_forge_nudge = step > 0 ? (test_forge_nudge == 25 ? 1 : test_forge_nudge == 1 ? 5 : test_forge_nudge * 2) : 5; }
@@ -3127,6 +3139,116 @@ static void test_forge_page(void)
 		strstr(menu, "\nGulch A\x02  Blood Gulch\n") && strstr(menu, "\nDamaged file\x02  Blood Gulch\n") &&
 		strstr(menu, "\nCold\x02  Chill Out\n") && menu_fits() && menu_height_fits(),
 		"Forge: Touch in Forge (On), Map (Blood Gulch first), Map variant (None), Network (Local), Start Forge; File Share's map variants, each fits");
+	/* (1.1.4) Command's page: Menu style Halo CE's way to Command mode - the Forge page above as before */
+	{
+		char saved[16];
+
+		snprintf(saved, sizeof(saved), "%s", setting_named("HALO_MENU_STYLE")->values[setting_named("HALO_MENU_STYLE")->choice]);
+		vita_settings_set("HALO_MENU_STYLE", "original");
+		press(VITA_BUTTON_R);
+		press(VITA_BUTTON_L);
+		check(to_tab("Game") && strstr(menu, "\nCommand\x02  >") && open_page("Command") &&
+			strstr(menu, "\n\x03Game > Command\n") && !strcmp(menu_line(2, line, sizeof(line)), "Layout\x02  Command's own >") &&
+			!strcmp(menu_line(3, line, sizeof(line)), "Command objective\x02< Both >") &&
+			!strcmp(menu_line(4, line, sizeof(line)), "AI commander\x02< Heroic >") &&
+			!strcmp(menu_line(5, line, sizeof(line)), "Start Command\x02  >") && menu_fits() && menu_height_fits(),
+			"Command (Menu style Halo CE): Layout (Command's own, Blood Gulch's two variants next), Command objective (Both), "
+			"AI commander (Heroic), Start Command; it fits");
+		to_line("Command objective");
+		press(VITA_BUTTON_RIGHT);
+		check(!strcmp(menu_line(3, line, sizeof(line)), "Command objective\x02< Territories >"), "Command objective: right, Territories");
+		to_line("Layout");
+		press(VITA_BUTTON_RIGHT);
+		check(!strncmp(menu_line(2, line, sizeof(line)), "Layout\x02< Gulch A", 15), "Layout: right, Blood Gulch's first variant");
+		press(VITA_BUTTON_LEFT);
+		press(VITA_BUTTON_CIRCLE);
+		vita_settings_set("HALO_MENU_STYLE", saved);
+		press(VITA_BUTTON_R);
+		press(VITA_BUTTON_L);
+		check(to_tab("Game") && !strstr(menu, "\nCommand\x02  >"), "Command's page row: Menu style Halo CE's alone");
+		/* (1.1.5) Firefight's page: its map (the ones with a built-in layout in the maps folder: Blood Gulch alone here,
+		Battle Creek's file missing), its layout (Firefight's own, Blood Gulch's variants next), Start Firefight */
+		vita_settings_set("HALO_MENU_STYLE", "original");
+		press(VITA_BUTTON_R);
+		press(VITA_BUTTON_L);
+		check(to_tab("Game") && strstr(menu, "\nFirefight\x02  >") && open_page("Firefight") &&
+			strstr(menu, "\n\x03Game > Firefight\n"), "Firefight (Menu style Halo CE): Game's row opens its page");
+		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02  Blood Gulch") &&
+			!strcmp(menu_line(3, line, sizeof(line)), "Layout\x02  Firefight's own >") &&
+			!strcmp(menu_line(4, line, sizeof(line)), "Start Firefight\x02  >"),
+			"Firefight: Map (Blood Gulch, the one Firefight map in the folder), Layout (Firefight's own, Blood Gulch's variants next), "
+			"Start Firefight");
+		check(menu_line(5, line, sizeof(line))[0] == '\x05' && menu_fits() && menu_height_fits(),
+			"Firefight: three rows, then the help; it fits");
+		to_line("Map");
+		press(VITA_BUTTON_RIGHT);
+		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02  Blood Gulch"), "Map: right, no other Firefight map in the folder");
+		to_line("Layout");
+		press(VITA_BUTTON_RIGHT);
+		check(!strncmp(menu_line(3, line, sizeof(line)), "Layout\x02< Gulch A", 15), "Layout: right, Blood Gulch's first variant");
+		to_line("Start Firefight");
+		check(strstr(menu, "\n\x05" "Co-op against the Covenant's waves on this map (local)\n") != NULL, "Start Firefight's help");
+		press(VITA_BUTTON_CROSS);
+		check(halo_system_link_request == SYSTEM_LINK_REQUEST_FORGE && halo_forge_request_map == 1 &&
+			halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT && !halo_forge_request_network &&
+			!strcmp(halo_forge_request_variant, "gulch_a.hmv") && !panel_open,
+			"Start Firefight: the game asked for, FIREFIGHT, Blood Gulch, its first variant, a local game; the panel closed");
+		halo_system_link_request = SYSTEM_LINK_REQUEST_NONE;
+		halo_forge_request_mode = 0;
+		open_panel();
+		/* (its packs still being built: the page says how far, Start Firefight waits) */
+		test_firefight_packs = 40;
+		check(to_tab("Game") && open_page("Firefight") && strstr(menu, "\n\x04" "Building Firefight's Covenant... 40%\n") && menu_fits(),
+			"Firefight's packs being built: the page's line, 40%");
+		to_line("Start Firefight");
+		press(VITA_BUTTON_CROSS);
+		check(halo_system_link_request == SYSTEM_LINK_REQUEST_NONE && panel_open &&
+			strstr(menu, "Firefight's Covenant still being built: wait"), "Start Firefight while they build: not started, the notice");
+		test_firefight_packs = -1;
+		press(VITA_BUTTON_CIRCLE);
+		/* (a saved layout of Chill Out with Firefight zones: Chill Out a Firefight map too, that layout its first -
+		"Firefight's own" is none of a map's with no built-in layout) */
+		{
+			int entry_index;
+
+			for (entry_index = 0; entry_index < test_forge_count; entry_index++)
+				if (!strcmp(test_forge_entries[entry_index].file_name, "cold.hmv"))
+					test_forge_entries[entry_index].firefight_zones = 3;
+		}
+		check(to_tab("Game") && open_page("Firefight") && !strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Blood Gulch >"),
+			"a Chill Out layout with Firefight zones: Map offers another");
+		to_line("Map");
+		press(VITA_BUTTON_RIGHT);
+		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Chill Out >") &&
+			!strncmp(menu_line(3, line, sizeof(line)), "Layout\x02< Cold", 13), "Map: right, Chill Out; Layout: Cold, the layout with zones");
+		to_line("Start Firefight");
+		press(VITA_BUTTON_CROSS);
+		check(halo_system_link_request == SYSTEM_LINK_REQUEST_FORGE && halo_forge_request_map == 2 &&
+			halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT && !strcmp(halo_forge_request_variant, "cold.hmv"),
+			"Start Firefight: Chill Out, its layout Cold");
+		halo_system_link_request = SYSTEM_LINK_REQUEST_NONE;
+		halo_forge_request_mode = 0;
+		open_panel();
+		check(to_tab("Game") && open_page("Firefight"), "the Firefight page again");
+		to_line("Layout");
+		press(VITA_BUTTON_LEFT);
+		check(!strncmp(menu_line(3, line, sizeof(line)), "Layout\x02< Cold", 13),
+			"Layout: left keeps Cold (Firefight's own is none of a map's with no built-in layout)");
+		{
+			int entry_index;
+
+			for (entry_index = 0; entry_index < test_forge_count; entry_index++)
+				test_forge_entries[entry_index].firefight_zones = 0;
+		}
+		to_line("Map");
+		press(VITA_BUTTON_LEFT);
+		press(VITA_BUTTON_CIRCLE);
+		vita_settings_set("HALO_MENU_STYLE", saved);
+		press(VITA_BUTTON_R);
+		press(VITA_BUTTON_L);
+		check(to_tab("Game") && !strstr(menu, "\nFirefight\x02  >"), "Firefight's page row: Menu style Halo CE's alone");
+		check(open_page("Forge"), "the Forge page again");
+	}
 	/* Touch in Forge: on as shipped; off and on again (HALO_FORGE_TOUCH) */
 	to_line("Touch in Forge");
 	check(strstr(menu, "\n\x05" "Drag an object to move it; tap it, then drag the screen to turn it\n") != NULL, "Touch in Forge's help");
@@ -3707,6 +3829,10 @@ static void test_tab_layouts(void)
 		{ PAGE_MENUS, "Scoreboard", "HALO_CLASSIC_SCOREBOARD", "classic|halo3", 0, "classic" },
 		/* (Forge and File Share, shown with Menu style Halo CE: under Menus) */
 		{ TAB_GAME, "Forge and File Share", NULL, NULL, 0, NULL, ACTION_PAGE, PAGE_FORGE },
+		/* (1.1.4: Command's page, Menu style Halo CE's) */
+		{ TAB_GAME, "Command", NULL, NULL, 0, NULL, ACTION_PAGE, PAGE_COMMAND },
+		/* (1.1.5: Firefight's page, Menu style Halo CE's) */
+		{ TAB_GAME, "Firefight", NULL, NULL, 0, NULL, ACTION_PAGE, PAGE_FIREFIGHT },
 		/* (File Share with friends: its page on Forge and File Share's) */
 		{ PAGE_FORGE, "Share with friends", NULL, NULL, 0, NULL, ACTION_PAGE, PAGE_FSFRIENDS },
 		{ PAGE_FORGE, "Touch in Forge", "HALO_FORGE_TOUCH", "1|0", 0, "1" },
@@ -3837,7 +3963,7 @@ static void test_tab_layouts(void)
 			old |= !strcmp(pages[index].name, "Screen") || !strcmp(pages[index].name, "First person") ||
 				!strcmp(pages[index].name, "Advanced") || !strcmp(pages[index].name, "General") ||
 				!strcmp(pages[index].name, "Graphics") || !strcmp(pages[index].name, "Audio");
-		check(!old && PAGE_GRAPHICS_DETAIL == TAB_COUNT && PAGE_COUNT == TAB_COUNT + 21 &&
+		check(!old && PAGE_GRAPHICS_DETAIL == TAB_COUNT && PAGE_COUNT == TAB_COUNT + 23 &&
 			!strcmp(pages[PAGE_GRAPHICS_DETAIL].name, "Detail") && !strcmp(pages[PAGE_GRAPHICS_PERFORMANCE].name, "Performance") &&
 			!strcmp(pages[PAGE_BUTTONS].name, "Button layout") && !strcmp(pages[PAGE_TOUCH].name, "Touch zones") &&
 			!strcmp(pages[PAGE_GYRO].name, "Gyro settings") && !strcmp(pages[PAGE_PLAY].name, "Play") &&
@@ -3848,10 +3974,12 @@ static void test_tab_layouts(void)
 			!strcmp(pages[PAGE_INFECTION].name, "Infection") && !strcmp(pages[PAGE_MENUS].name, "Menus") &&
 			!strcmp(pages[PAGE_CHAT].name, "Chat") && !strcmp(pages[PAGE_APPEARANCE].name, "Appearance") &&
 			pages[PAGE_APPEARANCE].tab == TAB_GAME && !strcmp(pages[PAGE_FSFRIENDS].name, "Share with friends") &&
-			!strcmp(pages[PAGE_FSSEND].name, "Send to a friend") && !strcmp(pages[PAGE_FSBROWSE].name, "A friend's File Share"),
+			!strcmp(pages[PAGE_FSSEND].name, "Send to a friend") && !strcmp(pages[PAGE_FSBROWSE].name, "A friend's File Share") &&
+			!strcmp(pages[PAGE_COMMAND].name, "Command") && pages[PAGE_COMMAND].tab == TAB_GAME &&
+			!strcmp(pages[PAGE_FIREFIGHT].name, "Firefight") && pages[PAGE_FIREFIGHT].tab == TAB_GAME,
 			"the pages rows open: Detail, Performance, Button layout, Touch zones, Gyro settings, Play, Modded maps, Vita and PC, A/B "
 			"switches, Forge and File Share, Mod manager, Friends, Party, Players, Infection, Menus, Chat, Appearance (Game's), "
-			"Share with friends, Send to a friend, A friend's File Share (no Screen, First person or Advanced page; no General, "
+			"Share with friends, Send to a friend, A friend's File Share, Command (1.1.4), Firefight (1.1.5) (no Screen, First person or Advanced page; no General, "
 			"Graphics or Audio tab)");
 	}
 	{

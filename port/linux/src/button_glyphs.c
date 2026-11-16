@@ -58,7 +58,7 @@ scoreboard's key, the D-pad the arrows, the sticks W A S D and the mouse.
 Change these with keyboard_menus and README.md's Controls table */
 static const signed char menu_keys[18] = {
 	HALO_KEY_ENTER, HALO_KEY_ESC, HALO_KEY_E, HALO_KEY_TAB, HALO_KEY_X, HALO_KEY_Q,
-	HALO_KEY_G, -1, HALO_KEY_UP, HALO_KEY_DOWN, HALO_KEY_LEFT, HALO_KEY_RIGHT, HALO_KEY_SPACE,
+	HALO_KEY_G, HALO_KEY_H, HALO_KEY_UP, HALO_KEY_DOWN, HALO_KEY_LEFT, HALO_KEY_RIGHT, HALO_KEY_SPACE,
 	HALO_KEY_F1, HALO_KEY_CTRL, HALO_KEY_Z, HALO_KEY_WASD, -1,
 };
 

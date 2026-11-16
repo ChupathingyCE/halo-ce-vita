@@ -80,9 +80,19 @@ docs/opence-net39-spec.md), played by 38's rules with 39's two meanings
 /* ... 40, OpenCE's 475ae67f (Oct 2026: a larger join request; 39's rules and
 network_wire_v40_rules, docs/opence-net41-spec.md) */
 #define HALO_PORT_CROSSPLAY_40_NETWORK_VERSION 40
-/* ... and the newest one its clients join, OpenCE's since cf9fad60 (40's
-rules and network_wire_v41_rules, docs/opence-net41-spec.md) */
-#define HALO_PORT_CROSSPLAY_NEWEST_NETWORK_VERSION 41
+/* ... 41, OpenCE's since cf9fad60 (40's rules and network_wire_v41_rules,
+docs/opence-net41-spec.md) */
+#define HALO_PORT_CROSSPLAY_41_NETWORK_VERSION 41
+/* ... 43, OpenCE's build-344 and ChupathingyCE's chupa-43a (Nov 2026: 42's
+layout - the join request's version word, the distributed header's
+checkpoint epoch, a unit state's scripted pose, a settings record 64 bytes
+longer - and 43's deck part and riders thrown from a vehicle on its side;
+ported from ChupathingyCE, GPL: network_wire_v42_rules, _v43_rules) */
+#define HALO_PORT_CROSSPLAY_43_NETWORK_VERSION 43
+/* ... and the newest one its clients join, OpenCE's build-355 and
+ChupathingyCE's 0.9.1 (chupa-44a): 43's layout and rules under a new
+number */
+#define HALO_PORT_CROSSPLAY_NEWEST_NETWORK_VERSION 44
 
 /* a Vita's game on the crossplay wire says it is a Vita's: this bit in its
 advertisement's flags (HALO_PORT_ADVERTISED_FLAGS_OFFSET; OpenCE's 0x01 and
@@ -134,7 +144,7 @@ version (the host's, joined or hosted; for a version the crossplay version
 table adds, the built-in one whose rules it plays) on the crossplay wire */
 unsigned int network_wire_version(void);
 /* whether a host announcing the version can be joined on that wire:
-legacy, exactly 18; crossplay, the accepted list (29, 32, 38, 39, 40 and 41, and
+legacy, exactly 18; crossplay, the accepted list (29, 32, 38, 39, 40, 41, 43 and 44, and
 what the crossplay version table adds, less what it refuses) */
 int network_wire_version_accepted_on(int crossplay, unsigned int version);
 /* the built-in crossplay version whose rules a host announcing this version
@@ -146,7 +156,7 @@ unsigned int network_wire_rules_version(unsigned int version);
 /* why the crossplay version table says a version is not joined (its refuse
 row's reason, or a newer build's rules): 1 and the reason, else 0 */
 int network_wire_crossplay_refusal(unsigned int version, char *reason, int size);
-/* whether a version is one of the crossplay rules built in (29, 32, 38, 39, 40, 41) */
+/* whether a version is one of the crossplay rules built in (29, 32, 38, 39, 40, 41, 43, 44) */
 int network_wire_rules_built_in(unsigned int rules);
 /* the crossplay version table in effect (netversion_fetch.c, as one
 checks; NULL: none, the built-in list alone), and its version (0: none) */
@@ -159,7 +169,7 @@ HALO_TEST_VERSION_HEARD=39:40 reads 39 as 40 (a PC host of a version no
 build has yet, played by a real OpenCE of 39: crossversion); the version
 itself otherwise */
 unsigned int network_wire_version_heard(unsigned int version);
-/* the crossplay versions joined, for a log line or a message ("29, 32, 38, 39, 40 and 41") */
+/* the crossplay versions joined, for a log line or a message ("29, 32, 38, 39, 40, 41, 43 and 44") */
 void network_wire_crossplay_versions_text(char *text, int size);
 /* the crossplay version a player should look for instead of a host's
 version not joined: the lowest joined above it, else the highest joined
@@ -246,9 +256,44 @@ changes what a game plays. The other changes of 40 and 41 (the votes, the
 map vote) are in messages this build does not read and drops by kind */
 int network_wire_v40_rules(void);
 int network_wire_v41_rules(void);
-/* the zero bytes a join request of this machine's game carries past the 0x70
+/* 42 (OpenCE build-344, in no release of its own; ChupathingyCE chupa-43a,
+GPL, port/linux/game/network_rules.h "chupa-43a's facts", ported here):
+- the join request 236 bytes past its 0x70, the host's network version as a
+  16-bit big-endian word at 234 of them (network_wire_join_request_tail): a
+  host of 42 or more admits only its own number, silently;
+- every distributed message's header 4 bytes longer (a batch's and each
+  message's in it): the host's checkpoint epoch, which the host's boundary
+  message (kind 96, the header alone, over its stream) says before its
+  objects; a client takes nothing of another epoch and stamps its own
+  messages with it (network_distributed.c, network_rules_wire.c);
+- a unit state's part bit 6 (a scripted pose, 30 bytes, last), passed over;
+- the settings record 64 bytes longer (13,200), the bytes after the local
+  data unread;
+- kinds 97-100 and 103-106 (MCC's), dropped by kind.
+43: a unit state's part bit 7 (28 bytes after the up), passed over; kind 107
+(riding) dropped; riders leave a vehicle on the ground whose up's height is
+below 0.2 (bipeds.c, network_wire_rider_ejection_up). 44: 43's under a new
+number. This build joins 43 and 44 (no release announces 42) as a client
+alone, and never in co-op: a co-op host of 42 or more restarts the game's
+objects at each checkpoint revert under a new epoch, which this build does
+not follow (network_game_record.c refuses such a game, the player told) */
+int network_wire_v42_rules(void);
+int network_wire_v43_rules(void);
+/* the bytes a join request of this machine's game carries past the 0x70
+every older wire has, into tail (room bytes): 0 on any wire but 40 and up,
+234 zeros to 40 and 41, 236 to 42 and up with the host's announced number
+at 234 big-endian. Returns how many (-1: room too small) */
+#define NETWORK_WIRE_V42_JOIN_REQUEST_TAIL 236
+#define NETWORK_WIRE_V42_JOIN_VERSION_AT 234
+int network_wire_join_request_tail(unsigned char *tail, int room);
+/* the height of a vehicle's up (its k) below which its riders leave it on
+the ground: 0 (the Xbox's: upside down) but in a crossplay game of 43 or
+more, 0.2 (a vehicle on its side) */
+float network_wire_rider_ejection_up(void);
+/* the bytes a join request of this machine's game carries past the 0x70
 every other wire has (0 on any wire but 40 and up): the empty pass and proof
-of OpenCE's 40. By the version the host announces as well as the rules it
+of OpenCE's 40 (234), and from 42 the version word after them (236:
+network_wire_join_request_tail). By the version the host announces as well as the rules it
 is played by: a host of 40 or more drops a shorter request with no word,
 whatever a table's row calls its rules */
 #define NETWORK_WIRE_V40_JOIN_REQUEST_PADDING 234

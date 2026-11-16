@@ -109,6 +109,10 @@ symbols in this file:
 #endif
 #include "damage.h"
 #include "ai/ai.h"
+#ifdef HALO_LINUX
+boolean command_ai_damage_owner(long owner_object_index);
+#include "bots.h"
+#endif
 #include "cseries/errors.h"
 #include "effects/effects.h"
 #include "effects/player_effects.h"
@@ -1535,6 +1539,17 @@ void object_cause_damage(
 		total_damage *= game_engine_get_damage_multiplier(
 			get_player_index_from_object_or_parents(damage->owner_object_index),
 			get_player_index_from_object_or_parents(object_index));
+#ifdef HALO_LINUX
+		/* port: the offline and the server's bots (port/linux/game/bots.c):
+		a bot's damage to an enemy player and a player's to an enemy bot
+		scaled by the bots' skill, as Halo CE's difficulty scales an
+		enemy's damage to the player and its vitality (Normal: x1) */
+		bots_damage_dealt(
+			damage->owner_player_index != NONE ? damage->owner_player_index :
+				get_player_index_from_object_or_parents(damage->owner_object_index),
+			get_player_index_from_object_or_parents(object_index),
+			&total_damage);
+#endif
 	}
 	/* port: Infection's zombie melee kills a human in one blow, shields
 	and overshield or not */
@@ -1549,7 +1564,14 @@ void object_cause_damage(
 		SET_FLAG(damage->flags, _damage_kill_instantly_bit, TRUE);
 	}
 	else if (damage->owner_team_index != NONE &&
-		game_team_is_enemy(damage->owner_team_index, _game_team_player))
+		(game_team_is_enemy(damage->owner_team_index, _game_team_player)
+#ifdef HALO_LINUX
+		/* port: a Command game (port/linux/game/command.c, C13): every
+		soldier's damage, both armies', the Legendary enemies' - not only
+		the player's enemies' */
+		|| command_ai_damage_owner(damage->owner_object_index)
+#endif
+		))
 	{
 		total_damage *= game_difficulty_get_value(_game_difficulty_value_enemy_damage);
 		damage_was_modified = TRUE;
@@ -1715,6 +1737,17 @@ void object_cause_damage(
 		}
 	}
 
+#ifdef HALO_LINUX
+	/* port: command mode's dropships - the campaign's, which no damage
+	hurts - kept a hull of their own, to be shot down, and who hurt each
+	unit last, for the kills' tally (port/linux/game/command.c; nothing
+	unless a Command game runs) */
+	{
+		extern void command_object_damaged(long object_index, real damage, long owner_object_index);
+
+		command_object_damaged(object_index, total_damage, damage->owner_object_index);
+	}
+#endif
 	if (total_damage > 0.f)
 	{
 		do
@@ -1959,6 +1992,22 @@ void object_cause_damage(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* port: an explosion damages what is around it, an object it destroys can
+make an effect of its own (its destruction's, or its area damage's), and
+that effect is updated as it is made (effect_new), its explosion damaging
+what is around it in turn - all in one call, so a chain of explosions nests
+as deep as it runs. On the Xbox a chain ran out where its effects did (256
+at once: every step of the chain holds one); the native builds have room
+for 2,048 (halo_port_capacity.h), and each step took ~37 KB of stack
+(objects_in_sphere's list of 8,192 objects, inlined into it), so a long
+enough chain - a crafted map's - ran off the end of the stack. A chain stops
+where the Xbox's would have at the latest; no chain the Xbox could make is
+changed. After ChupathingyCE (MrMilenko, GPL-3.0-or-later): 068ccad9d. */
+#define MAXIMUM_AREA_OF_EFFECT_NESTING 256
+static short area_of_effect_nesting = 0;
+#endif
+
 void area_of_effect_cause_damage(
 	struct damage_data *damage,
 	long unused_object_index)
@@ -1974,6 +2023,13 @@ void area_of_effect_cause_damage(
 #endif
 	short object_count;
 
+#ifdef HALO_LINUX
+	if (area_of_effect_nesting >= MAXIMUM_AREA_OF_EFFECT_NESTING)
+	{
+		return;
+	}
+	area_of_effect_nesting++;
+#endif
 	object_count = objects_in_sphere(
 		0,
 		0,
@@ -1996,6 +2052,9 @@ void area_of_effect_cause_damage(
 	}
 
 	breakable_surface_damage_area_of_effect(damage);
+#ifdef HALO_LINUX
+	area_of_effect_nesting--;
+#endif
 	return;
 }
 
@@ -2107,15 +2166,20 @@ void object_damage_update(
 			long player_index = player_index_from_unit_index(object_index);
 			real overcharge = object->object.shield_vitality - 1.f;
 
+			/* port: an overshield on a unit no player has (command mode's
+			Spartan as AI, port/linux/game/command.c) drains the same, with no
+			player's HUD to tick */
 			if (0.00074074074f > overcharge)
 			{
 				object->object.shield_vitality = 1.f;
-				hud_tick_shield(player_index, overcharge);
+				if (player_index != NONE)
+					hud_tick_shield(player_index, overcharge);
 			}
 			else
 			{
 				object->object.shield_vitality -= 0.00074074074f;
-				hud_tick_shield(player_index, 0.00074074074f);
+				if (player_index != NONE)
+					hud_tick_shield(player_index, 0.00074074074f);
 			}
 		}
 		else if (object->object.shield_vitality < 1.f)

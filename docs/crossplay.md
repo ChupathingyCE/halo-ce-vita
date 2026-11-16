@@ -9,6 +9,12 @@ ChupathingyCE 8cb79900 (0.7.2e, network version 26, accepts 11 to 30) and
 DamnationCE 7be58b2b (0.3.40, network version 26, accepts 26 only).
 Target: 1.1.0-beta.5 for the first phase.
 
+**Update, Nov 15 2026 (1.1.4 work, branch port/chupa-net44): our client
+joins network versions 43 and 44** (section 10.15), OpenCE's build-344 to
+build-365 and ChupathingyCE 0.9.1's, ported from ChupathingyCE (GPL). The
+joined list is 29, 32, 38, 39, 40, 41, 43 and 44; our hosts still announce
+32. Co-op on a host of 42 or more is refused with a message.
+
 **Update, Oct 14 2026: the crossplay wire is network version 29** (section
 10.6): OpenCE 8102e711 (build-206 and later) and ChupathingyCE 7d6d8f24
 (0.7.5b; 29 since 0.7.5a) announce it. The Vita joins exactly 29; hosts of
@@ -1677,10 +1683,16 @@ already" log change), not the wire.
 1. Read the browser's log of a current build ("network version N on the
    crossplay wire ... not yet checked") to see what the PCs moved to, and
    how many.
-2. ChupathingyCE first (GPL: port with credit): its `delta.h`
-   `DELTA_LEGACY_VERSIONS` and `network_rules.h`, and its `delta-table`
-   branch's `legacy.json` layouts. A row that only widens a maximum is a
-   guess, not a spec.
+2. ChupathingyCE first (GPL-3.0-or-later since 0.8.0: port with credit):
+   its `delta.h` `DELTA_LEGACY_VERSIONS` (one commented row a version) and
+   `DELTA_LEGACY_NEWEST`, `network_rules.h` ("layouts", "chupa-43a's facts"),
+   and `tools/legacy_rows/chupa-*.json` (each version's layout as data:
+   settings size, join request tail and version word, header bytes, epoch
+   kind, unit state parts, dropped kinds). Its commits that follow a raise
+   are titled "Followed OpenCE's network N" or "Play with OpenCE build ...".
+   Its servers host a newer number only by a table's `hosting` list: test
+   them with a local table (`XPPC_PC_LEGACY_TABLE`, 10.15). A row that only
+   widens a maximum is a guess, not a spec.
 3. Else clean-room: a separate agent reads OpenCE's commits from our last
    pinned wire point and writes `docs/opence-netN-spec.md` (facts only); the
    implementer reads only that. Pin the last wire-changing commit.
@@ -1697,6 +1709,13 @@ already" log change), not the wire.
    vita_abi_check, a Vita release build.
 7. docs/crossplay.md: a 10.x section with the table above; note what the
    owner must decide (hosting at N, new discovery paths).
+
+**Since 10.15:** a host of 42 or more lays out every distributed message
+otherwise (the epoch), so a table row for N of 42 or more must name 43's
+rules or newer (`join 45 rules 44`); this build refuses a row that names
+older rules for such N, but 1.1.1 to 1.1.3 do not: **never sign
+`join N rules M` with N >= 42 and M <= 41** (those builds would join and
+misread every message).
 
 **Since 10.13:** when the spec (step 3) says N changes nothing a game plays
 beyond one of our built-in versions (as 39 was 38 plus labels), the tests
@@ -1846,12 +1865,104 @@ and is read from its logs, as marked. Spec numbers in brackets):
 | [T20] `tools/vita_abi_check.py`; Vita `--lto off --pgo off --portable --release`, `ninja vita` | 0 unsafe declarations; eboot.bin and halo.vpk built, no test hook in them |
 
 
+### 10.15 Network versions 43 and 44 joined (Nov 15 2026)
+
+Branch port/chupa-net44 (from release-1.1.3-rc8 d97311f69, for 1.1.4).
+OpenCE moved from 41 to 42 (build-344, never in a release of its own), 43
+(build-344) and 44 (build-355). Its current build-365 is still 44.
+ChupathingyCE 0.9.1 (wire chupa-44a, Nov 13) joins 11 to 45. With no signed
+table it hosts 41; it hosts 43 or 44 only when a table's `hosting` list says
+so, or for a game on an MCC map. Our client joined 29, 32, 38, 39, 40 and 41,
+so every OpenCE player game and server of 44 was greyed out.
+
+**Source: ported from ChupathingyCE** (GPL-3.0-or-later since 0.8.0;
+`LICENSE`, `docs/license.md`), read at main fb5ba2536 and tag v0.9.1:
+- `port/linux/include/delta.h`: `DELTA_LEGACY_VERSIONS` rows 42 to 44.
+- `port/linux/game/network_rules.h` and `.c`: "chupa-43a's facts".
+- `tools/legacy_rows/chupa-44a.json`: each version's layout as data.
+- Commits 4982f6bc6, 4399e3603 and b7073d25e (chupa-43a, "Play with OpenCE
+  build 344"), efc8375a4 ("Followed OpenCE's network 44") and b1d6b69d9.
+
+The pure helpers are ported in `port/linux/src/network_epoch.c`, credited to
+Milenko. OpenCE's source past 4b09168e (AGPL) was not read. OpenCE build-365
+ran only as a black box, built by build_pc_crossplay.sh with no patch. Its
+version (44) was read from our client's log, not from its tree.
+
+**What 42 to 44 changed** (one row a version, as ChupathingyCE lists them):
+
+| Version | Change | Here |
+|---|---|---|
+| 42 (build-344, no release) | The join request is 236 bytes past its 0x70 (was 234). The host's network version is a 16-bit big-endian word at 234 of them, and a host of 42 or more silently drops any other number. | `network_wire_join_request_tail`: 236 bytes to a host announcing 42 or more, its announced number in the word (348 bytes with the version and type bytes). The message table stays 0x70. |
+| 42 | Every distributed message header is 12 bytes: 8 plus the host's checkpoint epoch (u32 LE). A batch has the extra bytes for itself and for each message in it, and each message's size word counts them. The host counts the epoch up at each map and co-op revert. Before its objects it sends the boundary, kind 96, over its stream: the header alone, count 0. A client takes nothing of another epoch and stamps its own messages with its epoch. | `network_epoch.c`: `network_epoch_header_expand` and `_strip`, `_boundary_taken`. `network_distributed.c`: a client of a 42-or-later host widens what it sends (`distributed_wire_send`, batch room counted per message). It strips what it gets: nothing before the first boundary, in a batch only messages of its own epoch. The boundary is taken only from the host's stream, outside a batch, header alone, count 0, and newer. The identity is sent again after the first boundary. |
+| 42 | Unit state part bit 6, a scripted pose: 30 bytes, last. | Passed over (`network_epoch_unit_part_bytes`). A bit the host's version does not have, or a part a dead or unplaced unit cannot have, makes the state unreadable. |
+| 42 | The settings record is 64 bytes longer (13,200), after the local data. | `network_game_record_wire_size`: the 64 bytes are unread, as ChupathingyCE leaves them. The client's staging buffer is sized for them. |
+| 42 | MCC-only kinds 97-100 and 103-106 (103 is MCC package sharing). | Dropped by kind: past our 78 kinds, so unknown. |
+| 43 | Unit state part bit 7, a vehicle deck: 28 bytes after the up. Kind 107 (riding) is new. Riders leave a vehicle on the ground whose up's height is below 0.2 (a vehicle on its side, not only upside down). | The part is passed over. 107 is dropped. `bipeds.c` uses `network_distributed_rider_ejection_up()`: 0.2 in a crossplay game of 43 or later, 0 otherwise. |
+| 44 (build-355) | No change: 43's layout under a new number. | Joined by 44's rules, which are 43's. |
+
+**Refused, with a message:** co-op on a host of 42 or later
+(`network_crossplay_guard_record`: "Co-op with this PC host's version is not
+supported yet. Multiplayer games with it work.", Spanish too). Such a host
+restarts the game's objects under a new epoch at each checkpoint revert.
+ChupathingyCE follows that with a client resync: it lets go of projectiles,
+effects, damage, actors and co-op presentation, and sends only its ready
+until the snapshot ends (4399e3603). That is not ported. A newer boundary in
+a game we play is logged and ignored. OpenCE's game types stay refused as
+before (35). An OpenCE host's game on an MCC map has not been tested (see
+below).
+
+**Table rule:** a host of 42 or later must be played by 43's rules or newer.
+This build refuses a `join N rules M` row with N >= 42 and M < 43 ("needs a
+newer Halo CE for PS Vita"). 1.1.1 to 1.1.3 do not, so such a row must never
+be signed. A later raise that changes nothing can be `join N rules 44`, and
+every 1.1.4 build joins it from the table.
+
+**Hosting:** our hosts still announce 32, which OpenCE's clients do not join
+(they want an exact match). ChupathingyCE 0.9.1 clients do join 32 (11 to 45).
+Announcing 44 would need the host side of 33 to 44: 35's longer record, 36's
+shield effects, a 40/42 join request with its word checked, the epoch,
+boundary and revert snapshot as host, and 34's static targets. That is a
+separate lane and an owner decision.
+
+**Not taken, by decision:** Delta, the game list, Workshop, map repository,
+MCC package sharing (103/104), votes, voice, verified names and accounts.
+None of it is read or sent.
+
+**Tests** (ours: the `--linux-net-vita --linux-d3d gxm-null` debug build
+without LTO; ChupathingyCE v0.9.1 e215ae527 built by build_pc_crossplay.sh
+with no patch, its server announcing 44 or 43 by a local legacy table
+`{"chupa-44a": {"announce": 44, "hosting": [44], ...}}`; OpenCE build-365
+e8a6f851, network version 44, a black box):
+
+| Test | Result |
+|---|---|
+| `opencelan` against OpenCE build-365 (44), LAN | PASS every step: join, settings, play, spawn, kills, client damage (39 hits, 39 dealt), score, end of game, rejoin (late and back clients ours), stability. Our client: "network version 44's rules", a 348-byte join request, "the host's checkpoint epoch 1". Passed again after the last change. One run done under libFuzzer load disagreed on one kill at the score step; it passed on the idle machine. |
+| `opencehost` against 365 (44): server browser through the test broker, and the invite link | PASS every step for both |
+| `openceserver` against 365 (44), dedicated, LAN and broker-listed internet | PASS every step on both. Both rotation games were played; the second game's boundary (epoch 3) was taken after the map change. MOTD and next-game notice shown, `[OPENCE SERVER]` on the LAN. |
+| `chupahost`, ChupathingyCE 0.9.1 player host at 44, LAN | PASS every step (every game step, rejoin) |
+| `chupahost` at 43 | PASS every step: 43's rules, 348 bytes, epoch taken |
+| `chupaserver`, ChupathingyCE 0.9.1 dedicated server at 44 | LAN: PASS every step. Internet: our client found the server in the browser ([CHUPA SERVER]), the tunnel connected directly, and it joined, took the 13,200-byte record and the epoch, and played 117 s with the other player. The harness's control (a ChupathingyCE 0.9.1 client standing in for OpenCE's) is not seen as joined over the internet by crossplay_check.py. That is a harness gap with 0.9.1's client, so the internet run is read from the logs. (The first run also flagged 0.9.1's `maps.chupathingy.org` lookup: `HALO_NET_MAPS_URL=` turns it off.) |
+| regression: `chupahost` at 41 (0.9.1 with no table) | PASS every step: 346-byte request, no epoch |
+| leaks | no packet left the test's network and no name was looked up (with `HALO_NET_MAPS_URL=`) |
+| `run_network_wire_test.sh`: network_wire_test in every build, plus the new network_epoch_test (ASan + UBSan) | PASS: 94/94/92/17/15 and 24 checks. Covers the list, the tail and its word, 42/43 rules and riders, and table rows (`join 47 rules 44` joined with the word 47; `join 42 rules 38` and `join 45 rules 41` refused). Epoch: expand and strip of a message and a batch, batch members of another epoch, malformed sizes, the boundary's conditions, and part bytes by version. |
+| `run_net_fuzz_test.sh`, all 12 targets on the kept cases (new: `epoch`; `variant_options` with 43 and 44 records; `messages` with the 236-byte tail) | PASS |
+| libFuzzer 300 s each: epoch, variant_options, messages, netversions | No crash: 184.8M, 68.8M, 16.7M and 0.3M runs |
+| `run_wire_contract_test.sh` against 8102e711 | PASS, as expected. S6 now reads the inner handler. |
+| `run_crossplay_guard_test.sh`, `run_lang_test.sh` | PASS (42 checks; 2516 of 2516 strings translated) |
+| co-op on a 42+ host | Not run live (crosscoop needs a DamnationCE build). Checked by reading the code only. |
+| `crossfuzzclient` (an ASan twin build against a live 44 host) | Not run in this lane: the next step |
+| `tools/vita_abi_check.py`; Vita `--lto off --pgo off --portable --release`, `ninja vita` | 0 unsafe declarations (638 units); eboot.bin and halo.vpk built, network_epoch.o in them |
+
 ## 11. Licensing and credit
 
 **Licences:**
-- OpenCE, ChupathingyCE and DamnationCE are CC0 1.0 (`LICENSE.md`, the same
-  text in all three). CC0 code can go into our GPL-3.0-only tree. No
-  attribution is legally required.
+- OpenCE, ChupathingyCE and DamnationCE were CC0 1.0 (`LICENSE.md`, the same
+  text in all three) when this plan was written. Since then OpenCE moved to
+  the AGPL (2026-10-19, past 4b09168e: never read here, clean-room only),
+  and ChupathingyCE to GPL-3.0-or-later from 0.8.0 (its `LICENSE`,
+  `docs/license.md`; releases up to 0.7.5d stay CC0). GPL-3.0-or-later code
+  can go into our GPL-3.0-only tree with its notices and credit (10.15's
+  port does: `port/linux/src/network_epoch.c`).
 - Third-party libraries keep their licences: Monocypher (BSD-2 or CC0, already
   ours), Opus (BSD, already ours in 1.1.1), KCP (MIT, ours), Mbed TLS (only
   if we ever take WebRTC; we won't).

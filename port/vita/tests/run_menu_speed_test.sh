@@ -44,6 +44,7 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 if [ "${HALO_NETNS_INSIDE:-}" != 1 ] && unshare -rn true 2> /dev/null; then
 	export HALO_NETNS_INSIDE=1
 	exec unshare -rn --fork "$0" "$@"
@@ -53,7 +54,7 @@ if [ "${HALO_NETNS_INSIDE:-}" = 1 ]; then
 	ip link add halo0 type dummy && ip addr add 10.77.0.2/24 dev halo0 && ip link set halo0 up
 fi
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menu_speed_test.$$}
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 . "$here/test_out.sh"

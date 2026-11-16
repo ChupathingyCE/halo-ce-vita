@@ -12219,3 +12219,32 @@ void unit_network_forget_weapon(
 		unit->unit.desired_weapon_index = unit_weapon_next_index(unit_index, NONE, 0);
 }
 #endif
+
+/* port: the unit riding a vehicle's seat, NONE for none (Command mode:
+port/linux/game/command.c; 1.2.0's, Halo 2's boarding left out) */
+long unit_seat_occupant(
+	long vehicle_index,
+	short seat_index)
+{
+	long child_index = object_get(vehicle_index)->object.first_child_object_index;
+
+	while (child_index != NONE)
+	{
+		struct object_datum *child = object_get(child_index);
+
+		if (TEST_FLAG(_object_mask_unit, child->object.type) && unit_get(child_index)->unit.parent_seat_index == seat_index)
+			return child_index;
+		child_index = child->object.next_object_index;
+	}
+
+	return NONE;
+}
+
+/* port: an item the unit holds thrown down (Command mode's Spartan taken
+back from the AI: port/linux/game/command.c) */
+void unit_drop_weapon_item(
+	long unit_index,
+	long item_index)
+{
+	unit_drop_item(unit_index, item_index);
+}

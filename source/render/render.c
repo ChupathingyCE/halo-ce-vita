@@ -754,6 +754,12 @@ static void render_window(
 			extern void forge_render_world(void);
 
 			forge_render_world();
+			/* (and command mode's rings on the ground: port/linux/game/command.c) */
+			{
+				extern void command_render_world(void);
+
+				command_render_world();
+			}
 		}
 #endif
 		RENDER_PHASE_END(34, "post_objects");

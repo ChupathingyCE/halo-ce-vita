@@ -1,0 +1,8 @@
+# FIREFIGHT's and WARZONE's Sentinels (port/linux/game/forge_modes.inc), built
+# in memory as a game of either loads, from the player's own campaign maps
+# (The Library, or Two Betrayals): the sentinel and its major. Nothing
+# written anywhere.
+pack mode_sentinels
+map c20 c40
+tag actv characters\sentinel\sentinel
+tag actv characters\sentinel\sentinel major

@@ -50,8 +50,9 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA:-$root/../data2276}
+data=${HALO_TEST_DATA:-$data_root/data2276}
 mcc=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_mcc_sound_test.$$}
 . "$here/test_out.sh"
@@ -294,7 +295,7 @@ open(p, 'wb').write(d)" "$out/damaged_content/halo1/sound/pc/lst/sounds_adpcm.ls
 		# foreign: a Custom Edition map (a download, say) whose sound says its
 		# permutations are streams of MCC's CELT banks must not read them (1.1.3
 		# audit, LOW-1): only MCC's own maps and scene packs built from them may
-		ce_maps=${HALO_TEST_CE_MAPS:-$root/../custom-maps-dl}
+		ce_maps=${HALO_TEST_CE_MAPS:-$data_root/custom-maps-dl}
 		resources=${HALO_TEST_CE_RESOURCES:-$mcc/maps/custom_edition}
 		foreign_tag='sound\sfx\weapons\gunfire_sounds\fire2'
 		if [ ! -e "$ce_maps/extinction.map" ] || [ ! -e "$resources/sounds.map" ]; then

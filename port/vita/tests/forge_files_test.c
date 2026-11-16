@@ -108,6 +108,11 @@ static int layouts_equal(struct forge_file_layout const *a, struct forge_file_la
 	{
 		return 0;
 	}
+	if (a->canvas.categories != b->canvas.categories || a->canvas.entry_count != b->canvas.entry_count ||
+		memcmp(a->canvas.entries, b->canvas.entries, sizeof(a->canvas.entries[0]) * (size_t)(a->canvas.entry_count > 0 ? a->canvas.entry_count : 0)))
+	{
+		return 0;
+	}
 	for (index = 0; index < a->pack_count; index++)
 	{
 		if (memcmp(a->packs[index].recipe, b->packs[index].recipe, sizeof(a->packs[index].recipe)) ||
@@ -129,10 +134,16 @@ static int layouts_equal(struct forge_file_layout const *a, struct forge_file_la
 		if (x->path_index != y->path_index || x->kind != y->kind || x->team != y->team ||
 			memcmp(x->position, y->position, sizeof(x->position)) || memcmp(x->angles, y->angles, sizeof(x->angles)) ||
 			x->respawn_seconds != y->respawn_seconds || x->count != y->count || x->game_types != y->game_types ||
-			x->variant != y->variant || x->flags != y->flags || x->ai_team != y->ai_team)
+			x->variant != y->variant || x->flags != y->flags || x->ai_team != y->ai_team ||
+			memcmp(&x->mode, &y->mode, sizeof(x->mode)))
 		{
 			return 0;
 		}
+	}
+	if (memcmp(&a->modes.firefight, &b->modes.firefight, sizeof(a->modes.firefight)) ||
+		memcmp(&a->modes.warzone, &b->modes.warzone, sizeof(a->modes.warzone)) || a->modes.skulls != b->modes.skulls)
+	{
+		return 0;
 	}
 	return 1;
 }
@@ -1424,6 +1435,433 @@ static void test_version_7(void)
 	}
 }
 
+/* ---------- version 8: the game modes' markers and settings */
+
+static unsigned char good8[FORGE_FILE_MAXIMUM_SIZE];
+static int good8_size;
+/* (version 11) the canvas: the map's own placements a layout takes away */
+static unsigned char good11[FORGE_FILE_MAXIMUM_SIZE];
+static int good11_size;
+/* (versions 9 and 10) the boundaries and the lobby camera */
+static unsigned char good10[FORGE_FILE_MAXIMUM_SIZE];
+static int good10_size;
+
+
+static struct forge_file_record *add_marker(struct forge_file_layout *layout, int kind, float x, float y, int team, int variant)
+{
+	struct forge_file_record *record = &layout->records[layout->record_count++];
+
+	memset(record, 0, sizeof(*record));
+	record->path_index = FORGE_FILE_NO_PATH;
+	record->kind = (unsigned char)kind;
+	record->team = (signed char)team;
+	record->position[0] = x;
+	record->position[1] = y;
+	record->position[2] = 1.f;
+	record->angles[0] = 0.25f;
+	record->variant = (unsigned char)variant;
+	layout->flags |= FORGE_FILE_FLAG_NETGAME_SPAWNS;
+	return record;
+}
+
+/* the version 4 sample (records 0-4 objects, 5-7 spawns), a Firefight spawn
+and a Warzone one, then one marker of each kind (records 10-17) and the
+settings */
+static void sample_layout_8(struct forge_file_layout *layout)
+{
+	struct forge_file_record *record;
+
+	sample_layout_4(layout);
+	add_spawn(layout, 93.f, -153.f, 0.f, 0, FORGE_FILE_GAME_TYPE_FIREFIGHT, 1);
+	add_spawn(layout, 94.f, -154.f, 0.f, 1, FORGE_FILE_GAME_TYPE_WARZONE | FORGE_FILE_GAME_TYPE_SLAYER, 0);
+	/* 10: a Hunter pair, hostile, defending base B, by dropship */
+	record = add_marker(layout, _forge_record_ai_zone, 60.f, -100.f, FORGE_MODE_TEAM_NONE, _forge_mode_squad_hunters);
+	record->count = 2;
+	record->mode.radius = 6 * FORGE_FILE_MODE_RADIUS_UNITS;
+	record->mode.index = 2;
+	record->mode.flags = FORGE_MODE_FLAG_DROPSHIP;
+	record->game_types = FORGE_FILE_GAME_TYPE_WARZONE;
+	/* 11: Grunts for Firefight's rounds 1 and 3, waves 1, 2 and the boss's */
+	record = add_marker(layout, _forge_record_ai_zone, 61.f, -101.f, FORGE_MODE_TEAM_NONE, _forge_mode_squad_grunts);
+	record->count = 4;
+	record->mode.radius = 9;
+	record->mode.rounds = 0x05;
+	record->mode.waves = 0x03 | FORGE_FILE_MODE_BOSS_WAVE;
+	record->respawn_seconds = 60;
+	record->mode.start_minute = 2;
+	/* 12: a boss, its name 3, 250 points, toughness 4, back after 120 s */
+	record = add_marker(layout, _forge_record_boss, 62.f, -102.f, FORGE_MODE_TEAM_NONE, _forge_mode_boss_elite_commander);
+	record->mode.index = 3;
+	record->mode.points = 250;
+	record->mode.toughness = 4;
+	record->mode.flags = FORGE_MODE_FLAG_RETURNS;
+	record->respawn_seconds = 120;
+	/* 13: base B, blue's home */
+	record = add_marker(layout, _forge_record_base, 63.f, -103.f, FORGE_MODE_TEAM_BLUE, 0);
+	record->mode.index = 1;
+	record->mode.radius = 10 * FORGE_FILE_MODE_RADIUS_UNITS;
+	record->mode.seconds = 10;
+	record->mode.flags = FORGE_MODE_FLAG_HOME;
+	/* 14: blue's core */
+	record = add_marker(layout, _forge_record_core, 64.f, -104.f, FORGE_MODE_TEAM_BLUE, 0);
+	record->mode.points = 3000;
+	/* 15: a drop point of the hostile AI's, Covenant dropship */
+	add_marker(layout, _forge_record_drop_point, 65.f, -105.f, FORGE_MODE_TEAM_HOSTILE, _forge_mode_ship_covenant_dropship);
+	/* 16: a hold zone for round 2 */
+	record = add_marker(layout, _forge_record_ff_objective, 66.f, -106.f, FORGE_MODE_TEAM_NONE, _forge_mode_objective_hold_zone);
+	record->mode.radius = 5 * FORGE_FILE_MODE_RADIUS_UNITS;
+	record->mode.rounds = 0x02;
+	record->mode.seconds = 60;
+	/* 17: (Firefight round 3) a bonus round, Grunts and Jackals, 90 s, 150
+	points a kill, by dropship */
+	record = add_marker(layout, _forge_record_bonus_round, 67.f, -107.f, FORGE_MODE_TEAM_NONE, _forge_mode_squad_grunts_jackals);
+	record->count = 4;
+	record->mode.radius = 6 * FORGE_FILE_MODE_RADIUS_UNITS;
+	record->mode.seconds = 90;
+	record->mode.points = 150;
+	record->mode.flags = FORGE_MODE_FLAG_DROPSHIP;
+	record->game_types = FORGE_FILE_GAME_TYPE_FIREFIGHT;
+	forge_file_mode_settings_default(&layout->modes);
+	layout->modes.skulls = FORGE_MODE_SKULL_MYTHIC | FORGE_MODE_SKULL_BLIND;
+	layout->modes.warzone.point_limit = 1500;
+	layout->flags |= FORGE_FILE_FLAG_MODE_SETTINGS;
+}
+
+static void test_version_8(void)
+{
+	struct forge_file_layout layout;
+	int result = -1;
+	int records;
+	int settings;
+	int offset;
+	int index;
+
+	sample_layout_8(&layout);
+	CHECK(forge_file_layout_version(&layout) == 8, "mode markers need version 8");
+	good8_size = forge_file_encode(&layout, good8, sizeof(good8), &result);
+	if (good8_size <= 0)
+		printf("  (refused: %s)\n", forge_file_result_name(result));
+	CHECK(good8_size > 0 && result == _forge_file_ok && good8[4] == 8 && good8[5] == 0, "written as version 8");
+	CHECK(decode(good8, good8_size, "bloodgulch") == _forge_file_ok && decoded.version == 8, "read back as version 8");
+	layout.version = 8;
+	CHECK(layouts_equal(&layout, &decoded), "the markers and the settings read back the same");
+	CHECK(decoded.records[10].kind == _forge_record_ai_zone && decoded.records[10].mode.index == 2 &&
+		decoded.records[13].mode.flags == FORGE_MODE_FLAG_HOME && decoded.records[14].mode.points == 3000 &&
+		decoded.modes.warzone.point_limit == 1500 && decoded.modes.firefight.lives == 7 &&
+		decoded.modes.skulls == (FORGE_MODE_SKULL_MYTHIC | FORGE_MODE_SKULL_BLIND), "the Hunters defend B, B blue's home, the core 3000, the settings");
+	CHECK(forge_file_encode(&decoded, work, sizeof(work), &result) == good8_size && !memcmp(work, good8, (size_t)good8_size),
+		"a version 8 file writes back as itself");
+	/* (only the settings, or only one marker: version 8 still) */
+	sample_layout(&layout);
+	forge_file_mode_settings_default(&layout.modes);
+	layout.flags |= FORGE_FILE_FLAG_MODE_SETTINGS;
+	CHECK(forge_file_layout_version(&layout) == 8 && forge_file_encode(&layout, work, sizeof(work), &result) > 0 && work[4] == 8,
+		"the settings alone: version 8");
+	sample_layout(&layout);
+	add_marker(&layout, _forge_record_drop_point, 65.f, -105.f, FORGE_MODE_TEAM_NONE, 0);
+	CHECK(forge_file_layout_version(&layout) == 8 && forge_file_encode(&layout, work, sizeof(work), &result) > 0 && work[4] == 8,
+		"a drop point alone: version 8");
+	/* (no mode: as before, byte for byte) */
+	sample_layout_4(&layout);
+	CHECK(forge_file_layout_version(&layout) == 4 && forge_file_encode(&layout, work, sizeof(work), &result) == good4_size &&
+		!memcmp(work, good4, (size_t)good4_size), "a layout without modes is written as version 4, as before");
+	/* (the writer's refusals: each field of each kind) */
+	{
+		static struct
+		{
+			int record;
+			int field;
+			int value;
+			char const *what;
+		} const cases[] =
+		{
+			/* field: 0 team, 1 count, 2 variant, 3 respawn, 4 game types, 5 flags (record), 6 ai team, 7 path,
+			10 radius, 11 rounds, 12 waves, 13 points, 14 toughness, 15 seconds, 16 start minute, 17 index, 18 mode flags */
+			{ 10, 0, 2, "a zone of team 2" },
+			{ 10, 1, 0, "a zone of nobody" },
+			{ 10, 1, 9, "a zone of 9" },
+			{ 10, 2, NUMBER_OF_FORGE_MODE_SQUADS, "an unknown squad" },
+			{ 10, 3, 29, "a zone's waves every 29 s" },
+			{ 10, 3, 301, "a zone's waves every 301 s" },
+			{ 10, 4, FORGE_FILE_GAME_TYPE_SLAYER, "a zone of slayer" },
+			{ 10, 5, FORGE_RECORD_PLACE_AT_START, "a zone's object flag" },
+			{ 10, 6, 1, "a zone's AI team" },
+			{ 10, 7, 0, "a zone naming a path" },
+			{ 10, 10, 7, "a zone's radius under 2" },
+			{ 10, 10, 65, "a zone's radius past 16" },
+			{ 10, 11, 0x20, "round 6" },
+			{ 10, 12, 0x40, "wave 7" },
+			{ 10, 13, 1, "a zone's points" },
+			{ 10, 14, 1, "a zone's toughness" },
+			{ 10, 15, 1, "a zone's seconds" },
+			{ 10, 16, 21, "minute 21" },
+			{ 10, 17, FORGE_FILE_MAXIMUM_BASES + 1, "a zone defending base F" },
+			{ 10, 18, FORGE_MODE_FLAG_HOME, "a zone's home flag" },
+			{ 10, 18, 0x08, "an unknown mode flag" },
+			{ 12, 2, NUMBER_OF_FORGE_MODE_BOSSES, "an unknown boss" },
+			{ 12, 1, 1, "a boss's count" },
+			{ 12, 13, 24, "a boss of 24 points" },
+			{ 12, 13, 501, "a boss of 501 points" },
+			{ 12, 14, 0, "a boss of toughness 0" },
+			{ 12, 14, 9, "a boss of toughness 9" },
+			{ 12, 17, FORGE_FILE_MODE_BOSS_NAMES, "a boss's unknown name" },
+			{ 12, 3, 0, "a returning boss with no respawn" },
+			{ 12, 18, 0, "a boss's respawn without its return" },
+			{ 13, 17, FORGE_FILE_MAXIMUM_BASES, "base F" },
+			{ 13, 10, 11, "a base's radius under 3" },
+			{ 13, 10, 81, "a base's radius past 20" },
+			{ 13, 15, 4, "a base taken in 4 s" },
+			{ 13, 15, 31, "a base taken in 31 s" },
+			{ 13, 0, FORGE_MODE_TEAM_NONE, "nobody's home base" },
+			{ 13, 0, FORGE_MODE_TEAM_HOSTILE, "a hostile base" },
+			{ 13, 2, 1, "a base's variant" },
+			{ 14, 0, FORGE_MODE_TEAM_NONE, "nobody's core" },
+			{ 14, 13, 999, "a core of 999" },
+			{ 14, 13, 10001, "a core of 10001" },
+			{ 14, 10, 4, "a core's radius" },
+			{ 15, 2, NUMBER_OF_FORGE_MODE_SHIPS, "an unknown ship" },
+			{ 15, 0, 3, "a drop point of team 3" },
+			{ 15, 13, 1, "a drop point's points" },
+			{ 16, 2, NUMBER_OF_FORGE_MODE_OBJECTIVES, "an unknown objective" },
+			{ 16, 15, 29, "a hold of 29 s" },
+			{ 16, 0, 0, "a red objective" },
+			{ 16, 10, 0, "a hold zone of no radius" },
+			{ 17, 2, NUMBER_OF_FORGE_MODE_SQUADS, "a bonus round of an unknown squad" },
+			{ 17, 1, 0, "a bonus round of nobody" },
+			{ 17, 0, FORGE_MODE_TEAM_RED, "a red bonus round" },
+			{ 17, 15, 29, "a bonus round of 29 s" },
+			{ 17, 15, 121, "a bonus round of 121 s" },
+			{ 17, 13, 24, "a bonus round of 24 points a kill" },
+			{ 17, 13, 501, "a bonus round of 501 points a kill" },
+			{ 17, 11, 1, "a bonus round's rounds" },
+			{ 17, 18, FORGE_MODE_FLAG_RETURNS, "a returning bonus round" },
+			{ 17, 3, 30, "a bonus round's respawn" },
+			{ 10, 18, FORGE_MODE_FLAG_OFF, "a zone turned off" },
+		};
+
+		for (index = 0; index < (int)(sizeof(cases) / sizeof(cases[0])); index++)
+		{
+			struct forge_file_record *record;
+			char what[96];
+			int value = cases[index].value;
+
+			sample_layout_8(&layout);
+			record = &layout.records[cases[index].record];
+			switch (cases[index].field)
+			{
+			case 0: record->team = (signed char)value; break;
+			case 1: record->count = (unsigned char)value; break;
+			case 2: record->variant = (unsigned char)value; break;
+			case 3: record->respawn_seconds = (unsigned short)value; break;
+			case 4: record->game_types = (unsigned short)value; break;
+			case 5: record->flags = (unsigned char)value; break;
+			case 6: record->ai_team = (unsigned char)value; break;
+			case 7: record->path_index = (unsigned short)value; break;
+			case 10: record->mode.radius = (unsigned char)value; break;
+			case 11: record->mode.rounds = (unsigned char)value; break;
+			case 12: record->mode.waves = (unsigned char)value; break;
+			case 13: record->mode.points = (unsigned short)value; break;
+			case 14: record->mode.toughness = (unsigned char)value; break;
+			case 15: record->mode.seconds = (unsigned short)value; break;
+			case 16: record->mode.start_minute = (unsigned char)value; break;
+			case 17: record->mode.index = (unsigned char)value; break;
+			default: record->mode.flags = (unsigned char)value; break;
+			}
+			snprintf(what, sizeof(what), "version 8: %s is not written", cases[index].what);
+			CHECK(encode_refused(&layout), what);
+		}
+	}
+	sample_layout_8(&layout);
+	layout.records[0].mode.radius = 4;
+	CHECK(encode_refused(&layout), "an object's mode field is not written");
+	sample_layout_8(&layout);
+	layout.version = 4;
+	CHECK(encode_refused(&layout), "mode markers in a layout called version 4 are not written");
+	sample_layout_8(&layout);
+	layout.records[5].game_types = 0x100;
+	CHECK(encode_refused(&layout), "a spawn's game type bit 8 is not written");
+	sample_layout_8(&layout);
+	layout.records[0].game_types = FORGE_FILE_GAME_TYPE_FIREFIGHT;
+	CHECK(encode_refused(&layout), "Firefight's bit on an object is not written");
+	sample_layout_4(&layout);
+	layout.records[5].game_types = FORGE_FILE_GAME_TYPE_FIREFIGHT;
+	layout.version = 4;
+	CHECK(encode_refused(&layout), "Firefight's bit on a version 4 spawn is not written");
+	sample_layout_8(&layout);
+	layout.records[13].mode.index = 2;
+	layout.records[layout.record_count] = layout.records[13];
+	layout.record_count++;
+	CHECK(encode_refused(&layout), "two bases B are not written");
+	sample_layout_8(&layout);
+	layout.records[layout.record_count] = layout.records[14];
+	layout.record_count++;
+	CHECK(encode_refused(&layout), "two blue cores are not written");
+	sample_layout_8(&layout);
+	layout.records[layout.record_count] = layout.records[14];
+	layout.records[layout.record_count].team = FORGE_MODE_TEAM_RED;
+	layout.record_count++;
+	CHECK(!encode_refused(&layout), "a red core and a blue one are written");
+	sample_layout_8(&layout);
+	for (index = 0; index < 4; index++)
+	{
+		layout.records[layout.record_count] = layout.records[13];
+		layout.records[layout.record_count].mode.index = (unsigned char)(index == 0 ? 0 : index + 1);
+		layout.records[layout.record_count].team = FORGE_MODE_TEAM_NONE;
+		layout.records[layout.record_count].mode.flags = 0;
+		layout.record_count++;
+	}
+	CHECK(!encode_refused(&layout), "five bases are written");
+	layout.records[layout.record_count] = layout.records[13];
+	layout.records[layout.record_count].mode.index = 4;
+	layout.record_count++;
+	CHECK(encode_refused(&layout), "six bases are not written");
+	sample_layout(&layout);
+	for (index = 0; index < FORGE_FILE_MAXIMUM_MODE_MARKERS + 1; index++)
+		add_marker(&layout, _forge_record_drop_point, 10.f + index, 10.f, FORGE_MODE_TEAM_NONE, 0);
+	CHECK(encode_refused(&layout), "65 mode markers (and 9 drop points) are not written");
+	sample_layout(&layout);
+	for (index = 0; index < FORGE_FILE_MAXIMUM_MODE_MARKERS; index++)
+	{
+		struct forge_file_record *record = add_marker(&layout, _forge_record_ai_zone, 10.f + index, 10.f, FORGE_MODE_TEAM_NONE, 0);
+
+		record->count = 1;
+		record->mode.radius = 8;
+	}
+	CHECK(!encode_refused(&layout), "64 mode markers are written");
+	/* (the settings' ranges) */
+	{
+		static struct
+		{
+			int offset;
+			int value;
+			char const *what;
+		} const cases[] =
+		{
+			{ 4, 6, "6 sets" }, { 5, 0, "no rounds" }, { 5, 6, "6 rounds" }, { 6, 0, "no waves" }, { 6, 6, "6 waves" },
+			{ 7, 31, "31 lives" }, { 8, 4, "4 lives a round" }, { 9, 4, "difficulty 4" }, { 10, 3, "ramp 3" },
+			{ 11, 3, "skull mode 3" }, { 12, 2, "a 2 minute round" }, { 12, 16, "a 16 minute round" },
+			{ 13, 2, "round time rule 2" }, { 14, 2, "allies 2" }, { 15, 2, "resupply 2" },
+			{ 28, 249, "a point limit of 249" }, { 31, 101, "101 a kill" }, { 32, 101, "101 a capture" },
+			{ 33, 101, "101 a hold" }, { 34, 45, "a first wave after 301 s" }, { 36, 29, "waves every 29 s" },
+			{ 38, 33, "33 hostile AI" }, { 39, 17, "17 red AI" }, { 40, 17, "17 blue AI" }, { 41, 61, "61 minutes" },
+			{ 30, 2, "cores 2" }, { 52, 0x80, "an unknown skull" }, { 0, 2, "settings version 2" }, { 1, 1, "a reserved byte" },
+			{ 20, 1, "a reserved Firefight byte" }, { 45, 1, "a reserved Warzone byte" }, { 63, 1, "the last byte" },
+		};
+
+		records = good8_size - FORGE_FILE_MODE_SETTINGS_SIZE - (FORGE_FILE_RECORD_SIZE * 18) -
+			(int)(strlen(layout.title) + strlen(layout.author) + strlen(layout.description) + strlen(layout.date) + 4);
+		settings = records + FORGE_FILE_RECORD_SIZE * 18;
+		for (index = 0; index < (int)(sizeof(cases) / sizeof(cases[0])); index++)
+		{
+			char what[96];
+
+			memcpy(work, good8, (size_t)good8_size);
+			work[settings + cases[index].offset] = (unsigned char)cases[index].value;
+			/* (the u16s: their high byte) */
+			if (cases[index].offset == 28 || cases[index].offset == 36)
+				work[settings + cases[index].offset + 1] = 0;
+			if (cases[index].offset == 34)
+				work[settings + 35] = 1;
+			fix_checksum(work, good8_size);
+			snprintf(what, sizeof(what), "version 8: the settings' %s: refused", cases[index].what);
+			CHECK(decode(work, good8_size, "bloodgulch") == _forge_file_bad_record, what);
+		}
+		/* (the hostile AI and the teams' past 32 together) */
+		memcpy(work, good8, (size_t)good8_size);
+		work[settings + 38] = 20;
+		fix_checksum(work, good8_size);
+		CHECK(decode(work, good8_size, "bloodgulch") == _forge_file_bad_record, "version 8: 20 + 8 + 8 AI: refused");
+	}
+	/* (the reader's: a mode marker's bytes, checksum right) */
+	{
+		static struct
+		{
+			int record;
+			int offset;
+			unsigned char value;
+			char const *what;
+		} const cases[] =
+		{
+			{ 10, 47, 1, "a zone's last reserved byte" },
+			{ 10, 36, 0, "a zone's radius 0" },
+			{ 10, 45, 6, "a zone defending base F" },
+			{ 13, 45, 5, "base F" },
+			{ 12, 41, 9, "a boss of toughness 9" },
+			{ 14, 40, 3, "a core of 952" },
+			{ 14, 40, 0, "a core's hull's high byte 0" },
+			{ 0, 36, 1, "a Warthog's first mode byte" },
+			{ 5, 47, 1, "a spawn's last reserved byte" },
+			{ 16, 33, 9, "an objective's kind 9" },
+			{ 15, 2, NUMBER_OF_FORGE_RECORD_KINDS, "an unknown kind" },
+		};
+
+		for (index = 0; index < (int)(sizeof(cases) / sizeof(cases[0])); index++)
+		{
+			char what[96];
+
+			memcpy(work, good8, (size_t)good8_size);
+			work[records + FORGE_FILE_RECORD_SIZE * cases[index].record + cases[index].offset] = cases[index].value;
+			fix_checksum(work, good8_size);
+			snprintf(what, sizeof(what), "version 8: %s: refused", cases[index].what);
+			CHECK(decode(work, good8_size, "bloodgulch") == _forge_file_bad_record, what);
+		}
+	}
+	/* (called version 4: its markers and the settings' flag refused) */
+	memcpy(work, good8, (size_t)good8_size);
+	put_u16(work, 4, 4);
+	fix_checksum(work, good8_size);
+	CHECK(decode(work, good8_size, "bloodgulch") == _forge_file_bad_flags, "version 8's settings in a file called version 4: refused");
+	/* (the settings' flag cleared: the block is then read as the meta) */
+	memcpy(work, good8, (size_t)good8_size);
+	put_u32(work, 8, FORGE_FILE_FLAG_NETGAME_SPAWNS);
+	fix_checksum(work, good8_size);
+	CHECK(decode(work, good8_size, "bloodgulch") != _forge_file_ok, "version 8 with the settings' flag cleared: refused");
+	/* (a version 4 file with the settings' flag set) */
+	memcpy(work, good4, (size_t)good4_size);
+	put_u32(work, 8, FORGE_FILE_FLAG_NETGAME_SPAWNS | FORGE_FILE_FLAG_MODE_SETTINGS);
+	fix_checksum(work, good4_size);
+	CHECK(decode(work, good4_size, "bloodgulch") == _forge_file_bad_flags, "version 4 with the settings' flag: refused");
+	/* (a version 4 file called version 8: none of version 8's) */
+	memcpy(work, good4, (size_t)good4_size);
+	put_u16(work, 4, 8);
+	fix_checksum(work, good4_size);
+	CHECK(decode(work, good4_size, "bloodgulch") == _forge_file_bad_version, "a version 4 file called version 8: refused");
+	/* (every bit of the version 5 file flipped: refused, but for the map
+	hash and fields with other good values) */
+	for (offset = 0; offset < good8_size; offset++)
+	{
+		int bit;
+		int field = 0;
+		int record;
+
+		for (record = 5; record < 17; record++)
+		{
+			int at = records + FORGE_FILE_RECORD_SIZE * record;
+
+			if (offset == at + 3 || offset == at + 31 || offset == at + 34 || (record >= 10 && offset >= at + 28 && offset < at + 47) ||
+				(record >= 10 && offset == at + 33) || (record >= 10 && offset == at + 30))
+			{
+				field = 1;
+			}
+		}
+		if (offset >= settings && offset < settings + FORGE_FILE_MODE_SETTINGS_SIZE)
+			field = 1;
+		for (bit = 0; bit < 8; bit++)
+		{
+			int taken;
+
+			memcpy(work, good8, (size_t)good8_size);
+			work[offset] ^= (unsigned char)(1 << bit);
+			taken = decode(work, good8_size, "bloodgulch") == _forge_file_ok;
+			if (taken && !(offset >= 44 && offset < 48) && !field)
+			{
+				printf("  (version 8: byte %d bit %d)\n", offset, bit);
+				CHECK(0, "a flipped bit of a version 8 file was taken");
+			}
+		}
+	}
+}
+
 static void test_names(void)
 {
 	char name[FORGE_FILE_NAME_SIZE];
@@ -1493,8 +1931,20 @@ static void fuzz(long iterations)
 		{
 			/* (the version 1 sample, the version 2 one, or the version 4
 			one with player spawns) */
-			switch (next_random() % 6)
+			switch (next_random() % 9)
 			{
+			case 8:
+				size = good10_size;
+				memcpy(work, good10, (size_t)size);
+				break;
+			case 7:
+				size = good11_size;
+				memcpy(work, good11, (size_t)size);
+				break;
+			case 6:
+				size = good8_size;
+				memcpy(work, good8, (size_t)size);
+				break;
 			case 5:
 				size = good7_size;
 				memcpy(work, good7, (size_t)size);
@@ -1667,13 +2117,379 @@ static int dump(char const *path)
 				(record->flags & FORGE_RECORD_SPAWN_INITIAL) ? "initial" : "respawn", record->team, record->game_types);
 		if (record->flags & FORGE_RECORD_PHYSICS_MASK)
 			printf("record %d: physics %s\n", index, (record->flags & FORGE_RECORD_PHYSICS_FIXED) ? "fixed" : "phased");
+		if (forge_file_kind_is_mode_marker(record->kind))
+			printf("record %d: a mode marker: kind %d team %d variant %d count %d modes %d respawn %d radius %d rounds %d waves %d "
+				"points %d toughness %d seconds %d minute %d index %d flags %d\n", index, record->kind, record->team, record->variant,
+				record->count, record->game_types, record->respawn_seconds, record->mode.radius, record->mode.rounds, record->mode.waves,
+				record->mode.points, record->mode.toughness, record->mode.seconds, record->mode.start_minute, record->mode.index,
+				record->mode.flags);
 		if (record->kind == _forge_record_flag)
 			printf("record %d: a game type object: flag type %d, index %d\n", index, record->variant, record->team);
 		if (record->kind == _forge_record_teleporter_in || record->kind == _forge_record_teleporter_out)
 			printf("record %d: a teleporter %s, channel %d\n", index,
 				record->kind == _forge_record_teleporter_in ? "sender" : "receiver", record->team);
 	}
+	if (decoded.flags & FORGE_FILE_FLAG_MODE_SETTINGS)
+		printf("mode settings: firefight sets %d rounds %d waves %d lives %d; warzone points %d cores %d; skulls %d\n",
+			decoded.modes.firefight.sets, decoded.modes.firefight.rounds, decoded.modes.firefight.waves, decoded.modes.firefight.lives,
+			decoded.modes.warzone.point_limit, decoded.modes.warzone.cores, decoded.modes.skulls);
 	return 0;
+}
+
+
+/* ---------- versions 9 and 10 (sec120): the boundary and the lobby camera,
+as a file from another player reads them */
+
+
+/* the version 8 sample, a wall and a kill zone (records 18, 19), then the
+lobby camera (record 20) */
+static void sample_layout_10(struct forge_file_layout *layout)
+{
+	struct forge_file_record *record;
+
+	sample_layout_8(layout);
+	record = add_marker(layout, _forge_record_boundary, 70.f, -110.f, FORGE_MODE_TEAM_NONE, 0);
+	record->mode.points = 40;
+	record->mode.seconds = FORGE_FILE_BOUNDARY_MAXIMUM_HALF_UNITS;
+	record->mode.radius = 255;
+	record = add_marker(layout, _forge_record_boundary, 71.f, -111.f, FORGE_MODE_TEAM_NONE, NUMBER_OF_FORGE_FILE_BOUNDARY_KINDS - 1);
+	record->mode.points = 1;
+	record->mode.seconds = 1;
+	record->mode.radius = 1;
+	record = add_marker(layout, _forge_record_camera, 72.f, -112.f, FORGE_MODE_TEAM_NONE, 0);
+	record->mode.radius = 2 * FORGE_FILE_CAMERA_PITCH_OFFSET;
+}
+
+/* a byte of a record's of the file in bytes (no canvas), the checksum made
+right again */
+static void record_byte_set(unsigned char *bytes, int size, int record_count, int records_from_end_of, int record, int at,
+	unsigned char value)
+{
+	int records_at = records_from_end_of - record_count * FORGE_FILE_RECORD_SIZE;
+
+	bytes[records_at + record * FORGE_FILE_RECORD_SIZE + at] = value;
+	fix_checksum(bytes, size);
+}
+
+static void test_version_10(void)
+{
+	struct forge_file_layout layout;
+	int result = -1;
+	int meta_size;
+	int records_end;
+	int record_count;
+
+	sample_layout_10(&layout);
+	CHECK(forge_file_layout_version(&layout) == 10, "a lobby camera needs version 10");
+	good10_size = forge_file_encode(&layout, good10, sizeof(good10), &result);
+	if (good10_size <= 0)
+		printf("  (refused: %s)\n", forge_file_result_name(result));
+	CHECK(good10_size > 0 && result == _forge_file_ok && good10[4] == 10, "written as version 10");
+	CHECK(decode(good10, good10_size, "bloodgulch") == _forge_file_ok && decoded.version == 10, "read back as version 10");
+	layout.version = 10;
+	CHECK(layouts_equal(&layout, &decoded), "the boundaries and the camera read back the same");
+	/* (a boundary alone: version 9) */
+	sample_layout_10(&layout);
+	layout.record_count--;
+	CHECK(forge_file_layout_version(&layout) == 9 && forge_file_encode(&layout, work, sizeof(work), &result) > 0 && work[4] == 9,
+		"the boundaries without the camera: version 9");
+	/* (the writer refuses what the reader must refuse) */
+	sample_layout_10(&layout);
+	layout.records[20].mode.radius = 2 * FORGE_FILE_CAMERA_PITCH_OFFSET + 1;
+	CHECK(encode_refused(&layout), "a camera's pitch past straight up: refused");
+	sample_layout_10(&layout);
+	layout.records[layout.record_count] = layout.records[20];
+	layout.record_count++;
+	CHECK(encode_refused(&layout), "two lobby cameras: refused");
+	sample_layout_10(&layout);
+	layout.records[20].game_types = 1;
+	CHECK(encode_refused(&layout), "a camera with game types: refused");
+	sample_layout_10(&layout);
+	layout.records[18].mode.points = 0;
+	CHECK(encode_refused(&layout), "a boundary no length: refused");
+	sample_layout_10(&layout);
+	layout.records[18].mode.seconds = FORGE_FILE_BOUNDARY_MAXIMUM_HALF_UNITS + 1;
+	CHECK(encode_refused(&layout), "a boundary past the most across: refused");
+	sample_layout_10(&layout);
+	layout.records[18].mode.radius = 0;
+	CHECK(encode_refused(&layout), "a boundary no height: refused");
+	sample_layout_10(&layout);
+	layout.records[19].variant = NUMBER_OF_FORGE_FILE_BOUNDARY_KINDS;
+	CHECK(encode_refused(&layout), "a boundary of an unknown kind: refused");
+	sample_layout_10(&layout);
+	layout.records[19].team = FORGE_MODE_TEAM_RED;
+	CHECK(encode_refused(&layout), "a boundary of a side: refused");
+	sample_layout_10(&layout);
+	layout.records[19].angles[1] = 0.5f;
+	CHECK(encode_refused(&layout), "a boundary pitched: refused");
+	sample_layout_10(&layout);
+	/* (two there, then as many more as the most less one, and one past it) */
+	while (layout.record_count < 21 + FORGE_FILE_MAXIMUM_BOUNDARIES - 2 && layout.record_count < FORGE_FILE_MAXIMUM_RECORDS)
+	{
+		layout.records[layout.record_count] = layout.records[18];
+		layout.records[layout.record_count].position[0] += (float)layout.record_count;
+		layout.record_count++;
+	}
+	result = -1;
+	if (forge_file_encode(&layout, work, sizeof(work), &result) <= 0)
+		printf("  (the most boundaries refused: %s, %d records)\n", forge_file_result_name(result), layout.record_count);
+	CHECK(result == _forge_file_ok, "the most boundaries: taken");
+	layout.records[layout.record_count] = layout.records[18];
+	layout.record_count++;
+	CHECK(encode_refused(&layout), "more boundaries than the most: refused");
+	/* (the bytes of another player's file: each refused by the reader) */
+	sample_layout_10(&layout);
+	meta_size = (int)(strlen(layout.title) + strlen(layout.author) + strlen(layout.description) + strlen(layout.date)) + 4;
+	records_end = good10_size - meta_size - FORGE_FILE_MODE_SETTINGS_SIZE;
+	record_count = layout.record_count;
+	memcpy(work, good10, (size_t)good10_size);
+	record_byte_set(work, good10_size, record_count, records_end, 20, 36, 2 * FORGE_FILE_CAMERA_PITCH_OFFSET + 1);
+	CHECK(decode(work, good10_size, NULL) == _forge_file_bad_record, "a file's camera pitch past straight up: refused");
+	memcpy(work, good10, (size_t)good10_size);
+	record_byte_set(work, good10_size, record_count, records_end, 18, 39, 0);
+	record_byte_set(work, good10_size, record_count, records_end, 18, 40, 0);
+	CHECK(decode(work, good10_size, NULL) == _forge_file_bad_record, "a file's boundary no length: refused");
+	memcpy(work, good10, (size_t)good10_size);
+	record_byte_set(work, good10_size, record_count, records_end, 19, 33, NUMBER_OF_FORGE_FILE_BOUNDARY_KINDS);
+	CHECK(decode(work, good10_size, NULL) == _forge_file_bad_record, "a file's boundary of an unknown kind: refused");
+	memcpy(work, good10, (size_t)good10_size);
+	record_byte_set(work, good10_size, record_count, records_end, 18, 47, 1);
+	CHECK(decode(work, good10_size, NULL) == _forge_file_bad_record, "a file's boundary, its last byte set: refused");
+	/* (a newer record in an older file: refused) */
+	memcpy(work, good10, (size_t)good10_size);
+	work[4] = 9;
+	fix_checksum(work, good10_size);
+	CHECK(decode(work, good10_size, NULL) != _forge_file_ok, "a camera in a file called version 9: refused");
+	memcpy(work, good10, (size_t)good10_size);
+	work[4] = 8;
+	fix_checksum(work, good10_size);
+	CHECK(decode(work, good10_size, NULL) != _forge_file_ok, "a boundary in a file called version 8: refused");
+	/* (a camera turned into another mode marker's kind, its fields a camera's:
+	refused as that kind) */
+	memcpy(work, good10, (size_t)good10_size);
+	record_byte_set(work, good10_size, record_count, records_end, 20, 2, _forge_record_base);
+	CHECK(decode(work, good10_size, NULL) != _forge_file_ok, "a camera's fields as a base's: refused");
+	memcpy(work, good10, (size_t)good10_size);
+	record_byte_set(work, good10_size, record_count, records_end, 20, 2, NUMBER_OF_FORGE_RECORD_KINDS);
+	CHECK(decode(work, good10_size, NULL) != _forge_file_ok, "a record of an unknown kind: refused");
+}
+
+
+static void sample_layout_11(struct forge_file_layout *layout)
+{
+	sample_layout_8(layout);
+	layout->flags |= FORGE_FILE_FLAG_CANVAS;
+	/* (the scenery and the vehicles whole but scenery 3 and 40 and vehicle
+	1 kept; weapon 2 and item spawns 0 and 8191 alone) */
+	layout->canvas.categories = (1 << _forge_canvas_scenery) | (1 << _forge_canvas_vehicles);
+	layout->canvas.entry_count = 6;
+	layout->canvas.entries[0].category = _forge_canvas_scenery; layout->canvas.entries[0].kept = 1; layout->canvas.entries[0].index = 3;
+	layout->canvas.entries[1].category = _forge_canvas_scenery; layout->canvas.entries[1].kept = 1; layout->canvas.entries[1].index = 40;
+	layout->canvas.entries[2].category = _forge_canvas_vehicles; layout->canvas.entries[2].kept = 1; layout->canvas.entries[2].index = 1;
+	layout->canvas.entries[3].category = _forge_canvas_weapons; layout->canvas.entries[3].kept = 0; layout->canvas.entries[3].index = 2;
+	layout->canvas.entries[4].category = _forge_canvas_items; layout->canvas.entries[4].kept = 0; layout->canvas.entries[4].index = 0;
+	layout->canvas.entries[5].category = _forge_canvas_items; layout->canvas.entries[5].kept = 0; layout->canvas.entries[5].index = FORGE_FILE_CANVAS_MAXIMUM_INDEX;
+}
+
+static void test_version_11(void)
+{
+	struct forge_file_layout layout;
+	int result = -1;
+	int canvas;
+	int offset;
+
+	sample_layout_11(&layout);
+	CHECK(forge_file_layout_version(&layout) == 11, "a canvas needs version 11");
+	good11_size = forge_file_encode(&layout, good11, sizeof(good11), &result);
+	if (good11_size <= 0)
+		printf("  (refused: %s)\n", forge_file_result_name(result));
+	CHECK(good11_size == good8_size + FORGE_FILE_CANVAS_HEADER_SIZE + 6 * FORGE_FILE_CANVAS_ENTRY_SIZE && result == _forge_file_ok &&
+		good11[4] == 11 && good11[5] == 0, "written as version 11, the canvas block 8 bytes and 4 an entry");
+	CHECK(decode(good11, good11_size, "bloodgulch") == _forge_file_ok && decoded.version == 11, "read back as version 11");
+	layout.version = 11;
+	CHECK(layouts_equal(&layout, &decoded), "the canvas reads back the same");
+	CHECK(decoded.canvas.categories == ((1 << _forge_canvas_scenery) | (1 << _forge_canvas_vehicles)) && decoded.canvas.entry_count == 6 &&
+		decoded.canvas.entries[1].index == 40 && decoded.canvas.entries[1].kept == 1 && decoded.canvas.entries[3].category == _forge_canvas_weapons &&
+		decoded.canvas.entries[5].index == FORGE_FILE_CANVAS_MAXIMUM_INDEX, "the categories, the kept ones and the single ones");
+	CHECK(forge_file_encode(&decoded, work, sizeof(work), &result) == good11_size && !memcmp(work, good11, (size_t)good11_size),
+		"a version 11 file writes back as itself");
+	/* (a canvas alone, on the plain sample: version 11; categories alone) */
+	sample_layout(&layout);
+	layout.flags |= FORGE_FILE_FLAG_CANVAS;
+	layout.canvas.categories = FORGE_FILE_CANVAS_DEFAULT;
+	CHECK(forge_file_layout_version(&layout) == 11 && forge_file_encode(&layout, work, sizeof(work), &result) > 0 && work[4] == 11,
+		"the default blank canvas alone: version 11");
+	/* (no canvas: as before, byte for byte) */
+	sample_layout_8(&layout);
+	CHECK(forge_file_layout_version(&layout) == 8 && forge_file_encode(&layout, work, sizeof(work), &result) == good8_size &&
+		!memcmp(work, good8, (size_t)good8_size), "a layout without a canvas is written as version 8, as before");
+	/* (the writer's refusals) */
+	sample_layout_11(&layout);
+	layout.canvas.categories = 0; layout.canvas.entry_count = 0;
+	CHECK(encode_refused(&layout), "the canvas flag with an empty canvas: refused");
+	sample_layout_11(&layout);
+	layout.flags &= ~(unsigned int)FORGE_FILE_FLAG_CANVAS;
+	CHECK(encode_refused(&layout), "a canvas without its flag: refused");
+	sample_layout_11(&layout);
+	layout.canvas.categories |= 1 << NUMBER_OF_FORGE_CANVAS_CATEGORIES;
+	CHECK(encode_refused(&layout), "a category past the last: refused");
+	sample_layout_11(&layout);
+	layout.canvas.entries[3].category = NUMBER_OF_FORGE_CANVAS_CATEGORIES;
+	CHECK(encode_refused(&layout), "an entry of a category past the last: refused");
+	sample_layout_11(&layout);
+	layout.canvas.entries[5].index = FORGE_FILE_CANVAS_MAXIMUM_INDEX + 1;
+	CHECK(encode_refused(&layout), "an index past the most: refused");
+	sample_layout_11(&layout);
+	layout.canvas.entries[0].kept = 0;
+	CHECK(encode_refused(&layout), "an entry taken away of a category taken away whole: refused");
+	sample_layout_11(&layout);
+	layout.canvas.entries[3].kept = 1;
+	CHECK(encode_refused(&layout), "an entry kept of a category not taken away: refused");
+	sample_layout_11(&layout);
+	layout.canvas.entries[1].index = 3;
+	CHECK(encode_refused(&layout), "the same entry twice: refused");
+	sample_layout_11(&layout);
+	layout.canvas.entries[0].index = 41;
+	CHECK(encode_refused(&layout), "entries out of order: refused");
+	sample_layout_11(&layout);
+	layout.canvas.entry_count = FORGE_FILE_MAXIMUM_CANVAS_ENTRIES + 1;
+	CHECK(encode_refused(&layout), "more entries than the most: refused");
+	sample_layout_11(&layout);
+	layout.version = 10;
+	CHECK(encode_refused(&layout), "a canvas in a layout called version 10: refused");
+	/* (the most entries: written and read back) */
+	sample_layout(&layout);
+	layout.flags |= FORGE_FILE_FLAG_CANVAS;
+	layout.canvas.entry_count = FORGE_FILE_MAXIMUM_CANVAS_ENTRIES;
+	for (offset = 0; offset < FORGE_FILE_MAXIMUM_CANVAS_ENTRIES; offset++)
+	{
+		layout.canvas.entries[offset].category = _forge_canvas_scenery;
+		layout.canvas.entries[offset].index = (unsigned short)(offset * 2);
+	}
+	result = forge_file_encode(&layout, work, sizeof(work), NULL);
+	layout.version = 11;
+	CHECK(result > 0 && decode(work, result, "bloodgulch") == _forge_file_ok && layouts_equal(&layout, &decoded),
+		"the most entries written and read back");
+	/* (the reader's: the block's own fields, checksum right) */
+	canvas = good11_size - (FORGE_FILE_CANVAS_HEADER_SIZE + 6 * FORGE_FILE_CANVAS_ENTRY_SIZE) -
+		(int)(strlen(decoded.title) + strlen(decoded.author) + strlen(decoded.description) + strlen(decoded.date) + 4);
+	decode(good11, good11_size, "bloodgulch");
+	canvas = good11_size - (FORGE_FILE_CANVAS_HEADER_SIZE + 6 * FORGE_FILE_CANVAS_ENTRY_SIZE) -
+		(int)(strlen(decoded.title) + strlen(decoded.author) + strlen(decoded.description) + strlen(decoded.date) + 4);
+	CHECK(good11[canvas] == FORGE_FILE_CANVAS_VERSION && good11[canvas + 4] == 6, "the canvas block is where it is expected");
+	{
+		static struct
+		{
+			int at;
+			unsigned char value;
+			char const *name;
+		} const cases[] =
+		{
+			{ 0, 2, "the block's version 2" },
+			{ 0, 0, "the block's version 0" },
+			{ 1, 1, "the block's zero byte set" },
+			{ 3, 0x80, "a category bit past the last" },
+			{ 4, 7, "one more entry than there are" },
+			{ 4, 5, "one entry fewer than there are" },
+			{ 5, 0x10, "more entries than the most" },
+			{ 6, 1, "the block's last zero set" },
+			{ 8, 9, "an entry's category out of order" },
+			{ 8, 200, "an entry's category past the last" },
+			{ 9, 0, "a kept entry not kept" },
+			{ 9, 2, "an entry's kept byte 2" },
+			{ 11, 0x20, "an index past the most" },
+			{ 14, 3, "the same index twice" },
+			{ 8 + 12 + 1, 1, "a single entry kept" },
+		};
+		int index;
+
+		for (index = 0; index < (int)(sizeof(cases) / sizeof(cases[0])); index++)
+		{
+			memcpy(work, good11, (size_t)good11_size);
+			work[canvas + cases[index].at] = cases[index].value;
+			fix_checksum(work, good11_size);
+			if (decode(work, good11_size, "bloodgulch") == _forge_file_ok)
+				printf("  (%s)\n", cases[index].name);
+			CHECK(decode(work, good11_size, "bloodgulch") != _forge_file_ok, "a bad canvas block: refused");
+		}
+	}
+	/* (called version 10: its flag is not that version's; its flag cleared:
+	the block is read as the meta; a version 8 file called 11 or with the flag) */
+	memcpy(work, good11, (size_t)good11_size);
+	put_u16(work, 4, 10);
+	fix_checksum(work, good11_size);
+	CHECK(decode(work, good11_size, "bloodgulch") == _forge_file_bad_flags, "version 11's canvas in a file called version 10: refused");
+	memcpy(work, good11, (size_t)good11_size);
+	put_u32(work, 8, FORGE_FILE_FLAG_NETGAME_SPAWNS | FORGE_FILE_FLAG_MODE_SETTINGS);
+	fix_checksum(work, good11_size);
+	CHECK(decode(work, good11_size, "bloodgulch") != _forge_file_ok, "version 11 with the canvas' flag cleared: refused");
+	memcpy(work, good8, (size_t)good8_size);
+	put_u16(work, 4, 11);
+	fix_checksum(work, good8_size);
+	CHECK(decode(work, good8_size, "bloodgulch") == _forge_file_bad_version, "a version 8 file called version 11: refused");
+	memcpy(work, good8, (size_t)good8_size);
+	put_u32(work, 8, FORGE_FILE_FLAG_NETGAME_SPAWNS | FORGE_FILE_FLAG_MODE_SETTINGS | FORGE_FILE_FLAG_CANVAS);
+	fix_checksum(work, good8_size);
+	CHECK(decode(work, good8_size, "bloodgulch") != _forge_file_ok, "a version 8 file with the canvas' flag: refused");
+	/* (cut short anywhere: refused) */
+	for (offset = canvas; offset < good11_size; offset++)
+	{
+		memcpy(work, good11, (size_t)offset);
+		put_u32(work, 56, (unsigned int)(offset - FORGE_FILE_HEADER_SIZE));
+		fix_checksum(work, offset);
+		CHECK(decode(work, offset, "bloodgulch") != _forge_file_ok, "a version 11 file cut short: refused");
+	}
+	/* (every bit flipped: refused but for the map hash) */
+	for (offset = 0; offset < good11_size; offset++)
+	{
+		int bit;
+
+		for (bit = 0; bit < 8; bit++)
+		{
+			memcpy(work, good11, (size_t)good11_size);
+			work[offset] ^= (unsigned char)(1 << bit);
+			if (decode(work, good11_size, "bloodgulch") == _forge_file_ok && !(offset >= 44 && offset < 48))
+			{
+				printf("  (version 11: byte %d bit %d)\n", offset, bit);
+				CHECK(0, "a flipped bit of a version 11 file was taken");
+			}
+		}
+	}
+}
+
+/* (sec120) each version's sample, its first byte 3 (net_fuzz_forge_file.c:
+the payload size and the checksum made right), the network fuzz target's
+seeds (net_fuzz_cases/forge_file) */
+static int write_seeds(char const *folder)
+{
+	static unsigned char const *const samples[] = { good, good2, good4, good5, good6, good7, good8, good10, good11 };
+	int const *const sizes[] = { &good_size, &good2_size, &good4_size, &good5_size, &good6_size, &good7_size, &good8_size,
+		&good10_size, &good11_size };
+	static unsigned char seed[FORGE_FILE_MAXIMUM_SIZE + 1];
+	int index;
+	int status = 0;
+
+	test_round_trip();
+	test_version_2();
+	test_version_4();
+	test_version_5();
+	test_version_6();
+	test_version_7();
+	test_version_8();
+	test_version_10();
+	test_version_11();
+	for (index = 0; index < (int)(sizeof(samples) / sizeof(samples[0])); index++)
+	{
+		char name[32];
+
+		if (*sizes[index] <= 0)
+			return 1;
+		seed[0] = 3;
+		memcpy(seed + 1, samples[index], (size_t)*sizes[index]);
+		snprintf(name, sizeof(name), "seed-v%d", samples[index][4]);
+		status |= write_file(folder, name, seed, *sizes[index] + 1);
+	}
+	return status || failures;
 }
 
 int main(int argc, char **argv)
@@ -1684,6 +2500,8 @@ int main(int argc, char **argv)
 		return write_samples(argv[2]);
 	if (argc == 3 && !strcmp(argv[1], "--write-teleport"))
 		return write_teleport_sample(argv[2]);
+	if (argc == 3 && !strcmp(argv[1], "--write-seeds"))
+		return write_seeds(argv[2]);
 	if (argc == 3 && !strcmp(argv[1], "--dump"))
 		return dump(argv[2]);
 	if (argc == 2)
@@ -1696,6 +2514,9 @@ int main(int argc, char **argv)
 	test_version_5();
 	test_version_6();
 	test_version_7();
+	test_version_8();
+	test_version_10();
+	test_version_11();
 	test_names();
 	fuzz(iterations);
 	printf("%d checks, %d failed\n", checks, failures);

@@ -42,6 +42,11 @@ long halo_screen_width(void);
 /* set while the game's menus are up (halo_ui_pointer_update, d3d8_gxm.c) */
 int vita_menus_active;
 
+/* (port/linux/game/command.c) set while Command mode's HQ panel is open
+above the map: the menus' layout meanwhile (its D-pad, Cross and Circle), as
+every other menu has */
+extern int command_menu_pad;
+
 /* set while Forge's monitor flies (port/linux/game/forge.c) */
 extern int forge_monitor_flying;
 
@@ -121,7 +126,7 @@ int vita_pad_button_glyph(short gamepad_button)
 {
 	if (!icons_playstation)
 		return VITA_GLYPH_NONE;
-	return vita_button_glyph(&icons_controls, gamepad_button, vita_menus_active);
+	return vita_button_glyph(&icons_controls, gamepad_button, vita_menus_active || command_menu_pad);
 }
 
 /* (the score hint, source/interface/hud_draw.c hud_vita_score_hint) the
@@ -298,7 +303,7 @@ void vita_pad_state(XINPUT_GAMEPAD *gamepad)
 		vita_controls_map(&flying, &controls_state, pad.buttons, 0, vita_menus_active, &output);
 	}
 	else
-		vita_controls_map(&controls, &controls_state, pad.buttons, pad.touch, vita_menus_active, &output);
+		vita_controls_map(&controls, &controls_state, pad.buttons, pad.touch, vita_menus_active || command_menu_pad, &output);
 	gamepad->wButtons |= (WORD)output.digital;
 	for (index = 0; index < 8; index++)
 		gamepad->bAnalogButtons[index] = output.analog[index];

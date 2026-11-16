@@ -40,6 +40,10 @@ long bots_online_fill(void);
 /* a machine (or a player of one) is a bot */
 int bots_machine_is_bot(long machine_index);
 int bots_player_is_bot(long player_index);
+/* damage one player's unit deals another's (damage.c, the host's): a bot's
+to an enemy player and a player's to an enemy bot scaled by the bots' skill
+(Halo CE's enemy damage and vitality), and counted for the fights' numbers */
+void bots_damage_dealt(long owner_player_index, long victim_player_index, float *damage);
 /* the network player for bot number `bot_index` (0 up): its machine,
 controller, name and no team or colour yet */
 void bots_network_player(long bot_index, struct network_player *player);

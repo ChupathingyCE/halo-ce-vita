@@ -100,6 +100,9 @@ static void menu_tags_dump(long tag_index, int depth);
 game (halo3/forge.xml, whatever the Menu style) */
 #define XBOX_PAUSE_SCREEN "ui\\shell\\solo_game\\pause_game\\pause_game"
 #define FORGE_PAUSE_SCREEN "h3/forge/pause/screen"
+/* (1.1.5) a FIREFIGHT game's: RESUME and LEAVE FIREFIGHT alone (forge.c's
+forge_modes.inc) */
+#define FIREFIGHT_PAUSE_SCREEN "h3/firefight/pause/screen"
 /* a network game's pause screens (ui_widget.c ui_check_for_pause_game opens
 one of them by the machine's players): a network Forge game's Start opens
 the Forge menu in their place too, the host's and every joiner's, whatever
@@ -472,6 +475,14 @@ static char const *const port_function_names[] =
 	"port cascade tab next",
 	"port cascade mp maps",
 	"port cascade gametypes",
+	/* (1.1.4: Command mode's lobby and PREPARING COMMAND) */
+	"port command lobby init",
+	"port command side",
+	"port command ai level",
+	"port command prepare cancel",
+	"port forge start command",
+	"port forge command objective",
+	"port forge command prepare",
 	"port h3 mods tab games", "port h3 mods tab mods", "port h3 mods tab next",
 	/* (1.1.3/1.1.4: GAME MANAGER's DOWNLOAD FROM STEAM, halo3/steam.xml) */
 	"port h3 steam row", "port h3 steam back",
@@ -479,6 +490,10 @@ static char const *const port_function_names[] =
 	"port h3 workshop row", "port h3 workshop back", "port h3 workshop download", "port h3 workshop search",
 	"port h3 workshop page previous", "port h3 workshop page next", "port h3 workshop order previous",
 	"port h3 workshop order next",
+	/* (1.1.5: the Firefight lobby, START FIREFIGHT and PREPARING FIREFIGHT) */
+	"port firefight lobby init",
+	"port forge start firefight",
+	"port forge firefight prepare",
 };
 
 /* the port's game data functions (menu_functions.c), from
@@ -521,6 +536,8 @@ static char const *const port_game_data_input_names[] =
 	"port cascade",
 	"port h3 steam",
 	"port h3 workshop",
+	/* (1.1.4) */
+	"port command prepare",
 };
 
 static struct
@@ -761,9 +778,26 @@ static long tag_named(long group_tag, char const *name, char const *file, long l
 
 	if (strchr(name, '\\'))
 	{
-		/* (a picture a Halo PC ui.map has not, the Xbox's Y button: none shown) */
+		/* (a picture a Halo PC ui.map has not - MCC's has not the Xbox's Y button: ours drawn in its
+		place, classic/xbox_screens.xml's, for every widget that asks for it; any other: none shown.
+		The Xbox's ui.map has them all and never gets here) */
 		if (group_tag == BITMAP_GROUP_TAG && tag_loaded(group_tag, name) == NONE && !build.ingame)
 		{
+			static char const *const drawn[][2] = {
+				{ "ui\\shell\\bitmaps\\y_butn", XBOX_SCREEN_WIDGET_PREFIX "y_butn_art" },
+			};
+			long which;
+
+			for (which = 0; which < (long)NUMBEROF(drawn); which++)
+			{
+				if (!strcmp(name, drawn[which][0]) && build.halo_pc_ui &&
+					(index = find(drawn[which][1], build.menus->bitmap_count, bitmap_name)) != NONE)
+				{
+					platform_log("menus: %s:%ld: this ui.map has no bitmap %s: ours drawn in its place",
+						file, line, name);
+					return build.bitmap_tags[index];
+				}
+			}
 			platform_log("menus: %s:%ld: this ui.map has no bitmap %s: none shown", file, line, name);
 			return NONE;
 		}
@@ -3304,11 +3338,14 @@ long menu_tags_screen(
 		}
 		if (pause)
 		{
-			long forge_menu = menu_tags_ingame_screen(FORGE_PAUSE_SCREEN);
+			/* (a FIREFIGHT game: its own pause; Forge's with none) */
+			long forge_menu = forge_modes_game_running() ? menu_tags_ingame_screen(FIREFIGHT_PAUSE_SCREEN) : NONE;
 
+			if (forge_menu == NONE)
+				forge_menu = menu_tags_ingame_screen(FORGE_PAUSE_SCREEN);
 			if (forge_menu != NONE)
 			{
-				platform_log("menus: the Forge menu for %s", pause);
+				platform_log("menus: the %s menu for %s", forge_modes_game_running() ? "Firefight" : "Forge", pause);
 				return forge_menu;
 			}
 		}

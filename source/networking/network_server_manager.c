@@ -475,6 +475,8 @@ symbols in this file:
 #include "custom_edition_cache.h"
 #include "custom_edition_maps.h"
 #include "map_share.h"
+/* port: port/linux/game/forge_net.inc's (a Command game hosted) */
+boolean forge_net_command_session(void);
 #include "forge.h"
 #include "dedicated_server.h"
 #include "bots.h"
@@ -3709,6 +3711,11 @@ boolean server_needs_more_teams(
 	its bots, or with people and bots, could never start Infection */
 	if (infection_variant(&server->game.variant))
 		return FALSE;
+	/* (port) a Command game's side with no human is the AI commander's
+	(port/linux/game/command.c): a host alone, or its co-op commanders all on
+	one side, start it */
+	if (forge_net_command_session())
+		return FALSE;
 	if (server->game.variant.universal_variant.teams)
 	{
 		short player_count_by_team[NUMBER_OF_MULTIPLAYER_TEAMS] = { 0, 0 };
@@ -6581,6 +6588,72 @@ static boolean network_game_server_have_all_machines_have_precached(
 	return all_machines_have_precached;
 }
 
+/* port: the pregame load timeout. Once the countdown is over, the game
+starts when every machine joined has said it has the map loaded (its
+precache report). A machine that never says so - a broken one, or one sent
+to hold the lobby - held the start for good. Once the countdown is over
+and nothing else holds the start (a map download, a Forge pack build: each
+waits on its own), a machine still not loaded after
+PREGAME_LOAD_TIMEOUT_MILLISECONDS is dropped as a machine that times out is,
+and the game starts with the others; the host's own machine never is. From
+ChupathingyCE (cfb560935, "Lobbies: one machine whose map never loads can't
+hold the start (#1060)", MrMilenko; GPL-3.0-or-later), with a fixed time
+(no setting) long enough for a Vita reading a large map from its card */
+#define PREGAME_LOAD_TIMEOUT_MILLISECONDS (180UL * MILLISECONDS_PER_SECOND)
+static unsigned long network_game_server_pregame_load_held_since;
+
+static unsigned long network_game_server_pregame_load_timeout_milliseconds(
+	void)
+{
+#if defined(HALO_LINUX) && !defined(HALO_RELEASE)
+	/* (debug builds, the tests: HALO_TEST_PREGAME_LOAD_TIMEOUT seconds) */
+	char const *seconds = getenv("HALO_TEST_PREGAME_LOAD_TIMEOUT");
+
+	if (seconds && atol(seconds) > 0)
+		return (unsigned long)atol(seconds) * MILLISECONDS_PER_SECOND;
+#endif
+	return PREGAME_LOAD_TIMEOUT_MILLISECONDS;
+}
+
+static void network_game_server_pregame_load_timeout(
+	struct network_game_server *server,
+	boolean held)
+{
+	unsigned long now = system_milliseconds();
+	long i;
+
+	if (!held || network_game_server_have_all_machines_have_precached(server))
+	{
+		network_game_server_pregame_load_held_since = 0;
+		return;
+	}
+	if (!network_game_server_pregame_load_held_since)
+	{
+		network_game_server_pregame_load_held_since = now ? now : 1;
+		return;
+	}
+	if (now - network_game_server_pregame_load_held_since < network_game_server_pregame_load_timeout_milliseconds())
+		return;
+	network_game_server_pregame_load_held_since = 0;
+	for (i = 0; i < MAXIMUM_NETWORK_MACHINE_COUNT; i++)
+	{
+		struct network_game_server_client_machine *machine = server->client_machines + i;
+
+		/* (the machines have_all_machines_have_precached waits for) */
+		if (!network_game_server_client_machine_is_joined_to_game(server, machine) ||
+			network_game_server_client_machine_is_local(server, machine) ||
+			TEST_FLAG(machine->flags, _network_client_machine_precached_bit))
+		{
+			continue;
+		}
+		/* (its index, never its address: the log may be shared) */
+		network_event("machine #%d has not loaded the map %lu seconds after the countdown ended; dropping it",
+			(int)machine->machine_index, network_game_server_pregame_load_timeout_milliseconds() / MILLISECONDS_PER_SECOND);
+		if (!network_game_server_drop_client_machine(server, machine))
+			network_event("failed to remove client machine %x from game", (int)machine->machine_index);
+	}
+}
+
 static boolean network_game_server_idle_pregame_tasks(
 	struct network_game_server *server)
 {
@@ -6653,7 +6726,19 @@ static boolean network_game_server_idle_pregame_tasks(
 		if (server->countdown_state.active == TRUE)
 		{
 			boolean send_countdown_update = FALSE;
-			boolean ok_to_countdown = server_ok_to_countdown(server);
+			boolean ok_to_countdown;
+
+			/* (port: a machine whose map never loads holds the start no
+			longer than the pregame load timeout, above) */
+			network_game_server_pregame_load_timeout(server,
+				countdown_timer_get_time_remaining(&server->countdown_state.timer) == 0 &&
+				server->countdown_state.paused == FALSE
+#ifdef HALO_LINUX
+				&& !map_share_server_holds_start(server) &&
+				!forge_net_server_holds_start(server, NULL, 0, NULL)
+#endif
+				);
+			ok_to_countdown = server_ok_to_countdown(server);
 
 			if (!ok_to_countdown)
 			{
@@ -6728,6 +6813,7 @@ static boolean network_game_server_idle_pregame_tasks(
 		}
 		else
 		{
+			network_game_server_pregame_load_timeout(server, FALSE);
 			if ((unsigned long)now - (unsigned long)server->time_of_last_keep_alive >
 				5UL * MILLISECONDS_PER_SECOND)
 			{
@@ -6827,6 +6913,7 @@ boolean network_game_server_reset_to_pregame(
 		bots_playlist_before_pregame();
 #endif
 	csmemset(&server->countdown_state, 0, sizeof(server->countdown_state));
+	network_game_server_pregame_load_held_since = 0;
 	server->next_update_number = 0;
 	server->time_of_first_client_loading_completion = 0;
 	server->sent_start_game_message = FALSE;

@@ -16156,6 +16156,10 @@ static char const *hs_host_player_command(
 /* port: network Forge's (port/linux/game/forge_net.inc): this machine plays
 the host's Forge game, whose edits are requests the host checks */
 boolean forge_net_client_session(void);
+/* ... its Command game's, whose orders and buys are requests the host checks
+(port/linux/game/command.c: a client's own commands are its view's and its
+requests alone) */
+boolean forge_net_command_session(void);
 
 /* port: a command someone typed (the console, the telnet console, a cheat
 button, init.txt): what it logs is its answer, shown whatever
@@ -16191,7 +16195,8 @@ static boolean hs_compile_and_evaluate_command(
 	game run each tick also puts back what was changed before joining,
 	cheats_network_client_enforce) */
 	if (hs_playing_in_anothers_game() && !hs_expression_changes_no_game(expression) &&
-		!(hs_host_player_command(expression, "forge") && forge_net_client_session()))
+		!(hs_host_player_command(expression, "forge") && forge_net_client_session()) &&
+		!(hs_host_player_command(expression, "command") && forge_net_command_session()))
 	{
 		console_warning("not while playing in another's game: the host decides the game");
 		return FALSE;
@@ -16206,6 +16211,18 @@ spike, port/linux/game/forge.c), which are no script's */
 			boolean forge_command(char const *arguments);
 
 			return forge_command(text);
+		}
+	}
+	/* port: command mode's commands ("command on", "command spawn ..."...:
+	port/linux/game/command.c), which are no script's */
+	{
+		char const *text = hs_host_player_command(expression, "command");
+
+		if (text)
+		{
+			boolean command_command(char const *arguments);
+
+			return command_command(text);
 		}
 	}
 	/* port: the scene packs' commands ("pack load <name>"...:

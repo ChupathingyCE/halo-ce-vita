@@ -29,8 +29,9 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 binary=$(readlink -f "${HALO_TEST_VITA:-$root/build/linux/halo}")
-data=${HALO_TEST_DATA:-$root/../data2276}
+data=${HALO_TEST_DATA:-$data_root/data2276}
 mod=${HALO_TEST_MCC_MOD:-$HOME/.local/share/Steam/steamapps/workshop/content/976730/2915693904}
 name=${HALO_TEST_MCC_NAME:-ruby}
 seconds=${HALO_TEST_MCC_SECONDS:-120}

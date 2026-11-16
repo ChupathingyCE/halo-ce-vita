@@ -33,6 +33,10 @@ boolean network_game_player_is_local(
 	struct network_player *player);
 void network_game_accept_remote_connections(
 	boolean accept_remote_connections);
+/* (port) whether the game hosted here takes no remote connection (split
+screen, bots): its listeners bound to this machine alone (xnet.c) */
+boolean network_game_port_hosting_local(
+	void);
 boolean network_game_should_accept_remote_connections(
 	void);
 boolean network_game_is_splitscreen_local(

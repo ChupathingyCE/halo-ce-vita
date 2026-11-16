@@ -7,7 +7,7 @@ tools/fonts/OFL.txt). The same bytes each run.
   the game's own pause box (its blue border, dark blue glass and the line
   over the button key).
 - <lang>/main_<row>_0.png and _1.png: the main menu's new rows (MEDIA,
-  FORGE) as words in the look of the game's own
+  EXTRAS) as words in the look of the game's own
   CAMPAIGN, MULTIPLAYER and SETTINGS (a picture 256 x 64, capitals 20
   pixels high from its 6th row, about 17.5 pixels a letter): 0 not focused
   (a solid mid blue), 1 focused (white with a blue glow), the two frames the
@@ -42,8 +42,8 @@ FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts', 'SairaS
 LANG = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'port', 'vita', 'app0', 'lang')
 # the main menu's rows (their files' names) and the heading, in English
 # (1.2.0 menu round 3, owner Nov 8: MEDIA - File Share, Friends, Game Manager together as ElDewrito's START >
-# MEDIA - and FORGE at the bottom; 1.2.0's EXTRAS comes with Command in 1.1.4)
-ROWS = (('media', 'MEDIA'), ('forge', 'FORGE'))
+# MEDIA - and EXTRAS - Forge, Command - at the bottom)
+ROWS = (('media', 'MEDIA'), ('modes', 'EXTRAS'))
 HEADINGS = (('header_lobby_options', 'LOBBY OPTIONS'),
             # (Classic+'s screens for the port's features: classic/forge.xml, customize.xml)
             ('header_forge', 'FORGE'), ('header_extra_objects', 'EXTRA OBJECTS'),
@@ -62,9 +62,9 @@ HEADINGS = (('header_lobby_options', 'LOBBY OPTIONS'),
             ('header_edit_game_type', 'EDIT GAME TYPE'),
             # (classic/fileshare_friends.xml: File Share with friends)
             ('header_sharing', 'SHARING'), ('header_send_to_a_friend', 'SEND TO A FRIEND'),
-            # (classic/modes.xml: the main menu's MEDIA)
-            ('header_media', 'MEDIA'),
-            )
+            # (classic/modes.xml: the main menu's MEDIA and EXTRAS, the Command lobby)
+            ('header_media', 'MEDIA'), ('header_modes', 'EXTRAS'),
+            ('header_command', 'COMMAND'))
 # (classic/xbox_screens.xml: an Xbox screen's heading an MCC-only install's ui.map has not, at the
 # size of the Xbox's own headings - capitals about 20 high, 18 a letter)
 XBOX_HEADINGS = (('header_select_profile_to_edit', 'SELECT PROFILE TO EDIT'),

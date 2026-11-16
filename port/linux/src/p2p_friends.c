@@ -624,8 +624,9 @@ struct party_invite_record
 	int size;
 	unsigned long time;
 	int asked;
-	/* accepted: waiting for the leader's roster */
+	/* accepted: waiting for the leader's roster; that wait said */
 	int accepted;
+	int unanswered_said;
 };
 
 /* an invite this machine sent (its leader's), not answered yet */
@@ -673,6 +674,12 @@ struct party_state
 	unsigned long follow_heard_time;
 	unsigned long follow_done;
 	int follow_result;
+	/* (a member) when the follow's join was made (its outcome, refused or
+	there, comes later: p2p_party_follow_join_outcome) */
+	unsigned long follow_join_time;
+	/* (a member) when this machine was last seen in the leader's game the
+	follow joined (a refusal there - its map - comes as it is left) */
+	unsigned long follow_there_time;
 	/* (the leader) since when in a game no member reaches (0: not) */
 	unsigned long unreachable_since;
 	/* (a member) the invite hash of the game the leader hosts (its key's:

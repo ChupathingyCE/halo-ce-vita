@@ -418,6 +418,14 @@ static void hud_show_action_response(
 #ifdef HALO_LINUX
 	struct player_datum player_snapshot;
 
+	/* port: Forge's monitor (port/linux/game/forge.c): its hidden unit's
+	prompt is not its to act on */
+	{
+		extern boolean forge_monitor_hides_prompt(short local_player_index);
+
+		if (forge_monitor_hides_prompt(render.local_player_index))
+			return;
+	}
 	if (halo_epoch_threaded)
 	{
 		player_snapshot = *player;
@@ -1297,6 +1305,12 @@ void hud_draw_screen(
 			extern void forge_draw(short local_player_index);
 
 			forge_draw(render.local_player_index);
+			/* (and command mode's: port/linux/game/command.c) */
+			{
+				extern void command_draw(short local_player_index);
+
+				command_draw(render.local_player_index);
+			}
 		}
 
 		if (!game_time_get_paused() &&

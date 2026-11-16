@@ -913,6 +913,7 @@
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+. "$here/test_data_root.sh"
 # (the menus' XML of this tree: the game looks beside its binary, and a copy
 # of the harness elsewhere found none: run_menus_test.sh)
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
@@ -950,7 +951,7 @@ fi
 	export HALO_TEST_NETEM="delay 80ms 70ms"
 vita=${HALO_TEST_VITA:-$root/build/linux/halo}
 pc=${HALO_TEST_PC:-}
-data=${HALO_TEST_DATA:-$root/../data2276}
+data=${HALO_TEST_DATA:-$data_root/data2276}
 seconds=${HALO_TEST_SECONDS:-180}
 [ "$mode" = busyport ] && seconds=${HALO_TEST_SECONDS:-100}
 [ "$mode" = dedicated ] && seconds=${HALO_TEST_SECONDS:-260}
@@ -1008,7 +1009,7 @@ fi
 [ "$mode" = h3livebots ] && seconds=${HALO_TEST_SECONDS:-110}
 [ "$mode" = h3liveagain ] && seconds=${HALO_TEST_SECONDS:-280}
 # (network Forge: netns_forge_cases.sh)
-case $mode in forge) seconds=${HALO_TEST_SECONDS:-110} ;; forge3) seconds=${HALO_TEST_SECONDS:-125} ;; forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeold111|forgeflagwarn|forgephase|forgerider) seconds=${HALO_TEST_SECONDS:-80} ;; forgelate112) seconds=${HALO_TEST_SECONDS:-180} ;; forgemp) seconds=${HALO_TEST_SECONDS:-150} ;; h3forge|h3forgeadhoc|forgepanel) seconds=${HALO_TEST_SECONDS:-130} ;; h3forgeonline) seconds=${HALO_TEST_SECONDS:-230} ;; h3variant) seconds=${HALO_TEST_SECONDS:-150} ;; h3forgeslow|h3forgeskip) seconds=${HALO_TEST_SECONDS:-330} ;; forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold) seconds=${HALO_TEST_SECONDS:-90} ;; friendforge|partyforge|friendmp) seconds=${HALO_TEST_SECONDS:-180} ;; fjoin|fedge) seconds=${HALO_TEST_SECONDS:-130} ;; esac
+case $mode in forge) seconds=${HALO_TEST_SECONDS:-110} ;; forge3) seconds=${HALO_TEST_SECONDS:-125} ;; forgeold|forgeleave|forgeffnet|forgetele|forgetouch|forgeold112|forgeold111|forgeflagwarn|forgephase|forgerider) seconds=${HALO_TEST_SECONDS:-80} ;; forgelate112) seconds=${HALO_TEST_SECONDS:-180} ;; forgemp) seconds=${HALO_TEST_SECONDS:-150} ;; h3forge|h3forgeadhoc|forgepanel) seconds=${HALO_TEST_SECONDS:-130} ;; h3forgeonline) seconds=${HALO_TEST_SECONDS:-230} ;; h3variant) seconds=${HALO_TEST_SECONDS:-150} ;; h3forgeslow|h3forgeskip) seconds=${HALO_TEST_SECONDS:-330} ;; forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold) seconds=${HALO_TEST_SECONDS:-90} ;; friendforge|partyforge|friendmp) seconds=${HALO_TEST_SECONDS:-180} ;; fjoin|fedge) seconds=${HALO_TEST_SECONDS:-130} ;; esac
 # (dedicatedrace: its maps, or SKIP; about two minutes a game of the cycle:
 # the download, the load, the game and its scores)
 if [ "$mode" = dedicatedrace ]; then
@@ -1565,7 +1566,7 @@ code|lobby|lobbytls|lobbypw|relay|latency|infection|infectionold)
 	;;
 menus|menuspw|menusjoinpress)
 	password=${HALO_TEST_LOBBY_PASSWORD:-hunter2}
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	extra="HALO_NET_HOST_PUBLIC=true"
 	[ "$mode" = menuspw ] && extra="$extra HALO_NET_LOBBY_PASSWORD=$password"
 	run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NETWORK_TEST_START=${HALO_TEST_MENUS_START:-75} \
@@ -1617,7 +1618,7 @@ menus|menuspw|menusjoinpress)
 	[ "$two" -ge 30 ] || fail "the joiner played the host's game for $two s with two players (30 wanted)"
 	;;
 browserscroll)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NETWORK_TEST_START=${HALO_TEST_MENUS_START:-90} \
 		HALO_NET_LOBBY_NAME=VitaHost HALO_NET_HOST_PUBLIC=true; host_pid=$last_pid
 	code=$(wait_code)
@@ -1659,7 +1660,7 @@ browserscroll)
 	[ "$two" -ge 30 ] || fail "the joiner played the host's game for $two s with two players (30 wanted)"
 	;;
 onlinebrowser|onlinebrowserded|onlinebrowsertab)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ $mode = onlinebrowserded ]; then
 		server=${HALO_TEST_SERVER:-$root/build/linux/halo-server}
 		[ -x "$server" ] || { echo "$mode needs the dedicated server (ninja linux-server, HALO_TEST_SERVER)"; exit 2; }
@@ -1725,7 +1726,7 @@ onlinebrowser|onlinebrowserded|onlinebrowsertab)
 	[ "$two" -ge 20 ] || fail "the joiner played the game for $two s with others (20 wanted)"
 	;;
 menushost|pickjoin)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	# (Multiplayer, CREATE GAME INTERNET: Server Setup; A on SERVER NAME types
 	# it; down to START GAME (past WHO CAN JOIN); the System Link screen's profile (A A A), the map
 	# list (A), the gametype (A): the lobby; START starts the game. pickjoin:
@@ -1887,7 +1888,7 @@ lobbydns)
 badmap)
 	game=${HALO_TEST_BADMAP_GAME:-host:beavercreek:rockets}
 	level=$(echo "$game" | cut -d: -f2)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	[ -d "$menus_data/maps" ] || menus_data=$data
 	# (the joiners' maps folders: the level's file cut short, or missing, or a
 	# Halo PC map under its name, beside links to the others)
@@ -2201,8 +2202,8 @@ hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin)
 	# HALO_TEST_DATA_MENUS on both: the joiner downloads it, map sharing's
 	# messages, 35, twinned)
 	if [ "$mode" = hostfuzzmap ]; then
-		ce_map=${HALO_TEST_CE_MAP:-$root/../custom-maps-dl/extinction.map}
-		menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+		ce_map=${HALO_TEST_CE_MAP:-$data_root/custom-maps-dl/extinction.map}
+		menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 		if [ ! -f "$ce_map" ] || [ ! -r "$menus_data/maps/bitmaps.map" ]; then
 			echo "SKIP (hostfuzzmap): no Custom Edition map (HALO_TEST_CE_MAP) or Halo PC files (HALO_TEST_DATA_MENUS)"
 			exit 0
@@ -2862,7 +2863,7 @@ coopmenuonline)
 	[ "$both" -ge 15 ] || fail "both players were alive for $both s (15 wanted)"
 	;;
 h3coopmenu)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; exit 0
 	fi
@@ -2912,7 +2913,7 @@ h3coopmenu)
 	[ "$both" -ge 15 ] || fail "both players were alive for $both s (15 wanted)"
 	;;
 h3lan|h3adhoc)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS)"; exit 0
 	fi
@@ -2984,7 +2985,7 @@ h3lan|h3adhoc)
 	[ "$mode" = h3adhoc ] && grep -q CONNECT "$out/broker.log" && fail "ad hoc play reached the signalling broker"
 	;;
 h3liveinvite)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; exit 0
 	fi
@@ -3054,7 +3055,7 @@ h3liveinvite)
 		fail "the joiner was not told the online game closed (its network named)"
 	;;
 h3livebots)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; exit 0
 	fi
@@ -3099,7 +3100,7 @@ h3livebots)
 		fail "the host alone with its bots did not start the game"
 	;;
 h3liveprivate)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; exit 0
 	fi
@@ -3149,7 +3150,7 @@ h3liveprivate)
 	[ "$two" -ge 15 ] || fail "the friend played the host's game for $two s with two players (15 wanted)"
 	;;
 h3live|h3liveleave|h3liveagain)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	# (h3liveagain: a short game - 5 kills, the host's kills every 2 s -, then the lobby again and
 	# a second game: a longer run)
 	again_env=
@@ -3180,15 +3181,16 @@ h3live|h3liveleave|h3liveagain)
 	}
 	old_joiner=${HALO_TEST_VITA_JOINER:-}
 	# (the host: MULTIPLAYER, the lobby on SYSTEM LINK, live once up (its game open, Slayer on
-	# Battle Creek); a while for the joiner; then h3live: MAP (down two, A), BLOOD GULCH (down
-	# nine, A); GAME (up, A), the next game type (down, A); START GAME (down two, A): the game's
-	# lobby, its countdown at once; h3liveleave: B, the lobby left)
+	# Battle Creek); a while for the joiner; then h3live: MAP (down one - above GAME TYPE since
+	# 1.1.3 -, A: SELECT MAP on Battle Creek), BLOOD GULCH (down nine, A); GAME TYPE (down, A:
+	# SELECT GAME TYPE on SLAYER; A: its game types on Slayer), the next game type (down, A); START
+	# GAME (down, A): the game's lobby, its countdown at once; h3liveleave: B, the lobby left)
 	live_pad="wait:150:3000 down:150:700 a wait:150:${HALO_TEST_LIVE_WAIT:-45000} @live-01-lobby-joined:0:300"
 	if [ $mode = h3live ] || [ $mode = h3liveagain ]; then
-		live_pad="$live_pad down:150:500 down:150:500 a wait:150:2500"
+		live_pad="$live_pad down:150:500 a wait:150:2500"
 		for row in $(seq 1 9); do live_pad="$live_pad down:150:300"; done
-		live_pad="$live_pad a wait:150:8000 @live-02-map-changed:0:300 up:150:500 a wait:150:2500 down:150:500 a wait:150:8000"
-		live_pad="$live_pad @live-03-game-changed:0:300 down:150:500 down:150:500 a wait:150:3000 @live-04-countdown:0:300"
+		live_pad="$live_pad a wait:150:8000 @live-02-map-changed:0:300 down:150:500 a wait:150:2500 a wait:150:1500 down:150:500 a wait:150:8000"
+		live_pad="$live_pad @live-03-game-changed:0:300 down:150:500 a wait:150:3000 @live-04-countdown:0:300"
 		# (h3liveagain: the game over, the host back in the lobby, START GAME focused: A again)
 		[ $mode = h3liveagain ] && live_pad="$live_pad wait:150:${HALO_TEST_AGAIN_WAIT:-110000} @live-05-lobby-again:0:300 ${HALO_TEST_AGAIN_PAD:-a wait:150:4000 @live-06-second-countdown:0:300}"
 	else
@@ -3299,7 +3301,7 @@ h3live|h3liveleave|h3liveagain)
 	fi
 	;;
 h3mppause)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; exit 0
 	fi
@@ -3385,7 +3387,7 @@ h3mppause)
 	grep -aq "network test: joining" "$out/joiner2/run.log" || fail "the second joiner did not join"
 	;;
 h3scoreboard)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; exit 0
 	fi
@@ -3470,7 +3472,7 @@ PY
 	done
 	;;
 carnage)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; exit 0
 	fi
@@ -3532,8 +3534,8 @@ carnage)
 	done
 	;;
 carnageold)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
-	old=${HALO_TEST_VITA_OLD:-$root/../wt-v110client/build/linux/halo}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
+	old=${HALO_TEST_VITA_OLD:-$data_root/wt-v110client/build/linux/halo}
 	map=${HALO_TEST_CARNAGE_MAP:-bloodgulch}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "$menus_data/maps/$map.map" ] || [ ! -x "$old" ]; then
 		echo "SKIP: no Halo PC files or $map.map in $menus_data/maps (HALO_TEST_DATA_MENUS), or no older build ($old: HALO_TEST_VITA_OLD)"; exit 0
@@ -3577,7 +3579,7 @@ carnageold)
 		fail "the joiner: an assertion, exception or crash"
 	;;
 h3liveonline)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; exit 0
 	fi
@@ -3640,7 +3642,7 @@ h3liveonline)
 	fi
 	;;
 h3online|h3pickjoin|h3onlinelan)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	# (h3pickjoin: the host stays on the map list a minute, the joiner joining its lobby meanwhile)
 	pick=5000
 	[ $mode = h3pickjoin ] && pick=${HALO_TEST_PICK_WAIT:-60000}
@@ -5846,7 +5848,7 @@ presence|presence2b)
 	# the second and the joiner only the first for PRESENCE_SPLIT seconds (30) after the start
 	# again, as two Vitas whose first brokers came at different times (1.1.2, Nov 4 2026: one
 	# of two friends showed online only after a while))
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	hc=$out/host.code jc=$out/joiner.code brokers=198.51.100.1:1883
 	if [ $mode = presence2b ]; then
 		ip addr add 198.51.100.2/32 dev lo
@@ -6059,7 +6061,7 @@ fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad)
 		# five rows of its own; Triangle's options: INVITE TO PARTY, REMOVE FRIEND, BLOCK, FILE SHARE)
 		d="down:150:500"
 		# (the Halo 3 menus with the Halo PC files, as the other h3 modes play them)
-		export HALO_TEST_DATA_JOINER=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+		export HALO_TEST_DATA_JOINER=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 		join_more="$join_more HALO_MENU_STYLE=halo3 HALO_UI_LOG=1 HALO_SCREENSHOT_DIR=$out/joiner/shots"
 		mkdir -p "$out/joiner/shots"
 		join_pad="wait:150:45000 @pre:0:300 $d $d $d $d $d $d a:150:4000 $d $d $d $d $d @00-friends:0:300 y:150:2500 @01-options:0:300"
@@ -6070,7 +6072,7 @@ fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad)
 		# its own; Triangle's options as fsbrowseui's; back to the main menu, FILE SHARE the
 		# sixth row, Start on the file saved, SEND TO A FRIEND the question's second row)
 		d="down:150:500"
-		export HALO_TEST_DATA_JOINER=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+		export HALO_TEST_DATA_JOINER=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 		join_more="$join_more HALO_UI_LOG=1 HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1 HALO_SCREENSHOT_DIR=$out/joiner/shots HALO_SCREENSHOT_EVERY=100000"
 		mkdir -p "$out/joiner/shots"
 		join_pad="wait:150:45000 $d $d $d $d a:150:4000 $d $d $d $d $d @00-friends:0:300 y:150:2500 @01-options:0:300"
@@ -6249,7 +6251,7 @@ friendsbackup)
 	;;
 hostbots)
 	most=${HALO_TEST_HOSTBOTS_MAX:-16}
-	old=${HALO_TEST_VITA_OLD:-$root/../wt-v110client/build/linux/halo}
+	old=${HALO_TEST_VITA_OLD:-$data_root/wt-v110client/build/linux/halo}
 	[ -x "$old" ] || { echo "hostbots: no 1.1.0 build at $old (HALO_TEST_VITA_OLD)"; exit 2; }
 	jc=$out/joiner.code j2c=$out/joiner2.code add=$out/joiner.add
 	(for i in $(seq 1 90); do [ -s "$j2c" ] && break; sleep 1; done
@@ -6591,7 +6593,7 @@ chat)
 	done
 	;;
 partyfollow)
-	menus_data=${HALO_TEST_DATA_MENUS:-$root/../triage/menus/data}
+	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	if [ ! -r "$menus_data/maps/bitmaps.map" ] || [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 		echo "SKIP: no Halo PC files in $menus_data/maps (HALO_TEST_DATA_MENUS) or no HALO_TEST_PROFILE"; exit 0
 	fi
@@ -6764,7 +6766,7 @@ friendsplayers|friendsplayersoff|friendsplayersnone)
 	echo "joiner's seconds with two players playing: $two"
 	[ "$two" -ge 20 ] || fail "the joiner played the host's game for $two s with two players (20 wanted)"
 	;;
-forge|forge3|forgemp|forgeold|forgeleave|forgetele|forgetouch|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|fedge)
+forge|forge3|forgemp|forgeold|forgeleave|forgeffnet|forgetele|forgetouch|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|fedge)
 	# network Forge (port/linux/game/forge_net.inc), on the host's LAN (system
 	# link): the host hosts a Forge game of Blood Gulch (the network test's
 	# host:bloodgulch:forge), the joiners join it by the System Link search;

@@ -1043,7 +1043,7 @@ legacy Vita wire's or the crossplay wire's: network_game_record.c); it is
 decoded and applied once the last piece is in */
 /* (room for a record of OpenCE's network version 35 on, 16 bytes longer:
 network_game_record_wire_size) */
-static byte network_game_client_settings_staging[HALO_PORT_NETWORK_GAME_SIZE + 16];
+static byte network_game_client_settings_staging[NETWORK_GAME_RECORD_WIRE_SIZE_MAXIMUM];
 static long network_game_client_settings_staging_size = 0;
 static struct network_game network_game_client_settings_record;
 

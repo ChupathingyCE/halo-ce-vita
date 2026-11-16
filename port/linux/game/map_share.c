@@ -1489,8 +1489,11 @@ static void map_share_join_refused(
 {
 #ifndef HALO_DEDICATED_SERVER
 	extern void menu_functions_join_refused(void);
+	/* (a party's follow: the party told, friends_game.c) */
+	extern void friends_game_join_map_refused(void);
 
 	menu_functions_join_refused();
+	friends_game_join_map_refused();
 #endif
 	return;
 }

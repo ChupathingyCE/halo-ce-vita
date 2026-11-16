@@ -1,18 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Menu style Classic+ (1.2.0 menu round 3, owner Nov 8; 1.1.3): the main menu's MEDIA (classic/main.xml)
-     in the original menus' look: File Share, Friends and the Game Manager together, as ElDewrito's
-     START > MEDIA (online/start.xml): each row opens Classic+'s own screen of it (classic/fileshare.xml,
-     friends.xml, mods.xml). (1.2.0's EXTRAS - Forge, Command, Firefight - comes with Command in 1.1.4;
-     FORGE stays the main menu's row.) The pictures and fonts are the player's own (ui.map); the heading
-     is the port's words drawn in the game's look (tools/classic_menu_art.py) -->
+<!-- Menu style Classic+ (1.2.0 menu round 3, owner Nov 8; 1.1.4, 1.1.5): the main menu's MEDIA and
+     EXTRAS (classic/main.xml) and the COMMAND and FIREFIGHT lobbies, in the original menus' look as
+     classic/forge.xml's FORGE lobby is (a cp/<name> widget stands for h3/<name> while the style is
+     Classic+: menu_tags.c menu_tags_online).
+     - MEDIA: File Share, Friends and the Game Manager together, as ElDewrito's START > MEDIA
+       (online/start.xml): each row opens Classic+'s own screen of it (classic/fileshare.xml,
+       friends.xml, mods.xml).
+     - EXTRAS: Forge, Command and Firefight, each opening its lobby as ElDewrito's main menu's
+       rows do (h3/forge/lobby, h3/command/lobby, h3/firefight/lobby: cp/forge/lobby and the two
+       below).
+     - COMMAND and FIREFIGHT: the Halo 3 set's lobbies' rows and functions (halo3/forge_lobby.xml,
+       menu_functions.c "port command lobby init", "port firefight lobby init": the rows found by
+       their names), laid out as cp/forge/lobby, sharing its rows, description panel and key.
+     The pictures and fonts are the player's own (ui.map); the headings are the port's words drawn
+     in the game's look (tools/classic_menu_art.py) -->
 <menus>
 	<bitmap name="ce/media/header_art">
 		<frame png="classic/{lang}/header_media.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="ce/modes/header_art">
+		<frame png="classic/{lang}/header_modes.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="cp/command/header_art">
+		<frame png="classic/{lang}/header_command.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="cp/firefight/header_art">
+		<frame png="classic/{lang}/header_firefight.png" width="512" height="64"/>
 	</bitmap>
 	<strings name="ce/modes_text">
 		<string text="FILE SHARE"/>
 		<string text="FRIENDS"/>
 		<string text="GAME MANAGER"/>
+		<string text="FORGE"/>
+		<string text="COMMAND"/>
+		<string text="FIREFIGHT"/>
 	</strings>
 
 	<!-- MEDIA -->
@@ -45,5 +66,147 @@
 		<child widget="cp/key/back"/>
 		<child widget="cp/key/a_butn"/>
 		<child widget="cp/key/select"/>
+	</widget>
+
+	<!-- EXTRAS -->
+	<widget name="ce/modes/header" left="35" top="11" width="512" height="64" bitmap="ce/modes/header_art"/>
+	<widget name="ce/modes/forge/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="3"/>
+	<widget name="ce/modes/forge" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" open="h3/forge/lobby"/>
+		<child widget="ce/modes/forge/row_name"/>
+	</widget>
+	<widget name="ce/modes/command/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="4"/>
+	<widget name="ce/modes/command" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" open="h3/command/lobby"/>
+		<child widget="ce/modes/command/row_name"/>
+	</widget>
+	<widget name="ce/modes/firefight/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="5"/>
+	<widget name="ce/modes/firefight" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" open="h3/firefight/lobby"/>
+		<child widget="ce/modes/firefight/row_name"/>
+	</widget>
+	<widget name="ce/modes/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<child widget="ce/modes/forge" x="51" y="78"/>
+		<child widget="ce/modes/command" x="51" y="110"/>
+		<child widget="ce/modes/firefight" x="51" y="142"/>
+	</widget>
+	<widget name="ce/modes/screen" flags="pass_unhandled_to_focused_child" bitmap="gradient">
+		<on event="b back" back="true"/>
+		<child widget="ce/modes/header"/>
+		<child widget="ce/modes/list"/>
+		<child widget="cp/key/b_butn"/>
+		<child widget="cp/key/back"/>
+		<child widget="cp/key/a_butn"/>
+		<child widget="cp/key/select"/>
+	</widget>
+
+	<!-- the COMMAND lobby: NETWORK, the map, OBJECTIVE, AI COMMANDER, SIDE, START COMMAND -->
+	<widget name="cp/command/header" left="35" top="11" width="512" height="64" bitmap="cp/command/header_art"/>
+	<!-- (OBJECTIVE and AI COMMANDER: their values too long for the row's right - TERRITORIES AND FLAG -:
+	the name above, the value under it in the small font, a taller row) -->
+	<widget name="cp/command/value_row/row_name" type="text" left="13" top="1" width="199" height="22" font="ui\large_ui" color="#FF2896FF"/>
+	<widget name="cp/command/value_row/value" type="text" left="13" top="21" width="199" height="16" font="ui\small_ui" color="#FF2896FF"/>
+	<widget name="cp/forge/objective_row" left="0" width="224" height="38" bitmap="list_item_bkd">
+		<on event="a" run="port forge command objective"/>
+		<child widget="cp/command/value_row/row_name"/>
+		<child widget="cp/command/value_row/value"/>
+	</widget>
+	<widget name="cp/forge/commander_row" left="0" width="224" height="38" bitmap="list_item_bkd">
+		<on event="a" run="port command ai level"/>
+		<child widget="cp/command/value_row/row_name"/>
+		<child widget="cp/command/value_row/value"/>
+	</widget>
+	<widget name="cp/command/side_row" left="0" width="224" height="38" bitmap="list_item_bkd">
+		<on event="a left right" run="port command side"/>
+		<child widget="cp/command/value_row/row_name"/>
+		<child widget="cp/command/value_row/value"/>
+	</widget>
+	<widget name="cp/forge/command_row/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="h3/forge_text" string_index="9"/>
+	<widget name="cp/forge/command_row" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port forge command prepare" open="h3/command/prepare/screen"/>
+		<on event="a start" run="port forge start command"/>
+		<child widget="cp/forge/command_row/row_name"/>
+	</widget>
+	<widget name="cp/command/command_live/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="h3/forge_text" string_index="9"/>
+	<widget name="cp/command/command_live" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port forge start live" open="ui\shell\main_menu\multiplayer_type_select\connected\4way_profile_select\4way_start2join_screen"/>
+		<child widget="cp/command/command_live/row_name"/>
+	</widget>
+	<widget name="cp/command/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<on event="y" open="h3/friends/screen"/>
+		<on event="left_trigger" run="port h3 invite ask" open="h3/invite/screen"/>
+		<child widget="cp/forge/network_row" x="51" y="78"/>
+		<child widget="cp/forge/map_row" x="51" y="110"/>
+		<child widget="cp/forge/objective_row" x="51" y="142"/>
+		<child widget="cp/forge/commander_row" x="51" y="182"/>
+		<child widget="cp/command/side_row" x="51" y="222"/>
+		<child widget="cp/forge/command_row" x="51" y="262"/>
+		<child widget="cp/command/command_live" x="51" y="262"/>
+	</widget>
+	<widget name="cp/command/lobby" flags="pass_unhandled_to_focused_child" bitmap="gradient">
+		<on event="created" run="port command lobby init"/>
+		<on event="b back" run="port h3 live leave"/>
+		<on event="b back" back="true"/>
+		<data input="port forge lobby"/>
+		<child widget="cp/command/header"/>
+		<child widget="cp/forge/description"/>
+		<child widget="cp/command/list"/>
+		<child widget="cp/key/b_butn"/>
+		<child widget="cp/key/back"/>
+		<child widget="cp/key/a_butn"/>
+		<child widget="cp/key/select"/>
+	</widget>
+
+	<!-- the FIREFIGHT lobby: the map, START FIREFIGHT -->
+	<widget name="cp/firefight/header" left="35" top="11" width="512" height="64" bitmap="cp/firefight/header_art"/>
+	<widget name="cp/forge/firefight_row/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="h3/forge_text" string_index="13"/>
+	<widget name="cp/forge/firefight_row" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port forge firefight prepare" open="h3/command/prepare/screen"/>
+		<on event="a start" run="port forge start firefight"/>
+		<child widget="cp/forge/firefight_row/row_name"/>
+	</widget>
+	<widget name="cp/firefight/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<on event="y" open="h3/friends/screen"/>
+		<child widget="cp/forge/map_row" x="51" y="78"/>
+		<child widget="cp/forge/firefight_row" x="51" y="110"/>
+	</widget>
+	<widget name="cp/firefight/lobby" flags="pass_unhandled_to_focused_child" bitmap="gradient">
+		<on event="created" run="port firefight lobby init"/>
+		<on event="b back" run="port h3 live leave"/>
+		<on event="b back" back="true"/>
+		<data input="port forge lobby"/>
+		<child widget="cp/firefight/header"/>
+		<child widget="cp/forge/description"/>
+		<child widget="cp/firefight/list"/>
+		<child widget="cp/key/b_butn"/>
+		<child widget="cp/key/back"/>
+		<child widget="cp/key/a_butn"/>
+		<child widget="cp/key/select"/>
+	</widget>
+
+	<!-- PREPARING COMMAND / PREPARING FIREFIGHT (START COMMAND or START FIREFIGHT before the modes' packs
+	     are built: halo3/forge_lobby.xml's h3/command/prepare/screen, the same function - port command
+	     prepare: its title and progress found by their names -) as the Xbox's own questions look: ui.map's
+	     semi_transparent_grey over the screen, alert_bkd's box, its large_ui and small_ui words -->
+	<strings name="cp/prepare_text">
+		<string text="%b-button =CANCEL"/>
+	</strings>
+	<!-- (the title's words port command prepare's each frame: PREPARING COMMAND or PREPARING FIREFIGHT; a string list's
+	     text would be copied over them at every draw) -->
+	<widget name="cp/command/prepare/title" type="text" left="56" top="160" width="528" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/command/prepare/text" type="text" left="56" top="190" width="528" height="58" font="ui\small_ui" color="#FF2896FF" string_list="h3/forge_text" string_index="11" text_flags="no_focus_test"/>
+	<widget name="cp/command/prepare/progress" type="text" left="56" top="252" width="528" height="30" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/command/prepare/keys" type="text" left="56" top="283" width="528" height="24" font="ui\large_ui" color="#FF2896FF" string_list="cp/prepare_text" string_index="0" text_flags="no_focus_test"/>
+	<widget name="cp/command/prepare/box" left="40" top="150" width="560" height="170" bitmap="ui\shell\bitmaps\alert_bkd">
+		<child widget="cp/command/prepare/title"/>
+		<child widget="cp/command/prepare/text"/>
+		<child widget="cp/command/prepare/progress"/>
+		<child widget="cp/command/prepare/keys"/>
+	</widget>
+	<widget name="cp/command/prepare/screen" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\semi_transparent_grey">
+		<on event="b back" run="port command prepare cancel"/>
+		<on event="b back" back="true"/>
+		<data input="port command prepare"/>
+		<child widget="cp/command/prepare/box"/>
 	</widget>
 </menus>

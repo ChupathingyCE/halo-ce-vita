@@ -1,0 +1,8 @@
+# Command mode's reinforcements (port/linux/game/command.c), built in memory
+# as a Command game loads, from the player's own campaign maps: the UNSC
+# Pelican and the Covenant dropship, as the campaign flies them (riders'
+# seats, the Pelican's Warthog). Nothing written anywhere.
+pack command_dropships
+map b40 b30 a50
+tag vehi vehicles\pelican\pelican
+tag vehi vehicles\c_dropship\c_dropship

@@ -211,9 +211,12 @@ What a bot does each tick, in a player's terms:
   found as each game's bots first tick, a bounded step a tick (the map's
   walkable surfaces as a graph, the AI's sight test), and logged.
 
-Skill (bots.skill): easy, normal, heroic, legendary - how soon it reacts,
-how far and how wide it sees, how large its aim error is and how fast that
-settles, how fast it turns, how tight its shots must be before it fires.
+Skill (bots.skill): easy, normal, heroic, legendary - Normal's own numbers
+scaled by the level's difficulty table as Halo CE's campaign scales its
+actors (bots_skill_normal's note): how soon it reacts, how large its aim
+error is and how fast that settles, how fast it turns, how tight its shots
+must be before it fires, its bursts and pauses, grenades and blows, and its
+damage to players and how much players' damage hurts it.
 
 Squads (port, team games: bots_squads.c): two attackers or roamers to a
 squad, on one lane; in CTF an attacker ahead of its partner holds for it
@@ -552,23 +555,189 @@ struct bots_skill_definition
 	real heal_below;
 	real heal_below_fighting;
 	real powerup_reach;
+	/* port (Nov 15 2026, Halo CE's difficulty table: bots_skill_normal's
+	note): the aim's tremble (x), a tap weapon's press interval (x, 1 or
+	more), the chance a grenade's situation is taken, the seconds between
+	throws, the seconds between blows (a soldier's; a zombie's two thirds),
+	the chance of the head with a precision weapon and of the feet with a
+	splash one, a bot's damage to a player (x) and a player's to a bot (/) */
+	real tremble_scale;
+	real tap_scale;
+	real grenade_situation_chance;
+	real grenade_rest_seconds;
+	real melee_rest_seconds;
+	real head_chance;
+	real feet_chance;
+	real damage_to_players;
+	real vitality;
 };
 
-/* (port, Oct 25 2026: jumps in a fight at every skill, a few a minute at
+/* port, Nov 15 2026 (1.1.4, StarlessLemon96: "too tough even on Easy"): the
+skills scale as Halo CE's own difficulty scales its AI. Normal is the bots'
+own (as tuned on Oct 17 and 25); Easy, Heroic and Legendary are Normal
+scaled by the difficulty table of the level's globals tag (globals\globals'
+difficulty block, game_globals.c; the campaign's actors read the same
+values: actor_combat.c, actions.c, damage.c), each value as the actors
+take it:
+- new target delay (actor_combat.c: the time before an actor fires at a
+  new target): the reaction time, x
+- burst error (the burst's origin off the target): the aim's error on
+  taking a target and how far off it still fires, x
+- projectile error (each shot's error angle): the aim's tremble, x
+- target tracking (+ the fraction of the target's motion a burst follows):
+  the turn speed x (1 + it), the aim settling / (1 + it)
+- target leading (+ the fraction of the lead taken): the lead, +
+- rate of fire: a burst's length x, a tap weapon's presses no faster than
+  the weapon and / it below 1
+- burst separation: the pause between bursts x
+- grenade chance scale and grenade timer scale (actions.c): the grenades'
+  chances x, the rest between throws x
+- melee delay scale and base (actions.c: scale x the delay + base): the
+  rest between blows
+- enemy damage, enemy vitality (damage.c: an enemy's damage to the player,
+  its body's and shield's size): a bot's damage to a player x, a player's
+  damage to a bot / (bots_damage_dealt; between bots nothing changes, as
+  the multiplayer game's rules are the same for everyone)
+What Halo CE does not change with its difficulty - how far and how wide an
+actor sees, how it moves, takes cover, jumps, goes for health - is Normal's
+at every skill. The stock globals' values (easy/normal/heroic/legendary):
+enemy damage 0.3/1/1.4/1.8, enemy vitality 0.6/1/1.2/1.4, rate of fire
+0.8/1/1.2/1.5, projectile error 0.75/1/0.8/0.5, burst error 1.25/1/0.8/0.5,
+new target delay 1.4/1/0.6/0.3, burst separation 1.2/1/0.8/0.5, target
+tracking and leading 0/0/0.2/0.4, melee delay base 1.5/0/0/0 and scale
+2/1/0.8/0.5, grenade chance scale 0.2/1/1.5/2, grenade timer scale
+1.2/1/0.8/0.5 (a map with no difficulty block takes these).
+(port, Oct 25 2026: jumps in a fight at every skill, a few a minute at
 easy - none before - and three times as often just hurt, a dodge; the
 grenades' chance is now the middle-range throw's alone, the situations'
 bots_grenade_update's. Aim and reactions as on Oct 17.)
 (port: toned down Oct 17 2026, the owner finding them too strong: each
 reacts later, its aim further off and slower to settle, leads less, fires
 looser, shorter bursts; easy, normal, heroic, legendary were 0.75/0.45/
-0.30/0.18 s, 12/7/4/2.2 degrees settling in 1.4/0.9/0.6/0.35 s) */
-static struct bots_skill_definition const bots_skills[NUMBER_OF_BOTS_SKILLS] =
+0.30/0.18 s, 12/7/4/2.2 degrees settling in 1.4/0.9/0.6/0.35 s. Until
+Nov 15 easy, heroic and legendary were tables of their own: easy 0.90 s,
+14 degrees, sight 20 units; heroic 0.42 s, 6 degrees; legendary 0.28 s,
+3.5 degrees, sight 48 units - with every bot's damage the same) */
+static char const *const bots_skill_names[NUMBER_OF_BOTS_SKILLS] = { "easy", "normal", "heroic", "legendary" };
+
+static struct bots_skill_definition const bots_skill_normal =
+	{ "normal", 0.60f, 30.0f, 110.0f, 9.5f, 1.3f, 11.0f, 2.0f, 0.5f, 0.08f, 0.12f, 7, 12, 0.50f, 0.25f, 25.0f,
+	1.0f, 1.0f, 0.55f, 5.0f, 1.0f, 0.35f, 0.5f, 1.0f, 1.0f };
+
+/* Halo CE's difficulty values the bots take (game_globals.h's), and the
+stock globals tag's, for a map whose globals has no difficulty block */
+enum
 {
-	{ "easy", 0.90f, 20.0f, 100.0f, 14.0f, 1.8f, 7.0f, 2.4f, 0.2f, 0.03f, 0.02f, 5, 16, 0.35f, 0.00f, 15.0f },
-	{ "normal", 0.60f, 30.0f, 110.0f, 9.5f, 1.3f, 11.0f, 2.0f, 0.5f, 0.08f, 0.12f, 7, 12, 0.50f, 0.25f, 25.0f },
-	{ "heroic", 0.42f, 38.0f, 130.0f, 6.0f, 0.9f, 16.0f, 1.7f, 0.65f, 0.12f, 0.18f, 9, 9, 0.65f, 0.35f, 30.0f },
-	{ "legendary", 0.28f, 48.0f, 150.0f, 3.5f, 0.6f, 24.0f, 1.4f, 0.85f, 0.18f, 0.25f, 12, 6, 0.80f, 0.45f, 40.0f },
+	_bots_difficulty_enemy_damage = 0,
+	_bots_difficulty_enemy_vitality,
+	_bots_difficulty_rate_of_fire,
+	_bots_difficulty_projectile_error,
+	_bots_difficulty_burst_error,
+	_bots_difficulty_new_target_delay,
+	_bots_difficulty_burst_separation,
+	_bots_difficulty_target_tracking,
+	_bots_difficulty_target_leading,
+	_bots_difficulty_melee_delay_base,
+	_bots_difficulty_melee_delay_scale,
+	_bots_difficulty_grenade_chance_scale,
+	_bots_difficulty_grenade_timer_scale,
+	NUMBER_OF_BOTS_DIFFICULTY_VALUES
 };
+
+static short const bots_difficulty_value_types[NUMBER_OF_BOTS_DIFFICULTY_VALUES] =
+{
+	_game_difficulty_value_enemy_damage, _game_difficulty_value_enemy_vitality, _game_difficulty_value_rate_of_fire,
+	_game_difficulty_value_projectile_error, _game_difficulty_value_burst_error, _game_difficulty_value_new_target_delay,
+	_game_difficulty_value_burst_separation, _game_difficulty_value_target_tracking, _game_difficulty_value_target_leading,
+	_game_difficulty_value_melee_delay_base, _game_difficulty_value_melee_delay_scale,
+	_game_difficulty_value_grenade_chance_scale, _game_difficulty_value_grenade_timer_scale,
+};
+
+static real const bots_difficulty_stock[NUMBER_OF_BOTS_DIFFICULTY_VALUES][NUMBER_OF_BOTS_SKILLS] =
+{
+	{ 0.3f, 1.0f, 1.4f, 1.8f }, { 0.6f, 1.0f, 1.2f, 1.4f }, { 0.8f, 1.0f, 1.2f, 1.5f }, { 0.75f, 1.0f, 0.8f, 0.5f },
+	{ 1.25f, 1.0f, 0.8f, 0.5f }, { 1.4f, 1.0f, 0.6f, 0.3f }, { 1.2f, 1.0f, 0.8f, 0.5f }, { 0.0f, 0.0f, 0.2f, 0.4f },
+	{ 0.0f, 0.0f, 0.2f, 0.4f }, { 1.5f, 0.0f, 0.0f, 0.0f }, { 2.0f, 1.0f, 0.8f, 0.5f }, { 0.2f, 1.0f, 1.5f, 2.0f },
+	{ 1.2f, 1.0f, 0.8f, 0.5f },
+};
+
+/* the skills, built from Normal and the level's table (bots_skills_build:
+a level's first use) */
+static struct bots_skill_definition bots_skills[NUMBER_OF_BOTS_SKILLS];
+static boolean bots_skills_built;
+
+/* a difficulty value of Halo CE's table: the level's globals tag's, else the
+stock one's */
+static real bots_difficulty_value(short value, short skill)
+{
+	extern real game_difficulty_value_at(short value_type, short difficulty);
+	struct game_globals *globals = scenario_get_game_globals();
+
+	if (globals && globals->difficulty_information.count > 0)
+		return game_difficulty_value_at(bots_difficulty_value_types[value], skill);
+	return bots_difficulty_stock[value][skill];
+}
+
+static void bots_skills_build(void)
+{
+	short skill;
+
+	for (skill = 0; skill < NUMBER_OF_BOTS_SKILLS; skill++)
+	{
+		struct bots_skill_definition *definition = &bots_skills[skill];
+		struct bots_skill_definition const *normal = &bots_skill_normal;
+		real tracking = MAX(bots_difficulty_value(_bots_difficulty_target_tracking, skill), 0.0f);
+		real rate_of_fire = bots_difficulty_value(_bots_difficulty_rate_of_fire, skill);
+		real burst_error = bots_difficulty_value(_bots_difficulty_burst_error, skill);
+		real vitality = bots_difficulty_value(_bots_difficulty_enemy_vitality, skill);
+
+		*definition = *normal;
+		definition->name = bots_skill_names[skill];
+		definition->reaction_seconds = normal->reaction_seconds * bots_difficulty_value(_bots_difficulty_new_target_delay, skill);
+		definition->aim_error_degrees = normal->aim_error_degrees * burst_error;
+		definition->fire_cone = normal->fire_cone * burst_error;
+		definition->tremble_scale = bots_difficulty_value(_bots_difficulty_projectile_error, skill);
+		definition->turn_degrees_per_tick = normal->turn_degrees_per_tick * (1.0f + tracking);
+		definition->aim_settle_seconds = normal->aim_settle_seconds / (1.0f + tracking);
+		definition->lead = PIN(normal->lead + bots_difficulty_value(_bots_difficulty_target_leading, skill), 0.0f, 1.0f);
+		definition->burst_ticks = (short)MAX(1, (long)(normal->burst_ticks * rate_of_fire + 0.5f));
+		definition->tap_scale = rate_of_fire > 0.0f && rate_of_fire < 1.0f ? 1.0f / rate_of_fire : 1.0f;
+		definition->pause_ticks = (short)(normal->pause_ticks * bots_difficulty_value(_bots_difficulty_burst_separation, skill) + 0.5f);
+		definition->grenade_chance = normal->grenade_chance * bots_difficulty_value(_bots_difficulty_grenade_chance_scale, skill);
+		definition->grenade_situation_chance = MIN(normal->grenade_situation_chance *
+			bots_difficulty_value(_bots_difficulty_grenade_chance_scale, skill), 1.0f);
+		definition->grenade_rest_seconds = normal->grenade_rest_seconds * bots_difficulty_value(_bots_difficulty_grenade_timer_scale, skill);
+		definition->melee_rest_seconds = normal->melee_rest_seconds * bots_difficulty_value(_bots_difficulty_melee_delay_scale, skill) +
+			bots_difficulty_value(_bots_difficulty_melee_delay_base, skill);
+		definition->head_chance = burst_error > 0.0f ? MIN(normal->head_chance / burst_error, 1.0f) : 1.0f;
+		definition->feet_chance = burst_error > 0.0f ? MIN(normal->feet_chance / burst_error, 1.0f) : 1.0f;
+		definition->damage_to_players = bots_difficulty_value(_bots_difficulty_enemy_damage, skill);
+		definition->vitality = vitality > 0.0f ? vitality : 1.0f;
+	}
+	bots_skills_built = TRUE;
+	platform_log("bots: skills from the level's difficulty table: %s",
+		scenario_get_game_globals() && scenario_get_game_globals()->difficulty_information.count > 0 ? "the globals tag's" : "the stock values");
+	for (skill = 0; skill < NUMBER_OF_BOTS_SKILLS; skill++)
+	{
+		struct bots_skill_definition const *definition = &bots_skills[skill];
+
+		platform_log("bots: skill %s: reaction %.2f s, aim error %.2f deg (tremble x%.2f, settles %.2f s), turn %.1f deg/tick, "
+			"fire cone %.2f, lead %.2f, burst %d ticks, pause %d ticks, taps x%.2f, grenades %.3f/s (situations %.2f, rest %.1f s), "
+			"blows %.2f s apart, head %.2f feet %.2f, damage to players x%.2f, players' damage to bots /%.2f",
+			definition->name, definition->reaction_seconds, definition->aim_error_degrees, definition->tremble_scale,
+			definition->aim_settle_seconds, definition->turn_degrees_per_tick, definition->fire_cone, definition->lead,
+			(int)definition->burst_ticks, (int)definition->pause_ticks, definition->tap_scale, definition->grenade_chance,
+			definition->grenade_situation_chance, definition->grenade_rest_seconds, definition->melee_rest_seconds,
+			definition->head_chance, definition->feet_chance, definition->damage_to_players, definition->vitality);
+	}
+}
+
+static struct bots_skill_definition const *bots_skill_get(short skill)
+{
+	if (!bots_skills_built)
+		bots_skills_build();
+	return &bots_skills[PIN(skill, 0, NUMBER_OF_BOTS_SKILLS - 1)];
+}
 
 /* the vehicle tag's fields a bot drives by (vehicle_definitions.h keeps the
 tag opaque; the places are those actor_moving.c's fragment pins for the
@@ -1070,6 +1239,17 @@ static struct
 		long push_seconds;
 		/* port: seconds of aim at the head, and at the feet */
 		long aim_spots[3];
+		/* port: the fights in numbers (bots_damage_dealt): ticks the bots
+		held the trigger, their hits (damage events) on other bots and on
+		players, and the damage those dealt (before shields), and the
+		players' hits and damage on bots */
+		long trigger_ticks;
+		long hits_on_bots;
+		long hits_on_players;
+		real damage_to_bots;
+		real damage_to_players;
+		long player_hits_on_bots;
+		real player_damage_to_bots;
 	} play;
 } bots_globals;
 
@@ -1252,6 +1432,55 @@ long bots_wanted_count(void)
 	return count < 0 ? 0 : count > BOTS_MAXIMUM ? BOTS_MAXIMUM : count;
 }
 
+static boolean bots_is_enemy(struct player_datum *player, struct player_datum *other);
+
+/* port: damage one player's unit deals another's (damage.c's
+object_cause_damage, a multiplayer game's, on the host: the damage before
+the shields take it): a bot's to an enemy player and a player's to an enemy
+bot scaled by the skill, and counted for the fights' numbers */
+void bots_damage_dealt(long owner_player_index, long victim_player_index, real *damage)
+{
+	boolean owner_bot, victim_bot;
+
+	if (owner_player_index == NONE || victim_player_index == NONE || owner_player_index == victim_player_index)
+		return;
+	owner_bot = bots_player_is_bot(owner_player_index) != 0;
+	victim_bot = bots_player_is_bot(victim_player_index) != 0;
+	/* (a skill's damage to a player and a player's to a bot, enemies', as
+	Halo CE's difficulty takes an enemy's damage to the player and its
+	vitality: bots_skill_normal's note; Normal's 1 and 1) */
+	if (owner_bot != victim_bot)
+	{
+		struct player_datum *owner = player_try_and_get(owner_player_index);
+		struct player_datum *victim = player_try_and_get(victim_player_index);
+
+		if (owner && victim && victim->unit_index != NONE && bots_is_enemy(owner, victim))
+		{
+			struct bots_skill_definition const *skill = bots_skill_get(bots_skill());
+
+			if (owner_bot)
+				*damage *= skill->damage_to_players;
+			else
+				*damage /= skill->vitality;
+		}
+	}
+	if (owner_bot && victim_bot)
+	{
+		bots_globals.play.hits_on_bots++;
+		bots_globals.play.damage_to_bots += *damage;
+	}
+	else if (owner_bot)
+	{
+		bots_globals.play.hits_on_players++;
+		bots_globals.play.damage_to_players += *damage;
+	}
+	else if (victim_bot)
+	{
+		bots_globals.play.player_hits_on_bots++;
+		bots_globals.play.player_damage_to_bots += *damage;
+	}
+}
+
 short bots_skill(void)
 {
 	char const *name = bots_setting_string("HALO_BOT_SKILL", "bots.skill");
@@ -1259,7 +1488,7 @@ short bots_skill(void)
 
 	for (skill = 0; skill < NUMBER_OF_BOTS_SKILLS; skill++)
 	{
-		if (!strcmp(name, bots_skills[skill].name))
+		if (!strcmp(name, bots_skill_names[skill]))
 			return skill;
 	}
 	/* (a number, 0 to 3) */
@@ -3399,6 +3628,8 @@ void bots_initialize_for_new_map(void)
 	bots_globals.turret_fire_ticks = 0;
 	bots_globals.turret_count = 0;
 	csmemset(&bots_globals.play, 0, sizeof(bots_globals.play));
+	/* (the skills from this level's difficulty table) */
+	bots_skills_built = FALSE;
 	bots_powerups.count = 0;
 	bots_powerups.found_tick = NONE;
 	bots_spawns.prepared = FALSE;
@@ -4814,7 +5045,7 @@ static boolean bots_target_score(struct bots_bot *bot, struct player_datum *play
 static long bots_find_target(struct bots_bot *bot, struct player_datum *player, struct unit_datum *unit,
 	real_point3d const *eye)
 {
-	struct bots_skill_definition const *skill = &bots_skills[bots_globals.skill];
+	struct bots_skill_definition const *skill = bots_skill_get(bots_globals.skill);
 	struct data_iterator iterator;
 	struct player_datum *other;
 	boolean hurt = game_time_get() - bot->hurt_tick < TICKS_PER_SECOND * 2;
@@ -5355,7 +5586,7 @@ be a while, as one it finds no way to (bots_search_take). TRUE while it
 goes for one */
 static boolean bots_powerup_goal(struct bots_bot *bot, struct unit_datum *unit, real_point3d const *position, boolean fighting)
 {
-	struct bots_skill_definition const *skill = &bots_skills[bots_globals.skill];
+	struct bots_skill_definition const *skill = bots_skill_get(bots_globals.skill);
 	long now = game_time_get();
 	real body = unit->object.body_vitality;
 	real heal_below, best_score = REAL_MAX;
@@ -6479,8 +6710,6 @@ and five in six): the bots were found too strong on Oct 17, and a head shot
 is a kill */
 static void bots_aim_spot(struct bots_bot *bot, struct bots_tick *tick, long target_unit_index, real_point3d *aim_point)
 {
-	static real const head_chances[NUMBER_OF_BOTS_SKILLS] = { 0.15f, 0.35f, 0.55f, 0.75f };
-	static real const feet_chances[NUMBER_OF_BOTS_SKILLS] = { 0.25f, 0.5f, 0.7f, 0.85f };
 	struct object_datum *target = object_get(target_unit_index);
 	short precision;
 
@@ -6492,13 +6721,13 @@ static void bots_aim_spot(struct bots_bot *bot, struct bots_tick *tick, long tar
 		bot->aim_spot = _bots_aim_middle;
 		precision = bots_weapon_precision(tick->weapon_index);
 		if ((precision == _bots_precision_mid || precision == _bots_precision_long) && target->object.shield_vitality <= 0.05f &&
-			bots_random_real(bot) < head_chances[bots_globals.skill])
+			bots_random_real(bot) < tick->skill->head_chance)
 		{
 			bot->aim_spot = _bots_aim_head;
 		}
 		else if ((precision == _bots_precision_heavy || bots_weapon_kind(weapon_get(tick->weapon_index)->definition_index)->splash) &&
 			target->object.parent_object_index == NONE &&
-			tick->target_distance > 5.0f && bots_random_real(bot) < feet_chances[bots_globals.skill])
+			tick->target_distance > 5.0f && bots_random_real(bot) < tick->skill->feet_chance)
 		{
 			/* (its feet seen: a ray, once a second) */
 			real_point3d feet = target->object.position;
@@ -6569,9 +6798,9 @@ static void bots_bot_fight(struct bots_bot *bot, struct bots_tick *tick)
 	horizontal = (real)sqrt(dx * dx + dy * dy);
 	/* the aim error settles while the target stays in sight, with a tremble */
 	bot->aim_error_yaw = bot->aim_error_yaw * settle +
-		bots_random_signed(bot) * skill->aim_error_degrees * 0.04f * BOTS_DEGREES;
+		bots_random_signed(bot) * skill->aim_error_degrees * skill->tremble_scale * 0.04f * BOTS_DEGREES;
 	bot->aim_error_pitch = bot->aim_error_pitch * settle +
-		bots_random_signed(bot) * skill->aim_error_degrees * 0.03f * BOTS_DEGREES;
+		bots_random_signed(bot) * skill->aim_error_degrees * skill->tremble_scale * 0.03f * BOTS_DEGREES;
 	desired_yaw = (real)atan2(dy, dx) + bot->aim_error_yaw;
 	desired_pitch = (real)atan2(dz, horizontal) + bot->aim_error_pitch;
 	turn = skill->turn_degrees_per_tick * BOTS_DEGREES;
@@ -6597,7 +6826,8 @@ static void bots_bot_fight(struct bots_bot *bot, struct bots_tick *tick)
 			if (now >= bot->burst_until_tick)
 			{
 				tick->flags |= FLAG(_unit_control_weapon_primary_trigger_bit);
-				bot->burst_until_tick = now + tap_ticks + (long)(bots_random(bot) % (1 + skill->pause_ticks / 3));
+				bot->burst_until_tick = now + (long)(tap_ticks * skill->tap_scale + 0.5f) +
+					(long)(bots_random(bot) % (1 + skill->pause_ticks / 3));
 			}
 		}
 		else if (now < bot->burst_until_tick)
@@ -6617,13 +6847,13 @@ static void bots_bot_fight(struct bots_bot *bot, struct bots_tick *tick)
 		if (tick->target_distance < 1.6f && now >= bot->melee_tick)
 		{
 			tick->flags |= FLAG(_unit_control_use_equipment_bit);
-			bot->melee_tick = now + TICKS_PER_SECOND * 2 / 3;
+			bot->melee_tick = now + (long)(TICKS_PER_SECOND * 2 / 3 * skill->melee_rest_seconds + 0.5f);
 		}
 	}
 	else if (tick->target_distance < 1.1f && now >= bot->melee_tick)
 	{
 		tick->flags |= FLAG(_unit_control_use_equipment_bit);
-		bot->melee_tick = now + TICKS_PER_SECOND;
+		bot->melee_tick = now + (long)(TICKS_PER_SECOND * skill->melee_rest_seconds + 0.5f);
 	}
 	/* (port: grenades are bots_grenade_update's, by the fight's situation) */
 	/* strafing, to a side for a while; nearer or further to keep its
@@ -6635,16 +6865,19 @@ static void bots_bot_fight(struct bots_bot *bot, struct bots_tick *tick)
 	the enemy's shields down, pushed in on */
 	if (now >= bot->strafe_until_tick)
 	{
-		static long const shortest[NUMBER_OF_BOTS_SKILLS] = { 15, 12, 9, 7 };
-		static long const spread[NUMBER_OF_BOTS_SKILLS] = { 21, 18, 15, 13 };
+		/* (Normal's at every skill: Halo CE's difficulty does not change how
+		an actor moves - bots_skill_normal's note; until Nov 15 easy to
+		legendary turned after 15/12/9/7 ticks and more 21/18/15/13, heroic
+		and up crouched an eighth of the time) */
+		long const shortest = 12, spread = 18;
 		real roll = bots_random_real(bot);
 
 		bot->strafe_sign = roll < 0.8f ? -bot->strafe_sign : bot->strafe_sign;
 		if (bot->strafe_sign == 0.0f)
 			bot->strafe_sign = 1.0f;
-		bot->strafe_until_tick = now + shortest[bots_globals.skill] + (long)(bots_random(bot) % spread[bots_globals.skill]);
+		bot->strafe_until_tick = now + shortest + (long)(bots_random(bot) % spread);
 		bot->strafe_still = bots_random_real(bot) < 0.08f;
-		bot->strafe_crouched = bots_globals.skill >= _bots_skill_heroic && bots_random_real(bot) < 0.12f;
+		bot->strafe_crouched = FALSE;
 	}
 	{
 		struct object_datum *self = tick->object;
@@ -6825,8 +7058,6 @@ static long bots_enemies_near(struct player_datum *player, long except_player_in
 the throw pressed once aimed, the aim held to the release */
 static void bots_grenade_update(struct bots_bot *bot, struct bots_tick *tick)
 {
-	static real const chances[NUMBER_OF_BOTS_SKILLS] = { 0.45f, 0.55f, 0.65f, 0.75f };
-	static long const rests[NUMBER_OF_BOTS_SKILLS] = { 5, 5, 4, 4 };
 	long now = tick->now;
 	struct unit_datum *unit = tick->unit;
 	boolean frags = unit->unit.grenade_counts[0] > 0, plasmas = unit->unit.grenade_counts[1] > 0;
@@ -6905,7 +7136,7 @@ static void bots_grenade_update(struct bots_bot *bot, struct bots_tick *tick)
 			reason = _bots_grenade_reason_range;
 		if (reason == NONE)
 			return;
-		if (reason != _bots_grenade_reason_range && bots_random_real(bot) >= chances[bots_globals.skill])
+		if (reason != _bots_grenade_reason_range && bots_random_real(bot) >= tick->skill->grenade_situation_chance)
 			return;
 		/* (a plasma for a stick and at a vehicle, else a frag first) */
 		type = (reason == _bots_grenade_reason_stick || reason == _bots_grenade_reason_vehicle) ?
@@ -6933,7 +7164,7 @@ static void bots_grenade_update(struct bots_bot *bot, struct bots_tick *tick)
 			bots_random_signed(bot) * tick->skill->aim_error_degrees * 0.4f * BOTS_DEGREES;
 		bot->grenade_pitch = bots_grenade_pitch(tick->player->unit_index, type, eye, &point) +
 			bots_random_signed(bot) * tick->skill->aim_error_degrees * 0.3f * BOTS_DEGREES;
-		bot->grenade_tick = now + TICKS_PER_SECOND * rests[bots_globals.skill];
+		bot->grenade_tick = now + (long)(TICKS_PER_SECOND * tick->skill->grenade_rest_seconds + 0.5f);
 	}
 }
 
@@ -8593,7 +8824,7 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 	long vehicle_index;
 
 	csmemset(&tick, 0, sizeof(tick));
-	tick.skill = &bots_skills[bots_globals.skill];
+	tick.skill = bots_skill_get(bots_globals.skill);
 	tick.player = player_get(bot->player_index);
 	tick.now = game_time_get();
 	tick.throttle_scale = 1.0f;
@@ -8890,6 +9121,8 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 	}
 	action->control_flags = tick.flags;
 	action->primary_trigger = TEST_FLAG(tick.flags, _unit_control_weapon_primary_trigger_bit) ? 1.0f : 0.0f;
+	if (TEST_FLAG(tick.flags, _unit_control_weapon_primary_trigger_bit))
+		bots_globals.play.trigger_ticks++;
 	bots_play_count(bot, &tick);
 	bots_bot_trace(bot, bot_index, &tick);
 	bots_profile_part(_bots_part_rest, &started);
@@ -8925,7 +9158,7 @@ static void bots_report(void)
 		return;
 	platform_log("bots: tick %ld, %ld bots (%s): %.0f us/tick (%.1f a bot), searches %ld (%ld failed, %ld short, %ld full, %ld unavoided, %ld unsmoothed, tick %.0f us, "
 		"helper %.0f us), shots %ld hit %ld, flag taken %ld (enemy stand reached %ld), ball taken %ld, kills/deaths%s", now, count,
-		bots_skills[bots_skill()].name,
+		bots_skill_names[bots_skill()],
 		(double)bots_globals.tick_us / (double)bots_globals.ticks,
 		bots_globals.bot_ticks ? (double)bots_globals.tick_us / (double)bots_globals.bot_ticks : 0.0,
 		bots_globals.searches, bots_globals.search_failures, bots_globals.search_partials, bots_globals.search_overflows,
@@ -8981,6 +9214,11 @@ static void bots_report(void)
 		bots_globals.play.goals_unreachable, bots_globals.play.fight_blocks, bots_globals.play.walk_jumps,
 		bots_globals.play.jump_shortcuts, bots_globals.play.retreats, bots_globals.play.cover_crouch_seconds,
 		bots_globals.play.push_seconds, bots_globals.play.aim_spots[_bots_aim_head], bots_globals.play.aim_spots[_bots_aim_feet]);
+	platform_log("bots: fights at tick %ld (%s): trigger held %ld ticks; hits on bots %ld (damage %.1f), on players %ld "
+		"(damage %.1f); players' hits on bots %ld (damage %.1f)", now, bots_skill_names[bots_skill()],
+		bots_globals.play.trigger_ticks, bots_globals.play.hits_on_bots, (double)bots_globals.play.damage_to_bots,
+		bots_globals.play.hits_on_players, (double)bots_globals.play.damage_to_players,
+		bots_globals.play.player_hits_on_bots, (double)bots_globals.play.player_damage_to_bots);
 	platform_log("bots: items at tick %ld: spawns %ld; gone for/taken: power weapons %ld/%ld, weapons %ld/%ld, overshield %ld/%ld, "
 		"camouflage %ld/%ld, health %ld/%ld, grenades %ld/%ld; waited for the next %ld; weapons changed for the range %ld, "
 		"the one to drop chosen %ld; grenades: behind cover %ld, a group %ld, a vehicle %ld, a carrier %ld, a stick %ld, "
