@@ -3261,7 +3261,7 @@
 "Vehicle bay" = "Hangar de vehículos"
 "Defences" = "Defensas"
 "Armory" = "Armería"
-"Spartan's secondary: switch" = "Arma secundaria del Spartan: cambiar"
+"Spartan's secondary: switch" = "Secundaria del Spartan: cambiar"
 "Spartan: %s" = "Spartan: %s"
 "Squad %d: %s" = "Escuadra %d: %s"
 "Squad %d has arrived" = "Llegó la escuadra %d"

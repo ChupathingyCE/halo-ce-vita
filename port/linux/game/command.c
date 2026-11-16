@@ -11040,6 +11040,10 @@ static void command_hud_hq(
 	command_hud_art(_command_art_panel, x, y, right, y + height, 0.92f);
 	command_hud_text(command_hud.font_title, x + 8.f, y + 4.f, right, 0, COMMAND_HUD_LIGHT, T("HQ"));
 	snprintf(text, sizeof(text), T("RESOURCES %ld"), command_globals.resources[command_globals.side]);
+	/* (a long title - Spanish's "Cuartel general" - ran into the resources:
+	the number alone then) */
+	if (command_hud_text_width(command_hud.font_title, T("HQ")) + command_hud_text_width(command_hud.font_item, text) > width - 28.f)
+		snprintf(text, sizeof(text), "%ld", command_globals.resources[command_globals.side]);
 	command_hud_text(command_hud.font_item, x, y + 7.f, right - 8.f, 1, COMMAND_HUD_ORANGE, text);
 	command_hud_art(_command_art_rule, x + 6.f, y + 27.f, right - 6.f, y + 29.f, 1.f);
 	y += 30.f;
