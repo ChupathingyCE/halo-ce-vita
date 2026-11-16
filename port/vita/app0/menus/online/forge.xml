@@ -29,9 +29,6 @@
 	<widget name="online/forge/pause/band" left="0" top="40" width="640" height="44" bitmap="online/f_header" />
 	<widget name="online/forge/browser/screen" flags="pass_unhandled_to_focused_child">
 		<on event="created" run="port forge browser init" />
-		<!-- (B on the screen itself: a screen with no B of its own is closed by B,
-		before its list sees it. B one level back - a category to the categories,
-		them closed -; Square, which opens the browser, closes it) -->
 		<on event="b" run="port forge browser back" />
 		<on event="x" run="port forge close" />
 		<child widget="online/forge/browser/panel" />
@@ -174,8 +171,8 @@
 	<widget name="online/forge/pause/title" type="text" left="36" top="59" width="540" height="26" font="online/font_item" color="#FFF4F4F4">
 		<data input="port forge title" />
 	</widget>
-	<widget name="online/forge/pause/column" left="28" top="122" width="236" height="278" bitmap="online/f_panel" />
-	<widget name="online/forge/pause/status" type="text" left="36" top="404" width="508" height="34" font="online/font_small" color="#FF9FD8FF" />
+	<widget name="online/forge/pause/column" left="28" top="122" width="236" height="288" bitmap="online/f_panel" />
+	<widget name="online/forge/pause/status" type="text" left="36" top="414" width="488" height="34" font="online/font_small" color="#FF9FD8FF" />
 	<widget name="online/forge/pause/controls_panel" left="280" top="150" width="320" height="224" bitmap="online/f_panel" />
 	<widget name="online/forge/pause/controls_caption" type="text" left="292" top="156" width="296" height="16" font="online/font_small" color="#FF9FB6CC" string_list="h3/forge_menu" string_index="6" />
 	<widget name="online/forge/pause/controls_rule" left="292" top="174" width="296" height="2" bitmap="online/f_rule" />
@@ -184,17 +181,19 @@
 	</widget>
 	<widget name="online/forge/pause/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
 		<child widget="online/forge/pause/resume" x="0" y="0" />
-		<child widget="online/forge/pause/toggle" x="0" y="22" />
-		<child widget="online/forge/pause/save" x="0" y="44" />
-		<child widget="online/forge/pause/undo" x="0" y="66" />
-		<child widget="online/forge/pause/redo" x="0" y="88" />
-		<child widget="online/forge/pause/snap" x="0" y="110" />
-		<child widget="online/forge/pause/allai" x="0" y="132" />
-		<child widget="online/forge/pause/cleardead" x="0" y="154" />
-		<child widget="online/forge/pause/clearall" x="0" y="176" />
-		<child widget="online/forge/pause/deleteall" x="0" y="198" />
-		<child widget="online/forge/pause/newround" x="0" y="220" />
-		<child widget="online/forge/pause/leave" x="0" y="242" />
+		<child widget="online/forge/pause/toggle" x="0" y="20" />
+		<child widget="online/forge/pause/save" x="0" y="40" />
+		<child widget="online/forge/pause/undo" x="0" y="60" />
+		<child widget="online/forge/pause/redo" x="0" y="80" />
+		<child widget="online/forge/pause/snap" x="0" y="100" />
+		<child widget="online/forge/pause/magnets" x="0" y="120" />
+		<child widget="online/forge/pause/nudge" x="0" y="140" />
+		<child widget="online/forge/pause/allai" x="0" y="160" />
+		<child widget="online/forge/pause/cleardead" x="0" y="180" />
+		<child widget="online/forge/pause/clearall" x="0" y="200" />
+		<child widget="online/forge/pause/deleteall" x="0" y="220" />
+		<child widget="online/forge/pause/newround" x="0" y="240" />
+		<child widget="online/forge/pause/leave" x="0" y="260" />
 	</widget>
 	<widget name="online/forge/pause/resume" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFE6ECF2" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="4">
 		<on event="a" close="all" />
@@ -214,6 +213,12 @@
 	<widget name="online/forge/pause/snap" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a left right" run="port forge snap" />
 	</widget>
+	<widget name="online/forge/pause/magnets" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a left right" run="port forge magnets" />
+	</widget>
+	<widget name="online/forge/pause/nudge" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
+		<on event="a left right" run="port forge nudge step" />
+	</widget>
 	<widget name="online/forge/pause/allai" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a left right" run="port forge all ai" />
 	</widget>
@@ -223,7 +228,6 @@
 	<widget name="online/forge/pause/clearall" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" open="h3/forge/clearai/screen" />
 	</widget>
-	<!-- (1.1.3) DELETE ALL: Halo 3's screens (halo3/forge.xml) -->
 	<widget name="online/forge/pause/deleteall" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="18">
 		<on event="a" open="h3/forge/deleteall/screen" />
 	</widget>
