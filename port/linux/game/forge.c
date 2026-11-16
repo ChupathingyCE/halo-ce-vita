@@ -5953,6 +5953,28 @@ boolean forge_monitor_active(
 	return forge_globals.active;
 }
 
+/* (1.1.4) whether the HUD leaves the Spartan's action prompt undrawn for
+local player `local_player_index`: as the monitor, the player's unit stands
+hidden where it was left, and the game still works out its action every tick
+(a weapon let go at its feet: "Hold X to pick up", a vehicle beside it:
+"enter"), but the monitor's controls never reach it - the prompt was drawn
+over the monitor's view and could not be acted on (hud.c
+hud_show_action_response). Said in the log the first frame it is left out
+and the first frame it is drawn again */
+boolean forge_monitor_hides_prompt(
+	short local_player_index)
+{
+	static boolean hidden_last;
+	boolean hidden = forge_globals.active && local_player_index == forge_globals.local_player_index;
+
+	if (hidden != hidden_last)
+	{
+		platform_log("forge: the Spartan's action prompt %s", hidden ? "not drawn for the monitor" : "drawn again");
+		hidden_last = hidden;
+	}
+	return hidden;
+}
+
 void forge_toggle_request(
 	void)
 {
@@ -7804,11 +7826,12 @@ boolean forge_command(
 		{
 			struct object_datum *unit = object_get(unit_index);
 
-			platform_log("forge: the player's unit at %.2f %.2f %.2f, %s, %s, team %d, body %.2f, shield %.2f",
+			platform_log("forge: the player's unit at %.2f %.2f %.2f, %s, %s, team %d, body %.2f, shield %.2f, action %d on #%ld",
 				unit->object.position.x, unit->object.position.y, unit->object.position.z,
 				TEST_FLAG(unit->object.damage_flags, _object_cannot_take_damage_bit) ? "unhurt" : "can be hurt",
 				TEST_FLAG(unit->object.damage_flags, _object_dead_bit) ? "dead" : "alive", unit->object.owner_team_index,
-				unit->object.body_vitality, unit->object.shield_vitality);
+				unit->object.body_vitality, unit->object.shield_vitality, player_get(player_index)->action_result,
+				(long)player_get(player_index)->action_object_index);
 		}
 		/* (an AI character finds its way on the structure's pathfinding
 		data, which a multiplayer map may lack) */
