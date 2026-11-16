@@ -423,6 +423,12 @@ The joiner never opens a connection to anything but Steam's CM/CDN for this.
   each up to the end of the run).
 - Offline: a local game with 3 bots on ws2900000002_coldsna-8866 (MCC Blood Gulch as a Workshop item): loaded from
   mods/2900000002, bots' nav built, 85 s of play, kills.
+- run_menus_test.sh h3workshoppicker (the lobby's map picker offers the Workshop map; a maps-folder file of the
+  reserved name is not listed), h3workshop (English and Spanish), h3modspicker: PASS. The settings panel's Steam
+  Workshop request opened the STEAM WORKSHOP screen over the Classic main menu. run_vita_settings_test.sh: PASS,
+  also as a Workshop build (the row). run_steam_download_test.sh: PASS (262 checks, every ws-* flow).
+  run_mcc_content_test.sh: PASS but mcccplus, whose pad meets release-1.1.4-int's new Classic+ FIREFIGHT row (not
+  this branch's change).
 
 ### 8.8 Findings of this review
 
