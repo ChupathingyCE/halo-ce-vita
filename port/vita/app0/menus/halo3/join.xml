@@ -23,12 +23,12 @@ un-readies, leaves, and with no one in goes back. The art is this folder's own. 
 
 	<!-- a player's plate: PLAYER n, the profile's colour and name between the arrows while it is
 	chosen, and what to press (port h3 join) -->
-	<widget name="h3/join/slot_title" type="text" left="10" top="6" width="200" height="20" font="h3/font_item" color="#FF9FB6CC" text_y="2"/>
+	<widget name="h3/join/slot_title" type="text" left="10" top="6" width="200" height="20" font="h3/font_item" color="#FF9AA59C" text_y="2"/>
 	<widget name="h3/join/slot_swatch" left="22" top="44" width="16" height="16" bitmap="h3/swatch"/>
 	<widget name="h3/join/slot_left" left="10" top="44" width="8" height="16" bitmap="h3/arrow_left"/>
-	<widget name="h3/join/slot_name" type="text" left="44" top="40" width="180" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1"/>
+	<widget name="h3/join/slot_name" type="text" left="44" top="40" width="180" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1"/>
 	<widget name="h3/join/slot_right" left="234" top="44" width="8" height="16" bitmap="h3/arrow_right"/>
-	<widget name="h3/join/slot_state" type="text" left="10" top="74" width="240" height="40" font="h3/font_small" color="#FFCFD9E3" text_y="1"/>
+	<widget name="h3/join/slot_state" type="text" left="10" top="74" width="240" height="40" font="h3/font_small" color="#FFB8C1B9" text_y="1"/>
 	<widget name="h3/join/slot_rule" left="0" top="30" width="252" height="2" bitmap="h3/rule"/>
 
 	<widget name="h3/join/slot_1" width="252" height="120" bitmap="h3/column">
@@ -91,10 +91,10 @@ un-readies, leaves, and with no one in goes back. The art is this folder's own. 
 		<child widget="h3/join/slot_4" x="330" y="256" controller="4"/>
 	</widget>
 
-	<widget name="h3/join/title" type="text" left="52" top="46" width="400" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/join_text" string_index="0"/>
-	<widget name="h3/join/next" type="text" left="52" top="80" width="536" height="32" font="h3/font_small" color="#FFCFD9E3" text_y="1"/>
+	<widget name="h3/join/title" type="text" left="52" top="46" width="400" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/join_text" string_index="0"/>
+	<widget name="h3/join/next" type="text" left="52" top="80" width="536" height="32" font="h3/font_small" color="#FFB8C1B9" text_y="1"/>
 	<widget name="h3/join/start_butn" left="246" top="422" width="16" height="16" bitmap="h3/glyph_start"/>
-	<widget name="h3/join/join" type="text" left="266" top="421" width="80" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/join_text" string_index="5"/>
+	<widget name="h3/join/join" type="text" left="266" top="421" width="80" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/join_text" string_index="5"/>
 
 	<widget name="h3/join/screen" flags="pass_unhandled_to_focused_child no_focused_child pass_unhandled_to_all_children">
 		<on event="created" run="clear multiplayer player joins"/>

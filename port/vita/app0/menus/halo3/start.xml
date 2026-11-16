@@ -22,22 +22,22 @@ opening its screen or the settings panel on its tab (the PS Vita's); the focused
 		<string text="ONLINE"/>
 		<string text="ADVANCED"/>
 	</strings>
-	<widget name="h3/start/friends" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="2">
+	<widget name="h3/start/friends" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="2">
 		<on event="a" open="h3/friends/screen"/>
 	</widget>
-	<widget name="h3/start/fileshare" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="3">
+	<widget name="h3/start/fileshare" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="3">
 		<on event="a" run="port fileshare enter" open="h3/fileshare/screen"/>
 	</widget>
-	<widget name="h3/start/transfers" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="4">
+	<widget name="h3/start/transfers" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="4">
 		<on event="a" run="port start panel"/>
 		<on event="a" run="port start desktop" open="h3/fileshare/screen"/>
 	</widget>
-	<widget name="h3/start/games" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="5">
+	<widget name="h3/start/games" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="5">
 		<on event="a" run="port h3 mods init" open="h3/mods/screen"/>
 	</widget>
-	<widget name="h3/start/screenshots" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FF7F8FA2" text_x="8" text_y="2" string_list="h3/start/text" string_index="6">
+	<widget name="h3/start/screenshots" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FF686E67" text_x="8" text_y="2" string_list="h3/start/text" string_index="6">
 	</widget>
-	<widget name="h3/start/news" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="7">
+	<widget name="h3/start/news" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="7">
 		<on event="a" run="port start panel"/>
 	</widget>
 	<widget name="h3/start/media_list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -54,26 +54,26 @@ opening its screen or the settings panel on its tab (the PS Vita's); the focused
 		<child widget="h3/start/screenshots" y="76"/>
 		<child widget="h3/start/news" y="95"/>
 	</widget>
-	<widget name="h3/start/controls" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="9">
+	<widget name="h3/start/controls" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="9">
 		<on event="a" run="port start panel"/>
 		<on event="a" run="port start desktop" open="ui\shell\main_menu\settings_select\player_setup\player_profile_select_screen" label="settings"/>
 	</widget>
-	<widget name="h3/start/appearance" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="10">
+	<widget name="h3/start/appearance" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="10">
 		<on event="a" open="ui\shell\main_menu\settings_select\player_setup\player_profile_select_screen" label="settings"/>
 	</widget>
-	<widget name="h3/start/graphics" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="11">
+	<widget name="h3/start/graphics" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="11">
 		<on event="a" run="port start panel"/>
 	</widget>
-	<widget name="h3/start/sound" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="12">
+	<widget name="h3/start/sound" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="12">
 		<on event="a" open="h3/sound/screen"/>
 	</widget>
-	<widget name="h3/start/interface" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="13">
+	<widget name="h3/start/interface" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="13">
 		<on event="a" run="port start panel"/>
 	</widget>
-	<widget name="h3/start/online" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="14">
+	<widget name="h3/start/online" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="14">
 		<on event="a" run="port start panel"/>
 	</widget>
-	<widget name="h3/start/advanced" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2" string_list="h3/start/text" string_index="15">
+	<widget name="h3/start/advanced" type="text" width="200" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2" string_list="h3/start/text" string_index="15">
 		<on event="a" run="port start panel"/>
 	</widget>
 	<widget name="h3/start/settings_list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -91,13 +91,13 @@ opening its screen or the settings panel on its tab (the PS Vita's); the focused
 		<child widget="h3/start/online" y="95"/>
 		<child widget="h3/start/advanced" y="114"/>
 	</widget>
-	<widget name="h3/start/tab_media" type="text" width="160" height="28" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/start/text" string_index="0"/>
-	<widget name="h3/start/tab_settings" type="text" width="200" height="28" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/start/text" string_index="1"/>
+	<widget name="h3/start/tab_media" type="text" width="160" height="28" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/start/text" string_index="0"/>
+	<widget name="h3/start/tab_settings" type="text" width="200" height="28" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/start/text" string_index="1"/>
 	<bitmap name="h3/start/tab_line">
 		<frame png="online/rule.png" width="4" height="4"/>
 	</bitmap>
 	<widget name="h3/start/tab_mark" width="150" height="3" bitmap="h3/start/tab_line"/>
-	<widget name="h3/start/desc" type="text" left="312" top="104" width="256" height="160" font="h3/font_small" color="#FFCFD9E3"/>
+	<widget name="h3/start/desc" type="text" left="312" top="104" width="256" height="160" font="h3/font_small" color="#FFB8C1B9"/>
 	<widget name="h3/start/l_butn" left="234" top="421" width="16" height="16" bitmap="h3/glyph_l"/>
 	<widget name="h3/start/r_butn" left="252" top="421" width="16" height="16" bitmap="h3/glyph_r"/>
 	<widget name="h3/start/panel" left="40" top="40" width="560" height="400" bitmap="h3/panel"/>

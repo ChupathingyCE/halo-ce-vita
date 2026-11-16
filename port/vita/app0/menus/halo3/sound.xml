@@ -10,12 +10,12 @@ PS Vita, whose settings panel's Sound has the same rows; config.toml on a PC). m
 		<string text="SOUND"/>
 		<string text="Done"/>
 	</strings>
-	<widget name="h3/sound/master" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2"/>
-	<widget name="h3/sound/music" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2"/>
-	<widget name="h3/sound/effects" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2"/>
-	<widget name="h3/sound/dialogue" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2"/>
-	<widget name="h3/sound/ambience" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2"/>
-	<widget name="h3/sound/menu_music" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFF0F4F8" text_x="8" text_y="2"/>
+	<widget name="h3/sound/master" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2"/>
+	<widget name="h3/sound/music" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2"/>
+	<widget name="h3/sound/effects" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2"/>
+	<widget name="h3/sound/dialogue" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2"/>
+	<widget name="h3/sound/ambience" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2"/>
+	<widget name="h3/sound/menu_music" type="text" width="520" height="18" bitmap="h3/row" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="2"/>
 	<widget name="h3/sound/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
 		<data input="port sound"/>
 		<on event="left" run="port sound left"/>
@@ -28,15 +28,15 @@ PS Vita, whose settings panel's Sound has the same rows; config.toml on a PC). m
 		<child widget="h3/sound/ambience" y="76"/>
 		<child widget="h3/sound/menu_music" y="95"/>
 	</widget>
-	<widget name="h3/sound/v_master" type="text" left="330" top="100" width="240" height="18" font="h3/font_item" color="#FFF0F4F8" text_y="2"/>
-	<widget name="h3/sound/v_music" type="text" left="330" top="119" width="240" height="18" font="h3/font_item" color="#FFF0F4F8" text_y="2"/>
-	<widget name="h3/sound/v_effects" type="text" left="330" top="138" width="240" height="18" font="h3/font_item" color="#FFF0F4F8" text_y="2"/>
-	<widget name="h3/sound/v_dialogue" type="text" left="330" top="157" width="240" height="18" font="h3/font_item" color="#FFF0F4F8" text_y="2"/>
-	<widget name="h3/sound/v_ambience" type="text" left="330" top="176" width="240" height="18" font="h3/font_item" color="#FFF0F4F8" text_y="2"/>
-	<widget name="h3/sound/v_menu_music" type="text" left="330" top="195" width="240" height="18" font="h3/font_item" color="#FFF0F4F8" text_y="2"/>
-	<widget name="h3/sound/title" type="text" left="60" top="50" width="400" height="28" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/sound/text" string_index="0"/>
-	<widget name="h3/sound/desc" type="text" left="68" top="232" width="500" height="80" font="h3/font_small" color="#FFCFD9E3"/>
-	<widget name="h3/sound/done" type="text" left="166" top="421" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/sound/text" string_index="1"/>
+	<widget name="h3/sound/v_master" type="text" left="330" top="100" width="240" height="18" font="h3/font_item" color="#FFEDEFEE" text_y="2"/>
+	<widget name="h3/sound/v_music" type="text" left="330" top="119" width="240" height="18" font="h3/font_item" color="#FFEDEFEE" text_y="2"/>
+	<widget name="h3/sound/v_effects" type="text" left="330" top="138" width="240" height="18" font="h3/font_item" color="#FFEDEFEE" text_y="2"/>
+	<widget name="h3/sound/v_dialogue" type="text" left="330" top="157" width="240" height="18" font="h3/font_item" color="#FFEDEFEE" text_y="2"/>
+	<widget name="h3/sound/v_ambience" type="text" left="330" top="176" width="240" height="18" font="h3/font_item" color="#FFEDEFEE" text_y="2"/>
+	<widget name="h3/sound/v_menu_music" type="text" left="330" top="195" width="240" height="18" font="h3/font_item" color="#FFEDEFEE" text_y="2"/>
+	<widget name="h3/sound/title" type="text" left="60" top="50" width="400" height="28" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/sound/text" string_index="0"/>
+	<widget name="h3/sound/desc" type="text" left="68" top="232" width="500" height="80" font="h3/font_small" color="#FFB8C1B9"/>
+	<widget name="h3/sound/done" type="text" left="166" top="421" width="70" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/sound/text" string_index="1"/>
 	<widget name="h3/sound/screen" flags="pass_unhandled_to_focused_child">
 		<on event="b back" back="true"/>
 		<child widget="h3/main/haze"/>

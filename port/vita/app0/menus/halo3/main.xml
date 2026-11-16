@@ -123,42 +123,42 @@ art is this folder's own (tools/halo3_menu_art.py). -->
 	custom maps and mods (halo3/mods.xml: off and on, details, delete), beside FILE SHARE, where
 	Halo 3 keeps the player's content; CUSTOMIZATION the player profiles' settings, the Xbox's (the
 	Halo 3 CUSTOMIZATION stands for them, halo3/customize.xml) -->
-	<widget name="h3/main/campaign" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="1">
+	<widget name="h3/main/campaign" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="1">
 		<on event="a start" open="ui\shell\main_menu\load_campaign_player_profile" label="load_campaign"/>
 	</widget>
-	<widget name="h3/main/multiplayer" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="2">
+	<widget name="h3/main/multiplayer" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="2">
 		<on event="a start" open="ui\shell\main_menu\multiplayer_type_select\multiplayer_type_select_screen" label="multiplayer"/>
 	</widget>
-	<widget name="h3/main/firefight" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="15">
+	<widget name="h3/main/firefight" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="15">
 		<on event="a start" open="h3/firefight/lobby"/>
 	</widget>
-	<widget name="h3/main/forge" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="3">
+	<widget name="h3/main/forge" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="3">
 		<on event="a start" open="h3/forge/lobby"/>
 	</widget>
-	<widget name="h3/main/fileshare" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="7">
+	<widget name="h3/main/fileshare" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="7">
 		<on event="a start" run="port fileshare enter" open="h3/fileshare/screen"/>
 	</widget>
-	<widget name="h3/main/mods" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="12">
+	<widget name="h3/main/mods" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="12">
 		<on event="a start" run="port h3 mods init" open="h3/mods/screen"/>
 	</widget>
-	<widget name="h3/main/customization" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="11">
+	<widget name="h3/main/customization" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="11">
 		<on event="a start" open="ui\shell\main_menu\settings_select\player_setup\player_profile_select_screen" label="settings"/>
 	</widget>
 	<!-- (FRIENDS: the friends list, halo3/friends.xml: codes, requests, presence, Join, Invite) -->
-	<widget name="h3/main/friends" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="13">
+	<widget name="h3/main/friends" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="13">
 		<on event="a start" open="h3/friends/screen"/>
 	</widget>
 	<!-- (1.1.4, 1.2.0's menu rework, owner Nov 5: CAMPAIGN, MULTIPLAYER, FIREFIGHT, FORGE, COMMAND, EXIT on a PC, as
 	Menu style ElDewrito's (1.1.5: FIREFIGHT); FILE SHARE, MOD MANAGER and CUSTOMIZATION under
 	Start's MEDIA | SETTINGS, FRIENDS on Triangle; the focused row's line under the column, the row last
 	focused focused again: port online main, port online main focus) -->
-	<widget name="h3/main/command" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="16">
+	<widget name="h3/main/command" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="16">
 		<on event="a start" open="h3/command/lobby"/>
 	</widget>
-	<widget name="h3/main/exit" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/main_items" string_index="17">
+	<widget name="h3/main/exit" type="text" width="190" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/main_items" string_index="17">
 		<on event="a start" open="online/exit/screen"/>
 	</widget>
-	<widget name="h3/main/row_text" type="text" left="16" top="392" width="182" height="40" font="h3/font_small" color="#FF9FB6CC" text_x="0" text_y="0"/>
+	<widget name="h3/main/row_text" type="text" left="16" top="392" width="182" height="40" font="h3/font_small" color="#FF9AA59C" text_x="0" text_y="0"/>
 	<widget name="h3/main/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
 		<on event="y" open="h3/friends/screen"/>
 		<on event="created" run="port online main focus"/>
@@ -176,9 +176,9 @@ art is this folder's own (tools/halo3_menu_art.py). -->
 	<widget name="h3/main/rule1" left="8" top="290" width="190" height="2" bitmap="h3/rule"/>
 	<widget name="h3/main/rule2" left="8" top="440" width="190" height="2" bitmap="h3/rule"/>
 	<widget name="h3/main/start_butn" left="16" top="447" width="16" height="16" bitmap="h3/glyph_start"/>
-	<widget name="h3/main/settings" type="text" left="36" top="445" width="70" height="20" font="h3/font_item" color="#FFE6ECF2" text_x="0" text_y="2" string_list="h3/main_items" string_index="4"/>
+	<widget name="h3/main/settings" type="text" left="36" top="445" width="70" height="20" font="h3/font_item" color="#FFD2D9D3" text_x="0" text_y="2" string_list="h3/main_items" string_index="4"/>
 	<widget name="h3/main/y_butn" left="112" top="447" width="16" height="16" bitmap="h3/main_glyph_triangle"/>
-	<widget name="h3/main/friends_hint" type="text" left="132" top="445" width="66" height="20" font="h3/font_item" color="#FFE6ECF2" text_x="0" text_y="2" string_list="h3/main_items" string_index="14"/>
+	<widget name="h3/main/friends_hint" type="text" left="132" top="445" width="66" height="20" font="h3/font_item" color="#FFD2D9D3" text_x="0" text_y="2" string_list="h3/main_items" string_index="14"/>
 	<!-- (Halo 3's place and size: the right half, the logo half the 640 columns wide - 38% of a
 	16:9 screen -, its top level with the column's first row; under the nameplates and the live
 	servers) -->
@@ -186,11 +186,11 @@ art is this folder's own (tools/halo3_menu_art.py). -->
 	<!-- (PC: "Halo MCC not found ..." when the game looked for the player's Halo: The Master Chief
 	Collection and found none, port h3 content notice, xbox_files.c; empty when found, set, and on
 	the PS Vita) -->
-	<widget name="h3/main/content_notice" type="text" left="289" top="440" width="340" height="34" font="h3/font_small" color="#FFC5D0DD" text_x="0" text_y="0">
+	<widget name="h3/main/content_notice" type="text" left="289" top="440" width="340" height="34" font="h3/font_small" color="#FFB0B9B1" text_x="0" text_y="0">
 		<data input="port h3 content notice"/>
 	</widget>
 	<!-- ("1 Player", "3 Players": the player and the party's members, said by port h3 party plates) -->
-	<widget name="h3/main/players" type="text" left="380" top="20" width="200" height="16" font="h3/font_small" color="#FFEEF2F6" text_x="0" text_y="0"/>
+	<widget name="h3/main/players" type="text" left="380" top="20" width="200" height="16" font="h3/font_small" color="#FFE4E8E5" text_x="0" text_y="0"/>
 	<widget name="h3/main/nameplate" type="text" left="380" top="38" width="256" height="16" bitmap="h3/nameplate" font="h3/font_small" color="#FF10220A" text_x="22" text_y="0">
 		<data input="port h3 nameplate"/>
 	</widget>
@@ -258,21 +258,21 @@ art is this folder's own (tools/halo3_menu_art.py). -->
 	</widget>
 
 	<!-- the live servers (port h3 servers: the three with the most players, hidden with none) -->
-	<widget name="h3/main/servers_label" type="text" left="380" top="62" width="256" height="16" font="h3/font_small" color="#FF9FB6CC" text_x="0" text_y="1" string_list="h3/main_items" string_index="6"/>
-	<widget name="h3/main/server_1_name" type="text" left="380" top="80" width="196" height="16" font="h3/font_small" color="#FFEEF2F6" text_x="22" text_y="1"/>
-	<widget name="h3/main/server_1_count" type="text" left="576" top="80" width="56" height="16" font="h3/font_small" color="#FFDDE6F0" align="right" text_y="1"/>
+	<widget name="h3/main/servers_label" type="text" left="380" top="62" width="256" height="16" font="h3/font_small" color="#FF9AA59C" text_x="0" text_y="1" string_list="h3/main_items" string_index="6"/>
+	<widget name="h3/main/server_1_name" type="text" left="380" top="80" width="196" height="16" font="h3/font_small" color="#FFE4E8E5" text_x="22" text_y="1"/>
+	<widget name="h3/main/server_1_count" type="text" left="576" top="80" width="56" height="16" font="h3/font_small" color="#FFC9D0CA" align="right" text_y="1"/>
 	<widget name="h3/main/server_1" left="380" top="80" width="256" height="16" bitmap="h3/server_plate">
 		<child widget="h3/main/server_1_name"/>
 		<child widget="h3/main/server_1_count"/>
 	</widget>
-	<widget name="h3/main/server_2_name" type="text" left="380" top="98" width="196" height="16" font="h3/font_small" color="#FFEEF2F6" text_x="22" text_y="1"/>
-	<widget name="h3/main/server_2_count" type="text" left="576" top="98" width="56" height="16" font="h3/font_small" color="#FFDDE6F0" align="right" text_y="1"/>
+	<widget name="h3/main/server_2_name" type="text" left="380" top="98" width="196" height="16" font="h3/font_small" color="#FFE4E8E5" text_x="22" text_y="1"/>
+	<widget name="h3/main/server_2_count" type="text" left="576" top="98" width="56" height="16" font="h3/font_small" color="#FFC9D0CA" align="right" text_y="1"/>
 	<widget name="h3/main/server_2" left="380" top="98" width="256" height="16" bitmap="h3/server_plate">
 		<child widget="h3/main/server_2_name"/>
 		<child widget="h3/main/server_2_count"/>
 	</widget>
-	<widget name="h3/main/server_3_name" type="text" left="380" top="116" width="196" height="16" font="h3/font_small" color="#FFEEF2F6" text_x="22" text_y="1"/>
-	<widget name="h3/main/server_3_count" type="text" left="576" top="116" width="56" height="16" font="h3/font_small" color="#FFDDE6F0" align="right" text_y="1"/>
+	<widget name="h3/main/server_3_name" type="text" left="380" top="116" width="196" height="16" font="h3/font_small" color="#FFE4E8E5" text_x="22" text_y="1"/>
+	<widget name="h3/main/server_3_count" type="text" left="576" top="116" width="56" height="16" font="h3/font_small" color="#FFC9D0CA" align="right" text_y="1"/>
 	<widget name="h3/main/server_3" left="380" top="116" width="256" height="16" bitmap="h3/server_plate">
 		<child widget="h3/main/server_3_name"/>
 		<child widget="h3/main/server_3_count"/>
@@ -300,9 +300,9 @@ art is this folder's own (tools/halo3_menu_art.py). -->
 	<widget name="h3/soon/strip" left="120" top="290" width="400" height="20" bitmap="h3/strip"/>
 	<widget name="h3/soon/rule" left="120" top="180" width="400" height="2" bitmap="h3/rule"/>
 	<widget name="h3/soon/b_butn" left="132" top="292" width="16" height="16" bitmap="h3/glyph_circle"/>
-	<widget name="h3/soon/back" type="text" left="152" top="291" width="120" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/main_items" string_index="10"/>
-	<widget name="h3/soon/fileshare_title" type="text" left="132" top="156" width="376" height="22" font="h3/font_title" color="#FFF2F6FA" string_list="h3/main_items" string_index="7"/>
-	<widget name="h3/soon/fileshare_text" type="text" left="132" top="194" width="376" height="80" font="h3/font_small" color="#FFCFD9E3" string_list="h3/main_items" string_index="9"/>
+	<widget name="h3/soon/back" type="text" left="152" top="291" width="120" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/main_items" string_index="10"/>
+	<widget name="h3/soon/fileshare_title" type="text" left="132" top="156" width="376" height="22" font="h3/font_title" color="#FFEDEFEE" string_list="h3/main_items" string_index="7"/>
+	<widget name="h3/soon/fileshare_text" type="text" left="132" top="194" width="376" height="80" font="h3/font_small" color="#FFB8C1B9" string_list="h3/main_items" string_index="9"/>
 	<widget name="h3/soon/fileshare" flags="pass_unhandled_to_focused_child">
 		<on event="b back" back="true"/>
 		<child widget="h3/main/haze"/>

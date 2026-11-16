@@ -32,34 +32,34 @@ functions ("port h3 lan ...", "port browser ..."). -->
 		<string text="RULES"/>
 	</strings>
 	<widget name="online/lan/haze" left="-80" top="0" width="800" height="480" bitmap="online/haze_light"/>
-	<widget name="online/lan/title" type="text" left="-60" top="10" width="400" height="34" font="online/font_header" color="#FFF2F6FA" string_list="online/browser_text" string_index="0"/>
-	<widget name="online/lan/browser_status" type="text" left="320" top="24" width="390" height="18" align="right" font="online/font_small" color="#FFC4D2E2" text_y="1"/>
+	<widget name="online/lan/title" type="text" left="-60" top="10" width="400" height="34" font="online/font_header" color="#FFEDEFEE" string_list="online/browser_text" string_index="0"/>
+	<widget name="online/lan/browser_status" type="text" left="320" top="24" width="390" height="18" align="right" font="online/font_small" color="#FFB0B9B1" text_y="1"/>
 	<widget name="online/lan/net_tab_0" left="-68" top="52" width="118" height="24" bitmap="online/tab"/>
-	<widget name="online/lan/net_label_0" type="text" left="-60" top="52" width="104" height="24" font="online/font_tab" color="#FFE8EEF6" text_y="4" string_list="online/browser_text" string_index="1"/>
+	<widget name="online/lan/net_label_0" type="text" left="-60" top="52" width="104" height="24" font="online/font_tab" color="#FFD8DED9" text_y="4" string_list="online/browser_text" string_index="1"/>
 	<widget name="online/lan/net_tab_1" left="50" top="52" width="118" height="24" bitmap="online/tab"/>
-	<widget name="online/lan/net_label_1" type="text" left="58" top="52" width="104" height="24" font="online/font_tab" color="#FFE8EEF6" text_y="4" string_list="online/browser_text" string_index="2"/>
+	<widget name="online/lan/net_label_1" type="text" left="58" top="52" width="104" height="24" font="online/font_tab" color="#FFD8DED9" text_y="4" string_list="online/browser_text" string_index="2"/>
 	<widget name="online/lan/net_tab_2" left="168" top="52" width="118" height="24" bitmap="online/tab"/>
-	<widget name="online/lan/net_label_2" type="text" left="176" top="52" width="104" height="24" font="online/font_tab" color="#FFE8EEF6" text_y="4" string_list="online/browser_text" string_index="3"/>
-	<widget name="online/lan/filter_0" type="text" left="-60" top="82" width="52" height="16" font="online/font_small" color="#FFC4D2E2" text_x="6" text_y="1" string_list="online/browser_text" string_index="4"/>
-	<widget name="online/lan/filter_1" type="text" left="-2" top="82" width="56" height="16" font="online/font_small" color="#FFC4D2E2" text_x="6" text_y="1" string_list="online/browser_text" string_index="5"/>
-	<widget name="online/lan/filter_2" type="text" left="60" top="82" width="44" height="16" font="online/font_small" color="#FFC4D2E2" text_x="6" text_y="1" string_list="online/browser_text" string_index="6"/>
-	<widget name="online/lan/filter_3" type="text" left="110" top="82" width="80" height="16" font="online/font_small" color="#FFC4D2E2" text_x="6" text_y="1" string_list="online/browser_text" string_index="7"/>
-	<widget name="online/lan/filter_4" type="text" left="196" top="82" width="56" height="16" font="online/font_small" color="#FFC4D2E2" text_x="6" text_y="1" string_list="online/browser_text" string_index="8"/>
+	<widget name="online/lan/net_label_2" type="text" left="176" top="52" width="104" height="24" font="online/font_tab" color="#FFD8DED9" text_y="4" string_list="online/browser_text" string_index="3"/>
+	<widget name="online/lan/filter_0" type="text" left="-60" top="82" width="52" height="16" font="online/font_small" color="#FFB0B9B1" text_x="6" text_y="1" string_list="online/browser_text" string_index="4"/>
+	<widget name="online/lan/filter_1" type="text" left="-2" top="82" width="56" height="16" font="online/font_small" color="#FFB0B9B1" text_x="6" text_y="1" string_list="online/browser_text" string_index="5"/>
+	<widget name="online/lan/filter_2" type="text" left="60" top="82" width="44" height="16" font="online/font_small" color="#FFB0B9B1" text_x="6" text_y="1" string_list="online/browser_text" string_index="6"/>
+	<widget name="online/lan/filter_3" type="text" left="110" top="82" width="80" height="16" font="online/font_small" color="#FFB0B9B1" text_x="6" text_y="1" string_list="online/browser_text" string_index="7"/>
+	<widget name="online/lan/filter_4" type="text" left="196" top="82" width="56" height="16" font="online/font_small" color="#FFB0B9B1" text_x="6" text_y="1" string_list="online/browser_text" string_index="8"/>
 	<widget name="online/lan/filter_bar_0" left="-60" top="81" width="52" height="18" bitmap="online/tab"/>
 	<widget name="online/lan/filter_bar_1" left="-2" top="81" width="56" height="18" bitmap="online/tab"/>
 	<widget name="online/lan/filter_bar_2" left="60" top="81" width="44" height="18" bitmap="online/tab"/>
 	<widget name="online/lan/filter_bar_3" left="110" top="81" width="80" height="18" bitmap="online/tab"/>
 	<widget name="online/lan/filter_bar_4" left="196" top="81" width="56" height="18" bitmap="online/tab"/>
 	<widget name="online/lan/band" left="-60" top="102" width="480" height="20" bitmap="online/backing"/>
-	<widget name="online/lan/header_name" type="text" left="-2" top="104" width="150" height="16" font="online/font_small" color="#FF9FB6CC" string_list="online/browser_text" string_index="9"/>
-	<widget name="online/lan/header_game" type="text" left="150" top="104" width="80" height="16" font="online/font_small" color="#FF9FB6CC" string_list="online/browser_text" string_index="10"/>
-	<widget name="online/lan/header_map" type="text" left="232" top="104" width="110" height="16" font="online/font_small" color="#FF9FB6CC" string_list="online/browser_text" string_index="11"/>
-	<widget name="online/lan/header_players" type="text" left="344" top="104" width="70" height="16" align="right" font="online/font_small" color="#FF9FB6CC" string_list="online/browser_text" string_index="12"/>
+	<widget name="online/lan/header_name" type="text" left="-2" top="104" width="150" height="16" font="online/font_small" color="#FF9AA59C" string_list="online/browser_text" string_index="9"/>
+	<widget name="online/lan/header_game" type="text" left="150" top="104" width="80" height="16" font="online/font_small" color="#FF9AA59C" string_list="online/browser_text" string_index="10"/>
+	<widget name="online/lan/header_map" type="text" left="232" top="104" width="110" height="16" font="online/font_small" color="#FF9AA59C" string_list="online/browser_text" string_index="11"/>
+	<widget name="online/lan/header_players" type="text" left="344" top="104" width="70" height="16" align="right" font="online/font_small" color="#FF9AA59C" string_list="online/browser_text" string_index="12"/>
 	<widget name="online/lan/row_badge" left="4" top="1" width="52" height="16" bitmap="h3/badge"/>
-	<widget name="online/lan/row_name" type="text" left="58" top="0" width="150" height="18" font="online/font_item" color="#FFF0F4F8" text_y="2"/>
-	<widget name="online/lan/row_game" type="text" left="210" top="0" width="80" height="18" font="online/font_small" color="#FFC4D2E2" text_y="3"/>
-	<widget name="online/lan/row_map" type="text" left="292" top="0" width="110" height="18" font="online/font_small" color="#FFC4D2E2" text_y="3"/>
-	<widget name="online/lan/row_players" type="text" left="404" top="0" width="70" height="18" align="right" font="online/font_small" color="#FFC4D2E2" text_y="3"/>
+	<widget name="online/lan/row_name" type="text" left="58" top="0" width="150" height="18" font="online/font_item" color="#FFEDEFEE" text_y="2"/>
+	<widget name="online/lan/row_game" type="text" left="210" top="0" width="80" height="18" font="online/font_small" color="#FFB0B9B1" text_y="3"/>
+	<widget name="online/lan/row_map" type="text" left="292" top="0" width="110" height="18" font="online/font_small" color="#FFB0B9B1" text_y="3"/>
+	<widget name="online/lan/row_players" type="text" left="404" top="0" width="70" height="18" align="right" font="online/font_small" color="#FFB0B9B1" text_y="3"/>
 	<widget name="online/lan/row_1" width="480" height="18" bitmap="online/item">
 		<on event="a start" run="port browser join"/>
 		<child widget="online/lan/row_badge"/>
@@ -183,27 +183,27 @@ functions ("port h3 lan ...", "port browser ..."). -->
 	<!-- the chosen game's card -->
 	<widget name="online/lan/card" left="430" top="102" width="280" height="330" bitmap="online/panel"/>
 	<widget name="online/lan/map_picture" left="440" top="110" width="140" height="114" bitmap="ui\shell\bitmaps\mp_map_grafix"/>
-	<widget name="online/lan/card_name" type="text" left="440" top="230" width="262" height="20" font="online/font_item" color="#FFF2F6FA" text_y="1"/>
-	<widget name="online/lan/card_info" type="text" left="440" top="250" width="262" height="34" font="online/font_small" color="#FFC4D2E2" text_y="1"/>
-	<widget name="online/lan/ticker_players_label" type="text" left="440" top="290" width="262" height="16" font="online/font_small" color="#FF9FB6CC" string_list="online/browser_text" string_index="12"/>
-	<widget name="online/lan/ticker_players_value" type="text" left="440" top="306" width="262" height="50" font="online/font_small" color="#FFDDE6F0"/>
-	<widget name="online/lan/ticker_rules_label" type="text" left="440" top="358" width="262" height="16" font="online/font_small" color="#FF9FB6CC" string_list="online/browser_text" string_index="19"/>
-	<widget name="online/lan/ticker_rules_value" type="text" left="440" top="374" width="262" height="50" font="online/font_small" color="#FFDDE6F0"/>
+	<widget name="online/lan/card_name" type="text" left="440" top="230" width="262" height="20" font="online/font_item" color="#FFEDEFEE" text_y="1"/>
+	<widget name="online/lan/card_info" type="text" left="440" top="250" width="262" height="34" font="online/font_small" color="#FFB0B9B1" text_y="1"/>
+	<widget name="online/lan/ticker_players_label" type="text" left="440" top="290" width="262" height="16" font="online/font_small" color="#FF9AA59C" string_list="online/browser_text" string_index="12"/>
+	<widget name="online/lan/ticker_players_value" type="text" left="440" top="306" width="262" height="50" font="online/font_small" color="#FFC9D0CA"/>
+	<widget name="online/lan/ticker_rules_label" type="text" left="440" top="358" width="262" height="16" font="online/font_small" color="#FF9AA59C" string_list="online/browser_text" string_index="19"/>
+	<widget name="online/lan/ticker_rules_value" type="text" left="440" top="374" width="262" height="50" font="online/font_small" color="#FFC9D0CA"/>
 	<!-- the foot -->
 	<widget name="online/lan/foot" left="0" top="446" width="640" height="34" bitmap="online/footer"/>
 	<widget name="online/lan/a_butn" left="-60" top="452" width="16" height="16" bitmap="h3/glyph_cross"/>
-	<widget name="online/lan/join" type="text" left="-40" top="451" width="60" height="18" font="online/font_item" color="#FFF0F4F8" text_y="1" string_list="online/browser_text" string_index="13"/>
+	<widget name="online/lan/join" type="text" left="-40" top="451" width="60" height="18" font="online/font_item" color="#FFEDEFEE" text_y="1" string_list="online/browser_text" string_index="13"/>
 	<widget name="online/lan/x_butn" left="20" top="452" width="16" height="16" bitmap="h3/glyph_square"/>
-	<widget name="online/lan/refresh" type="text" left="40" top="451" width="70" height="18" font="online/font_item" color="#FFF0F4F8" text_y="1" string_list="online/browser_text" string_index="14"/>
+	<widget name="online/lan/refresh" type="text" left="40" top="451" width="70" height="18" font="online/font_item" color="#FFEDEFEE" text_y="1" string_list="online/browser_text" string_index="14"/>
 	<widget name="online/lan/y_butn" left="114" top="452" width="16" height="16" bitmap="h3/glyph_triangle"/>
-	<widget name="online/lan/sort" type="text" left="134" top="451" width="60" height="18" font="online/font_item" color="#FFF0F4F8" text_y="1" string_list="online/browser_text" string_index="15"/>
+	<widget name="online/lan/sort" type="text" left="134" top="451" width="60" height="18" font="online/font_item" color="#FFEDEFEE" text_y="1" string_list="online/browser_text" string_index="15"/>
 	<widget name="online/lan/l_butn" left="196" top="452" width="16" height="16" bitmap="h3/glyph_l"/>
 	<widget name="online/lan/r_butn" left="214" top="452" width="16" height="16" bitmap="h3/glyph_r"/>
-	<widget name="online/lan/network" type="text" left="234" top="451" width="80" height="18" font="online/font_item" color="#FFF0F4F8" text_y="1" string_list="online/browser_text" string_index="16"/>
+	<widget name="online/lan/network" type="text" left="234" top="451" width="80" height="18" font="online/font_item" color="#FFEDEFEE" text_y="1" string_list="online/browser_text" string_index="16"/>
 	<widget name="online/lan/filter_butn" left="318" top="452" width="16" height="16" bitmap="h3/glyph_dpad_lr"/>
-	<widget name="online/lan/filter_hint" type="text" left="338" top="451" width="60" height="18" font="online/font_item" color="#FFF0F4F8" text_y="1" string_list="online/browser_text" string_index="17"/>
+	<widget name="online/lan/filter_hint" type="text" left="338" top="451" width="60" height="18" font="online/font_item" color="#FFEDEFEE" text_y="1" string_list="online/browser_text" string_index="17"/>
 	<widget name="online/lan/b_butn" left="400" top="452" width="16" height="16" bitmap="h3/glyph_circle"/>
-	<widget name="online/lan/back" type="text" left="420" top="451" width="60" height="18" font="online/font_item" color="#FFF0F4F8" text_y="1" string_list="online/browser_text" string_index="18"/>
+	<widget name="online/lan/back" type="text" left="420" top="451" width="60" height="18" font="online/font_item" color="#FFEDEFEE" text_y="1" string_list="online/browser_text" string_index="18"/>
 	<widget name="online/lan/screen" flags="pass_unhandled_to_focused_child">
 		<on event="created" run="port h3 lan init"/>
 		<on event="created" run="initialize net game server list"/>

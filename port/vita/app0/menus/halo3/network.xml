@@ -25,7 +25,7 @@ h3 lan ...", "port h3 adhoc ..."):
 	</strings>
 
 	<!-- the LAN browser -->
-	<widget name="h3/lan/lan_title" type="text" left="28" top="26" width="300" height="26" font="h3/font_title" color="#FFF2F6FA" text_y="1"/>
+	<widget name="h3/lan/lan_title" type="text" left="28" top="26" width="300" height="26" font="h3/font_title" color="#FFEDEFEE" text_y="1"/>
 	<widget name="h3/lan/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
 		<data input="port browser update"/>
 		<on event="x" run="port h3 lan refresh"/>
@@ -85,14 +85,14 @@ h3 lan ...", "port h3 adhoc ..."):
 
 	<!-- the joining dialog (multiplayer.xml's internet play dialog's look) -->
 	<widget name="h3/adhoc/joining_panel" left="120" top="160" width="400" height="150" bitmap="h3/panel"/>
-	<widget name="h3/adhoc/joining_title" type="text" left="132" top="166" width="376" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/adhoc_text" string_index="0"/>
+	<widget name="h3/adhoc/joining_title" type="text" left="132" top="166" width="376" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/adhoc_text" string_index="0"/>
 	<widget name="h3/adhoc/joining_rule" left="120" top="194" width="400" height="2" bitmap="h3/rule"/>
-	<widget name="h3/adhoc/adhoc_text" type="text" left="132" top="204" width="376" height="80" font="h3/font_small" color="#FFCFD9E3"/>
+	<widget name="h3/adhoc/adhoc_text" type="text" left="132" top="204" width="376" height="80" font="h3/font_small" color="#FFB8C1B9"/>
 	<widget name="h3/adhoc/joining_strip" left="120" top="290" width="400" height="20" bitmap="h3/strip"/>
 	<widget name="h3/adhoc/a_butn" left="132" top="292" width="16" height="16" bitmap="h3/glyph_cross"/>
-	<widget name="h3/adhoc/again" type="text" left="152" top="291" width="90" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/adhoc_text" string_index="1"/>
+	<widget name="h3/adhoc/again" type="text" left="152" top="291" width="90" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/adhoc_text" string_index="1"/>
 	<widget name="h3/adhoc/b_butn" left="250" top="292" width="16" height="16" bitmap="h3/glyph_circle"/>
-	<widget name="h3/adhoc/back" type="text" left="270" top="291" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/main_items" string_index="10"/>
+	<widget name="h3/adhoc/back" type="text" left="270" top="291" width="70" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/main_items" string_index="10"/>
 	<widget name="h3/adhoc/joining" flags="pass_unhandled_to_focused_child no_history">
 		<on event="created" run="port h3 adhoc join"/>
 		<on event="deleted" run="port h3 adhoc cancel"/>

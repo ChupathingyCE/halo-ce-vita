@@ -52,104 +52,140 @@ def alpha(value):
     return round(value * 255)
 
 
+# ElDewrito's look (Nov 2026, 1.1.3: after Halo 3's and Halo 3: ODST's own
+# menus, measured on their screens): charcoal see-through panels, the scene
+# behind graded dark and cool with a low fog, flat light-grey rules, the
+# focused row's bar the real Halo 3 bronze (the owner, Nov 2: about (100,62,30)
+# fading right to (56,41,36); not ODST's rose), fading out to
+# the right as ODST's does
+PANEL = (54, 58, 54)
+PANEL_TOP = (76, 80, 76)
+PANEL_DEEP = (30, 32, 30)
+GRADE = (6, 9, 9)
+FOG = (54, 60, 58)
+BRONZE = (118, 72, 36)
+BRONZE_MID = (100, 62, 30)
+BRONZE_END = (56, 41, 36)
+RULE = (150, 156, 150)
+
+
+def grade(width, height, ellipse=True):
+    """the cinematic grade over a menu's 3D scene (a full-screen picture: a
+    widget as wide as the 640 columns stretches over the wide screen too):
+    the scene darkened toward a cool near-black, a low fog lifting the lower
+    third toward grey, and the edges darker (a vignette)"""
+    image = Image.new('RGBA', (width, height))
+    pixels = image.load()
+    shade = Image.new('L', (width, height), 0)
+    if ellipse:
+        ImageDraw.Draw(shade).ellipse([-width * .22, -height * .30, width * 1.22, height * 1.22], fill=255)
+        shade = shade.filter(ImageFilter.GaussianBlur(max(2, width // 9)))
+    else:
+        shade = Image.new('L', (width, height), 255)
+    mask = shade.load()
+    for y in range(height):
+        t = y / max(height - 1, 1)
+        # (the fog: none above the middle, most at three quarters down)
+        fog = max(0.0, min(1.0, (t - .45) / .30)) * (1.0 - max(0.0, (t - .85) / .15) * .5)
+        colour = lerp(GRADE, FOG, fog * .55)
+        base = .68 + .05 * t
+        for x in range(width):
+            edge = 1.0 - mask[x, y] / 255.0
+            a = base + (.93 - base) * edge * .85
+            pixels[x, y] = colour + (alpha(min(a, .93)),)
+    return image
+
+
 def column():
-    # Halo 3's main-menu column: navy, a little lighter at the top
+    # the lobbies' full-height panel: charcoal, see-through, its top a
+    # little lighter
     return vertical_gradient((64, 64), [
-        (0.0, (20, 40, 78, alpha(.78))),
-        (0.6, (14, 28, 58, alpha(.84))),
-        (1.0, (8, 16, 36, alpha(.90))),
+        (0.0, PANEL_TOP + (alpha(.66),)),
+        (0.05, PANEL + (alpha(.62),)),
+        (0.7, PANEL + (alpha(.64),)),
+        (1.0, PANEL_DEEP + (alpha(.72),)),
     ])
 
 
 def menu_column():
-    # Halo 3's main-menu list panel, measured on its screen (each row's
-    # pixels just inside the panel's straight edges against those just
-    # outside, where the scene behind is alike): one dark navy tint whose
-    # opacity grows with the height, about half see-through at the first row
-    # and a quarter at the bottom - a gradient, not only the darker scene
-    # showing through; the main menu's own (the lobbies keep column())
+    # the main menu's list panel: as column(), the scene a little more
+    # through at the top
     return vertical_gradient((64, 64), [
-        (0.0, (6, 16, 42, alpha(.50))),
-        (0.6, (4, 12, 34, alpha(.64))),
-        (1.0, (2, 8, 26, alpha(.78))),
+        (0.0, PANEL_TOP + (alpha(.58),)),
+        (0.05, PANEL + (alpha(.56),)),
+        (0.6, PANEL + (alpha(.62),)),
+        (1.0, PANEL_DEEP + (alpha(.72),)),
     ])
 
 
 def haze():
-    # Halo 3's blue cast over the menu's 3D scene: full screen (a widget as
-    # wide as the 640 columns stretches over the wide screen too), deeper at
-    # the bottom
-    return vertical_gradient((64, 64), [
-        (0.0, (16, 34, 84, alpha(.50))),
-        (1.0, (8, 18, 52, alpha(.64))),
-    ])
+    # the grade over the menus' 3D scenes (the lobbies' and the pause's)
+    return grade(64, 64)
 
 
 def dim():
-    # the Halo 3 dialog's (halo3/dialog.xml): what is behind a message box or
-    # question dimmed, darker than the haze, the same blue cast
+    # the dialog's (halo3/dialog.xml): what is behind a message box or
+    # question dimmed, darker than the grade
     return vertical_gradient((64, 64), [
-        (0.0, (6, 12, 28, alpha(.66))),
-        (1.0, (2, 6, 16, alpha(.74))),
+        (0.0, (4, 6, 6, alpha(.70))),
+        (1.0, (2, 3, 3, alpha(.80))),
     ])
 
 
 def panel():
-    # the lobby and settings panel (Halo Online's window gradient)
+    # the settings and pickers' panel: the lobbies' charcoal, more opaque
     return vertical_gradient((64, 64), [
-        (0.0, (27, 41, 70, alpha(.95))),
-        (0.2, (24, 39, 69, alpha(.90))),
-        (1.0, (6, 16, 37, alpha(.90))),
+        (0.0, PANEL_TOP + (alpha(.92),)),
+        (0.08, PANEL + (alpha(.88),)),
+        (1.0, PANEL_DEEP + (alpha(.90),)),
     ])
 
 
-def custom_panel():
-    # CUSTOMIZATION's editor: the panel (as panel(), over the editor's 560x400
-    # at 40,40, stretched) with a window at the right where the scene packs'
-    # Spartan stands (the preview, 396,98 to 592,304 on the screen), rimmed
+def windowed_panel(window):
+    # panel() with a clear window, rimmed (the scene packs' Spartan stands
+    # there): window = (x0, x1, y0, y1) of 560x400
     width, height = 256, 256
-    image = vertical_gradient((width, height), [
-        (0.0, (27, 41, 70, alpha(.95))),
-        (0.2, (24, 39, 69, alpha(.90))),
-        (1.0, (6, 16, 37, alpha(.90))),
-    ])
-    x0, x1 = round(356 / 560 * width), round(552 / 560 * width)
-    y0, y1 = round(58 / 400 * height), round(264 / 400 * height)
+    image = panel().resize((width, height), Image.Resampling.BILINEAR)
+    x0, x1 = round(window[0] / 560 * width), round(window[1] / 560 * width)
+    y0, y1 = round(window[2] / 400 * height), round(window[3] / 400 * height)
     draw = ImageDraw.Draw(image)
     draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 0))
-    draw.rectangle([x0, y0, x1, y1], outline=(150, 176, 206, alpha(.45)))
+    draw.rectangle([x0, y0, x1, y1], outline=RULE + (alpha(.45),))
     return image
 
 
+def custom_panel():
+    # CUSTOMIZATION's editor: the panel (over the editor's 560x400 at 40,40,
+    # stretched) with a window at the right where the scene packs' Spartan
+    # stands (the preview, 396,98 to 592,304 on the screen), rimmed
+    return windowed_panel((356, 552, 58, 264))
+
+
 def profiles_panel():
-    # SELECT PROFILE's (and CUSTOMIZATION's list's) panel: as custom_panel(),
-    # its window at the card's lower right, where the focused profile's
-    # Spartan stands (486,146 to 592,334 on the screen), rimmed
-    width, height = 256, 256
-    image = vertical_gradient((width, height), [
-        (0.0, (27, 41, 70, alpha(.95))),
-        (0.2, (24, 39, 69, alpha(.90))),
-        (1.0, (6, 16, 37, alpha(.90))),
+    # SELECT PROFILE's (and CUSTOMIZATION's list's) panel: its window at the
+    # card's lower right (486,146 to 592,334 on the screen)
+    return windowed_panel((446, 552, 106, 294))
+
+
+def bar(width, height):
+    # the focused row's bar: bronze, brightest a little in from the left,
+    # fading to the right (ODST's shape), a faint light edge on top
+    image = horizontal_gradient((width, height), [
+        (0.0, BRONZE_MID + (alpha(.88),)),
+        (0.12, BRONZE + (255,)),
+        (0.55, BRONZE_MID + (alpha(.96),)),
+        (1.0, BRONZE_END + (alpha(.55),)),
     ])
-    x0, x1 = round(446 / 560 * width), round(552 / 560 * width)
-    y0, y1 = round(106 / 400 * height), round(294 / 400 * height)
     draw = ImageDraw.Draw(image)
-    draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 0))
-    draw.rectangle([x0, y0, x1, y1], outline=(150, 176, 206, alpha(.45)))
+    edge = max(1, height // 22)
+    draw.rectangle([0, 0, width - 1, edge - 1], fill=(255, 214, 170, alpha(.22)))
+    draw.rectangle([0, height - edge, width - 1, height - 1], fill=(20, 10, 4, alpha(.30)))
     return image
 
 
 def item_on():
-    # the main menu's selection: Halo 3's solid orange bar, a light edge on top
-    image = horizontal_gradient((128, 16), [
-        (0.0, (184, 116, 58, 255)),
-        (0.6, (168, 104, 58, 255)),
-        (1.0, (138, 90, 58, 255)),
-    ])
-    draw = ImageDraw.Draw(image)
-    draw.line([(0, 0), (127, 0)], fill=(255, 220, 180, alpha(.35)))
-    draw.line([(0, 15), (127, 15)], fill=(0, 0, 0, alpha(.35)))
-    return image
+    # the main menu's (and the lists') selection
+    return bar(128, 16)
 
 
 def item_off():
@@ -159,26 +195,23 @@ def item_off():
 
 
 def row_on():
-    # a lobby or settings row's selection: orange fading out by two thirds
-    return horizontal_gradient((128, 16), [
-        (0.0, (200, 120, 40, alpha(.55))),
-        (0.66, (200, 120, 40, 0)),
-        (1.0, (200, 120, 40, 0)),
+    # a lobby or settings row's selection: the bar, fading out further
+    image = horizontal_gradient((128, 16), [
+        (0.0, BRONZE_MID + (alpha(.85),)),
+        (0.10, BRONZE + (alpha(.92),)),
+        (0.70, BRONZE_MID + (alpha(.60),)),
+        (1.0, BRONZE_END + (alpha(.18),)),
     ])
+    return image
 
 
 def strip():
-    return Image.new('RGBA', (64, 16), (2, 5, 10, alpha(.88)))
+    return Image.new('RGBA', (64, 16), (5, 6, 6, alpha(.82)))
 
 
 def rule():
-    image = horizontal_gradient((128, 2), [
-        (0.0, (160, 180, 205, 0)),
-        (0.2, (160, 180, 205, alpha(.55))),
-        (0.8, (160, 180, 205, alpha(.55))),
-        (1.0, (160, 180, 205, 0)),
-    ])
-    return image
+    # a group's rule: flat light grey across the panel
+    return Image.new('RGBA', (128, 2), RULE + (alpha(.42),))
 
 
 def nameplate():
@@ -219,13 +252,13 @@ def nameplate_colour(colour):
 
 
 def server_plate():
-    # a live server's row: Halo 3's blue nameplate, fading out to the right
+    # a live server's row: a steel-grey plate, fading out to the right
     image = horizontal_gradient((256, 16), [
-        (0.0, (60, 110, 170, alpha(.85))),
-        (1.0, (40, 80, 130, alpha(.45))),
+        (0.0, (74, 80, 76, alpha(.85))),
+        (1.0, (52, 56, 53, alpha(.45))),
     ])
     draw = ImageDraw.Draw(image)
-    draw.rectangle([0, 0, 15, 15], fill=(25, 45, 75, alpha(.9)))
+    draw.rectangle([0, 0, 15, 15], fill=(28, 31, 29, alpha(.9)))
     draw.rectangle([0, 0, 255, 15], outline=(255, 255, 255, alpha(.25)))
     return image
 

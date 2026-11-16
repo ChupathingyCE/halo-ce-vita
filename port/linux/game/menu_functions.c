@@ -2435,14 +2435,17 @@ static void h3_scene_request(struct widget_instance *widget)
 		return;
 	char const *objects = NULL;
 
-	/* (the live backdrop, a lit level, not under the Online screens' deep
-	blue haze, which was made for ui.map's dark ring: menu_backdrop.c) */
+	/* (the haze is the ElDewrito look's cinematic grade since 1.1.3 - dark,
+	cool, a low fog, after Halo 3: ODST's menus -, made for the live
+	backdrop's lit level as much as for ui.map's ring: shown over both; it
+	was hidden over the backdrop while it was the deep blue cast made for
+	the dark ring: menu_backdrop.c) */
 	{
 		struct widget_instance *haze = named(screen, "haze");
 
 		if (haze && (!strcmp(tag_get_name(haze->definition_tag_index), "pc\\online\\main\\haze") ||
 			!strcmp(tag_get_name(haze->definition_tag_index), "pc\\h3\\main\\haze")))
-			widget_instance_set_visibility_recursive(haze, !menu_backdrop_active());
+			widget_instance_set_visibility_recursive(haze, TRUE);
 	}
 	scene = h3_scene_of(screen, name, sizeof(name), &objects);
 	if (!scene)
