@@ -729,6 +729,22 @@ static void upload(GLuint texture, GLenum target, const struct xgpu_texture_desc
 	decode_compressed = description->compressed && !xgpu_capabilities.s3tc;
 #endif
 	converted = description->compressed && !decode_compressed ? NULL : malloc(largest * sizeof(unsigned long));
+	/* (the C heap full - the Vita's fixed heap, or the harness's
+	HALO_HEAP_LIMIT_KB -: the texels cannot be converted now; the texture
+	keeps what it had (nothing, the first time) and is tried again on its
+	next change, rather than written through the NULL: a Command game on
+	Danger Canyon, Ice Fields and Death Island under the Vita's budget
+	faulted so, the 1024x256 glyph cache's 1 MB refused) */
+	if (!converted && !(description->compressed && !decode_compressed))
+	{
+		static unsigned long said;
+
+		if (said++ < 4)
+			platform_log("texture upload: no memory to convert a %lux%lux%lu texture (format %02lx, %lu KB): left as it was",
+				description->width, description->height, description->depth, (unsigned long)description->format,
+				largest * sizeof(unsigned long) / 1024);
+		return;
+	}
 	glBindTexture(target, texture);
 	xgpu_gl_state_invalidate();
 	/* the channel of the texture each channel is sampled from, set on every
@@ -873,21 +889,6 @@ GLuint xgpu_texture_get(const DWORD *resource, const D3DCOLOR *palette, GLenum *
 	unsigned long recent = bucket_index(data, format_word, size_word) % RECENT_TEXTURE_COUNT;
 	unsigned long watch_serial = memory_watch_serial();
 
-	/* (a texture with no pixels behind it - its Data 0: one the memory
-	window had no room for, or not resident - is drawn with no texture
-	rather than read from address 0: a Command game on Danger Canyon under
-	the Vita's memory budget faulted so, drawing its HUD's text) */
-	if (!data)
-	{
-		static unsigned long said;
-
-		xgpu_texture_describe(format_word, size_word, description);
-		*target = description->cube_map ? GL_TEXTURE_CUBE_MAP : description->depth > 1 ? GL_TEXTURE_3D : GL_TEXTURE_2D;
-		if (said++ < 4)
-			platform_log("texture: a %lux%lux%lu texture (format %02lx) has no pixel data: drawn with none", description->width,
-				description->height, description->depth, (unsigned long)description->format);
-		return 0;
-	}
 	if (!palettized && recent_textures[recent].entry && recent_textures[recent].data == data &&
 		recent_textures[recent].format_word == format_word && recent_textures[recent].size_word == size_word &&
 		recent_textures[recent].watch_serial == watch_serial &&
