@@ -8140,6 +8140,44 @@ void command_packs_prebuild(
 /* (a joiner of a network Command game, in its lobby: forge_net.inc) whether
 Command's packs are still being built here, and how far (0 to 100) - the
 host's start waits for them, as for a Forge game's packs */
+static boolean command_pack_pending(char const *name);
+
+/* (the settings panel's Firefight page, vita_settings.c: another ABI, plain
+types only) the mode's packs asked for if they were not yet, and how far
+their builds are: -1 when every one is ready - a game of the mode starts at
+once -, else 0 to 100 (the lobby's note says the same) */
+int command_panel_packs_progress(
+	int firefight)
+{
+	char const *const *names;
+	short count, index, building = 0, finished = 0;
+	long done_sum = 0;
+
+	command_mode_packs_get(firefight != 0, &names, &count);
+	for (index = 0; index < count; index++)
+	{
+		long done = 0;
+		short state;
+
+		if (scene_packs_status(names[index], NULL, NULL, 0) == _scene_pack_state_none)
+			scene_packs_prebuild(names[index]);
+		state = scene_packs_status(names[index], &done, NULL, 0);
+		if (command_pack_pending(names[index]))
+		{
+			building++;
+			done_sum += state == _scene_pack_state_building ? PIN(done, 0, 100) : 0;
+		}
+		else
+			finished++;
+	}
+	/* (and the Forge lobby's packs these games load) */
+	if (forge_packs_building(NULL, 0, NULL))
+		building++;
+	if (!building)
+		return -1;
+	return (int)((done_sum + 100L * finished) / (building + finished));
+}
+
 boolean command_packs_building(
 	short *percent)
 {

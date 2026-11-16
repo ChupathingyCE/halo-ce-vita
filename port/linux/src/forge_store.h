@@ -39,6 +39,10 @@ struct forge_store_entry
 	/* its records (objects), its packs */
 	short objects;
 	short packs;
+	/* (1.1.5) its FIREFIGHT zones - AI spawn zones of the hostile, of
+	Firefight's or both modes' - : a Firefight layout of the map (the
+	Firefight lobby and the panel list the map by it) */
+	short firefight_zones;
 	/* refused by the validator: listed so that it can be deleted, never
 	read further */
 	int damaged;

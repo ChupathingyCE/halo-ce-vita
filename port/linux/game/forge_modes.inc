@@ -348,8 +348,10 @@ static struct
 	short difficulty;
 	short difficulty_before;
 	/* this wave's: its enemies made, still to be made, since when one or
-	two hold out */
+	two hold out; whether a squad of it could not be made at all (no such
+	characters loaded: the mode's packs not built, or no memory for them) */
 	short wave_made;
+	boolean nothing_made;
 	long straggler_since;
 	struct forge_modes_squad squads[FORGE_MODES_MAXIMUM_SQUADS];
 	struct forge_modes_unit units[FORGE_MODES_MAXIMUM_UNITS];
@@ -922,6 +924,7 @@ static boolean forge_modes_spawn(
 	{
 		platform_log("forge modes: a squad of %s could not be made (no such characters loaded?)", composition);
 		pending->count = 0;
+		forge_modes.nothing_made = TRUE;
 		return TRUE;
 	}
 	forge_modes.squads[slot].handle = handle;
@@ -1051,6 +1054,7 @@ static void forge_modes_wave_begin(
 	short more = (short)((forge_modes.wave - 1) / 2 + (forge_modes.set - 1));
 
 	forge_modes.wave_made = 0;
+	forge_modes.nothing_made = FALSE;
 	forge_modes.straggler_since = NONE;
 	forge_modes.pending_count = 0;
 	forge_modes_queue_heavy = heavy;
@@ -1868,6 +1872,15 @@ static void forge_modes_firefight_update(
 		enemies = forge_modes_alive(FALSE);
 		if (forge_modes.pending_count > 0)
 			break;
+		/* (a wave none of whose squads could be made - the mode's packs not
+		built, or no memory for them on a Vita: 1.1.5 - is no game: said, and
+		over, rather than a round of nothing cleared) */
+		if (enemies == 0 && forge_modes.wave_made == 0 && forge_modes.nothing_made)
+		{
+			forge_modes_banner(T("No enemies could be made"), T("The mode's packs are not built, or there is no memory"), 6.f);
+			forge_modes_end(FALSE);
+			break;
+		}
 		/* (done: all dead, or one or two holding out a while) */
 		if (enemies > 0 && enemies <= 2)
 		{

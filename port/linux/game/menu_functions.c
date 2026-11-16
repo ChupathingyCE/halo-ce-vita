@@ -3215,7 +3215,65 @@ static struct
 	Command, command.c's command_net.inc) */
 	short command_network;
 	boolean command_network_set;
+	/* (1.1.5, the Firefight lobby: its maps) each map with a saved map
+	variant that has Firefight zones of its own - a Firefight layout made
+	in Forge on a map with no built-in layout -, found as the lobby opens
+	(bit = the map's index) */
+	unsigned long firefight_maps;
 } h3_forge;
+
+/* (the Firefight lobby) whether a map is one of its: a built-in Firefight
+layout, or a saved layout with Firefight zones (h3_forge.firefight_maps) */
+static boolean h3_forge_firefight_map(short map)
+{
+	return forge_modes_builtin_of(forge_map_short(map)) != NONE ||
+		(map >= 0 && map < 32 && (h3_forge.firefight_maps & (1UL << map)));
+}
+
+static void h3_forge_firefight_maps_find(void)
+{
+	static struct forge_store_entry entries[FORGE_STORE_MAXIMUM_LISTED];
+	short map;
+
+	h3_forge.firefight_maps = 0;
+	for (map = 0; map < forge_map_count() && map < 32; map++)
+	{
+		int count, index;
+
+		if (forge_modes_builtin_of(forge_map_short(map)) != NONE || forge_map_state(map, NULL, 0) == _map_check_missing)
+			continue;
+		count = forge_store_list(forge_map_short(map), entries, FORGE_STORE_MAXIMUM_LISTED);
+		for (index = 0; index < count; index++)
+		{
+			if (!entries[index].damaged && entries[index].firefight_zones > 0)
+			{
+				h3_forge.firefight_maps |= 1UL << map;
+				platform_log("menus: firefight lobby: %s has a Firefight layout of its own (%s, %d zones)", forge_map_short(map),
+					entries[index].title, (int)entries[index].firefight_zones);
+				break;
+			}
+		}
+	}
+}
+
+/* (START FIREFIGHT) a map with no built-in layout plays a layout with
+Firefight zones alone (a layout without them would get zones at the map's
+own starts: not a Firefight of anyone's making); the note says so */
+static boolean h3_forge_firefight_layout_ok(void)
+{
+	static struct forge_store_entry entries[FORGE_STORE_MAXIMUM_LISTED];
+	int count, index;
+
+	if (forge_modes_builtin_of(forge_map_short(h3_forge.map)) != NONE)
+		return TRUE;
+	count = h3_forge.variant_file[0] ? forge_store_list(forge_map_short(h3_forge.map), entries, FORGE_STORE_MAXIMUM_LISTED) : 0;
+	for (index = 0; index < count; index++)
+	{
+		if (!entries[index].damaged && !strcmp(entries[index].file_name, h3_forge.variant_file))
+			return entries[index].firefight_zones > 0;
+	}
+	return FALSE;
+}
 
 /* (1.1.5: FIREFIGHT - forge.c's forge_modes.inc; 1.1.4: COMMAND) */
 enum { H3_FORGE_MODE_FORGE, H3_FORGE_MODE_FIREFIGHT, H3_FORGE_MODE_COMMAND };
@@ -18356,6 +18414,13 @@ static boolean h3_forge_firefight_start(void)
 {
 	if (forge_map_state(h3_forge.map, h3_forge.note, sizeof(h3_forge.note)) != _map_check_playable)
 		return FALSE;
+	if (!h3_forge_firefight_layout_ok())
+	{
+		snprintf(h3_forge.note, sizeof(h3_forge.note), "%s", T("Choose a layout of this map with Firefight zones."));
+		platform_log("menus: forge lobby: START FIREFIGHT: %s has no built-in layout and the layout has no Firefight zones",
+			forge_map_short(h3_forge.map));
+		return FALSE;
+	}
 	platform_log("menus: forge lobby: START FIREFIGHT on %s%s%s", forge_map_path(h3_forge.map),
 		h3_forge.variant_file[0] ? " with the map variant " : "", h3_forge.variant_file);
 	forge_modes_game_request(FORGE_MODE_REQUEST_FIREFIGHT);
@@ -21087,7 +21152,7 @@ static int cascade_forge_groups(void)
 		/* (the Firefight lobby's: the maps with a built-in Firefight layout -
 		forge_modes.inc -, each its own and its map variants; a map variant of
 		another map is played from the Forge lobby's START FIREFIGHT) */
-		if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT && forge_modes_builtin_of(forge_map_short(map)) == NONE)
+		if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT && !h3_forge_firefight_map(map))
 			continue;
 		if (forge_map_state(map, NULL, 0) != _map_check_missing)
 			cascade_forge_maps[count++] = map;
@@ -21163,7 +21228,8 @@ static void cascade_forge_panel(struct widget_instance *screen, int group, int i
 		cascade_panel_words(screen, NULL, NULL, h3_forge.mode == H3_FORGE_MODE_COMMAND ?
 			(forge_map_short(map) && !strcmp(forge_map_short(map), "bloodgulch") ? T("Command's own layout.") :
 			T("Command mode plays on Blood Gulch for now.")) :
-			h3_forge.mode == H3_FORGE_MODE_FIREFIGHT ? T("Firefight's own layout.") :
+			h3_forge.mode == H3_FORGE_MODE_FIREFIGHT ? (forge_modes_builtin_of(forge_map_short(map)) != NONE ?
+			T("Firefight's own layout.") : T("Choose a layout of this map with Firefight zones.")) :
 			item == 0 ? T("The original map: nothing placed yet.") : NULL);
 		return;
 	}
@@ -22570,10 +22636,13 @@ boolean pc_menu_event_function_invoke(
 			h3_forge.network_set = TRUE;
 		}
 		h3_forge_lobby_initialize();
-		/* (Firefight's maps: those with a built-in layout - forge_modes.inc -;
-		another lobby's map not one of them, Blood Gulch) */
+		/* (Firefight's maps: those with a built-in layout - forge_modes.inc -,
+		or with a saved Firefight layout; another lobby's map not one of them,
+		Blood Gulch) */
+		if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT)
+			h3_forge_firefight_maps_find();
 		if (h3_forge.mode == H3_FORGE_MODE_COMMAND ||
-			(h3_forge.mode == H3_FORGE_MODE_FIREFIGHT && forge_modes_builtin_of(forge_map_short(h3_forge.map)) == NONE))
+			(h3_forge.mode == H3_FORGE_MODE_FIREFIGHT && !h3_forge_firefight_map(h3_forge.map)))
 		{
 			short map;
 

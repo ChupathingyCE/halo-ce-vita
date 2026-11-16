@@ -3507,3 +3507,11 @@
 "Firefight's own" = "El de Firefight"
 "Start Firefight" = "Empezar Firefight"
 "None of Firefight's maps is in the maps folder" = "Ningún mapa de Firefight está en la carpeta de mapas"
+# (1.1.5: Firefight's packs still being built - the panel's page and Start Firefight -; a wave none of whose squads could be made)
+"Building Firefight's Covenant... %d%%" = "Construyendo el Covenant de Firefight... %d%%"
+"Firefight's Covenant still being built: wait" = "Aún se construye el Covenant: espera un poco"
+"No enemies could be made" = "No se pudo crear ningún enemigo"
+"The mode's packs are not built, or there is no memory" = "Los paquetes del modo no están hechos, o no hay memoria"
+# (1.1.5: a Firefight layout made in Forge on a map with no built-in layout - the Firefight lobby's picker, the panel)
+"Choose a layout of this map with Firefight zones." = "Elige un diseño de este mapa con zonas de Firefight."
+"Choose a layout with Firefight zones" = "Elige un diseño con zonas de Firefight"

@@ -1560,6 +1560,11 @@ const char *forge_panel_map_short(int map_index);
 int forge_panel_map_available(int map_index);
 /* (1.1.5) whether a map has a built-in Firefight layout (forge_modes.inc) */
 int forge_panel_map_firefight(int map_index);
+/* (1.1.5, port/linux/game/command.c) Firefight's packs - its Covenant and
+the dropships, built once from the player's campaign maps - asked for, and
+how far: -1 ready, else 0 to 100 (the lobbies open PREPARING FIREFIGHT for
+this; the panel's page shows the line and Start Firefight waits) */
+int command_panel_packs_progress(int firefight);
 /* the Forge game's placed characters alive and dead (FALSE: no Forge game
 is played), and its dead or all of them cleared, at its next update */
 int forge_panel_ai_counts(int *alive, int *dead);
@@ -3834,9 +3839,28 @@ static const struct forge_store_entry *firefight_map_variant(int number, int *co
 	return found;
 }
 
-/* the Firefight maps: those with a built-in layout that are in the maps
-folder - the one chosen kept while it is, else Blood Gulch or the first -;
-the next one after map (step 1 or -1), or map itself with no other */
+/* a map with a saved layout of it that has Firefight zones (the entries
+listed, every map's): a Firefight map too, played as that layout */
+static int firefight_map_layouts(int map)
+{
+	int index, found = 0;
+
+	for (index = 0; map >= 0 && index < forge_entry_count; index++)
+		if (!forge_entries[index].damaged && forge_entries[index].firefight_zones > 0 &&
+			!strcmp(forge_entries[index].map_name, forge_panel_map_short(map)))
+			found++;
+	return found;
+}
+
+static int firefight_map_is(int map)
+{
+	return forge_panel_map_available(map) && (forge_panel_map_firefight(map) || firefight_map_layouts(map));
+}
+
+/* the Firefight maps: those with a built-in layout, or a saved Firefight
+layout, that are in the maps folder - the one chosen kept while it is, else
+Blood Gulch or the first -; the next one after map (step 1 or -1), or map
+itself with no other */
 static int firefight_map_next(int map, int step)
 {
 	int count = forge_panel_map_count();
@@ -3845,7 +3869,7 @@ static int firefight_map_next(int map, int step)
 	for (tries = 1, index = map; tries <= count; tries++)
 	{
 		index = ((map < 0 ? 0 : map) + step * tries + count * tries) % count;
-		if (forge_panel_map_available(index) && forge_panel_map_firefight(index))
+		if (firefight_map_is(index))
 			return index;
 	}
 	return map;
@@ -3855,17 +3879,13 @@ static void firefight_scan(void)
 {
 	int index, count = forge_panel_map_count();
 
-	if (firefight_map < 0 || firefight_map >= count || !forge_panel_map_available(firefight_map) ||
-		!forge_panel_map_firefight(firefight_map))
+	if (firefight_map < 0 || firefight_map >= count || !firefight_map_is(firefight_map))
 	{
 		firefight_map = -1;
 		for (index = 0; index < count; index++)
 		{
-			if (forge_panel_map_available(index) && forge_panel_map_firefight(index) &&
-				(firefight_map < 0 || !strcmp(forge_panel_map_short(index), "bloodgulch")))
-			{
+			if (firefight_map_is(index) && (firefight_map < 0 || !strcmp(forge_panel_map_short(index), "bloodgulch")))
 				firefight_map = index;
-			}
 		}
 		firefight_variant = 0;
 	}
@@ -3876,6 +3896,24 @@ static void firefight_scan(void)
 		firefight_map_variant(0, &layouts);
 		if (firefight_variant > layouts)
 			firefight_variant = 0;
+	}
+	/* (a map with no built-in layout: its first layout with Firefight zones
+	is the one, "Firefight's own" being none of its) */
+	if (firefight_map >= 0 && !forge_panel_map_firefight(firefight_map) && firefight_variant == 0)
+	{
+		int layouts = 0, number;
+
+		firefight_map_variant(0, &layouts);
+		for (number = 1; number <= layouts; number++)
+		{
+			const struct forge_store_entry *layout = firefight_map_variant(number, NULL);
+
+			if (layout && layout->firefight_zones > 0)
+			{
+				firefight_variant = number;
+				break;
+			}
+		}
 	}
 }
 
@@ -3959,7 +3997,21 @@ static void forge_start_mode(int mode)
 			set_notice("%s", T("None of Firefight's maps is in the maps folder"));
 			return;
 		}
+		/* (its packs not built yet: a game now would have no Covenant to make
+		on a Vita's memory - the builds go on, the page's line says how far) */
+		if (command_panel_packs_progress(1) >= 0)
+		{
+			set_notice("%s", T("Firefight's Covenant still being built: wait"));
+			return;
+		}
 		variant = firefight_variant ? firefight_map_variant(firefight_variant, NULL) : NULL;
+		/* (a map with no built-in layout plays a layout with Firefight zones
+		alone) */
+		if (!forge_panel_map_firefight(firefight_map) && (!variant || variant->firefight_zones <= 0))
+		{
+			set_notice("%s", T("Choose a layout with Firefight zones"));
+			return;
+		}
 		halo_forge_request_map = firefight_map;
 		halo_forge_request_network = 0;
 		snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s", variant ? variant->file_name : "");
@@ -4759,10 +4811,18 @@ static int page_lines(struct line *lines)
 	{
 		static const int firefight_lines[] = { FORGE_LINE_FIREFIGHT_MAP, FORGE_LINE_FIREFIGHT_LAYOUT, FORGE_LINE_START_FIREFIGHT };
 
+		int progress;
+
 		for (index = 0; index < (int)(sizeof(firefight_lines) / sizeof(firefight_lines[0])); index++)
 		{
 			lines[count].type = LINE_FORGE;
 			lines[count++].index = firefight_lines[index];
+		}
+		/* (its packs still being built: said, as the lobby's note says it) */
+		if ((progress = command_panel_packs_progress(1)) >= 0)
+		{
+			lines[count].type = LINE_INFO;
+			snprintf(lines[count++].text, sizeof(lines[0].text), T("Building Firefight's Covenant... %d%%"), progress);
 		}
 	}
 	if (page == PAGE_FORGE)
@@ -7132,7 +7192,12 @@ static void act(const struct setting *setting)
 		if (page == PAGE_FORGE || page == PAGE_COMMAND || page == PAGE_FIREFIGHT)
 			forge_scan();
 		if (page == PAGE_FIREFIGHT)
+		{
 			firefight_scan();
+			/* (the mode's packs begun now, at the lobby's pace: Start then
+			rarely waits) */
+			command_panel_packs_progress(1);
+		}
 		if (page == PAGE_FSFRIENDS)
 			fs_scan();
 		/* (the game looks: the page says so until it answers) */

@@ -221,6 +221,9 @@ const char *forge_panel_map_short(int map_index) { return map_index >= 0 && map_
 int forge_panel_map_available(int map_index) { return map_index == 1 || map_index == 2; }
 /* (1.1.5: Battle Creek and Blood Gulch have built-in Firefight layouts, Chill Out none) */
 int forge_panel_map_firefight(int map_index) { return map_index == 0 || map_index == 1; }
+/* (1.1.5: Firefight's packs - ready, or being built and how far) */
+static int test_firefight_packs = -1;
+int command_panel_packs_progress(int firefight) { (void)firefight; return test_firefight_packs; }
 /* (port/linux/game/map_checks.c: the map lists' looks forgotten as a map is deleted) */
 void map_checks_forget(void) { }
 /* (a Forge game played, with its placed characters alive and dead; what
@@ -3193,6 +3196,53 @@ static void test_forge_page(void)
 		halo_system_link_request = SYSTEM_LINK_REQUEST_NONE;
 		halo_forge_request_mode = 0;
 		open_panel();
+		/* (its packs still being built: the page says how far, Start Firefight waits) */
+		test_firefight_packs = 40;
+		check(to_tab("Game") && open_page("Firefight") && strstr(menu, "\n\x04" "Building Firefight's Covenant... 40%\n") && menu_fits(),
+			"Firefight's packs being built: the page's line, 40%");
+		to_line("Start Firefight");
+		press(VITA_BUTTON_CROSS);
+		check(halo_system_link_request == SYSTEM_LINK_REQUEST_NONE && panel_open &&
+			strstr(menu, "Firefight's Covenant still being built: wait"), "Start Firefight while they build: not started, the notice");
+		test_firefight_packs = -1;
+		press(VITA_BUTTON_CIRCLE);
+		/* (a saved layout of Chill Out with Firefight zones: Chill Out a Firefight map too, that layout its first -
+		"Firefight's own" is none of a map's with no built-in layout) */
+		{
+			int entry_index;
+
+			for (entry_index = 0; entry_index < test_forge_count; entry_index++)
+				if (!strcmp(test_forge_entries[entry_index].file_name, "cold.hmv"))
+					test_forge_entries[entry_index].firefight_zones = 3;
+		}
+		check(to_tab("Game") && open_page("Firefight") && !strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Blood Gulch >"),
+			"a Chill Out layout with Firefight zones: Map offers another");
+		to_line("Map");
+		press(VITA_BUTTON_RIGHT);
+		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Chill Out >") &&
+			!strncmp(menu_line(3, line, sizeof(line)), "Layout\x02< Cold", 13), "Map: right, Chill Out; Layout: Cold, the layout with zones");
+		to_line("Start Firefight");
+		press(VITA_BUTTON_CROSS);
+		check(halo_system_link_request == SYSTEM_LINK_REQUEST_FORGE && halo_forge_request_map == 2 &&
+			halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT && !strcmp(halo_forge_request_variant, "cold.hmv"),
+			"Start Firefight: Chill Out, its layout Cold");
+		halo_system_link_request = SYSTEM_LINK_REQUEST_NONE;
+		halo_forge_request_mode = 0;
+		open_panel();
+		check(to_tab("Game") && open_page("Firefight"), "the Firefight page again");
+		to_line("Layout");
+		press(VITA_BUTTON_LEFT);
+		check(!strncmp(menu_line(3, line, sizeof(line)), "Layout\x02< Cold", 13),
+			"Layout: left keeps Cold (Firefight's own is none of a map's with no built-in layout)");
+		{
+			int entry_index;
+
+			for (entry_index = 0; entry_index < test_forge_count; entry_index++)
+				test_forge_entries[entry_index].firefight_zones = 0;
+		}
+		to_line("Map");
+		press(VITA_BUTTON_LEFT);
+		press(VITA_BUTTON_CIRCLE);
 		vita_settings_set("HALO_MENU_STYLE", saved);
 		press(VITA_BUTTON_R);
 		press(VITA_BUTTON_L);
