@@ -1953,6 +1953,14 @@ e8a6f851, network version 44, a black box):
 | `crossfuzzclient` (an ASan twin build against a live 44 host) | Not run in this lane: the next step |
 | `tools/vita_abi_check.py`; Vita `--lto off --pgo off --portable --release`, `ninja vita` | 0 unsafe declarations (638 units); eboot.bin and halo.vpk built, network_epoch.o in them |
 
+### 10.16 Steam Workshop multiplayer maps and the wires (Nov 16 2026, feat/11x-steam-workshop-mp)
+
+No wire change: a Workshop map is named `levels\test\ws<id>_<map>\...` in the existing game settings field and its
+copy is the existing map version (docs/steam_download_security.md section 8). Older Vita/PC builds of ours see a
+custom map they lack and are refused by the host's map share ("not shared"); OpenCE and ChupathingyCE clients (an
+Everyone game) see a map they lack and our host serves no map share on that wire. Chupathingy's Workshop scheme (an
+item id in the map name's tail) is not read or sent. Tests: run_netns_online_test.sh workshop*, net fuzz `workshop`.
+
 ## 11. Licensing and credit
 
 **Licences:**

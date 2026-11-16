@@ -331,6 +331,19 @@
 #   h3coopguide  the settings panel's Host co-op campaign
 #            (HALO_SYSTEM_LINK_TEST=campaign): the Campaign screen opens, the
 #            Halo 3 campaign lobby behind it set to SYSTEM LINK CO-OP
+#   h3steam  GAME MANAGER's DOWNLOAD FROM STEAM (menus/halo3/steam.xml; port/steamdl) against
+#            steam_fake_server.py on 127.0.0.1 (a test build alone: configure.py --steam-test-ca;
+#            else SKIP - a game build never takes a test server): the row after Halo CE opens the
+#            screen, SIGN IN (the sound banks on, the default): the QR, the fake's approval, the
+#            progress, the end (Halo CE's made-up files in the case's own folder, revoked and logged
+#            off), Circle back; with HALO_TEST_SHOTS, each screen's picture (HALO_TEST_STEAM_SPANISH=1:
+#            in Spanish, the Vita's buttons)
+#   h3workshop  DOWNLOAD FROM STEAM's STEAM WORKSHOP (menus/halo3/workshop.xml; port/steamdl/steam_workshop.c)
+#            against steam_fake_server.py (a Steam Workshop test build alone: configure.py --steam-workshop
+#            --steam-test-ca; else SKIP): the screen, SIGN IN, the QR, the list (page 1, page 2, a search typed,
+#            the order changed), two items marked and downloaded, then installed by the game's own map check
+#            (2900000001's map a real MCC map of this PC - HALO_TEST_WORKSHOP_MAP, default MCC's chillout.map;
+#            else SKIP - taken; 2900000008's made-up map refused), revoked and logged off, no token written
 #   h3mods   the Halo 3 MOD MANAGER (menus/halo3/mods.xml, the main menu's) over
 #            content made at test time (mods_data: a modded Xbox map made from
 #            Blood Gulch, a corrupt file, a Custom Edition header with nothing
@@ -361,6 +374,11 @@
 #            picker (the list START GAME hosts from) leaves it out; again with
 #            it off (HALO_MAPS_DISABLED) and turned on in MOD MANAGER: the
 #            picker offers it
+#   h3workshoppicker  h3modspicker's walk with a Steam Workshop item's multiplayer map in the mods
+#            folder (mods/2900000002/maps, MCC's Blood Gulch of this PC as the item's file
+#            coldsnapextended.map, its halo1/maps/bitmaps.map beside: a Workshop build alone):
+#            the lobby's map picker offers it as ws2900000002_coldsna-8866, with mygulch (15 maps,
+#            2 custom), MCC mods off; the maps folder's own file of that reserved name is not listed
 #   h3games  GAME MANAGER's GAMES tab (its first; START > MEDIA > GAME MANAGER): Halo
 #            CE checked over the made-up maps folder (installed from the Xbox's
 #            files, a broken map found), Triangle the details, Square nothing (no
@@ -489,7 +507,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3workshop h3workshoppicker h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -2330,6 +2348,97 @@ for case in $cases; do
 			fail h3coopguide "the request did not open the Campaign screen"
 		grep -aq "menus: h3 campaign: network SYSTEM LINK CO-OP (host co-op campaign)" "$log" ||
 			fail h3coopguide "the lobby was not set to co-op" ;;
+	h3steam)
+		if ! grep -aq "HALO_STEAM_TEST_CM" "$binary"; then
+			echo "--- h3steam"; echo "SKIP (h3steam): not a Steam test build (configure.py --steam-test-ca)"
+			continue
+		fi
+		mkdir -p "$out/h3steam-fake"
+		rm -f "$out/h3steam-fake/stdin"; mkfifo "$out/h3steam-fake/stdin"
+		python3 -I "$here/steam_fake_server.py" --work "$out/h3steam-fake" --mode slow < "$out/h3steam-fake/stdin" \
+			> "$out/h3steam-fake/server.json" &
+		fake_pid=$!
+		exec 7> "$out/h3steam-fake/stdin"
+		for i in $(seq 50); do [ -s "$out/h3steam-fake/server.json" ] && break; sleep 0.1; done
+		fake_cm=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cm"])' "$out/h3steam-fake/server.json")
+		fake_cdn=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cdn"])' "$out/h3steam-fake/server.json")
+		fake_token=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$out/h3steam-fake/server.json")
+		# (GAME MANAGER as h3games opens it; down to the row after Halo CE, A: the screen; down to SIGN IN, A;
+		# the download; Circle back. HALO_TEST_SHOTS=DIR: steam_notice/qr/progress/done.bmp under DIR/h3steam)
+		mods_data "$out/h3mods-data"
+		run h3steam "$out/h3mods-data" 75 "$h3gmpad down:150:500 a wait:150:3000 @steam_notice wait:150:1000 down:150:500 a wait:150:1200 @steam_qr wait:150:12000 @steam_progress wait:150:25000 @steam_done wait:150:1000 b wait:150:3000" \
+			HALO_MENU_STYLE=halo3 HALO_STEAM_TEST_CM="ws://127.0.0.1:$fake_cm/cmsocket/" \
+			HALO_STEAM_TEST_CDN="http://127.0.0.1:$fake_cdn" HALO_STEAM_TEST_ROOT="$out/h3steam/card" \
+			${HALO_TEST_STEAM_SPANISH:+HALO_LANGUAGE=es "HALO_TEST_LANG_DIR=$root/port/vita/app0/lang" HALO_BUTTON_ICONS=playstation}
+		exec 7>&-
+		wait "$fake_pid" 2>/dev/null || true
+		check_h3 h3steam halo3
+		log=$out/h3steam/run.log
+		grep -aq "ui: screen pc.h3.steam.screen" "$log" || fail h3steam "DOWNLOAD FROM STEAM did not open"
+		grep -aq "menus: steam: sign-in begun (games 3)" "$log" || fail h3steam "the sign-in did not begin for Halo CE with the banks"
+		grep -aq "steam job: QR 1 up" "$log" || fail h3steam "no QR"
+		grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log" ||
+			fail h3steam "the download did not end done, revoked and logged off"
+		[ "$(find "$out/h3steam/card/haloce-vita/mcc/halo1" -type f 2>/dev/null | wc -l)" = 23 ] ||
+			fail h3steam "not the 23 made-up Halo CE files"
+		grep -aqF "$fake_token" "$log" && fail h3steam "the token is in the log"
+		grep -raqF "$fake_token" "$out/h3steam/card" && fail h3steam "the token is in a file written"
+		;;
+	h3workshop)
+		ws_map=${HALO_TEST_WORKSHOP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/chillout.map}
+		if ! grep -aq "port h3 workshop" "$binary" || ! grep -aq "HALO_STEAM_TEST_CM" "$binary"; then
+			echo "--- h3workshop"; echo "SKIP (h3workshop): not a Steam Workshop test build (configure.py --steam-workshop --steam-test-ca)"
+			continue
+		fi
+		if [ ! -f "$ws_map" ]; then
+			echo "--- h3workshop"; echo "SKIP (h3workshop): no MCC map to serve (HALO_TEST_WORKSHOP_MAP)"
+			continue
+		fi
+		mkdir -p "$out/h3workshop-fake"
+		rm -f "$out/h3workshop-fake/stdin"; mkfifo "$out/h3workshop-fake/stdin"
+		python3 -I "$here/steam_fake_server.py" --work "$out/h3workshop-fake" --chunk-kb 1024 --workshop-map "$ws_map" \
+			< "$out/h3workshop-fake/stdin" > "$out/h3workshop-fake/server.json" &
+		fake_pid=$!
+		exec 7> "$out/h3workshop-fake/stdin"
+		for i in $(seq 300); do [ -s "$out/h3workshop-fake/server.json" ] && break; sleep 0.1; done
+		fake_cm=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cm"])' "$out/h3workshop-fake/server.json")
+		fake_cdn=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cdn"])' "$out/h3workshop-fake/server.json")
+		fake_token=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$out/h3workshop-fake/server.json")
+		# (GAME MANAGER; the row after Halo CE: DOWNLOAD FROM STEAM; down twice to STEAM WORKSHOP, A; SIGN IN, A;
+		# the QR, approved; the list: R (page 2), L (page 1), Triangle (a search, typed: "rebalanced"), Cross marks
+		# its one item; Right (the order: the search cleared), down seven, Cross marks 2900000008; Square downloads;
+		# the install; Circle back)
+		mods_data "$out/h3workshop-data"
+		run h3workshop "$out/h3workshop-data" 130 "$h3gmpad down:150:500 a wait:150:3000 down:150:500 down:150:500 a wait:150:2500 @ws_notice a wait:150:400 @ws_qr wait:150:8000 @ws_list rt wait:150:2500 @ws_page2 lt wait:150:2500 y wait:150:3000 @ws_search a wait:150:800 right wait:150:4000 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 wait:150:800 a wait:150:1000 @ws_marked x wait:150:20000 @ws_done wait:150:1000 b wait:150:3000" \
+			HALO_MENU_STYLE=halo3 HALO_STEAM_TEST_CM="ws://127.0.0.1:$fake_cm/cmsocket/" \
+			HALO_STEAM_TEST_CDN="http://127.0.0.1:$fake_cdn" HALO_TEST_TEXT_INPUT=rebalanced \
+			${HALO_TEST_STEAM_SPANISH:+HALO_LANGUAGE=es "HALO_TEST_LANG_DIR=$root/port/vita/app0/lang" HALO_BUTTON_ICONS=playstation}
+		exec 7>&-
+		wait "$fake_pid" 2>/dev/null || true
+		check_h3 h3workshop halo3
+		log=$out/h3workshop/run.log
+		grep -aq "ui: screen pc.h3.workshop.screen" "$log" || fail h3workshop "STEAM WORKSHOP did not open"
+		grep -aq "menus: workshop: sign-in begun" "$log" || fail h3workshop "the sign-in did not begin"
+		grep -aq "steam job: QR 1 up" "$log" || fail h3workshop "no QR"
+		grep -aq "steam job: workshop page 1 (order 0): 10 items of 11" "$log" || fail h3workshop "page 1 not listed"
+		grep -aq "steam job: workshop page 2 (order 0): 1 items of 11" "$log" || fail h3workshop "R did not turn to page 2"
+		grep -aq "steam job: workshop page 1 (order 0, a search): 1 items of 1" "$log" || fail h3workshop "the search did not list its item"
+		grep -aq "steam job: workshop page 1 (order 1): 10 items" "$log" || fail h3workshop "Right did not change the order"
+		grep -aq "menus: workshop: 2900000001 marked (1)" "$log" && grep -aq "menus: workshop: 2900000008 marked (2)" "$log" ||
+			fail h3workshop "the two items were not marked"
+		grep -aq "steam job: workshop: 2 items chosen" "$log" || fail h3workshop "Square did not download the two"
+		grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log" ||
+			fail h3workshop "the session did not end done, revoked and logged off"
+		grep -aq "menus: workshop: 2900000001 installed in mods" "$log" || fail h3workshop "2900000001 (a real map) not installed"
+		grep -aq "menus: workshop: 2900000008 refused: maps/badcheck.map refused" "$log" ||
+			fail h3workshop "2900000008 (a made-up map) not refused by the game's map check"
+		[ -s "$out/h3workshop/data/mods/2900000001/maps/$(basename "$ws_map")" ] || fail h3workshop "the map is not in mods/2900000001"
+		cmp -s "$ws_map" "$out/h3workshop/data/mods/2900000001/maps/$(basename "$ws_map")" || fail h3workshop "the map's bytes differ"
+		[ -e "$out/h3workshop/data/mods/2900000008" ] && fail h3workshop "2900000008 was installed"
+		[ -z "$(ls -A "$out/h3workshop/data/workshop" 2>/dev/null)" ] || fail h3workshop "the staging folder is not empty"
+		grep -aqF "$fake_token" "$log" && fail h3workshop "the token is in the log"
+		grep -raqF "$fake_token" "$out/h3workshop/data" "$out/h3workshop/save" && fail h3workshop "the token is in a file written"
+		;;
 	h3mods)
 		# (the list; mygulch off and on; its details; broken.map: Square, Circle keeps it, Square,
 		# down to YES, A; cefake.map focused then: down two to TestMod, Square, down, A; B)
@@ -2367,6 +2476,34 @@ for case in $cases; do
 		[ "$(cat "$out/h3mods-data/outside/sentinel.txt" 2>/dev/null)" = kept ] ||
 			fail h3mods "a file a link in the mod pointed at was deleted (the link was followed)"
 		grep -aq "menus: h3 mods: Deleted TestMod" "$log" || fail h3mods "the screen did not say the mod was deleted" ;;
+	h3workshoppicker)
+		ws_mp_map=${HALO_TEST_WORKSHOP_MP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/bloodgulch.map}
+		if ! grep -aq "port h3 workshop" "$binary"; then
+			echo "--- h3workshoppicker"; echo "SKIP (h3workshoppicker): not a Steam Workshop build (configure.py --steam-workshop)"
+			continue
+		fi
+		if [ ! -f "$ws_mp_map" ]; then
+			echo "--- h3workshoppicker"; echo "SKIP (h3workshoppicker): no MCC multiplayer map (HALO_TEST_WORKSHOP_MP_MAP)"
+			continue
+		fi
+		mods_data "$out/h3wsp-data"
+		mkdir -p "$out/h3wsp-data/mods/2900000002/maps" "$out/h3wsp-data/mods/2900000002/halo1/maps"
+		cp --reflink=auto "$ws_mp_map" "$out/h3wsp-data/mods/2900000002/maps/coldsnapextended.map"
+		ln -s "$(dirname "$ws_mp_map")/bitmaps.map" "$out/h3wsp-data/mods/2900000002/halo1/maps/bitmaps.map"
+		# (a maps-folder file of the reserved name: never listed)
+		cp --reflink=auto "$(readlink -f "$out/h3wsp-data/maps/mygulch.map")" "$out/h3wsp-data/maps/ws2900000002_x.map"
+		mods_from="$out/h3wsp-data/mods" run h3workshoppicker "$out/h3wsp-data" 50 "$h3pickerpad" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch
+		check_h3 h3workshoppicker halo3
+		log=$out/h3workshoppicker/run.log
+		grep -aq "menus: cascade: mp maps$" "$log" || fail h3workshoppicker "MAP did not open the lobby's map picker"
+		grep -aq "mods: d:.mods.2900000002.maps.coldsnapextended.map is the Steam Workshop multiplayer map ws2900000002_coldsna-8866" \
+			"$out/h3workshoppicker/data/debug.txt" || fail h3workshoppicker "the Workshop map was not found in the mods folder"
+		grep -aq "workshop: 1 Steam Workshop multiplayer maps for the level list" "$out/h3workshoppicker/data/debug.txt" ||
+			fail h3workshoppicker "the Workshop map is not in the multiplayer level list"
+		grep -aq "the maps folder's 'ws2900000002_x' is not listed: that name is a Steam Workshop map's" \
+			"$out/h3workshoppicker/data/debug.txt" || fail h3workshoppicker "the maps folder's file of the reserved name was listed"
+		grep -aq "menus: h3 mp: the map picker: 15 maps (2 custom)" "$log" ||
+			fail h3workshoppicker "the map picker did not offer the Workshop map beside mygulch" ;;
 	h3modspicker)
 		mods_data "$out/h3mods-data"
 		run h3modspicker "$out/h3mods-data" 50 "$h3pickerpad" HALO_MENU_STYLE=halo3

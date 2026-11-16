@@ -44,6 +44,10 @@
 #              against a plain list. The co-op handlers themselves need a
 #              running game: run_netns_crossplay_test.sh crosscoopfuzz twins
 #              a PC co-op host's real messages in one
+#   workshop   a host's map that may be a Steam Workshop item's, as a joiner
+#              reads it (levels\test\ws<id>_<map>\..., its version and the
+#              joiner's copy's: port/linux/game/workshop_maps.c), and the
+#              names made of any item number and file name
 #   epoch      OpenCE 42's distributed layout as a client reads a 42-44
 #              host's messages (port/linux/src/network_epoch.c): the header's
 #              further bytes and checkpoint epoch, in a batch each message's
@@ -56,7 +60,7 @@
 #                        (clang's i386 runtime, its COMDAT groups taken out
 #                        when it does not link as it is); what it finds goes
 #                        to NET_FUZZ_OUT (default a folder under TMPDIR)
-#   NET_FUZZ_TARGETS     the targets (default all twelve)
+#   NET_FUZZ_TARGETS     the targets (default all thirteen)
 #   NET_FUZZ_DEDICATED=1 builds them as the dedicated server's code
 #                        (HALO_DEDICATED_SERVER, HALO_NET_AS_VITA: its limits
 #                        on a peer's packets and an address's peers, its
@@ -72,7 +76,7 @@ out=${TMPDIR:-/tmp}/net_fuzz_test.$$
 test_out_begin "$out"
 clang=${CLANG:-$(sed -n 's/^linux_cc = //p' "$root/build.ninja" | head -1)}
 [ -n "$clang" ] || clang=clang
-targets=${NET_FUZZ_TARGETS:-"p2p signal messages map_share variant_options crossplay_maps lobby actor_table forge command chat netversions epoch"}
+targets=${NET_FUZZ_TARGETS:-"p2p signal messages map_share variant_options crossplay_maps lobby actor_table forge command chat netversions epoch workshop"}
 seconds=${NET_FUZZ_SECONDS:-0}
 mkdir -p "$out"
 cd "$root"
@@ -144,6 +148,7 @@ for target in $targets; do
 	forge) flags=$platform_flags; sources="port/vita/tests/net_fuzz_forge.c" ;;
 	command) flags=$platform_flags; sources="port/vita/tests/net_fuzz_command.c" ;;
 	epoch) flags=$platform_flags; sources="port/vita/tests/net_fuzz_epoch.c port/linux/src/network_epoch.c" ;;
+	workshop) flags=$platform_flags; sources="port/vita/tests/net_fuzz_workshop.c port/linux/game/workshop_maps.c" ;;
 	chat) flags=$platform_flags; sources="port/vita/tests/net_fuzz_chat.c" ;;
 	netversions) flags=$platform_flags; sources="port/vita/tests/net_fuzz_netversions.c port/linux/src/netversion_table.c
 		port/linux/src/p2p_crypto.c $monocypher" ;;

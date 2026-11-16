@@ -300,6 +300,17 @@ harness tests otherwise run with no content folder (`test_out.sh`:
 
 ## Playing a mod natively
 
+A build with the Steam Workshop (configure.py --steam-workshop, off by default until it is tested against Steam)
+downloads a campaign mod straight to the Vita: GAME MANAGER > DOWNLOAD FROM STEAM > STEAM WORKSHOP, signed in with
+your own Steam account's QR code; each map is checked by the game before the mod lands in `mods/<workshop id>`
+(docs/steam_download_security.md section 7). Otherwise:
+
+Its **multiplayer** items too (feat/11x-steam-workshop-mp): an item's multiplayer maps (`mods/<id>/maps`, Halo: CE
+Anniversary caches of multiplayer scenarios) are in the multiplayer map lists as `ws<id>_<map>`, whatever MCC mods is,
+played offline with bots and split screen and online. A joiner without the host's map is asked whether to download the
+item from Steam (never from the host; docs/steam_download_security.md section 8); another copy is refused. Their
+bitmaps.map/sounds.map: beside the map, else the item's `halo1/maps` (as Workshop items carry them), else your MCC's.
+
 Copy the mod's whole folder (Steam keeps it in
 `steamapps/workshop/content/976730/<workshop id>`) into the data root's
 `mods` folder, under a short name of your own:

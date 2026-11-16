@@ -115,6 +115,11 @@
 #            the host, search, and say joining it failed (its host's game
 #            answered none of its System Link searches) and that it is
 #            hidden, never in a lobby
+#   workshop workshopget workshopno workshopdiff workshopold   Steam Workshop
+#            multiplayer maps on the host's LAN (netns_workshop_cases.sh has
+#            each: the joiner with the host's copy, without it - asked, it
+#            downloads the item from a fake Steam in its own namespace -, saying
+#            no, with another copy, and older builds joining)
 #   pc       the host is a Vita build, the joiner a PC build: by code (it
 #            must find nothing: Vitas signal on their own topics) and on
 #            one LAN with the host (it must never list or join the game)
@@ -6844,8 +6849,28 @@ command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|h3command)
 	. "$here/netns_command_cases.sh"
 	command_case
 	;;
+workshop|workshopget|workshopno|workshopdiff|workshopold)
+	# Steam Workshop multiplayer maps (port/linux/game/workshop_maps.h), on the
+	# host's LAN (System Link): netns_workshop_cases.sh
+	forge_lan_machine() { # NAME_VARIABLE ADDRESS: a machine on the host's LAN
+		holder
+		local machine=$held number=${2##*.}
+		in_ns "$host_router" ip link add "l${number}_host" type veth peer name "m${number}_host"
+		in_ns "$host_router" ip link set "m${number}_host" netns "$machine"
+		in_ns "$host_router" ip link set "l${number}_host" master b_host
+		in_ns "$host_router" ip link set "l${number}_host" up
+		in_ns "$machine" ip link set lo up
+		in_ns "$machine" ip addr add "$2/24" broadcast 192.168.1.255 dev "m${number}_host"
+		in_ns "$machine" ip link set "m${number}_host" up
+		in_ns "$machine" ip route add default via 192.168.1.1
+		eval "$1=$machine"
+	}
+	forge_lan_machine lan 192.168.1.3
+	. "$here/netns_workshop_cases.sh"
+	workshop_case
+	;;
 *)
-	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b|command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|h3command|pcmapjoin" >&2
+	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b|command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|h3command|pcmapjoin|workshop|workshopget|workshopno|workshopdiff|workshopold" >&2
 	exit 2
 	;;
 esac

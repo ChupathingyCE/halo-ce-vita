@@ -167,6 +167,25 @@ int posix_https_download(const char *url, const char *user_agent, const char *pa
 	posix_ulong maximum, posix_https_redirect_proc redirect_allowed, posix_https_progress_proc progress, void *context,
 	char *error, int error_size);
 
+/* ---------- a byte stream over HTTPS's TLS (the Steam download's CM
+WebSocket and CDN requests: port/steamdl/steam_net.c; posix_https.c)
+
+Opens url's host and port (https://host[:port]/path; http:// only to a
+loopback address, the tests' servers) with the same TLS, built-in
+authorities (update_roots.h: ISRG Root X1/X2, which Steam's CMs and CDNs
+chain to), host name check and deadlines as posix_https_get; nothing is sent
+before the handshake and its checks pass. The stream, or NULL with why in
+error. host and path get the URL's (host_size, path_size bytes). */
+void *posix_https_stream_open(const char *url, char *host, int host_size, char *path, int path_size, char *error,
+	int error_size);
+/* all of data sent within 15 seconds: 1, else 0 */
+int posix_https_stream_write(void *stream, const void *data, int size);
+/* bytes read: their count, 0 if none came within timeout_ms, -1 at the end
+or on an error */
+int posix_https_stream_read(void *stream, void *buffer, int size, int timeout_ms);
+/* closed (TLS close_notify) and freed */
+void posix_https_stream_close(void *stream);
+
 /* ---------- internet play's brokers over TLS (p2p_signal.c; posix_https.c,
 with port/third_party/mbedtls)
 

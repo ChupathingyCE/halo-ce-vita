@@ -23,7 +23,9 @@ from .linux_build import (version_defines, MBEDTLS_DIR, GAME_FLAGS, PLATFORM_FLA
                           ZLIB_DEFINES, MONOCYPHER_DIR, MONOCYPHER_SOURCES, EXPAT_DIR, EXPAT_SOURCES, musl_math_sources,
                           LIBOGG_INCLUDE, ogg_sound_sources, CELT_FLAGS, is_celt_source, PROFILE_USE_FLAGS,
                           MUSL_MATH_DIR, LIBMSPACK_DIR, LIBMSPACK_SOURCES, LIBMSPACK_FLAGS,
-                          ANDROID_VARIADIC_PROTOTYPE_FILES, xdk_headers, _quote)
+                          ANDROID_VARIADIC_PROTOTYPE_FILES, xdk_headers, _quote,
+                          STEAMDL_DIR, LZMA_DIR, ZSTD_DIR, QRCODEGEN_DIR, LIBDEFLATE_DIR, LIBDEFLATE_SOURCES,
+                          steam_download, steam_test_flags, steam_workshop)
 
 LINUX_DIR = Path("port/linux")
 VITA_DIR = Path("port/vita")
@@ -138,7 +140,7 @@ LINUX_SOURCES_REPLACED = {
 
 VITA_LIBRARIES = [
     "SDL3", "SceGxm_stub", "SceDisplay_stub", "SceCtrl_stub", "SceAudio_stub", "SceAudioIn_stub",
-    "SceSysmodule_stub", "SceHid_stub", "SceTouch_stub", "SceMotion_stub", "ScePower_stub",
+    "SceSysmodule_stub", "SceShellSvc_stub", "SceHid_stub", "SceTouch_stub", "SceMotion_stub", "ScePower_stub",
     "SceAppUtil_stub", "SceAppMgr_stub", "SceCommonDialog_stub", "SceIme_stub", "SceKernelDmacMgr_stub",
     "SceShaccCg_stub", "SceAvPlayer_stub", "SceCamera_stub", "SceRtc_stub", "SceNet_stub", "SceNetCtl_stub", "ScePspnetAdhoc_stub", "pthread", "m", "c",
 ]
@@ -271,6 +273,10 @@ def generate_vita_build(n: Writer, sln: Any) -> None:
                    (["-flto"] if lto else []) +
                    ([f"-fprofile-use={_quote(profile.resolve())}", *PROFILE_USE_FLAGS] if profile else []) +
                    test_defines +
+                   # (configure.py --steam-download: GAME MANAGER's DOWNLOAD FROM STEAM; port/steamdl)
+                   (["-DHALO_STEAM_DOWNLOAD=1"] if steam_download(sln) else []) +
+                   # (configure.py --steam-workshop: DOWNLOAD FROM STEAM's STEAM WORKSHOP)
+                   (["-DHALO_STEAM_WORKSHOP=1"] if steam_workshop(sln) else []) +
                    # (configure.py --vita-version: the version this build
                    # says it is, the PC builds' alike)
                    version_defines(sln))
@@ -380,6 +386,11 @@ def generate_vita_build(n: Writer, sln: Any) -> None:
     updater_cflags = " ".join([host_cflags, f"-I{MONOCYPHER_DIR}"])
     for source in sorted((VITA_DIR / "host").glob("*.c")):
         cflags = updater_cflags if source.name.startswith("vita_update") else host_cflags
+        if source.name == "vita_steam.c":
+            # (configure.py --steam-download: the Steam download's device side; else not built)
+            if not steam_download(sln):
+                continue
+            cflags = f"{host_cflags} -I{STEAMDL_DIR}" + "".join(f" {flag}" for flag in steam_test_flags(sln))
         add(source, "vita_host_cc", cflags, [generator_header] if source.name == "vita_gxm.c" else None)
     # the shader compiler's heap (vita_gxm.c): port/third_party/tlsf
     add(TLSF_DIR / "tlsf.c", "vita_host_cc", " ".join(HOST_FLAGS + ["-DNDEBUG", "-w"]))
@@ -388,9 +399,22 @@ def generate_vita_build(n: Writer, sln: Any) -> None:
     # changes: port/vita/include/mbedtls_vita_config.h), with the SDK's ABI
     mbedtls_flags = [f"-I{MBEDTLS_DIR / 'include'}", f"-I{MBEDTLS_DIR / 'library'}",
                      f"-I{vita_include}", '-DMBEDTLS_USER_CONFIG_FILE=\\"mbedtls_vita_config.h\\"']
-    add(LINUX_DIR / "src" / "posix_https.c", "vita_host_cc", " ".join([host_cflags, *mbedtls_flags]))
+    add(LINUX_DIR / "src" / "posix_https.c", "vita_host_cc", " ".join([host_cflags, *mbedtls_flags, *steam_test_flags(sln)]))
     for source in sorted((MBEDTLS_DIR / "library").glob("*.c")):
         add(source, "vita_host_cc", " ".join(HOST_FLAGS + mbedtls_flags + ["-w"]))
+    # the Steam download (configure.py --steam-download; port/steamdl, docs/steam_download_security.md), host-side,
+    # with the update check's Mbed TLS and HTTPS stream; its decoders, the LZMA SDK's LzmaDec (public domain),
+    # zstd's decompressor (BSD) and libdeflate (MIT), and the QR maker (MIT)
+    if steam_download(sln):
+        steam_flags = [host_cflags, *mbedtls_flags, f"-I{STEAMDL_DIR}", f"-I{LIBDEFLATE_DIR}", f"-I{LZMA_DIR}",
+                       f"-I{ZSTD_DIR}", f"-I{QRCODEGEN_DIR}", *steam_test_flags(sln)]
+        for source in sorted(STEAMDL_DIR.glob("*.c")):
+            add(source, "vita_host_cc", " ".join(steam_flags))
+        add(LZMA_DIR / "LzmaDec.c", "vita_host_cc", " ".join(HOST_FLAGS + ["-w"]))
+        add(ZSTD_DIR / "zstddeclib.c", "vita_host_cc", " ".join(HOST_FLAGS + ["-DZSTD_DISABLE_ASM", "-w"]))
+        add(QRCODEGEN_DIR / "qrcodegen.c", "vita_host_cc", " ".join(HOST_FLAGS + ["-w"]))
+        for name in LIBDEFLATE_SOURCES:
+            add(LIBDEFLATE_DIR / name, "vita_host_cc", " ".join(HOST_FLAGS + ["-w"]))
     # the files half of the Linux host boundary works as it is on newlib
     add(LINUX_DIR / "src" / "posix_files.c", "vita_host_cc", host_cflags + " -D_GNU_SOURCE")
     # the Custom Edition installer's maps (vita_ce_installer.c), with its

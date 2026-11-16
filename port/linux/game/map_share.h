@@ -56,6 +56,24 @@ boolean map_share_client_offer_pc_maps(
 	char *why,
 	long why_size);
 
+/* (a joiner, network_client_manager.c) The host's game settings name
+`level_name`, a Steam Workshop item's multiplayer map (workshop_maps.h) this
+machine lacks, the host's copy `identity`. Nothing is asked of the host,
+which never sends one: in a build with the Workshop (configure.py
+--steam-workshop) the player is asked whether to download the item from
+Steam (the STEAM WORKSHOP screen opened over the lobby for the sign-in and
+the progress), and once it is installed - every map checked by the game's
+own check - and its copy is the host's, it is precached and the join goes
+on. FALSE when it cannot be offered (no Workshop in this build, the game
+started, a badly named map): the caller refuses, adding `why`. */
+boolean map_share_client_offer_workshop(
+	struct network_game_client *client,
+	struct network_game const *game,
+	char const *level_name,
+	unsigned long identity,
+	char *why,
+	long why_size);
+
 /* (network_client_manager.c) The host's game settings name a level other
 than the one asked for: a download of another map stops. */
 void map_share_client_map_changed(

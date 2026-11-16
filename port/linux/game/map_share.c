@@ -124,12 +124,17 @@ Choices:
 #include "networking/network_connection.h"
 #include "custom_edition_cache.h"
 #include "custom_edition_maps.h"
+#include "custom_edition_mods.h"
 #include "map_share_protocol.h"
 #include "map_share.h"
 #include "mod_manager.h"
 #include "dedicated_server.h"
+#include "workshop_maps.h"
 #include "../src/p2p.h"
 #include "../src/lang.h"
+#ifdef HALO_STEAM_WORKSHOP
+#include "../../steamdl/steam_job.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,6 +183,12 @@ enum map_share_client_state
 	_client_receiving,
 	/* told why, about to leave the game */
 	_client_leaving,
+	/* (a Steam Workshop map, map_share_client_offer_workshop: nothing of it
+	asked of the host) the player asked whether to download the item from
+	Steam; then the Steam Workshop's download of it under way (the STEAM
+	WORKSHOP screen over the lobby), its install and the check after */
+	_client_workshop_asking,
+	_client_workshop_steam,
 };
 
 /* room left beside a download (the folder's other writes: settings, the
@@ -371,6 +382,8 @@ struct map_share_download
 	/* about a map that is no custom map (an Xbox level that could not be
 	precached: map_share_client_precache_failed) */
 	boolean plain_map;
+	/* (a Steam Workshop map) its item's number, as text */
+	char workshop_id[24];
 };
 
 /* ---------- prototypes */
@@ -1439,7 +1452,7 @@ static void map_share_client_reset(
 	struct map_share_download *download = &map_share_download;
 
 	map_share_client_close_file();
-	if (download->state == _client_asking)
+	if (download->state == _client_asking || download->state == _client_workshop_asking)
 	{
 		platform_ask_question(NULL, NULL);
 	}
@@ -1447,6 +1460,14 @@ static void map_share_client_reset(
 	{
 		platform_show_progress(NULL, NULL);
 	}
+#ifdef HALO_STEAM_WORKSHOP
+	/* (the Workshop's download for this join, its join gone: the Steam
+	session ended - revoked, logged off - and what is in kept for the next) */
+	if (download->state == _client_workshop_steam)
+	{
+		steam_job_cancel();
+	}
+#endif
 	csmemset(download, 0, sizeof(*download));
 
 	return;
@@ -1461,6 +1482,13 @@ static void map_share_client_refusal_text(
 {
 	struct map_share_download *download = &map_share_download;
 
+	/* (a Steam Workshop map: nothing of it is the host's to send) */
+	if (download->workshop_id[0])
+	{
+		snprintf(text, (size_t)text_size, T("The host is playing %s, a map from the Steam Workshop (item %s).\n\n%s"),
+			download->name, download->workshop_id, why);
+		return;
+	}
 	if (download->pc_maps_only)
 	{
 		snprintf(text, (size_t)text_size, T("The host is playing the PC (Custom Edition) map %s, and PC maps is off. "
@@ -1504,10 +1532,16 @@ static void map_share_client_fail(
 	struct map_share_download *download = &map_share_download;
 
 	network_event("map share: '%s' not downloaded: %s", download->name, why);
-	if (download->state == _client_asking)
+	if (download->state == _client_asking || download->state == _client_workshop_asking)
 	{
 		platform_ask_question(NULL, NULL);
 	}
+#ifdef HALO_STEAM_WORKSHOP
+	if (download->state == _client_workshop_steam)
+	{
+		steam_job_cancel();
+	}
+#endif
 	/* (the host is told while it still has bytes to send) */
 	if ((download->state == _client_starting || download->state == _client_receiving) && download->client &&
 		!map_share_receiver_complete(&download->receiver))
@@ -2429,6 +2463,187 @@ boolean map_share_client_offer_pc_maps(
 	return TRUE;
 }
 
+/* ---------- Steam Workshop maps (workshop_maps.h): never from the host */
+
+#ifdef HALO_STEAM_WORKSHOP
+/* menu_functions.c's: the STEAM WORKSHOP screen opened over the lobby for
+one item's download (its sign-in QR and progress), and the items the
+Workshop downloaded installed (each checked, every map by the game's own
+check) once its session ended: how many were */
+extern int menu_functions_workshop_open_item(char const *id_text);
+extern int menu_functions_workshop_install(void);
+
+static void map_share_client_workshop_ask(
+	void)
+{
+	struct map_share_download *download = &map_share_download;
+	char text[1024];
+
+	snprintf(text, sizeof(text),
+		T("The host is playing %s, a map from the Steam Workshop (item %s), which you don't have.\n\nThis map is from "
+		"the Steam Workshop - download it from Steam? You sign in to your own Steam account with the Steam app's QR "
+		"code; nothing comes from the host. Your account must own Halo: The Master Chief Collection."),
+		download->name, download->workshop_id);
+	if (download->public_game)
+	{
+		size_t length = strlen(text);
+
+		snprintf(text + length, sizeof(text) - length, "%s",
+			T("\n\nThis is a public game: the host only named the item; it is checked like any Workshop download."));
+	}
+	network_event("map share: asking the player about the Steam Workshop map '%s' (item %s, 0x%08lX) of '%s'%s",
+		download->name, download->workshop_id, (unsigned long)download->identity, download->host_name,
+		download->public_game ? ", a public game" : "");
+#ifndef HALO_RELEASE
+	if (!getenv("HALO_MAP_SHARE_ANSWER"))
+#endif
+	{
+		platform_ask_question(T("Halo: Steam Workshop map"), text);
+	}
+	download->state = _client_workshop_asking;
+	download->state_time = system_milliseconds();
+
+	return;
+}
+
+/* the item's download begun (the player said yes): the Steam Workshop job
+for that one item, and its screen over the lobby */
+static void map_share_client_workshop_start(
+	void)
+{
+	struct map_share_download *download = &map_share_download;
+	int started;
+
+	started = menu_functions_workshop_open_item(download->workshop_id);
+	if (started <= 0)
+	{
+		char text[640];
+
+		snprintf(text, sizeof(text), "%s", started == -1 ?
+			T("Charge the Vita to 30 percent or plug in the charger first, then join again.") : started < 0 ?
+			T("The STEAM WORKSHOP screen can't open here: download the item from STEAM WORKSHOP, then join again.") :
+			T("A Steam download is under way already: let it finish, then join again."));
+		map_share_client_fail(text);
+		return;
+	}
+	download->state = _client_workshop_steam;
+	download->state_time = system_milliseconds();
+	network_event("map share: the Steam Workshop download of item %s begun for '%s'", download->workshop_id, download->name);
+
+	return;
+}
+
+/* each frame of the Workshop's download for this join: once its session
+ended, the items installed and the host's map checked again - this machine's
+copy the host's: precached, and the join goes on */
+static void map_share_client_workshop_update(
+	void)
+{
+	struct map_share_download *download = &map_share_download;
+	struct steam_job_view view;
+	unsigned long local_identity;
+	char text[640];
+
+	steam_job_view(&view);
+	if (view.phase != STEAM_JOB_DONE && view.phase != STEAM_JOB_FAILED && view.phase != STEAM_JOB_CANCELLED &&
+		view.phase != STEAM_JOB_IDLE)
+	{
+		return;
+	}
+	menu_functions_workshop_install();
+	custom_edition_mods_look_again();
+	custom_edition_maps_look_again();
+	custom_edition_cache_map_identity_forget(download->name);
+	local_identity = custom_edition_maps_network_identity(download->level_name);
+	switch (workshop_map_join_verdict(download->level_name, sizeof(download->level_name), download->identity,
+		local_identity, NULL))
+	{
+	case WORKSHOP_MAP_JOIN_PLAYABLE:
+		network_event("map share: the Steam Workshop map '%s' is installed and the host's (0x%08lX); precaching it",
+			download->name, local_identity);
+		main_set_multiplayer_map_name(download->level_name);
+		download->state = _client_idle;
+		map_share_client_reset();
+		return;
+	case WORKSHOP_MAP_JOIN_DIFFERENT:
+		snprintf(text, sizeof(text), T("The Steam Workshop's copy of %s isn't the host's (0x%08lX here): the host may "
+			"need to update the item."), download->name, local_identity);
+		break;
+	default:
+		snprintf(text, sizeof(text), view.phase == STEAM_JOB_CANCELLED ? T("The Steam download of %s was stopped.") :
+			T("%s wasn't installed from the Steam Workshop."), download->name);
+		if (view.phase == STEAM_JOB_FAILED && view.error[0])
+		{
+			size_t length = strlen(text);
+
+			snprintf(text + length, sizeof(text) - length, " (%.200s)", view.error);
+		}
+		break;
+	}
+	map_share_client_fail(text);
+
+	return;
+}
+#endif
+
+boolean map_share_client_offer_workshop(
+	struct network_game_client *client,
+	struct network_game const *game,
+	char const *level_name,
+	unsigned long identity,
+	char *why,
+	long why_size)
+{
+	struct map_share_download *download = &map_share_download;
+	char name[WORKSHOP_MAP_NAME_BYTES];
+	uint64_t id = 0;
+	short state = network_game_client_get_state(client, NULL);
+
+	why[0] = 0;
+	if (!level_name || !workshop_map_level_name_parse(level_name, sizeof(download->level_name), name, &id) ||
+		strlen(level_name) >= sizeof(download->level_name))
+	{
+		return FALSE;
+	}
+#ifdef HALO_STEAM_WORKSHOP
+	if (state != _network_game_client_state_pregame && state != _network_game_client_state_joining)
+	{
+		snprintf(why, (size_t)why_size, "%s", T("The host's game had already started: download the item from STEAM "
+			"WORKSHOP, then join again."));
+		return FALSE;
+	}
+	if (!identity)
+	{
+		return FALSE;
+	}
+	map_share_client_reset();
+	download->client = client;
+	csstrncpy(download->level_name, level_name, sizeof(download->level_name) - 1);
+	csstrncpy(download->name, name, sizeof(download->name) - 1);
+	download->identity = (uint32_t)identity;
+	download->public_game = map_share_client_host(client, game, download->host_name, sizeof(download->host_name));
+	download->plain_map = TRUE;
+	if (!workshop_map_id_text(id, download->workshop_id, sizeof(download->workshop_id)))
+	{
+		csmemset(download, 0, sizeof(*download));
+		return FALSE;
+	}
+	map_share_client_workshop_ask();
+
+	return TRUE;
+#else
+	(void)client;
+	(void)game;
+	(void)identity;
+	(void)state;
+	(void)id;
+	snprintf(why, (size_t)why_size, "%s", T("This version can't download Steam Workshop maps."));
+	network_event("map share: the Steam Workshop map '%s' is not downloaded: no Workshop in this build", name);
+
+	return FALSE;
+#endif
+}
+
 /* (a PC maps question whose host refused the query, or did not answer it)
 asked as before: the players not held */
 static void map_share_client_ask_pc_maps_unheld(
@@ -2534,7 +2749,8 @@ boolean map_share_client_game_starting(
 		does) */
 		network_event("map share: the host's game started before '%s' was here", download->name);
 		map_share_client_refusal_text(text, sizeof(text), download->pc_maps_only ?
-			T("The host's game started before you answered.") :
+			T("The host's game started before you answered.") : download->workshop_id[0] ?
+			T("The host's game started before the Steam download ended: join again once the item is installed.") :
 			T("The host's game started before the map could be downloaded: join while the host is in the lobby."));
 		map_share_client_fail(text);
 		return FALSE;
@@ -2740,6 +2956,31 @@ boolean map_share_client_update(
 		}
 		break;
 	}
+
+#ifdef HALO_STEAM_WORKSHOP
+	case _client_workshop_asking:
+	{
+		int answer = map_share_client_answer();
+
+		if (answer > 0)
+		{
+			map_share_client_workshop_start();
+		}
+		else if (!answer)
+		{
+			char text[640];
+
+			snprintf(text, sizeof(text), T("The host is playing %s, a map from the Steam Workshop, which you don't have. "
+				"You answered no to downloading it."), download->name);
+			map_share_client_fail(text);
+		}
+		break;
+	}
+
+	case _client_workshop_steam:
+		map_share_client_workshop_update();
+		break;
+#endif
 
 	default:
 		break;

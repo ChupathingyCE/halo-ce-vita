@@ -398,6 +398,7 @@ symbols in this file:
 #include "custom_edition_maps.h"
 #include "custom_edition_cache.h" /* port: custom_edition_level_name */
 #include "mcc_content.h" /* port: MCC's own maps */
+#include "workshop_maps.h" /* port: Steam Workshop multiplayer maps */
 #include "network_wire.h"
 #include "crossplay_maps.h"
 #include "network_game_record.h"
@@ -1486,6 +1487,13 @@ enum network_game_client_map_check
 	which it plays: never downloaded */
 	_network_game_client_map_mcc_missing,
 	_network_game_client_map_mcc_different,
+	/* (port) a Steam Workshop item's multiplayer map (workshop_maps.h,
+	ws<id>_<map>) this machine does not have (it may download the item from
+	Steam: map_share_client_offer_workshop, never from the host), or whose
+	copy is not the host's (another version of the item), or that the host
+	does not say which copy it plays */
+	_network_game_client_map_workshop_missing,
+	_network_game_client_map_workshop_different,
 };
 
 static short network_game_client_map_check(
@@ -1522,6 +1530,27 @@ static short network_game_client_map_check(
 		if (!cache_files_map_plays_multiplayer(map->name, build))
 			return _network_game_client_map_build_unsupported;
 		return _network_game_client_map_playable;
+	}
+	/* port: a Steam Workshop item's multiplayer map (workshop_maps.h): this
+	machine's copy of the item (mods/<id>), the same as the host's (its
+	identity, as a custom map's, and one the host must give); never asked
+	of the host, which shares none: a joiner without it may download the
+	item from Steam (network_game_client_game_settings_updated) */
+	if (!global_network_game_server_get() &&
+		workshop_map_level_name_parse(map->name, sizeof(map->name), NULL, NULL))
+	{
+		unsigned long local_identity = custom_edition_maps_network_identity(map->name);
+
+		switch (workshop_map_join_verdict(map->name, sizeof(map->name), (unsigned long)map->version, local_identity,
+			NULL))
+		{
+		case WORKSHOP_MAP_JOIN_PLAYABLE:
+			break;
+		case WORKSHOP_MAP_JOIN_MISSING:
+			return _network_game_client_map_workshop_missing;
+		default:
+			return _network_game_client_map_workshop_different;
+		}
 	}
 	/* port: one of MCC's own maps (the Halo content folder,
 	mcc_content.h): this machine's own MCC file, the same as the host's
@@ -1612,6 +1641,25 @@ static void network_game_client_map_refusal_show(
 		length = snprintf(message, sizeof(message),
 			T("The host's %s from its MCC files isn't the same as yours (another MCC version?). MCC maps are never "
 			"downloaded."), name);
+		break;
+	case _network_game_client_map_workshop_missing:
+	{
+		char id[24];
+		uint64_t item = 0;
+
+		workshop_map_level_name_parse(map->name, sizeof(map->name), NULL, &item);
+		if (!workshop_map_id_text(item, id, sizeof(id)))
+			id[0] = 0;
+		length = snprintf(message, sizeof(message),
+			T("The host is playing %s, a map from the Steam Workshop (item %s), which you don't have. Players never "
+			"send each other Workshop maps: download it from STEAM WORKSHOP (Game Manager, or the settings panel's "
+			"Workshop row), then join again."), name, id);
+		break;
+	}
+	case _network_game_client_map_workshop_different:
+		length = snprintf(message, sizeof(message),
+			T("The host's Steam Workshop map %s isn't the same version as yours. Download the item again from STEAM "
+			"WORKSHOP (the host may need to update it too), then join again."), name);
 		break;
 	case _network_game_client_map_custom_needs_pc_maps:
 		length = snprintf(message, sizeof(message),
@@ -1838,6 +1886,16 @@ boolean network_game_client_game_settings_updated(
 					sizeof(why)))
 			{
 				network_event("asking the host for its map '%s'...", message_packet->map.name);
+			}
+			/* port: a Steam Workshop map this machine lacks: the player is
+			asked whether to download the item from Steam (its own Steam
+			sign-in, never the host's copy); the joiner stays in the lobby,
+			and precaches it once installed (map_share.c) */
+			else if (check == _network_game_client_map_workshop_missing &&
+				map_share_client_offer_workshop(client, message_packet, message_packet->map.name,
+					(unsigned long)message_packet->map.version, why, sizeof(why)))
+			{
+				network_event("asking the player about the Steam Workshop map '%s'...", message_packet->map.name);
 			}
 			/* port: the host's Custom Edition map, which this machine has,
 			with PC maps off: the player is asked to turn it on */

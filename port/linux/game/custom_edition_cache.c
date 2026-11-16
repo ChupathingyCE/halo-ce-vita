@@ -56,6 +56,7 @@ each one, and their vertices read from the file as they load
 #include "custom_edition_mods.h"
 #include "mcc_content.h"
 #include "mcc_sound.h"
+#include "workshop_maps.h"
 #include "tag_relocate.h"
 #include "load_profile.h"
 
@@ -742,6 +743,16 @@ static int custom_edition_cache_name_stem(
 	return mcc_content_name_stem(map_name, stem);
 }
 
+/* (port) whether `map_name` (a name or a level name) is a Steam Workshop
+multiplayer map's, ws<id>_<map> (workshop_maps.h): a name only ever looked
+for in the mods folder's item mods/<id>, never in the maps folder, in a
+build with the Workshop (configure.py --steam-workshop); none in another */
+static boolean custom_edition_cache_workshop_name(
+	char const *map_name)
+{
+	return map_name && workshop_map_name_parse(tag_name_strip_path(map_name), CACHE_FILE_STRING_BYTES, NULL);
+}
+
 /* <maps>\<name>.map, or the OpenSauce <maps>\<name>.yelo when there is no
 .map, in `path`: whether it is there */
 static boolean maps_folder_map_path(
@@ -1017,6 +1028,24 @@ static boolean custom_edition_map_path(
 		if (from_mods)
 		{
 			*from_mods = mcc_kind == _mcc_content_campaign;
+		}
+		return TRUE;
+	}
+	/* (port) a Steam Workshop multiplayer map's name (workshop_maps.h): only
+	ever the Workshop item's file in the mods folder, for any game (a
+	network game's players each with their own copy, the host's identity
+	compared: network_client_manager.c), its resource maps and sound cache
+	the item's folder's as a mod map's; never a file of the maps folder
+	(where map sharing writes). None without the Workshop. */
+	if (custom_edition_cache_workshop_name(map_name))
+	{
+		if (!custom_edition_mods_multiplayer_path(name, path, MAP_PATH_SIZE))
+		{
+			return FALSE;
+		}
+		if (from_mods)
+		{
+			*from_mods = TRUE;
 		}
 		return TRUE;
 	}
@@ -1482,6 +1511,7 @@ static boolean custom_edition_cache_identify_file(
 	short index;
 	char mcc_stem[MCC_CONTENT_STEM_BYTES];
 	int mcc_kind = custom_edition_cache_name_stem(map_name, mcc_stem);
+	boolean workshop = custom_edition_cache_workshop_name(map_name);
 
 	/* (port: a name of MCC's is no map with no Halo content folder,
 	whatever was found of it before) */
@@ -1518,14 +1548,14 @@ static boolean custom_edition_cache_identify_file(
 		if (cache_file_identify(&file.source, identity) == _cache_file_status_ok &&
 			(mcc_kind == _mcc_content_menu ?
 				identity->format == _cache_file_format_mcc_cea_cache :
-			mcc_kind == _mcc_content_multiplayer ?
+			mcc_kind == _mcc_content_multiplayer || workshop ?
 				identity->format == _cache_file_format_mcc_cea_cache && identity->scenario_type == _scenario_type_multiplayer :
 			from_mods ?
 				identity->format == _cache_file_format_mcc_cea_cache && identity->scenario_type == _scenario_type_solo :
 				identity->format == _cache_file_format_custom_edition_cache))
 		{
 			identified = TRUE;
-			if (resource_maps_used && mcc_kind != _mcc_content_none)
+			if (resource_maps_used && (mcc_kind != _mcc_content_none || workshop))
 			{
 				/* (pixels from the bitmaps.map beside it, checked as it loads:
 				no tag of a resource map) */
@@ -1579,7 +1609,8 @@ static boolean custom_edition_cache_identify(
 
 	/* (port: or one of MCC's own multiplayer maps, with the Halo content
 	folder, whatever PC maps is) */
-	return (halo_custom_edition_enabled() || custom_edition_cache_name_stem(map_name, mcc_stem) == _mcc_content_multiplayer) &&
+	return (halo_custom_edition_enabled() || custom_edition_cache_name_stem(map_name, mcc_stem) == _mcc_content_multiplayer ||
+			custom_edition_cache_workshop_name(map_name)) &&
 		custom_edition_cache_identify_file(map_name, identity, NULL, FALSE);
 }
 
@@ -1788,7 +1819,8 @@ boolean custom_edition_cache_playable(
 
 	/* (port: MCC's own maps, mcc_content.h, need the Halo content folder,
 	not PC maps: custom_edition_cache_identify_file) */
-	return (halo_custom_edition_enabled() || custom_edition_cache_name_stem(map_name, mcc_stem) != _mcc_content_none) &&
+	return (halo_custom_edition_enabled() || custom_edition_cache_name_stem(map_name, mcc_stem) != _mcc_content_none ||
+			custom_edition_cache_workshop_name(map_name)) &&
 		custom_edition_cache_identify_file(map_name, &identity, NULL, game_connection() == _game_connection_local);
 }
 
@@ -1817,7 +1849,7 @@ short custom_edition_cache_content_loader(
 	return (short)loader;
 }
 
-boolean custom_edition_cache_mod_map_identify(
+short custom_edition_cache_mod_map_kind(
 	char const *path)
 {
 	struct custom_edition_file file;
@@ -1826,7 +1858,7 @@ boolean custom_edition_cache_mod_map_identify(
 
 	if (!custom_edition_file_open(&file, path))
 	{
-		return FALSE;
+		return NONE;
 	}
 	status = cache_file_identify(&file.source, &identity);
 	custom_edition_file_close(&file);
@@ -1834,15 +1866,29 @@ boolean custom_edition_cache_mod_map_identify(
 	{
 		error(_error_silent, "mods: '%s' is left out: %s", path,
 			status != _cache_file_status_ok ? cache_file_status_describe(status) : "not a Halo: CE Anniversary map");
-		return FALSE;
+		return NONE;
 	}
-	if (identity.scenario_type != _scenario_type_solo)
+	if (identity.scenario_type != _scenario_type_solo && identity.scenario_type != _scenario_type_multiplayer)
 	{
-		error(_error_silent, "mods: '%s' is left out: not a campaign map (scenario type %d)", path, identity.scenario_type);
-		return FALSE;
+		error(_error_silent, "mods: '%s' is left out: neither a campaign nor a multiplayer map (scenario type %d)", path,
+			identity.scenario_type);
+		return NONE;
 	}
 
-	return TRUE;
+	return identity.scenario_type;
+}
+
+boolean custom_edition_cache_mod_map_identify(
+	char const *path)
+{
+	short kind = custom_edition_cache_mod_map_kind(path);
+
+	if (kind == _scenario_type_multiplayer)
+	{
+		error(_error_silent, "mods: '%s' is left out: not a campaign map (a multiplayer map)", path);
+	}
+
+	return kind == _scenario_type_solo;
 }
 
 short custom_edition_cache_file_check(
@@ -1888,6 +1934,7 @@ boolean custom_edition_cache_is_custom_edition(
 
 	/* (port: MCC's own maps are not: custom_edition_cache_mcc_content) */
 	return custom_edition_cache_name_stem(map_name, mcc_stem) == _mcc_content_none &&
+		!custom_edition_cache_workshop_name(map_name) &&
 		custom_edition_cache_identify_file(map_name, &identity, NULL, FALSE);
 }
 
@@ -2232,6 +2279,8 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 	/* (port) a map of the Halo content folder (mcc_content.h) */
 	char mcc_stem[MCC_CONTENT_STEM_BYTES];
 	int mcc_kind = custom_edition_cache_name_stem(map_name, mcc_stem);
+	/* (port) a Steam Workshop item's multiplayer map (workshop_maps.h) */
+	boolean workshop = custom_edition_cache_workshop_name(map_name);
 
 	custom_edition_load_phase_mark(&phase);
 	assert(!globals->tags_loaded);
@@ -2239,7 +2288,7 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 	globals->mcc_cea = FALSE;
 	/* (the mods folder looked in only for a game of this machine's own, as
 	the check below loads one only for that) */
-	if (!custom_edition_map_path(map_name, path, game_connection() == _game_connection_local ? &from_mods : NULL) ||
+	if (!custom_edition_map_path(map_name, path, game_connection() == _game_connection_local || workshop ? &from_mods : NULL) ||
 		!custom_edition_file_open(&globals->map, path))
 	{
 		error(_error_silent, "custom edition: cannot open the map '%s'", map_name);
@@ -2277,7 +2326,10 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 			game_connection() == _game_connection_local) &&
 		!(mcc_cea && mcc_kind == _mcc_content_menu && halo_content_library_found()) &&
 		!(mcc_cea && mcc_kind == _mcc_content_multiplayer && identity.scenario_type == _scenario_type_multiplayer &&
-			halo_content_library_found()))
+			halo_content_library_found()) &&
+		/* (port: a Steam Workshop item's multiplayer map, for any game: its
+		players each with their own copy, the host's identity compared) */
+		!(mcc_cea && workshop && from_mods && identity.scenario_type == _scenario_type_multiplayer))
 	{
 		error(
 			_error_silent,
@@ -2369,6 +2421,28 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 			}
 			sprintf(resource_path, "%.*s%s%s", (int)folder_length, path,
 				resource_map_type_describe((enum resource_map_type)type), MAP_FILE_EXTENSION);
+			/* (port: a mod's map without one beside it - a Steam Workshop
+			item keeps its own in its halo1\maps folder, mods\<id>\halo1\maps,
+			as MCC lays an item out -, else the player's own MCC's, the Halo
+			content folder's halo1\maps: read only, never written) */
+			if (!file_path_exists(resource_path) && from_mods && folder_length > 5 &&
+				!_strnicmp(path + folder_length - 5, "maps\\", 5) &&
+				folder_length - 5 + strlen("halo1\\maps\\") + strlen(resource_map_type_describe((enum resource_map_type)type)) +
+					strlen(MAP_FILE_EXTENSION) < MAP_PATH_SIZE)
+			{
+				sprintf(resource_path, "%.*shalo1\\maps\\%s%s", (int)(folder_length - 5), path,
+					resource_map_type_describe((enum resource_map_type)type), MAP_FILE_EXTENSION);
+				if (!file_path_exists(resource_path) && halo_content_library_found())
+				{
+					snprintf(resource_path, sizeof(resource_path), "%s%s%s", MCC_CONTENT_MAPS_DIRECTORY,
+						resource_map_type_describe((enum resource_map_type)type), MAP_FILE_EXTENSION);
+				}
+				if (file_path_exists(resource_path))
+				{
+					error(_error_silent, "custom edition: the mod map '%s' takes its %s from %s", path,
+						resource_map_type_describe((enum resource_map_type)type), resource_path);
+				}
+			}
 			if (!file_path_exists(resource_path))
 			{
 				continue;

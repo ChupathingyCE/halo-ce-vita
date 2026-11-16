@@ -118,6 +118,34 @@ char const *custom_edition_mods_mod_map_name(
 	short mod_index,
 	short which);
 
+/* (port, configure.py --steam-workshop) The Steam Workshop items'
+multiplayer maps (workshop_maps.h): the Halo: CE Anniversary caches of
+multiplayer scenarios in the maps folder of a mods folder's folder named by
+an item's number (mods/<id>, as the Workshop installs it), named
+ws<id>_<map>, whether MCC mods is on or off (a mod turned off in the mod
+manager is left out). They are the multiplayer level list's
+(custom_edition_maps.c), played offline and online, never shared. The
+mods are looked for when they have not been. The map at `index`: its name,
+its file's name without ".map", its item's folder, its picture (<map>.bmp
+beside it, or NULL); NULL past them. Without the switch there are none. */
+#define CUSTOM_EDITION_MODS_MAXIMUM_MULTIPLAYER_MAPS 32
+short custom_edition_mods_multiplayer_count(
+	void);
+char const *custom_edition_mods_multiplayer_name(
+	short index);
+char const *custom_edition_mods_multiplayer_stem(
+	short index);
+char const *custom_edition_mods_multiplayer_folder(
+	short index);
+char const *custom_edition_mods_multiplayer_picture_path(
+	short index);
+/* The file of the Workshop multiplayer map `name` (its name or level name):
+TRUE with its path; FALSE for any other name, or one not found. */
+boolean custom_edition_mods_multiplayer_path(
+	char const *name,
+	char *path,
+	long path_size);
+
 /* (port) Whether `name` is a name of the mods folder's this unit takes for a
 mod's folder: printable ASCII, none of what a path or a file system takes
 for something else, no "..", not starting with a dot, at most 47

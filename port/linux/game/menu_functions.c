@@ -156,6 +156,16 @@ for a gamepad); a test build's HALO_TEST_TEXT_INPUT answers in its place,
 #include "../../vita/include/vita_controls.h" /* (the Forge menu's CONTROLS: the buttons as mapped) */
 #endif
 #include "player_cosmetics.h"
+#ifdef HALO_STEAM_DOWNLOAD
+#include "../../steamdl/steam_job.h"
+#include "../../steamdl/steam_plan.h"
+#endif
+#ifdef HALO_STEAM_WORKSHOP
+#include "../../steamdl/steam_workshop.h"
+#include "cache_file_formats.h"
+#include "custom_edition_cache.h"
+#include "custom_edition_mods.h"
+#endif
 
 /* the platform layer's */
 void platform_log(char const *format, ...);
@@ -509,6 +519,18 @@ enum
 	_function_h3_mods_tab_games,
 	_function_h3_mods_tab_mods,
 	_function_h3_mods_tab_next,
+	/* (GAME MANAGER's DOWNLOAD FROM STEAM: halo3/steam.xml) */
+	_function_h3_steam_row,
+	_function_h3_steam_back,
+	/* (STEAM WORKSHOP: halo3/workshop.xml) */
+	_function_h3_workshop_row,
+	_function_h3_workshop_back,
+	_function_h3_workshop_download,
+	_function_h3_workshop_search,
+	_function_h3_workshop_page_previous,
+	_function_h3_workshop_page_next,
+	_function_h3_workshop_order_previous,
+	_function_h3_workshop_order_next,
 	/* (1.1.5: the Firefight lobby, START FIREFIGHT and PREPARING FIREFIGHT) */
 	_function_firefight_lobby_init,
 	_function_forge_start_firefight,
@@ -601,6 +623,8 @@ enum
 	_input_start,
 	_input_sound,
 	_input_cascade,
+	_input_h3_steam,
+	_input_h3_workshop,
 	/* (1.1.4) */
 	_input_command_prepare,
 	/* (1.1.4 polish: the Forge menu's LEAVE screen in a Command game) */
@@ -611,6 +635,7 @@ enum
 enum
 {
 	_typing_none,
+	_typing_workshop_search,
 	_typing_password,
 	_typing_lobby_name,
 	_typing_lobby_password,
@@ -2941,6 +2966,8 @@ real menu_functions_fade_alpha(void)
 
 /* (interface.c's full-screen overlays, last: over the 3D and the menus)
 the fade's black */
+static void h3_steam_qr_draw(void);
+
 void menu_functions_fade_draw(void)
 {
 	void draw_quad(rectangle2d *rectangle, pixel32 color);
@@ -2952,6 +2979,8 @@ void menu_functions_fade_draw(void)
 	rectangle2d bounds;
 	unsigned long level;
 
+	/* (DOWNLOAD FROM STEAM's QR, over the menus, under the fade) */
+	h3_steam_qr_draw();
 	if (alpha <= 0.f)
 		return;
 	level = (unsigned long)(alpha * 255.f + 0.5f);
@@ -12652,6 +12681,23 @@ static void h3_gm_update(struct widget_instance *list)
 			continue;
 		if (child == list->focused_child && index < NUMBER_OF_GAME_MANAGER_GAMES)
 			focused = index;
+#ifdef HALO_STEAM_DOWNLOAD
+		/* (the row after the games: DOWNLOAD FROM STEAM, Cross opens it) */
+		if (index == NUMBER_OF_GAME_MANAGER_GAMES)
+		{
+			widget_instance_set_visibility_recursive(child, TRUE);
+			child->disabled = FALSE;
+			row_column(child, "row_name", T("DOWNLOAD FROM STEAM"));
+			row_column(child, "row_kind", T("Your own MCC files"));
+			row_column(child, "row_size", "");
+			row_column(child, "row_state", "");
+			child->animation.current_frame_index = child == list->focused_child ? 1 : 0;
+			if (child == list->focused_child)
+				focused = index;
+			index++;
+			continue;
+		}
+#endif
 		if (index >= NUMBER_OF_GAME_MANAGER_GAMES)
 		{
 			widget_instance_set_visibility_recursive(child, FALSE);
@@ -12686,7 +12732,7 @@ static void h3_gm_update(struct widget_instance *list)
 		{
 			if (strncmp(child->name, "row_", 4))
 				continue;
-			if (at < NUMBER_OF_GAME_MANAGER_GAMES && child == list->focused_child)
+			if (at <= NUMBER_OF_GAME_MANAGER_GAMES && child == list->focused_child)
 				on_a_game = TRUE;
 			if (at == h3_mods.game)
 				wanted = child;
@@ -12694,6 +12740,24 @@ static void h3_gm_update(struct widget_instance *list)
 		}
 		if (!on_a_game && wanted)
 			ui_widget_port_give_focus(list, wanted);
+	}
+	if (focused == NUMBER_OF_GAME_MANAGER_GAMES)
+	{
+		/* (DOWNLOAD FROM STEAM focused: its line, Cross to open it) */
+		static char const *const hints[] = { "a_butn", "toggle", "y_butn", "details_label", "x_butn", "delete_label" };
+
+		text_show(named(screen, "detail_modes"), T("Halo CE from your own Steam account, with the Steam app's QR code."));
+		text_show(named(screen, "detail_check"), "");
+		text_show(named(screen, "detail_needs"), "");
+		text_show(named(screen, "detail_source"), "");
+		for (hint_index = 0; hint_index < (int)NUMBEROF(hints); hint_index++)
+		{
+			if ((hint = named(screen, hints[hint_index])) != NULL)
+				widget_instance_set_visibility_recursive(hint, hint_index < 2);
+		}
+		text_show(named(screen, "toggle"), T("Open"));
+		text_show(named(screen, "mods_message"), "");
+		return;
 	}
 	h3_mods.game = (short)focused;
 	game_manager_get((int)focused, &game);
@@ -12893,23 +12957,840 @@ static struct halo_mod_entry const *h3_mods_row_entry(struct widget_instance *wi
 	return h3_mods_chosen();
 }
 
-/* (port h3 mods toggle: a row's Cross) off or on */
-static void h3_mods_toggle(struct widget_instance *widget)
+/* ---- GAME MANAGER's DOWNLOAD FROM STEAM (halo3/steam.xml; port/steamdl/steam_job.c, docs/steam_download_security.md):
+the player's own Halo CE files from their Steam account. First the notice and the rows (the sound banks on or off, then
+the sign-in), then the QR the Steam app scans (drawn over the panel, h3_steam_qr_draw), then the progress, then the end.
+Circle cancels a download (it is kept: the next one resumes) and leaves once it has signed out. 1.1.x's: Halo CE alone
+(1.2.0's offers Halo 2 too) */
+static struct
+{
+	int games;
+	/* the screen last updated (the QR is drawn only while it is up) */
+	unsigned long updated;
+	char message[200];
+} h3_steam = { 3 };
+
+#ifdef HALO_STEAM_DOWNLOAD
+/* the download and card sizes of the choice, from MCC's manifests (976733, 976734, Nov 2026), in MB: the maps, the PC
+files, sounds_adpcm.fsb and the lists; the CELT banks (the dialogue 330, the music 957, the streams 159, debug 95) */
+static void h3_steam_sizes(int games, int *download_mb, int *card_mb)
+{
+	*download_mb = ((games & STEAM_GAME_HALO_CE) ? 470 : 0) + ((games & STEAM_GAME_HALO_CE_BANKS) ? 1500 : 0);
+	*card_mb = ((games & STEAM_GAME_HALO_CE) ? 1510 : 0) + ((games & STEAM_GAME_HALO_CE_BANKS) ? 1540 : 0);
+}
+
+static boolean h3_steam_running(int phase)
+{
+	return phase != STEAM_JOB_IDLE && phase != STEAM_JOB_DONE && phase != STEAM_JOB_FAILED && phase != STEAM_JOB_CANCELLED;
+}
+#endif
+
+static void h3_steam_update(struct widget_instance *list)
+{
+#ifdef HALO_STEAM_DOWNLOAD
+	struct widget_instance *screen = screen_of(list);
+	struct widget_instance *child, *found;
+	struct steam_job_view view;
+	char text[1400], line[256];
+	int index = 0, download_mb, card_mb;
+	boolean choosing;
+
+	h3_steam.updated = system_milliseconds();
+	steam_job_view(&view);
+	choosing = view.phase == STEAM_JOB_IDLE;
+	text[0] = 0;
+	switch (view.phase)
+	{
+	case STEAM_JOB_IDLE:
+	{
+		char date[32];
+
+		if (steam_job_marker_check(date, sizeof(date)))
+		{
+			snprintf(line, sizeof(line), T("A Steam sign-in from %s was not signed out. In the Steam app, remove \"Halo CE Vita (PS Vita)\" from Authorized devices."), date);
+			snprintf(text, sizeof(text), "%s\n\n", line);
+		}
+		h3_steam_sizes(h3_steam.games, &download_mb, &card_mb);
+		snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s\n\n", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code, downloads only your own Halo: The Master Chief Collection files, then signs out. Valve may stop it working at any time. No password is asked for or kept."));
+		snprintf(line, sizeof(line), T("About %.1f GB to download, %.1f GB on the memory card. The Vita stays awake and the PS button is locked until it ends."),
+			download_mb / 1000.0, card_mb / 1000.0);
+		strncat(text, line, sizeof(text) - strlen(text) - 1);
+		if (h3_steam.message[0])
+		{
+			strncat(text, "\n\n", sizeof(text) - strlen(text) - 1);
+			strncat(text, h3_steam.message, sizeof(text) - strlen(text) - 1);
+		}
+		break;
+	}
+	case STEAM_JOB_CONNECTING:
+		snprintf(text, sizeof(text), "%s", view.attempts > 1 ? T("The Steam session was lost. Connecting again: a new code to scan follows.") : T("Connecting to Steam..."));
+		break;
+	case STEAM_JOB_QR:
+		snprintf(text, sizeof(text), "%s", T("On your phone, open the Steam app, then Steam Guard, and scan this code.\n\nApprove only if you started this on your Vita just now.\n\nThe Vita never sees your password."));
+		break;
+	case STEAM_JOB_PREPARING:
+		snprintf(text, sizeof(text), "%s", T("Signed in. Getting Halo CE ready..."));
+		break;
+	case STEAM_JOB_DOWNLOADING:
+	case STEAM_JOB_PAUSED:
+		snprintf(text, sizeof(text), T("Halo CE, part %d of %d\n%.1f of %.1f MB"), view.depot_index + 1, view.depot_count,
+			view.done_kb / 1024.0, view.total_kb / 1024.0);
+		if (view.phase == STEAM_JOB_PAUSED)
+			snprintf(line, sizeof(line), "\n%s", T("Paused: the battery is low. Plug in the charger."));
+		else if (view.rate_kb && view.seconds_left >= 0)
+			snprintf(line, sizeof(line), T("\n%.1f MB/s, about %d min left"), view.rate_kb / 1024.0, (view.seconds_left + 59) / 60);
+		else
+			line[0] = 0;
+		strncat(text, line, sizeof(text) - strlen(text) - 1);
+		snprintf(line, sizeof(line), "\n%s\n\n%s", view.file, T("Circle stops it: what is in stays, and the next download resumes."));
+		strncat(text, line, sizeof(text) - strlen(text) - 1);
+		break;
+	case STEAM_JOB_ENDING:
+		snprintf(text, sizeof(text), "%s", T("Stopping and signing out of Steam..."));
+		break;
+	case STEAM_JOB_DONE:
+		snprintf(text, sizeof(text), T("Done: %u files downloaded, %u already there. Signed out of Steam."), view.files_done, view.files_already);
+		break;
+	case STEAM_JOB_FAILED:
+	case STEAM_JOB_CANCELLED:
+		snprintf(text, sizeof(text), "%s\n%s\n\n%s", view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The download stopped:"),
+			view.phase == STEAM_JOB_CANCELLED ? "" : view.error, view.revoked ? T("Signed out of Steam. What is in stays: download again to resume.") :
+			T("If \"Halo CE Vita (PS Vita)\" is in the Steam app's Authorized devices, remove it. What is in stays: download again to resume."));
+		break;
+	}
+	if ((found = named(screen, "steam_text")) != NULL)
+	{
+		widget_instance_set_visibility_recursive(found, view.phase != STEAM_JOB_QR);
+		h3_dialog_text_wrapped(found, view.phase != STEAM_JOB_QR ? text : "");
+	}
+	if ((found = named(screen, "qr_text")) != NULL)
+	{
+		widget_instance_set_visibility_recursive(found, view.phase == STEAM_JOB_QR);
+		h3_dialog_text_wrapped(found, view.phase == STEAM_JOB_QR ? text : "");
+	}
+	for (child = list->child; child; child = child->next, index++)
+	{
+		widget_instance_set_visibility_recursive(child, choosing);
+		child->disabled = !choosing;
+		if (index == 0)
+			snprintf(line, sizeof(line), "%s: %s", T("MCC's dialogue, music and stream banks (1.5 GB)"), (h3_steam.games & STEAM_GAME_HALO_CE_BANKS) ? T("ON") : T("OFF"));
+		else if (index == 1)
+			snprintf(line, sizeof(line), "%s", T("SIGN IN WITH THE STEAM APP"));
+		else
+		{
+			/* (STEAM WORKSHOP: a build with the Workshop alone) */
+#ifdef HALO_STEAM_WORKSHOP
+			snprintf(line, sizeof(line), "%s", T("STEAM WORKSHOP: MCC MODS AND MAPS"));
+#else
+			widget_instance_set_visibility_recursive(child, FALSE);
+			child->disabled = TRUE;
+			continue;
+#endif
+		}
+		h3_capitals(line);
+		text_show(child, line);
+		child->animation.current_frame_index = child == list->focused_child ? 1 : 0;
+	}
+	if ((found = named(screen, "a_butn")) != NULL)
+		widget_instance_set_visibility_recursive(found, choosing);
+	if ((found = named(screen, "select")) != NULL)
+		widget_instance_set_visibility_recursive(found, choosing);
+	text_show(named(screen, "back"), h3_steam_running(view.phase) ? T("Cancel") : T("Back"));
+#else
+	(void)list;
+#endif
+}
+
+/* (port h3 steam row: Cross) the sound banks on or off, or the sign-in begun */
+static boolean h3_steam_row(struct widget_instance *widget)
+{
+#ifdef HALO_STEAM_DOWNLOAD
+	long row = h3_child_index(widget);
+	int started;
+
+	h3_steam.message[0] = 0;
+	if (row == 0)
+	{
+		h3_steam.games ^= STEAM_GAME_HALO_CE_BANKS;
+		platform_log("menus: steam: sound banks %s", (h3_steam.games & STEAM_GAME_HALO_CE_BANKS) ? "on" : "off");
+		return TRUE;
+	}
+	if (row == 2)
+	{
+		/* (STEAM WORKSHOP: its own screen, halo3/workshop.xml - the row's open=) */
+#ifdef HALO_STEAM_WORKSHOP
+		platform_log("menus: steam: STEAM WORKSHOP");
+		return TRUE;
+#else
+		return FALSE;
+#endif
+	}
+	if (row != 1)
+		return FALSE;
+	started = steam_job_start_games(h3_steam.games);
+	if (started < 0)
+		snprintf(h3_steam.message, sizeof(h3_steam.message), "%s", T("Charge the Vita to 30 percent or plug in the charger first."));
+	platform_log("menus: steam: sign-in %s (games %d)", started > 0 ? "begun" : started < 0 ? "refused (battery)" : "already running",
+		h3_steam.games);
+	return started > 0;
+#else
+	(void)widget;
+	return FALSE;
+#endif
+}
+
+/* (port h3 steam back: Circle) a download cancelled (the screen stays while it signs out), else the screen left */
+static boolean h3_steam_back(void)
+{
+#ifdef HALO_STEAM_DOWNLOAD
+	struct steam_job_view view;
+
+	steam_job_view(&view);
+	if (h3_steam_running(view.phase))
+	{
+		steam_job_cancel();
+		return FALSE;
+	}
+	steam_job_forget();
+#endif
+	h3_steam.message[0] = 0;
+	return TRUE;
+}
+
+/* ---- STEAM WORKSHOP (halo3/workshop.xml; port/steamdl/steam_workshop.c, docs/steam_download_security.md section 7):
+Halo: MCC's Steam Workshop items for Halo CE, through the player's own Steam sign-in. The notice and SIGN IN, the QR
+(h3_steam_qr_draw: the same job's), then the list of a page (ten), marks, the download, then here - the session
+ended - each downloaded item checked again, every map by the game's own check (custom_edition_cache_file_check, as
+the mods folder's), and moved into the mods folder (steam_workshop_install). 1.1.3 plays a Workshop item's campaign
+maps (the mods folder's MCC mods, offline) and its multiplayer maps (the multiplayer map lists, offline and online:
+custom_edition_mods.c, workshop_maps.h; a joiner without the host's downloads it here, never from the host). */
+#ifdef HALO_STEAM_WORKSHOP
+static struct
+{
+	char marked[STEAM_WORKSHOP_CHOSEN_MAXIMUM][24];
+	char marked_titles[STEAM_WORKSHOP_CHOSEN_MAXIMUM][40];
+	int marked_count;
+	/* the job's end seen and its items installed */
+	boolean installed_seen;
+	int installed, refused;
+	char message[600];
+	int sort;
+	char search[STEAM_WORKSHOP_SEARCH_SIZE];
+} h3_workshop;
+
+/* (xbox_files.c's) */
+char const *platform_data_root(void);
+
+/* the data root (ux0:data/haloce-vita), without a trailing '/': the Workshop's workshop/ and mods/ are in it */
+static char const *h3_workshop_root(void)
+{
+	static char root[512];
+	size_t length;
+
+	snprintf(root, sizeof(root), "%s", platform_data_root());
+	length = strlen(root);
+	while (length > 1 && root[length - 1] == '/' && root[length - 2] != ':')
+		root[--length] = 0;
+	return root;
+}
+
+static char const *h3_workshop_order_name(int sort)
+{
+	switch (sort)
+	{
+	case STEAM_WORKSHOP_SORT_NEW:
+		return T("newest");
+	case STEAM_WORKSHOP_SORT_TOP:
+		return T("most liked");
+	case STEAM_WORKSHOP_SORT_UPDATED:
+		return T("last updated");
+	default:
+		return T("trending");
+	}
+}
+
+static int h3_workshop_marked_index(char const *id)
+{
+	int index;
+
+	for (index = 0; index < h3_workshop.marked_count; index++)
+		if (!strcmp(h3_workshop.marked[index], id))
+			return index;
+	return -1;
+}
+
+/* the game's own map check of a downloaded map (the mods folder's: a Halo: CE Anniversary cache that passes the cache
+file loader's checks), on the host path the install gives, as the game's d:\ path */
+static int h3_workshop_map_check(void *context, const char *path, char *why, size_t why_size)
+{
+	const char *root = h3_workshop_root();
+	size_t root_length = strlen(root), index;
+	char game_path[600];
+	short format = 0, scenario_type = 0, status;
+
+	(void)context;
+	if (strncmp(path, root, root_length) || path[root_length] != '/' ||
+		(size_t)snprintf(game_path, sizeof(game_path), "d:\\%s", path + root_length + 1) >= sizeof(game_path))
+	{
+		snprintf(why, why_size, "%s", T("not in the game's folder"));
+		return 0;
+	}
+	for (index = 0; game_path[index]; index++)
+		if (game_path[index] == '/')
+			game_path[index] = '\\';
+	status = custom_edition_cache_file_check(game_path, &format, &scenario_type, NULL, 0);
+	if (status != _cache_file_status_ok)
+	{
+		snprintf(why, why_size, "%s", T(cache_file_status_describe((enum cache_file_status)status)));
+		return 0;
+	}
+	if (format != _cache_file_format_mcc_cea_cache)
+	{
+		snprintf(why, why_size, "%s", T("not a Halo: CE Anniversary map"));
+		return 0;
+	}
+	return 1;
+}
+
+/* the downloaded items (the job's, or an earlier one's the game was closed before installing) checked and moved */
+static void h3_workshop_install_staged(void)
+{
+	uint64_t ids[16];
+	char why[200], line[300];
+	int count = steam_workshop_staged(h3_workshop_root(), ids, 16), index;
+
+	for (index = 0; index < count; index++)
+	{
+		if (steam_workshop_install(h3_workshop_root(), ids[index], h3_workshop_map_check, NULL, why, sizeof(why)))
+		{
+			h3_workshop.installed++;
+			platform_log("menus: workshop: %llu installed in mods", (unsigned long long)ids[index]);
+		}
+		else
+		{
+			h3_workshop.refused++;
+			platform_log("menus: workshop: %llu refused: %s", (unsigned long long)ids[index], why);
+			snprintf(line, sizeof(line), T("Not installed (%llu): %s\n"), (unsigned long long)ids[index], why);
+			strncat(h3_workshop.message, line, sizeof(h3_workshop.message) - strlen(h3_workshop.message) - 1);
+		}
+	}
+	if (count)
+	{
+		/* (the mods folder looked at again: the campaign's list and the MOD MANAGER) */
+		custom_edition_mods_look_again();
+		mod_manager_scan();
+	}
+}
+#endif
+
+static void h3_workshop_update(struct widget_instance *list)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct widget_instance *screen = screen_of(list);
+	struct widget_instance *child, *found;
+	struct steam_job_workshop_view ws;
+	struct steam_job_view view;
+	char status_text[400], details[700], line[300];
+	int index = 0, focused = -1;
+	boolean browsing, idle;
+
+	h3_steam.updated = system_milliseconds();
+	steam_job_view(&view);
+	steam_job_workshop_view(&ws);
+	browsing = view.phase == STEAM_JOB_BROWSING;
+	idle = view.phase == STEAM_JOB_IDLE;
+	status_text[0] = details[0] = 0;
+	if (!h3_steam_running(view.phase) && !h3_workshop.installed_seen)
+	{
+		/* (the session ended - or none ran: an earlier download not yet installed) */
+		h3_workshop.installed_seen = TRUE;
+		h3_workshop_install_staged();
+	}
+	switch (view.phase)
+	{
+	case STEAM_JOB_IDLE:
+		snprintf(status_text, sizeof(status_text), "%s", T("Halo CE items of MCC's Steam Workshop, on this Vita."));
+		snprintf(details, sizeof(details), "%s", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code, lists Halo CE's Workshop items, downloads the ones you pick, then signs out. Your account must own Halo: The Master Chief Collection. Campaign mods play from the mods folder, offline; multiplayer maps are in the multiplayer map lists, offline and online. No password is asked for or kept."));
+		if (h3_workshop.installed || h3_workshop.refused)
+		{
+			snprintf(line, sizeof(line), T("\n\nInstalled: %d. Not installed: %d."), h3_workshop.installed, h3_workshop.refused);
+			strncat(details, line, sizeof(details) - strlen(details) - 1);
+		}
+		if (h3_workshop.message[0])
+		{
+			strncat(details, "\n\n", sizeof(details) - strlen(details) - 1);
+			strncat(details, h3_workshop.message, sizeof(details) - strlen(details) - 1);
+		}
+		break;
+	case STEAM_JOB_CONNECTING:
+		snprintf(status_text, sizeof(status_text), "%s", view.attempts > 1 ? T("The Steam session was lost. Connecting again: a new code to scan follows.") : T("Connecting to Steam..."));
+		break;
+	case STEAM_JOB_QR:
+		snprintf(status_text, sizeof(status_text), "%s", T("On your phone, open the Steam app, then Steam Guard, and scan this code.\n\nApprove only if you started this on your Vita just now.\n\nThe Vita never sees your password."));
+		break;
+	case STEAM_JOB_BROWSING:
+		if (ws.search[0])
+			snprintf(status_text, sizeof(status_text), T("Search \"%.40s\": page %d, %d items. Marked: %d of %d."), ws.search,
+				ws.page, ws.total, h3_workshop.marked_count, STEAM_WORKSHOP_CHOSEN_MAXIMUM);
+		else
+			snprintf(status_text, sizeof(status_text), T("By %s: page %d of %d. Marked: %d of %d."),
+				h3_workshop_order_name(ws.sort), ws.page, ws.total ? (ws.total + 9) / 10 : 1, h3_workshop.marked_count,
+				STEAM_WORKSHOP_CHOSEN_MAXIMUM);
+		strncat(status_text, "\n", sizeof(status_text) - strlen(status_text) - 1);
+		strncat(status_text, ws.loading ? T("Asking Steam...") : ws.error[0] ? ws.error :
+			T("L R: page. Left Right: order."), sizeof(status_text) - strlen(status_text) - 1);
+		break;
+	case STEAM_JOB_PREPARING:
+	case STEAM_JOB_DOWNLOADING:
+	case STEAM_JOB_PAUSED:
+		snprintf(status_text, sizeof(status_text), T("Item %d of %d: %.50s"), ws.item_index + 1, ws.item_count, ws.item_title);
+		snprintf(details, sizeof(details), T("%.1f of %.1f MB"), view.done_kb / 1024.0, view.total_kb / 1024.0);
+		if (view.phase == STEAM_JOB_PAUSED)
+			snprintf(line, sizeof(line), "\n%s", T("Paused: the battery is low. Plug in the charger."));
+		else if (view.rate_kb && view.seconds_left >= 0)
+			snprintf(line, sizeof(line), T("\n%.1f MB/s, about %d min left"), view.rate_kb / 1024.0, (view.seconds_left + 59) / 60);
+		else
+			line[0] = 0;
+		strncat(details, line, sizeof(details) - strlen(details) - 1);
+		snprintf(line, sizeof(line), "\n%s", T("Circle stops it: what is in stays, and the next download resumes."));
+		strncat(details, line, sizeof(details) - strlen(details) - 1);
+		break;
+	case STEAM_JOB_ENDING:
+		snprintf(status_text, sizeof(status_text), "%s", T("Stopping and signing out of Steam..."));
+		break;
+	case STEAM_JOB_DONE:
+	case STEAM_JOB_FAILED:
+	case STEAM_JOB_CANCELLED:
+		snprintf(status_text, sizeof(status_text), "%s", view.phase == STEAM_JOB_DONE ? T("Done. Signed out of Steam.") :
+			view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The Workshop stopped:"));
+		if (view.phase == STEAM_JOB_FAILED)
+		{
+			strncat(status_text, " ", sizeof(status_text) - strlen(status_text) - 1);
+			strncat(status_text, view.error, sizeof(status_text) - strlen(status_text) - 1);
+		}
+		snprintf(details, sizeof(details), T("Installed in the mods folder: %d. Not installed: %d.\n"), h3_workshop.installed,
+			h3_workshop.refused);
+		if (ws.items_failed)
+		{
+			snprintf(line, sizeof(line), T("Not downloaded: %d (%.150s)\n"), ws.items_failed, ws.failure);
+			strncat(details, line, sizeof(details) - strlen(details) - 1);
+		}
+		strncat(details, h3_workshop.message, sizeof(details) - strlen(details) - 1);
+		if (!view.revoked && view.phase != STEAM_JOB_DONE)
+			strncat(details, T("If \"Halo CE Vita (PS Vita)\" is in the Steam app's Authorized devices, remove it."),
+				sizeof(details) - strlen(details) - 1);
+		break;
+	}
+	for (child = list->child; child; child = child->next, index++)
+	{
+		boolean shown = FALSE;
+
+		line[0] = 0;
+		if (idle && index == 0)
+		{
+			snprintf(line, sizeof(line), "%s", T("SIGN IN WITH THE STEAM APP"));
+			h3_capitals(line);
+			shown = TRUE;
+		}
+		else if (browsing && index < ws.count && !ws.loading)
+		{
+			struct steam_job_workshop_row const *row = &ws.rows[index];
+
+			snprintf(line, sizeof(line), "%s %.44s  %.1f MB%s", h3_workshop_marked_index(row->id) >= 0 ? "[X]" :
+				row->downloadable ? "[ ]" : " - ", row->title, row->size_kb / 1024.0,
+				(row->tags & STEAM_WORKSHOP_TAG_CAMPAIGN) ? T("  campaign") :
+				(row->tags & STEAM_WORKSHOP_TAG_MULTIPLAYER) ? T("  multiplayer") : "");
+			shown = TRUE;
+			if (child == list->focused_child)
+				focused = index;
+		}
+		widget_instance_set_visibility_recursive(child, shown);
+		child->disabled = !shown;
+		if (shown)
+			text_show(child, line);
+		child->animation.current_frame_index = child == list->focused_child ? 1 : 0;
+	}
+	if (browsing && focused >= 0)
+	{
+		struct steam_job_workshop_row const *row = &ws.rows[focused];
+
+		snprintf(details, sizeof(details), T("%s\nWorkshop item %s, %.1f MB%s\n%s"), row->title, row->id, row->size_kb / 1024.0,
+			(row->tags & STEAM_WORKSHOP_TAG_CAMPAIGN) ? T(", campaign") : (row->tags & STEAM_WORKSHOP_TAG_MULTIPLAYER) ?
+			T(", multiplayer") : "", row->downloadable ? T("Cross marks it; Square downloads the marked ones.") : row->reason);
+	}
+	else if (browsing && !ws.loading && !ws.count && !ws.error[0])
+		snprintf(details, sizeof(details), "%s", T("No items on this page."));
+	{
+		/* (the end's report is long: the big text box, below the headline, the rows being hidden) */
+		boolean ended = view.phase == STEAM_JOB_DONE || view.phase == STEAM_JOB_FAILED || view.phase == STEAM_JOB_CANCELLED;
+		char const *big = view.phase == STEAM_JOB_QR ? status_text : ended ? details : "";
+
+		if ((found = named(screen, "status")) != NULL)
+		{
+			widget_instance_set_visibility_recursive(found, view.phase != STEAM_JOB_QR);
+			h3_dialog_text_wrapped(found, view.phase != STEAM_JOB_QR ? status_text : "");
+		}
+		if ((found = named(screen, "qr_text")) != NULL)
+		{
+			widget_instance_set_visibility_recursive(found, big[0] != 0);
+			h3_dialog_text_wrapped(found, big);
+		}
+		if ((found = named(screen, "details")) != NULL)
+			h3_dialog_text_wrapped(found, ended ? "" : details);
+	}
+	{
+		static char const *const browse_only[] = { "x_butn", "download", "y_butn", "search" };
+		int button;
+
+		for (button = 0; button < 4; button++)
+			if ((found = named(screen, browse_only[button])) != NULL)
+				widget_instance_set_visibility_recursive(found, browsing);
+		if ((found = named(screen, "a_butn")) != NULL)
+			widget_instance_set_visibility_recursive(found, browsing || idle);
+		if ((found = named(screen, "select")) != NULL)
+			widget_instance_set_visibility_recursive(found, browsing || idle);
+	}
+	text_show(named(screen, "back"), h3_steam_running(view.phase) ? (browsing ? T("Sign out") : T("Cancel")) : T("Back"));
+	/* (the search typed: the first page of it) */
+	{
+		char typed[STEAM_WORKSHOP_SEARCH_SIZE];
+
+		if (typing_done(_typing_workshop_search, typed, sizeof(typed)))
+		{
+			snprintf(h3_workshop.search, sizeof(h3_workshop.search), "%s", typed);
+			steam_job_workshop_ask(1, h3_workshop.sort, h3_workshop.search);
+			platform_log("menus: workshop: search (%d characters)", (int)strlen(typed));
+		}
+	}
+#else
+	(void)list;
+#endif
+}
+
+/* (port h3 workshop row: Cross) SIGN IN, or an item marked or unmarked */
+static boolean h3_workshop_row(struct widget_instance *widget)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct steam_job_workshop_view ws;
+	struct steam_job_view view;
+	long row = h3_child_index(widget);
+
+	steam_job_view(&view);
+	if (view.phase == STEAM_JOB_IDLE && row == 0)
+	{
+		int started;
+
+		h3_workshop.marked_count = 0;
+		h3_workshop.installed = h3_workshop.refused = 0;
+		h3_workshop.message[0] = 0;
+		h3_workshop.search[0] = 0;
+		h3_workshop.sort = STEAM_WORKSHOP_SORT_TREND;
+		h3_workshop.installed_seen = FALSE;
+		started = steam_job_start_workshop(h3_workshop_root());
+		if (started < 0)
+			snprintf(h3_workshop.message, sizeof(h3_workshop.message), "%s", T("Charge the Vita to 30 percent or plug in the charger first."));
+		platform_log("menus: workshop: sign-in %s", started > 0 ? "begun" : started < 0 ? "refused (battery)" : "already running");
+		return started > 0;
+	}
+	if (view.phase != STEAM_JOB_BROWSING)
+		return FALSE;
+	steam_job_workshop_touch();
+	steam_job_workshop_view(&ws);
+	if (row < 0 || row >= ws.count || ws.loading)
+		return FALSE;
+	{
+		struct steam_job_workshop_row const *item = &ws.rows[row];
+		int marked = h3_workshop_marked_index(item->id);
+
+		if (marked >= 0)
+		{
+			memmove(h3_workshop.marked[marked], h3_workshop.marked[marked + 1],
+				(size_t)(h3_workshop.marked_count - marked - 1) * sizeof(h3_workshop.marked[0]));
+			memmove(h3_workshop.marked_titles[marked], h3_workshop.marked_titles[marked + 1],
+				(size_t)(h3_workshop.marked_count - marked - 1) * sizeof(h3_workshop.marked_titles[0]));
+			h3_workshop.marked_count--;
+			return TRUE;
+		}
+		if (!item->downloadable || h3_workshop.marked_count >= STEAM_WORKSHOP_CHOSEN_MAXIMUM)
+			return FALSE;
+		snprintf(h3_workshop.marked[h3_workshop.marked_count], sizeof(h3_workshop.marked[0]), "%s", item->id);
+		snprintf(h3_workshop.marked_titles[h3_workshop.marked_count], sizeof(h3_workshop.marked_titles[0]), "%s", item->title);
+		h3_workshop.marked_count++;
+		platform_log("menus: workshop: %s marked (%d)", item->id, h3_workshop.marked_count);
+		return TRUE;
+	}
+#else
+	(void)widget;
+	return FALSE;
+#endif
+}
+
+/* (port h3 workshop download: Square) the marked items - or the one in focus - downloaded; the list ends */
+static boolean h3_workshop_download(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct steam_job_view view;
+
+	steam_job_view(&view);
+	if (view.phase != STEAM_JOB_BROWSING || !h3_workshop.marked_count)
+		return FALSE;
+	platform_log("menus: workshop: download %d items", h3_workshop.marked_count);
+	steam_job_workshop_choose((const char (*)[24])h3_workshop.marked, h3_workshop.marked_count);
+	return TRUE;
+#else
+	return FALSE;
+#endif
+}
+
+/* (port h3 workshop search: Triangle) the system keyboard for a search; empty: the list by its order again */
+static boolean h3_workshop_search(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct steam_job_view view;
+
+	steam_job_view(&view);
+	if (view.phase != STEAM_JOB_BROWSING)
+		return FALSE;
+	steam_job_workshop_touch();
+	typing_begin(_typing_workshop_search, T("Search the Workshop"), h3_workshop.search, STEAM_WORKSHOP_SEARCH_SIZE - 1,
+		FALSE);
+	return TRUE;
+#else
+	return FALSE;
+#endif
+}
+
+/* (port h3 workshop page previous/next: L, R) */
+static boolean h3_workshop_page(int step)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct steam_job_workshop_view ws;
+	struct steam_job_view view;
+	int pages;
+
+	steam_job_view(&view);
+	if (view.phase != STEAM_JOB_BROWSING)
+		return FALSE;
+	steam_job_workshop_view(&ws);
+	pages = ws.total ? (ws.total + STEAM_WORKSHOP_PAGE_ITEMS - 1) / STEAM_WORKSHOP_PAGE_ITEMS : 1;
+	if (ws.loading || ws.page + step < 1 || ws.page + step > pages)
+		return FALSE;
+	steam_job_workshop_ask(ws.page + step, ws.sort, ws.search);
+	return TRUE;
+#else
+	(void)step;
+	return FALSE;
+#endif
+}
+
+/* (port h3 workshop order previous/next: Left, Right) trending, newest, most liked, last updated (a search: cleared) */
+static boolean h3_workshop_order(int step)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct steam_job_view view;
+
+	steam_job_view(&view);
+	if (view.phase != STEAM_JOB_BROWSING)
+		return FALSE;
+	h3_workshop.sort = (h3_workshop.sort + step + STEAM_WORKSHOP_SORT_COUNT) % STEAM_WORKSHOP_SORT_COUNT;
+	h3_workshop.search[0] = 0;
+	steam_job_workshop_ask(1, h3_workshop.sort, "");
+	return TRUE;
+#else
+	(void)step;
+	return FALSE;
+#endif
+}
+
+/* (port h3 workshop back: Circle) the list left (signing out), a download cancelled (the screen stays while it signs
+out), else the screen left */
+static boolean h3_workshop_back(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct steam_job_view view;
+
+	steam_job_view(&view);
+	if (view.phase == STEAM_JOB_BROWSING)
+	{
+		/* (nothing chosen: the session just ends) */
+		steam_job_workshop_choose(NULL, 0);
+		return FALSE;
+	}
+	if (h3_steam_running(view.phase))
+	{
+		steam_job_cancel();
+		return FALSE;
+	}
+	steam_job_forget();
+	h3_workshop.installed_seen = FALSE;
+	h3_workshop.installed = h3_workshop.refused = 0;
+	h3_workshop.message[0] = 0;
+#endif
+	return TRUE;
+}
+
+/* (system_link_shortcut.c: the settings panel's Steam Workshop row, for every Menu style) the STEAM WORKSHOP screen
+opened over the active screen (the main menu), as DOWNLOAD FROM STEAM's row opens it: 1 if it opened */
+int menu_functions_workshop_open(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	long screen = menu_tags_ingame_screen("h3/workshop/screen");
+	struct widget_instance *active = ui_widget_port_active_screen(0);
+
+	if (screen == NONE || !active || !ui_widget_load_by_name_or_tag(NULL, screen, NULL, active->local_player_index,
+		active->definition_tag_index, NONE, NONE))
+	{
+		platform_log("menus: workshop: the screen did not open (%s)", screen == NONE ? "no screen" : "no screen up");
+		return 0;
+	}
+	platform_log("menus: workshop: the screen opened (the settings panel's Steam Workshop)");
+	return 1;
+#else
+	return 0;
+#endif
+}
+
+/* (map_share.c: a joiner whose host plays a Steam Workshop map it lacks, the player having said yes) the Workshop's
+download of that one item begun - the sign-in, then the item straight away, no list - and the STEAM WORKSHOP screen
+opened over the game's lobby for its QR and progress (Circle cancels; Back after the end goes back to the lobby): 1,
+0 if a Steam job runs already, -1 if the battery is too low to start, -2 if the screen cannot open here */
+int menu_functions_workshop_open_item(char const *id_text)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	long screen = menu_tags_ingame_screen("h3/workshop/screen");
+	struct widget_instance *active = ui_widget_port_active_screen(0);
+	char ids[1][24];
+	uint64_t id;
+	int started;
+
+	if (!id_text || !steam_workshop_id_parse(id_text, &id) || screen == NONE || !active)
+	{
+		platform_log("menus: workshop: item %s not begun (%s)", id_text ? id_text : "?", screen == NONE ? "no screen" :
+			!active ? "no screen up" : "a bad number");
+		return -2;
+	}
+	h3_workshop.marked_count = 0;
+	h3_workshop.installed = h3_workshop.refused = 0;
+	h3_workshop.message[0] = 0;
+	h3_workshop.search[0] = 0;
+	h3_workshop.sort = STEAM_WORKSHOP_SORT_TREND;
+	h3_workshop.installed_seen = FALSE;
+	started = steam_job_start_workshop(h3_workshop_root());
+	if (started <= 0)
+	{
+		platform_log("menus: workshop: item %s not begun: %s", id_text, started < 0 ? "the battery" : "a Steam job runs");
+		return started;
+	}
+	/* (the item chosen at once: the job takes it as the list opens, never showing one) */
+	snprintf(ids[0], sizeof(ids[0]), "%s", id_text);
+	steam_job_workshop_choose((const char (*)[24])ids, 1);
+	if (!ui_widget_load_by_name_or_tag(NULL, screen, NULL, active->local_player_index, active->definition_tag_index,
+		NONE, NONE))
+	{
+		steam_job_cancel();
+		platform_log("menus: workshop: item %s: the screen did not open; the session ends", id_text);
+		return -2;
+	}
+	platform_log("menus: workshop: item %s's download begun for the host's map (the screen over the lobby)", id_text);
+	return 1;
+#else
+	(void)id_text;
+	return 0;
+#endif
+}
+
+/* (map_share.c) the Workshop's downloaded items installed once its session ended (each checked, every map by the
+game's own check; once a job): how many were */
+int menu_functions_workshop_install(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	if (!h3_workshop.installed_seen)
+	{
+		h3_workshop.installed_seen = TRUE;
+		h3_workshop_install_staged();
+	}
+	return h3_workshop.installed;
+#else
+	return 0;
+#endif
+}
+
+/* (menu_functions_fade_draw, over the menus) the QR the Steam app scans: dark modules on a white square with its
+quiet zone, in the panel's right half, each run of a row's dark modules one quad */
+static void h3_steam_qr_draw(void)
+{
+#ifdef HALO_STEAM_DOWNLOAD
+	void draw_quad(rectangle2d *rectangle, pixel32 color);
+	struct steam_job_view view;
+	rectangle2d bounds;
+	int module, x, y, left, top, area = 210;
+
+	if (!h3_steam.updated || system_milliseconds() - h3_steam.updated > 250)
+		return;
+	steam_job_view(&view);
+	if (view.phase != STEAM_JOB_QR || view.qr_size <= 0)
+		return;
+	module = area / (view.qr_size + 8);
+	left = 372 + (area - module * (view.qr_size + 8)) / 2;
+	top = 88;
+	bounds.x0 = (short)left;
+	bounds.y0 = (short)top;
+	bounds.x1 = (short)(left + module * (view.qr_size + 8));
+	bounds.y1 = (short)(top + module * (view.qr_size + 8));
+	draw_quad(&bounds, (pixel32)0xFFFFFFFF);
+	for (y = 0; y < view.qr_size; y++)
+	{
+		for (x = 0; x < view.qr_size; x++)
+		{
+			int run = x;
+
+			if (!view.qr[y * view.qr_size + x])
+				continue;
+			while (run + 1 < view.qr_size && view.qr[y * view.qr_size + run + 1])
+				run++;
+			bounds.x0 = (short)(left + (x + 4) * module);
+			bounds.y0 = (short)(top + (y + 4) * module);
+			bounds.x1 = (short)(left + (run + 5) * module);
+			bounds.y1 = (short)(top + (y + 5) * module);
+			draw_quad(&bounds, (pixel32)0xFF000000);
+			x = run;
+		}
+	}
+	memset(view.qr, 0, sizeof(view.qr));
+#endif
+}
+
+/* (port h3 mods toggle: a row's Cross) off or on; TRUE opens the row's screen (GAMES' DOWNLOAD FROM STEAM alone) */
+static boolean h3_mods_toggle(struct widget_instance *widget)
 {
 	struct halo_mod_entry const *entry = h3_mods.tab == 0 ? NULL : h3_mods_row_entry(widget);
 	short index;
 
+	/* (the GAMES tab's row after the games: DOWNLOAD FROM STEAM opens, mods.xml's open=) */
+	if (h3_mods.tab == 0)
+	{
+#ifdef HALO_STEAM_DOWNLOAD
+		if (h3_child_index(widget) == NUMBER_OF_GAME_MANAGER_GAMES)
+		{
+			platform_log("menus: game manager: DOWNLOAD FROM STEAM");
+			return TRUE;
+		}
+#endif
+		return FALSE;
+	}
 	if (!entry)
-		return;
+		return FALSE;
 	h3_mods_choose(entry);
 	index = mod_manager_find(entry->file, entry->kind);
 	if (!mod_manager_set_enabled(index, !entry->enabled))
 	{
 		h3_mods_message(T("This one can't be turned off here"));
-		return;
+		return FALSE;
 	}
 	entry = mod_manager_entry(index);
 	platform_log("menus: h3 mods: %s turned %s", entry->file, entry->enabled ? "on" : "off");
+	/* (nothing opens from a mod's row) */
+	return FALSE;
 }
 
 /* (port h3 mods details: the details' facts) */
@@ -23915,8 +24796,7 @@ boolean pc_menu_event_function_invoke(
 		h3_mods_initialize();
 		return TRUE;
 	case _function_h3_mods_toggle:
-		h3_mods_toggle(widget);
-		return TRUE;
+		return h3_mods_toggle(widget);
 	case _function_h3_mods_details:
 		/* (the details open for an entry; with none, nothing - GAMES: the game's, once its check is done) */
 		if (h3_mods.tab == 0)
@@ -24195,6 +25075,26 @@ boolean pc_menu_event_function_invoke(
 		h3_mods.tab = (short)(1 - h3_mods.tab);
 		platform_log("menus: game manager: the %s tab", h3_mods.tab ? "MODS" : "GAMES");
 		return TRUE;
+	case _function_h3_steam_row:
+		return h3_steam_row(widget);
+	case _function_h3_steam_back:
+		return h3_steam_back();
+	case _function_h3_workshop_row:
+		return h3_workshop_row(widget);
+	case _function_h3_workshop_back:
+		return h3_workshop_back();
+	case _function_h3_workshop_download:
+		return h3_workshop_download();
+	case _function_h3_workshop_search:
+		return h3_workshop_search();
+	case _function_h3_workshop_page_previous:
+		return h3_workshop_page(-1);
+	case _function_h3_workshop_page_next:
+		return h3_workshop_page(1);
+	case _function_h3_workshop_order_previous:
+		return h3_workshop_order(-1);
+	case _function_h3_workshop_order_next:
+		return h3_workshop_order(1);
 	case _function_online_exit:
 		platform_log("menus: online EXIT: the game closes");
 		exit(EXIT_SUCCESS);
@@ -24272,6 +25172,14 @@ void pc_menu_game_data_function_invoke(
 		break;
 	case _input_cascade:
 		cascade_update(widget);
+		break;
+	case _input_h3_steam:
+		if (widget->type == _ui_widget_type_column_list)
+			h3_steam_update(widget);
+		break;
+	case _input_h3_workshop:
+		if (widget->type == _ui_widget_type_column_list)
+			h3_workshop_update(widget);
 		break;
 	case _input_forge_maps:
 		h3_forge_maps_update(widget);

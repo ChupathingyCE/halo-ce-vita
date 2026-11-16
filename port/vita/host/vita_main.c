@@ -1142,6 +1142,14 @@ int main(int argc, char **argv)
 	/* port: a downloaded update checked again, in the background: the panel
 	and the main menu point to it until it is installed (vita_update.c) */
 	vita_update_scan_at_start();
+#ifdef HALO_STEAM_DOWNLOAD
+	/* port: the Steam download's device side, and a sign-in left behind (vita_steam.c) */
+	{
+		void vita_steam_init(void);
+
+		vita_steam_init();
+	}
+#endif
 	{
 		/* (the maps where this game keeps them, else Xita's copy) */
 		SceIoStat stat;

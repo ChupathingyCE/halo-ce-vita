@@ -52,11 +52,13 @@ MOD_CAMPAIGN_FILE_MAXIMUM_BYTES. Nothing in a mod is run.
 #include "cseries_windows.h"
 #include "tag_files/files.h"
 #include "cache/cache_files.h"
+#include "scenario/scenario_definitions.h"
 #include "cache_file_formats.h"
 #include "custom_edition_cache.h"
 #include "custom_edition_mods.h"
 #include "mod_campaign_files.h"
 #include "mcc_content.h"
+#include "workshop_maps.h"
 #include "../src/lang.h"
 
 #include <stdio.h>
@@ -95,6 +97,26 @@ struct custom_edition_mod
 	/* (port) the Halo content folder's campaign (mcc_content.h), not a
 	folder of the mods folder */
 	boolean mcc;
+	/* (port, --steam-workshop) its folder is a Steam Workshop item's number
+	(the Workshop installs mods/<id>): its multiplayer maps are played as
+	ws<id>_<map> (workshop_maps.h); 0 for any other folder */
+	uint64_t workshop_id;
+};
+
+/* (port, --steam-workshop) a Steam Workshop item's multiplayer map: a
+multiplayer map of the multiplayer level list (custom_edition_maps.c), not
+the campaign's */
+struct custom_edition_mod_multiplayer_map
+{
+	char name[WORKSHOP_MAP_NAME_BYTES];
+	char stem[MAP_STEM_BYTES];
+	short mod_index;
+	uint64_t id;
+	/* (two maps of an item named alike: neither is listed, so that every
+	machine finds the same file by the name or none) */
+	boolean ambiguous;
+	boolean has_picture;
+	char picture_path[PATH_BYTES];
 };
 
 struct custom_edition_mod_map
@@ -122,6 +144,12 @@ struct custom_edition_mods_globals
 	struct custom_edition_mod mods[CUSTOM_EDITION_MODS_MAXIMUM];
 	short map_count;
 	struct custom_edition_mod_map maps[CUSTOM_EDITION_MODS_MAXIMUM_MAPS];
+	/* (port, --steam-workshop) the Workshop items' multiplayer maps, and
+	whether the campaign's maps are looked for at all (MCC mods off: the
+	Workshop items' folders alone, for their multiplayer maps) */
+	short multiplayer_count;
+	struct custom_edition_mod_multiplayer_map multiplayer_maps[CUSTOM_EDITION_MODS_MAXIMUM_MULTIPLAYER_MAPS];
+	boolean campaign_off;
 };
 
 /* ---------- globals */
@@ -444,6 +472,82 @@ static void mod_campaign_read(
 	return;
 }
 
+#ifdef HALO_STEAM_WORKSHOP
+/* (port, --steam-workshop) Adds the Steam Workshop item `mod_index`'s
+multiplayer map `stem` (its file at `path`, a Halo: CE Anniversary cache of
+a multiplayer scenario): FALSE when it cannot be named (workshop_maps.h) or
+there is no room. Two of an item named alike are both left out
+(custom_edition_mods_find), and so is one of the name of a file of the maps
+folder (which a player never plays under that name: custom_edition_maps.c
+leaves such a file out). */
+static boolean workshop_multiplayer_map_add(
+	short mod_index,
+	char const *stem,
+	char const *path)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+	struct custom_edition_mod const *mod = &globals->mods[mod_index];
+	struct custom_edition_mod_multiplayer_map *map;
+	char name[WORKSHOP_MAP_NAME_BYTES];
+	struct file_reference reference;
+	long path_length = (long)strlen(path);
+	short index;
+
+	if (!workshop_map_name_make(mod->workshop_id, stem, name))
+	{
+		error(_error_silent, "mods: %s is left out: its Workshop name ws%s_%s cannot be made", path, mod->folder, stem);
+		return FALSE;
+	}
+	for (index = 0; index < globals->multiplayer_count; index++)
+	{
+		if (!csstrcasecmp(globals->multiplayer_maps[index].name, name))
+		{
+			error(_error_silent, "mods: %s is left out: another map of the item is named %s too", path, name);
+			globals->multiplayer_maps[index].ambiguous = TRUE;
+			return FALSE;
+		}
+	}
+	if (globals->multiplayer_count >= CUSTOM_EDITION_MODS_MAXIMUM_MULTIPLAYER_MAPS)
+	{
+		error(_error_silent, "mods: %s is left out: the first %d Workshop multiplayer maps are listed", path,
+			CUSTOM_EDITION_MODS_MAXIMUM_MULTIPLAYER_MAPS);
+		return FALSE;
+	}
+	map = &globals->multiplayer_maps[globals->multiplayer_count++];
+	csmemset(map, 0, sizeof(*map));
+	csstrcpy(map->name, name);
+	csstrncpy(map->stem, stem, sizeof(map->stem) - 1);
+	map->mod_index = mod_index;
+	map->id = mod->workshop_id;
+	/* (its picture: <map>.bmp beside it) */
+	if (path_length > 4 && path_length < (long)sizeof(map->picture_path))
+	{
+		snprintf(map->picture_path, sizeof(map->picture_path), "%.*s.bmp", (int)(path_length - 4), path);
+		map->has_picture = file_exists(file_reference_create_from_path(&reference, map->picture_path, FALSE));
+	}
+	error(_error_silent, "mods: %s is the Steam Workshop multiplayer map %s", path, name);
+
+	return TRUE;
+}
+
+/* each item's multiplayer maps in the order of their folders, then of their
+names */
+static int multiplayer_map_compare(
+	void const *first,
+	void const *second)
+{
+	struct custom_edition_mod_multiplayer_map const *first_map = first;
+	struct custom_edition_mod_multiplayer_map const *second_map = second;
+
+	if (first_map->mod_index != second_map->mod_index)
+	{
+		return first_map->mod_index - second_map->mod_index;
+	}
+
+	return (int)csstrcmp(first_map->stem, second_map->stem);
+}
+#endif
+
 /* Adds the mod of the mods folder's folder `folder`, and its maps; the
 survey's alone also a folder of a name this unit does not take (`valid`
 FALSE: listed, its name made printable, nothing in it looked at). */
@@ -459,7 +563,21 @@ static void mod_add(
 	short mod_index;
 	short length = 0;
 	short index;
+	uint64_t workshop_id = 0;
 
+	/* (port, --steam-workshop: a Steam Workshop item's folder, mods/<id>;
+	with MCC mods off, the only folders looked in, for their multiplayer
+	maps) */
+#ifdef HALO_STEAM_WORKSHOP
+	if (valid && !workshop_map_id_parse(folder, &workshop_id))
+	{
+		workshop_id = 0;
+	}
+#endif
+	if (globals->campaign_off && !workshop_id)
+	{
+		return;
+	}
 	if (globals->mod_count >= CUSTOM_EDITION_MODS_MAXIMUM)
 	{
 		error(_error_silent, "mods: '%s' is not looked at: the mods folder's first %d are", folder, CUSTOM_EDITION_MODS_MAXIMUM);
@@ -484,6 +602,7 @@ static void mod_add(
 		return;
 	}
 	csstrcpy(mod->folder, folder);
+	mod->workshop_id = workshop_id;
 	for (index = 0; folder[index] && length < MOD_KEY_LENGTH; index++)
 	{
 		char character = lower_case(folder[index]);
@@ -559,6 +678,7 @@ static void mod_add(
 		char maps_folder_path[PATH_BYTES];
 		long stem_length = (long)strlen(data.cFileName) - 4;
 		struct file_reference reference;
+		short kind;
 
 		if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
 			stem_length <= 0 || stem_length >= MAP_STEM_BYTES ||
@@ -578,6 +698,32 @@ static void mod_add(
 			continue;
 		}
 		mod->map_files++;
+		snprintf(map_path, sizeof(map_path), "%s%s\\maps\\%s", CUSTOM_EDITION_MODS_DIRECTORY, folder, data.cFileName);
+		kind = NONE - 1;
+#ifdef HALO_STEAM_WORKSHOP
+		/* (port, --steam-workshop: a Steam Workshop item's multiplayer map,
+		ws<id>_<map>: the multiplayer level list's, workshop_maps.h) */
+		if (mod->workshop_id && map_stem_valid(stem))
+		{
+			kind = custom_edition_cache_mod_map_kind(map_path);
+			if (kind == _scenario_type_multiplayer)
+			{
+				if (workshop_multiplayer_map_add(mod_index, stem, map_path))
+				{
+					mod->maps_valid++;
+				}
+				else
+				{
+					mod_problem(mod, T("A multiplayer map's name doesn't fit: rename it shorter"));
+				}
+				continue;
+			}
+		}
+#endif
+		if (globals->campaign_off)
+		{
+			continue;
+		}
 		if (!map_stem_valid(stem) ||
 			(long)strlen(mod->key) + 1 + stem_length > CUSTOM_EDITION_MODS_MAXIMUM_NAME_LENGTH)
 		{
@@ -609,8 +755,7 @@ static void mod_add(
 			mod_problem(mod, T("A map has the name of a file in the maps folder"));
 			continue;
 		}
-		snprintf(map_path, sizeof(map_path), "%s%s\\maps\\%s", CUSTOM_EDITION_MODS_DIRECTORY, folder, data.cFileName);
-		if (!custom_edition_cache_mod_map_identify(map_path))
+		if (kind == NONE - 1 ? !custom_edition_cache_mod_map_identify(map_path) : kind != _scenario_type_solo)
 		{
 			/* (the survey: why, by the same check) */
 			if (globals->survey && !mod->problem[0])
@@ -788,6 +933,8 @@ static short custom_edition_mods_find(
 	globals->survey = survey;
 	globals->mod_count = 0;
 	globals->map_count = 0;
+	globals->multiplayer_count = 0;
+	globals->campaign_off = FALSE;
 #ifdef HALO_DEDICATED_SERVER
 	/* (the dedicated server plays no mod's map: its mods folder is never
 	looked in, and no name finds a map there) */
@@ -803,7 +950,13 @@ static short custom_edition_mods_find(
 	off, the mods folder is not looked at, but by the survey) */
 	if (!survey && !halo_mcc_mods_enabled())
 	{
+#ifdef HALO_STEAM_WORKSHOP
+		/* (port, --steam-workshop: the Steam Workshop items' multiplayer
+		maps all the same - the multiplayer level list's, not MCC mods') */
+		globals->campaign_off = TRUE;
+#else
 		return globals->map_count;
+#endif
 	}
 #endif
 	find = FindFirstFileA(CUSTOM_EDITION_MODS_DIRECTORY "*", &data);
@@ -848,7 +1001,26 @@ static short custom_edition_mods_find(
 		mod_add(folders[folder_index].name, folders[folder_index].valid);
 	}
 	qsort(globals->maps, (size_t)globals->map_count, sizeof(globals->maps[0]), mod_map_compare);
+#ifdef HALO_STEAM_WORKSHOP
+	{
+		short kept = 0;
+		short index;
+
+		for (index = 0; index < globals->multiplayer_count; index++)
+		{
+			if (!globals->multiplayer_maps[index].ambiguous)
+			{
+				globals->multiplayer_maps[kept++] = globals->multiplayer_maps[index];
+			}
+		}
+		globals->multiplayer_count = kept;
+		qsort(globals->multiplayer_maps, (size_t)globals->multiplayer_count, sizeof(globals->multiplayer_maps[0]),
+			multiplayer_map_compare);
+		error(_error_silent, "mods: %d Steam Workshop multiplayer maps", globals->multiplayer_count);
+	}
+#endif
 	error(_error_silent, "mods: %d maps of %d mods %s", globals->map_count, globals->mod_count,
+		globals->campaign_off ? "(MCC mods off: the Steam Workshop items' multiplayer maps alone)" :
 		survey ? "found by the mod manager's survey" : "for the campaign's level list");
 
 	return globals->map_count;
@@ -1052,6 +1224,99 @@ boolean custom_edition_mods_map_path(
 	}
 
 	return TRUE;
+}
+
+/* ---------- (port, --steam-workshop) the Steam Workshop items' multiplayer
+maps */
+
+short custom_edition_mods_multiplayer_count(
+	void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	if (!custom_edition_mods_globals.looked_for)
+	{
+		custom_edition_mods_look_for();
+	}
+
+	return custom_edition_mods_globals.multiplayer_count;
+#else
+	return 0;
+#endif
+}
+
+char const *custom_edition_mods_multiplayer_name(
+	short index)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+
+	return index >= 0 && index < globals->multiplayer_count ? globals->multiplayer_maps[index].name : NULL;
+}
+
+char const *custom_edition_mods_multiplayer_stem(
+	short index)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+
+	return index >= 0 && index < globals->multiplayer_count ? globals->multiplayer_maps[index].stem : NULL;
+}
+
+char const *custom_edition_mods_multiplayer_folder(
+	short index)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+
+	return index >= 0 && index < globals->multiplayer_count ?
+		globals->mods[globals->multiplayer_maps[index].mod_index].folder : NULL;
+}
+
+char const *custom_edition_mods_multiplayer_picture_path(
+	short index)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+
+	return index >= 0 && index < globals->multiplayer_count && globals->multiplayer_maps[index].has_picture ?
+		globals->multiplayer_maps[index].picture_path : NULL;
+}
+
+boolean custom_edition_mods_multiplayer_path(
+	char const *name,
+	char *path,
+	long path_size)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+	short index;
+
+	if (!name)
+	{
+		return FALSE;
+	}
+	name = tag_name_strip_path(name);
+	if (!workshop_map_name_parse(name, CUSTOM_EDITION_MODS_MAXIMUM_NAME_LENGTH + 1, NULL))
+	{
+		return FALSE;
+	}
+	if (!globals->looked_for)
+	{
+		custom_edition_mods_look_for();
+	}
+	for (index = 0; index < globals->multiplayer_count; index++)
+	{
+		struct custom_edition_mod_multiplayer_map const *map = &globals->multiplayer_maps[index];
+
+		if (!csstrcasecmp(map->name, name))
+		{
+			return snprintf(path, (size_t)path_size, "%s%s\\maps\\%s.map", CUSTOM_EDITION_MODS_DIRECTORY,
+				globals->mods[map->mod_index].folder, map->stem) < path_size;
+		}
+	}
+#else
+	(void)name;
+	(void)path;
+	(void)path_size;
+#endif
+
+	return FALSE;
 }
 
 boolean custom_edition_mods_level_name(

@@ -474,6 +474,9 @@ enum
 	(its add_bot and drop_bot: network_server_manager.c) */
 	ACTION_ADD_BOT,
 	ACTION_DROP_BOT,
+	/* (Modded maps, a build with the Steam Workshop) the STEAM WORKSHOP
+	screen over the game's main menu (SYSTEM_LINK_REQUEST_WORKSHOP) */
+	ACTION_WORKSHOP,
 };
 
 struct setting
@@ -1071,6 +1074,13 @@ static struct setting settings[] = {
 	MCC mods with the game's own checks, turned off and on, deleted;
 	port/linux/game/mod_manager.c answers, mod_manager_share.h) */
 	PAGE_ROW("Mod manager", "Custom maps and MCC mods: check, on, off, delete", PAGE_MAPS, PAGE_MODS),
+#ifdef HALO_STEAM_WORKSHOP
+	/* (the Steam Workshop - MCC's Halo CE mods and multiplayer maps from the
+	player's own Steam sign-in - for every Menu style: the game opens its
+	STEAM WORKSHOP screen over the main menu, SYSTEM_LINK_REQUEST_WORKSHOP) */
+	{ "Steam Workshop", NULL, 0, 0, { NULL }, { NULL }, "MCC's Halo CE mods and maps, from your own Steam", 0,
+		PAGE_MAPS, KIND_ACTION, ACTION_WORKSHOP },
+#endif
 	{ "PC maps", "HALO_CUSTOM_EDITION", 0, 2, { "0", "1" }, { "Off", "On" },
 		"Experimental: Custom Edition maps in the map list", 0, PAGE_MAPS },
 	/* (the Halo content folder, port/linux/game/mcc_content.c: the
@@ -7248,6 +7258,23 @@ static void act(const struct setting *setting)
 	case ACTION_SAVE_REPORT:
 		report_start();
 		break;
+	/* (the STEAM WORKSHOP screen, at the game's main menu) */
+	case ACTION_WORKSHOP:
+	{
+		int state = multiplayer_state();
+
+		if (state == SYSTEM_LINK_STATE_PLAYING)
+			set_notice("%s", T("Leave the level first: Start, then Quit"));
+		else if (state == SYSTEM_LINK_STATE_JOINING || state == SYSTEM_LINK_STATE_HOSTING || state == SYSTEM_LINK_STATE_LOBBY)
+			set_notice("%s", T("Leave the network game's lobby first"));
+		else
+		{
+			__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_WORKSHOP, __ATOMIC_RELEASE);
+			vita_host_log("settings: Steam Workshop asked for (settings panel)");
+			close_panel();
+		}
+		break;
+	}
 	case ACTION_RESET_CONTROLS:
 		reset_controls();
 		break;

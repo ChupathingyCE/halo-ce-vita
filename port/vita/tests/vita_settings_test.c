@@ -47,6 +47,8 @@ place takes test_card_delay_us, as ux0's file calls took 27-137 ms a save
 on the testers' Vitas; the saves put in place counted) */
 static volatile unsigned long test_card_delay_us;
 static volatile int test_settings_renames;
+/* (the Modded maps page: 1 when a Workshop build adds its Steam Workshop row, the later lines a line down) */
+static int ws;
 static int test_rename(const char *from, const char *to);
 /* (the Vita's rule for the threads vita_host_thread_start_* makes: theirs
 is sceKernelCreateThread's, and such a thread has no pthread data - vitasdk
@@ -6263,21 +6265,28 @@ int main(void)
 	check(to_tab("Multiplayer") && strstr(menu, "\nModded maps\x02  4 maps  >"), "Multiplayer: Modded maps says how many");
 	check(open_page("Modded maps") && strstr(menu, "\n\x03Multiplayer > Modded maps\n"), "the Modded maps page");
 	printf("%s\n--\n", menu);
+	/* (a build with the Steam Workshop: its row under Mod manager, the rest a line down) */
+#ifdef HALO_STEAM_WORKSHOP
+	ws = 1;
+	check(!strcmp(menu_line(3, line, sizeof(line)), "Steam Workshop\x02  >"), "Modded maps: the Steam Workshop row (a Workshop build)");
+#else
+	ws = 0;
+#endif
 	check(!strcmp(menu_line(2, line, sizeof(line)), "Mod manager\x02  >") &&
-		!strncmp(menu_line(3, line, sizeof(line)), "PC maps\x02", 8) &&
-		!strcmp(menu_line(4, line, sizeof(line)), "Halo content folder\x02  Found by itself >") &&
-		!strcmp(menu_line(5, line, sizeof(line)), "Map downloads\x02  Ask >") && !menu_line(6, line, sizeof(line))[0] &&
-		!strcmp(menu_line(7, line, sizeof(line)), "!Missing: sounds.map loc.map") &&
-		!strcmp(menu_line(8, line, sizeof(line)), "!Copy them in, or the Halo CE installer") &&
-		!strcmp(menu_line(9, line, sizeof(line)), "!(halocesetup*.exe) to ux0:data/haloce-vita") &&
-		!strcmp(menu_line(10, line, sizeof(line)), "\x04" "Content: the Xbox maps (no MCC folder)") &&
-		!strcmp(menu_line(11, line, sizeof(line)), "\x04" "Steam's MCC files (halo1/maps) go in:") &&
-		!strcmp(menu_line(12, line, sizeof(line)), "\x04" "ux0:data/haloce-vita/mcc/halo1/maps"),
+		!strncmp(menu_line(3 + ws, line, sizeof(line)), "PC maps\x02", 8) &&
+		!strcmp(menu_line(4 + ws, line, sizeof(line)), "Halo content folder\x02  Found by itself >") &&
+		!strcmp(menu_line(5 + ws, line, sizeof(line)), "Map downloads\x02  Ask >") && !menu_line(6 + ws, line, sizeof(line))[0] &&
+		!strcmp(menu_line(7 + ws, line, sizeof(line)), "!Missing: sounds.map loc.map") &&
+		!strcmp(menu_line(8 + ws, line, sizeof(line)), "!Copy them in, or the Halo CE installer") &&
+		!strcmp(menu_line(9 + ws, line, sizeof(line)), "!(halocesetup*.exe) to ux0:data/haloce-vita") &&
+		!strcmp(menu_line(10 + ws, line, sizeof(line)), "\x04" "Content: the Xbox maps (no MCC folder)") &&
+		!strcmp(menu_line(11 + ws, line, sizeof(line)), "\x04" "Steam's MCC files (halo1/maps) go in:") &&
+		!strcmp(menu_line(12 + ws, line, sizeof(line)), "\x04" "ux0:data/haloce-vita/mcc/halo1/maps"),
 		"Mod manager, PC maps switch, Halo content folder (found by itself), Map downloads (Ask), a gap; a CE map "
 		"without sounds.map/loc.map: the warning, and that the installer does; no MCC folder: the Xbox maps");
-	check(!strncmp(menu_line(13, line, sizeof(line)), "cemap\x02", 6) && !strncmp(menu_line(14, line, sizeof(line)), "cesolo\x02", 7) &&
-		!strncmp(menu_line(15, line, sizeof(line)), "inplay\x02", 7) &&
-		!strncmp(menu_line(16, line, sizeof(line)), "mygulch\x02", 8) && menu_line(17, line, sizeof(line))[0] == '\x05',
+	check(!strncmp(menu_line(13 + ws, line, sizeof(line)), "cemap\x02", 6) && !strncmp(menu_line(14 + ws, line, sizeof(line)), "cesolo\x02", 7) &&
+		!strncmp(menu_line(15 + ws, line, sizeof(line)), "inplay\x02", 7) &&
+		!strncmp(menu_line(16 + ws, line, sizeof(line)), "mygulch\x02", 8) && menu_line(17 + ws, line, sizeof(line))[0] == '\x05',
 		"the custom maps listed in order, not the Xbox's or CE resource maps");
 	/* the Halo content folder (port/linux/game/mcc_content.c): found by
 	itself, or one of the memory cards' data/mcc; in the environment the game

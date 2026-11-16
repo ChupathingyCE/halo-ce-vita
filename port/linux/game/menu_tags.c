@@ -484,6 +484,12 @@ static char const *const port_function_names[] =
 	"port forge command objective",
 	"port forge command prepare",
 	"port h3 mods tab games", "port h3 mods tab mods", "port h3 mods tab next",
+	/* (1.1.3/1.1.4: GAME MANAGER's DOWNLOAD FROM STEAM, halo3/steam.xml) */
+	"port h3 steam row", "port h3 steam back",
+	/* (1.1.3: STEAM WORKSHOP, halo3/workshop.xml) */
+	"port h3 workshop row", "port h3 workshop back", "port h3 workshop download", "port h3 workshop search",
+	"port h3 workshop page previous", "port h3 workshop page next", "port h3 workshop order previous",
+	"port h3 workshop order next",
 	/* (1.1.5: the Firefight lobby, START FIREFIGHT and PREPARING FIREFIGHT) */
 	"port firefight lobby init",
 	"port forge start firefight",
@@ -528,6 +534,8 @@ static char const *const port_game_data_input_names[] =
 	"port start",
 	"port sound",
 	"port cascade",
+	"port h3 steam",
+	"port h3 workshop",
 	/* (1.1.4) */
 	"port command prepare",
 	"port forge leave text",

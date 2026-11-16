@@ -1069,6 +1069,97 @@ int posix_https_download(const char *url, const char *user_agent, const char *pa
 	}
 }
 
+/* ---------- a byte stream (posix.h; the Steam download's) */
+
+struct https_stream
+{
+	struct connection connection;
+	mbedtls_ssl_config config;
+};
+
+void *posix_https_stream_open(const char *url_text, char *host, int host_size, char *path, int path_size, char *error,
+	int error_size)
+{
+	struct https_stream *stream;
+	struct url url;
+
+	error[0] = 0;
+	if (!url_parse(url_text, &url, error, error_size))
+		return NULL;
+	if ((int)strlen(url.host) >= host_size || (int)strlen(url.path) >= path_size)
+	{
+		snprintf(error, (size_t)error_size, "URL too long");
+		return NULL;
+	}
+	stream = calloc(1, sizeof(*stream));
+	if (!stream)
+	{
+		snprintf(error, (size_t)error_size, "out of memory");
+		return NULL;
+	}
+	stream->connection.socket = -1;
+	stream->connection.deadline = time(NULL) + TIMEOUT_SECONDS;
+	mbedtls_ssl_init(&stream->connection.ssl);
+	mbedtls_ssl_config_init(&stream->config);
+	if (!connection_open(&url, &stream->connection, &stream->config, error, error_size))
+	{
+		connection_close(&stream->connection, &stream->config);
+		free(stream);
+		return NULL;
+	}
+	memcpy(host, url.host, strlen(url.host) + 1);
+	memcpy(path, url.path, strlen(url.path) + 1);
+	return stream;
+}
+
+int posix_https_stream_write(void *opaque, const void *data, int size)
+{
+	struct https_stream *stream = opaque;
+
+	if (!stream || size < 0)
+		return 0;
+	stream->connection.deadline = time(NULL) + TIMEOUT_SECONDS;
+	return connection_write(&stream->connection, data, (size_t)size);
+}
+
+int posix_https_stream_read(void *opaque, void *buffer, int size, int timeout_ms)
+{
+	struct https_stream *stream = opaque;
+	int received;
+
+	if (!stream || size <= 0)
+		return -1;
+	/* (nothing held decrypted: wait for the socket, at most timeout_ms,
+	without touching the TLS session, so a quiet server is no error) */
+	if (!stream->connection.tls || (!mbedtls_ssl_get_bytes_avail(&stream->connection.ssl) &&
+		!mbedtls_ssl_check_pending(&stream->connection.ssl)))
+	{
+		int list[1], count = 1, none = 0, result;
+
+		list[0] = stream->connection.socket;
+		result = posix_socket_select(list, &count, NULL, &none, NULL, &none, timeout_ms / 1000,
+			(timeout_ms % 1000) * 1000, 0);
+		if (result < 0)
+			return -1;
+		if (result == 0 || count == 0)
+			return 0;
+	}
+	/* (a record begun is read whole within the usual deadline) */
+	stream->connection.deadline = time(NULL) + TIMEOUT_SECONDS;
+	received = connection_read(&stream->connection, buffer, (size_t)size);
+	return received > 0 ? received : -1;
+}
+
+void posix_https_stream_close(void *opaque)
+{
+	struct https_stream *stream = opaque;
+
+	if (!stream)
+		return;
+	connection_close(&stream->connection, &stream->config);
+	free(stream);
+}
+
 /* ---------- internet play's brokers over TLS (posix_tls_*; p2p_signal.c)
 
 A broker's session: its socket (p2p_signal.c's, connected and non-blocking,

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STEAM WORKSHOP (GAME MANAGER's DOWNLOAD FROM STEAM, its third row): Halo: MCC's Steam Workshop items for Halo CE,
+listed and downloaded on the Vita through the player's own Steam sign-in (port/steamdl/steam_workshop.c,
+docs/steam_download_security.md section 7). Halo 3's dialog as DOWNLOAD FROM STEAM's: the title, the rule, the text,
+the rows, the buttons in the strip at the foot. First the notice and SIGN IN, then the QR for the Steam app (drawn over
+the panel's right side, menu_functions.c h3_steam_qr_draw), then the list: ten items a page, Cross marks one, Square
+downloads the marked ones, Triangle searches, L and R turn the page, Left and Right change the order; then the
+progress, then the install (every map checked by the game's own map check) and the end (signed out of Steam). Circle
+leaves the list (signing out) or cancels a download (it resumes next time). The text and the rows are
+menu_functions.c's (port h3 workshop). -->
+<menus>
+	<strings name="h3/workshop_text">
+		<string text="STEAM WORKSHOP"/>
+		<string text="Select"/>
+		<string text="Download"/>
+		<string text="Search"/>
+	</strings>
+
+	<widget name="h3/workshop/title" type="text" left="52" top="46" width="536" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/workshop_text" string_index="0"/>
+	<widget name="h3/workshop/status" type="text" left="52" top="80" width="536" height="40" font="h3/font_small" color="#FFCFD9E3"/>
+	<widget name="h3/workshop/qr_text" type="text" left="52" top="124" width="300" height="290" font="h3/font_small" color="#FFCFD9E3"/>
+	<widget name="h3/workshop/details" type="text" left="52" top="342" width="536" height="76" font="h3/font_small" color="#FFCFD9E3"/>
+	<widget name="h3/workshop/row_1" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/row_2" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/row_3" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/row_4" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/row_5" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/row_6" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/row_7" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/row_8" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/row_9" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/row_10" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 workshop row"/>
+	</widget>
+	<widget name="h3/workshop/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<data input="port h3 workshop"/>
+		<on event="x" run="port h3 workshop download"/>
+		<on event="y" run="port h3 workshop search"/>
+		<on event="left_trigger" run="port h3 workshop page previous"/>
+		<on event="right_trigger" run="port h3 workshop page next"/>
+		<on event="left" run="port h3 workshop order previous"/>
+		<on event="right" run="port h3 workshop order next"/>
+		<child widget="h3/workshop/row_1" y="0"/>
+		<child widget="h3/workshop/row_2" y="21"/>
+		<child widget="h3/workshop/row_3" y="42"/>
+		<child widget="h3/workshop/row_4" y="63"/>
+		<child widget="h3/workshop/row_5" y="84"/>
+		<child widget="h3/workshop/row_6" y="105"/>
+		<child widget="h3/workshop/row_7" y="126"/>
+		<child widget="h3/workshop/row_8" y="147"/>
+		<child widget="h3/workshop/row_9" y="168"/>
+		<child widget="h3/workshop/row_10" y="189"/>
+	</widget>
+	<widget name="h3/workshop/a_butn" left="52" top="422" width="16" height="16" bitmap="h3/glyph_cross"/>
+	<widget name="h3/workshop/select" type="text" left="72" top="421" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/workshop_text" string_index="1"/>
+	<widget name="h3/workshop/x_butn" left="146" top="422" width="16" height="16" bitmap="h3/glyph_square"/>
+	<widget name="h3/workshop/download" type="text" left="166" top="421" width="90" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/workshop_text" string_index="2"/>
+	<widget name="h3/workshop/y_butn" left="260" top="422" width="16" height="16" bitmap="h3/glyph_triangle"/>
+	<widget name="h3/workshop/search" type="text" left="280" top="421" width="80" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/workshop_text" string_index="3"/>
+	<widget name="h3/workshop/b_butn" left="364" top="422" width="16" height="16" bitmap="h3/glyph_circle"/>
+	<widget name="h3/workshop/back" type="text" left="384" top="421" width="200" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1"/>
+	<widget name="h3/workshop/screen" flags="pass_unhandled_to_focused_child">
+		<on event="b back" run="port h3 workshop back" back="true"/>
+		<child widget="h3/main/haze"/>
+		<child widget="h3/pick/panel"/>
+		<child widget="h3/workshop/title"/>
+		<child widget="h3/pick/rule"/>
+		<child widget="h3/workshop/status"/>
+		<child widget="h3/workshop/qr_text"/>
+		<child widget="h3/workshop/details"/>
+		<child widget="h3/pick/strip"/>
+		<child widget="h3/workshop/a_butn"/>
+		<child widget="h3/workshop/select"/>
+		<child widget="h3/workshop/x_butn"/>
+		<child widget="h3/workshop/download"/>
+		<child widget="h3/workshop/y_butn"/>
+		<child widget="h3/workshop/search"/>
+		<child widget="h3/workshop/b_butn"/>
+		<child widget="h3/workshop/back"/>
+		<child widget="h3/workshop/list" x="52" y="124"/>
+	</widget>
+</menus>
