@@ -102,9 +102,24 @@ int steam_download_depot(struct steam_session *session, const struct steam_kv *a
 	const char *const *cdn, int cdn_count, struct steam_download_result *result);
 
 /* (the Workshop) one page of the list, from inside workshop_choose: the items read (at most maximum), -1 with a
-reason */
+reason; sort STEAM_WORKSHOP_LIST_SUBSCRIBED: the signed-in account's own subscriptions (search not used) */
 int steam_download_workshop_query(struct steam_session *session, int page, enum steam_workshop_sort sort,
 	const char *search, struct steam_workshop_item *items, int maximum, uint32_t *total, char *error, int error_size);
+
+/* (the browser's details page) one item's details (GetDetails with its votes, pictures and description): 1, or 0
+with a reason */
+int steam_download_workshop_page(struct steam_session *session, uint64_t id, struct steam_workshop_details *details,
+	char *error, int error_size);
+/* (the browser) these accounts' public names ("" where none came): the names found, -1 if the call failed */
+int steam_download_workshop_names(struct steam_session *session, const uint64_t *steamids, int count,
+	char (*names)[STEAM_WORKSHOP_AUTHOR_SIZE]);
+
+/* (the browser's details page) the item's manifest read (the depot key, its request code, a CDN - cdn_override's,
+else Steam's list - one try each, no waits) and its files put through the name rule: 1, or 0 with a reason. Nothing
+is written */
+int steam_download_workshop_contents(struct steam_session *session, const struct steam_workshop_item *item,
+	const char *const *cdn_override, int cdn_override_count, struct steam_workshop_contents *contents, char *error,
+	int error_size);
 
 /* (the Workshop) one item, its details checked already, into <ce_root>/workshop/<id> with its .done mark: 1, or 0
 with result->error set (exposed for the tests) */

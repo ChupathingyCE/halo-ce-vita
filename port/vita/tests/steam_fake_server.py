@@ -37,10 +37,21 @@ times) shape a bigger test. --cert/--key serve both over TLS (the test's own cer
 of the game's own map check; never sent beyond 127.0.0.1). --workshop-mp-map <file> [--workshop-mp-name <name>]: item
 2900000002 (multiplayer) is that one map, named so (a joiner's download of the host's Workshop map: the netns tests).
 
-The Workshop (app 976730's own depot): PublishedFile.QueryFiles#1 (ten a page, a search by title), GetDetails#1,
-depot 976730's key, each item's manifest and chunks; made-up items, some hostile (names that leave the folder, two
-names one file, another game's, banned, a map not version 13, one the game's check refuses, a drive, a control
-byte); modes ws_not_owned, ws_wrong_manifest, ws_hostile_list.
+The Workshop (app 976730's own depot): PublishedFile.QueryFiles#1 (a page of what the client asks, a search by title),
+GetDetails#1, depot 976730's key, each item's manifest and chunks; made-up items, some hostile (names that leave the
+folder, two names one file, another game's, banned, a map not version 13, one the game's check refuses, a drive, a
+control byte); modes ws_not_owned, ws_wrong_manifest, ws_hostile_list.
+
+The browser (docs/steam_download_security.md section 9): each item's preview picture (made here with PIL, made-up
+pictures) at https://images.steamusercontent.com/ugc/<id>/<hex>/, served by the CDN's listener (the client's test
+image server, HALO_STEAM_TEST_IMAGES), each fetch logged "img: <id> <kind>"; hostile ones: a PNG claiming 30000x30000,
+one of 2000x2000 (more pixels than allowed), a 16-bit PNG, a truncated JPEG, a GIF, an HTML page, 3 MB of bytes, and
+URLs that are not Steam's image CDN (another host, http, a port, a user, a host that only ends like Steam's, "..": none
+may ever be fetched); a details page's extra pictures (GetDetails' includeadditionalpreviews, a video's entry among
+them), the votes, the authors (Player.GetPlayerLinkDetails#1: a Latin-1 name, a hostile one, one missing),
+long and odd text (UTF-8, the game's '|n' text code, bidi overrides, zero-width and control characters, emoji,
+BBCode, 20 KB), and SUBSCRIBED (PublishedFile.GetUserFiles#1 "mysubscriptions": only for the signed-in account's own
+steamid, else refused and logged "cm: subscriptions of another account").
 
 --fixtures <dir> writes the chunk fixtures the C unit tests read and exits.
 
@@ -342,6 +353,15 @@ def workshop_items(seed):
          {"maps\\a10.map": v13(9000), "maps\\a\x01.map": v13(1000)}, []),
         # (an item with no maps: only text)
         (2900000011, "Fake Notes", ["Halo1", "Campaign"], APP, False, {"readme.txt": b"hello"}, []),
+        # (the browser's hostile pictures and text: each item fine but for its picture or its words)
+        (2900000012, "Fake Huge Picture", ["Halo1", "Multiplayer"], APP, False, {"maps\\huge.map": v13(9000)}, []),
+        (2900000013, "Fake Truncated Picture", ["Halo1", "Campaign"], APP, False, {"maps\\a10.map": v13(9000)}, []),
+        (2900000014, "Fake GIF Picture", ["Halo1", "Multiplayer"], APP, False, {"maps\\gif.map": v13(9000)}, []),
+        (2900000015, "Fake Wrong Host", ["Halo1", "Campaign"], APP, False, {"maps\\a10.map": v13(9000)}, []),
+        (2900000016, LONG_TEXT, ["Halo1", "Multiplayer"], APP, False, {"maps\\long.map": v13(9000)}, []),
+        (2900000017, "Fake Big Picture", ["Halo1", "Campaign"], APP, False, {"maps\\a10.map": v13(9000)}, []),
+        (2900000018, "Fake HTML Picture", ["Halo1", "Multiplayer"], APP, False, {"maps\\html.map": v13(9000)}, []),
+        (2900000019, "Fake 16-bit Picture", ["Halo1", "Campaign"], APP, False, {"maps\\a10.map": v13(9000)}, []),
     ]
     return items
 
@@ -353,12 +373,134 @@ class WorkshopItem:
                            symlinks=links)
         self.size = sum(len(d) for d in files.values())
 
-    def details(self):
+    def browser(self):
+        return BROWSER.get(self.id, (76561198000000001, 1, 0, 1700000000 + self.id % 1000000, "jpeg", [], None))
+
+    def preview_url(self):
+        host = self.browser()[6]
+        return (host or "https://" + IMAGE_HOST) + picture_path(self.id)
+
+    def score(self):
+        up, down = self.browser()[1:3]
+        return up / (up + down) if up + down else 0.0
+
+    def details(self, extra=False):
+        creator, up, down, created, kind, extras, host = self.browser()
         tags = b"".join(pb_bytes(52, pb_bytes(1, t)) for t in self.tags)
-        return (pb_varint(1, 1) + pb_varint(2, self.id) + pb_fixed64(3, 76561198000000001) + pb_varint(4, APP) +
-                pb_varint(5, self.app) + pb_varint(8, self.size) + pb_fixed64(14, self.depot.gid) +
-                pb_bytes(16, self.title.encode()) + pb_varint(20, 1760000000) + pb_varint(21, 0) +
-                pb_varint(28, int(self.banned)) + tags + pb_bytes(17, "a description, not read"))
+        votes = pb_float(1, self.score()) + pb_varint(2, up) + pb_varint(3, down)
+        description = DESCRIPTION if self.id == 2900000001 else LONG_TEXT * 60 if self.id == 2900000016 else \
+            "A made-up item for the tests."
+        out = (pb_varint(1, 1) + pb_varint(2, self.id) + pb_fixed64(3, creator) + pb_varint(4, APP) +
+               pb_varint(5, self.app) + pb_varint(8, self.size) + pb_bytes(11, self.preview_url()) +
+               pb_fixed64(14, self.depot.gid) + pb_bytes(16, self.title.encode()) + pb_varint(19, created) +
+               pb_varint(20, created + 86400 * 30) + pb_varint(21, 0) + pb_varint(28, int(self.banned)) + tags +
+               pb_bytes(17, description) + pb_bytes(55, votes))
+        if extra:
+            for index, other in enumerate(extras):
+                if other == "video":
+                    preview = pb_bytes(3, "https://www.youtube.com/watch?v=fake") + pb_varint(7, 1)
+                elif other in ("http", "port", "user", "suffix", "dots", "elsewhere"):
+                    preview = pb_bytes(3, bad_url(other, self.id)) + pb_varint(7, 0)
+                else:
+                    preview = pb_bytes(3, "https://%s%s" % (IMAGE_HOST, picture_path(self.id, index + 1))) + \
+                        pb_varint(7, 0)
+                out += pb_bytes(51, pb_varint(1, index + 1) + preview)
+        return out
+
+    def picture(self, index):
+        """the picture of a path's index (0 the preview), its kind"""
+        kind = self.browser()[4] if index == 0 else (self.browser()[5] + [""] * 9)[index - 1]
+        return picture_bytes(kind, self.id * 10 + index), kind
+
+
+# ------------------------------------------------------------------ the browser's pictures and text (made up)
+
+IMAGE_HOST = "images.steamusercontent.com"
+AUTHORS = {76561198000000001: "Fake Author", 76561198000000002: "\u00d1and\u00fa Mapper",
+           76561198000000003: "Evil|nName\u202e\u0001\u200b" + "\U0001F600" * 3 + "x" * 200}
+LONG_TEXT = ("A title|n with the game's text code, \u202edesrever\u202c, zero\u200bwidth, a \u0007bell, "
+             "emoji \U0001F600\U0001F680, Espa\u00f1ol \u00bfs\u00ed?, \u65e5\u672c, " + "long " * 60)
+DESCRIPTION = ("[h1]Fake Rebalanced Campaign[/h1]\nA made-up campaign for the tests.\n\n[b]Features[/b]\n"
+               "[list][*]New enemies[*]Rebalanced weapons \u2013 \u201cquoted\u201d\u2026[/list]\n"
+               "[url=https://example.com/evil]a link that is never followed[/url]\n\n\n\nThe end.")
+
+
+def picture_bytes(kind, seed):
+    """a made-up preview picture of a kind (some hostile)"""
+    from PIL import Image, ImageDraw
+    rng = random.Random(seed)
+    hue = rng.randrange(256)
+    if kind in ("huge",):
+        # (a PNG whose header claims 30000x30000: never decoded)
+        def chunk(name, data):
+            return struct.pack(">I", len(data)) + name + data + struct.pack(">I", zlib.crc32(name + data) & 0xffffffff)
+        return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 30000, 30000, 8, 2, 0, 0, 0)) +
+                chunk(b"IDAT", zlib.compress(b"\0" * 64)) + chunk(b"IEND", b""))
+    if kind == "gif":
+        return b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+    if kind == "html":
+        return b"<html><body>Not a picture</body></html>" + b" " * 64
+    size = {"toomany": (2000, 2000)}.get(kind, (640, 360))
+    image = Image.new("RGB", size)
+    draw = ImageDraw.Draw(image)
+    w, h = size
+    top = ((hue * 7) % 256, (hue * 3) % 160 + 60, 200)
+    for y in range(h):
+        t = y / h
+        draw.line([(0, y), (w, y)], fill=(int(top[0] * (1 - t) + 40 * t), int(top[1] * (1 - t) + 90 * t),
+                                          int(top[2] * (1 - t) + 50 * t)))
+    for i in range(4):
+        x = rng.randrange(w)
+        draw.polygon([(x - w // 3, h), (x, h // 3 + rng.randrange(h // 4)), (x + w // 3, h)],
+                     fill=(60 + i * 20, 80 + rng.randrange(60), 40 + i * 10))
+    draw.rectangle([w // 2 - 30, h // 2 - 50, w // 2 + 30, h // 2 + 10], fill=(200, 200, 210))
+    draw.text((16, 16), "%d" % seed, fill=(255, 255, 255))
+    out = io.BytesIO()
+    if kind == "png" or kind == "toomany":
+        image.save(out, "PNG")
+    elif kind == "png16":
+        image.convert("I;16").save(out, "PNG")
+    elif kind == "progressive":
+        image.save(out, "JPEG", quality=85, progressive=True)
+    else:
+        image.save(out, "JPEG", quality=85)
+    data = out.getvalue()
+    if kind == "truncated":
+        return data[:len(data) // 2]
+    if kind == "big":
+        return data + b"\0" * (3 << 20)
+    return data
+
+
+def picture_path(item_id, index=0):
+    return "/ugc/%d/%040X/" % (item_id, (item_id * 2654435761 + index) & ((1 << 160) - 1))
+
+
+# id: (creator, up, down, created, picture kind, extra pictures, preview URL host or a whole URL)
+BROWSER = {
+    2900000001: (76561198000000001, 120, 8, 1750000000, "jpeg", ["progressive", "png", "video", "elsewhere"], None),
+    2900000002: (76561198000000002, 40, 2, 1755000000, "progressive", [], None),
+    2900000003: (76561198000000001, 3, 9, 1740000000, "png", [], None),
+    2900000004: (76561198000000004, 0, 0, 1741000000, "jpeg", [], None),
+    2900000012: (76561198000000001, 5, 1, 1757000000, "huge", [], None),
+    2900000013: (76561198000000002, 9, 3, 1758000000, "truncated", [], None),
+    2900000014: (76561198000000001, 2, 0, 1759000000, "gif", [], None),
+    2900000015: (76561198000000003, 1, 1, 1759500000, "jpeg", ["http", "port", "user", "suffix", "dots"],
+                 "https://evil.example.com"),
+    2900000016: (76561198000000003, 77, 1, 1760000000, "toomany", [], None),
+    2900000017: (76561198000000001, 6, 6, 1756000000, "big", [], None),
+    2900000018: (76561198000000002, 11, 0, 1754000000, "html", [], None),
+    2900000019: (76561198000000001, 15, 2, 1753000000, "png16", [], None),
+}
+SUBSCRIBED = [2900000002, 2900000001, 2900000016]
+
+
+def bad_url(kind, item_id):
+    path = picture_path(item_id, 9)
+    return {"http": "http://%s%s" % (IMAGE_HOST, path), "port": "https://%s:8443%s" % (IMAGE_HOST, path),
+            "user": "https://u@%s%s" % (IMAGE_HOST, path), "suffix": "https://%s.evil.test%s" % (IMAGE_HOST, path),
+            "dots": "https://%s/ugc/../../%d/x/" % (IMAGE_HOST, item_id),
+            "elsewhere": "https://evil.example.com%s" % path}[kind]
 
 
 # ------------------------------------------------------------------ the server
@@ -541,6 +683,11 @@ def cm_client(state, conn):
                 assert first(body, 5) == APP and first(body, 6) == b"Halo1" and first(body, 37) == 1
                 state.log("cm: workshop query page %d sort %d search '%s'" % (page, first(body, 1, 0), search))
                 listed = [i for i in state.workshop if search.lower() in i.title.lower()]
+                order = first(body, 1, 0)
+                if order == 1:
+                    listed.sort(key=lambda i: -i.browser()[3])
+                elif order == 0:
+                    listed.sort(key=lambda i: -i.score())
                 if state.mode == "ws_hostile_list":
                     # (a hostile list: an item whose tag runs past its message is malformed)
                     reply = pb_varint(1, 3) + pb_bytes(2, pb_varint(2, 1) + b"\xa2\x03\x7f\x0a")
@@ -550,8 +697,27 @@ def cm_client(state, conn):
             elif name == "PublishedFile.GetDetails#1":
                 assert logged_on and emsg == 151
                 ids = [v for n, v in body if n == 1]
-                state.log("cm: workshop details %s" % " ".join(str(i) for i in ids))
-                reply = b"".join(pb_bytes(1, i.details()) for i in state.workshop if i.id in ids)
+                extra = first(body, 3, 0) == 1
+                state.log("cm: workshop details %s%s" % (" ".join(str(i) for i in ids), " (a page)" if extra else ""))
+                reply = b"".join(pb_bytes(1, i.details(extra)) for i in state.workshop if i.id in ids)
+            elif name == "PublishedFile.GetUserFiles#1":
+                assert logged_on and emsg == 151
+                page, per_page = first(body, 4, 1), first(body, 5, 1)
+                if first(body, 1) != steamid or first(body, 6) != b"mysubscriptions" or first(body, 2) != APP:
+                    state.log("cm: subscriptions of another account (refused)")
+                    result = 15
+                else:
+                    state.log("cm: workshop subscribed page %d" % page)
+                    listed = [i for s_id in SUBSCRIBED for i in state.workshop if i.id == s_id]
+                    shown = listed[(page - 1) * per_page:page * per_page]
+                    reply = pb_varint(1, len(listed)) + pb_varint(2, (page - 1) * per_page) + \
+                        b"".join(pb_bytes(3, i.details()) for i in shown)
+            elif name == "Player.GetPlayerLinkDetails#1":
+                assert logged_on and emsg == 151
+                wanted = [v for n, v in body if n == 1]
+                state.log("cm: names of %d accounts" % len(wanted))
+                reply = b"".join(pb_bytes(1, pb_bytes(1, pb_fixed64(1, w) + pb_varint(2, 3) +
+                                                      pb_bytes(10, AUTHORS[w]))) for w in wanted if w in AUTHORS)
             elif name == "ContentServerDirectory.GetServersForSteamPipe#1":
                 server = (pb_bytes(1, "SteamCache") + pb_varint(3, 7) + pb_bytes(8, "cache1-fake.steamcontent.test") +
                           pb_bytes(9, "cache1-fake.steamcontent.test") + pb_bytes(12, "mandatory"))
@@ -643,6 +809,26 @@ def cdn_client(state, conn):
         parts = path.strip("/").split("/")
         count += 1
         status, body = 404, b"not found"
+        if parts and parts[0] == "ugc":
+            # (the browser's pictures: the client's test image server; the query (the CDN's resize) logged, not used)
+            try:
+                item_id = int(parts[1])
+                item = next((i for i in state.workshop if i.id == item_id), None)
+                index = next((n for n in range(10) if picture_path(item_id, n).strip("/").split("?")[0] ==
+                              path.split("?")[0].strip("/")), None)
+                if item and index is not None:
+                    body, kind = item.picture(index)
+                    status = 200
+                    asked = path.split("imw=")[1].split("&")[0] if "imw=" in path else ""
+                    state.log("img: %d %d %s %s" % (item_id, index, kind, "resized %s" % asked if asked else "whole"))
+                else:
+                    state.log("img: %s not found" % path.split("?")[0])
+            except (IndexError, ValueError):
+                state.log("img: odd path")
+            reason = {200: "OK", 404: "Not Found"}[status]
+            conn.sendall(b"HTTP/1.1 %d %s\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\nConnection: keep-alive"
+                         b"\r\n\r\n" % (status, reason.encode(), len(body)) + body)
+            continue
         try:
             depot = int(parts[1])
             if parts[0] == "depot" and depot == WORKSHOP_DEPOT and parts[2] == "manifest":
@@ -788,6 +974,21 @@ def write_fixtures(folder, seed):
     items = [WorkshopItem(entry, seed, workshop_key) for entry in workshop_items(seed)]
     seed_file("ws_list", "query", pb_varint(1, len(items)) + b"".join(pb_bytes(2, i.details()) for i in items[:10]))
     seed_file("ws_list", "details", b"".join(pb_bytes(1, i.details()) for i in items[:4]))
+    # (the browser: pictures for the decode's unit test and the ws_image fuzzer's seeds, a details page)
+    pictures = os.path.join(folder, "pictures")
+    os.makedirs(pictures, exist_ok=True)
+    for kind in ("jpeg", "progressive", "png", "huge", "toomany", "png16", "truncated", "gif", "html", "big"):
+        data = picture_bytes(kind, 7)
+        with open(os.path.join(pictures, kind), "wb") as out:
+            out.write(data)
+        if kind not in ("big", "toomany"):
+            seed_file("ws_image", kind, data)
+    page = next(i for i in items if i.id == 2900000001).details(True)
+    seed_file("ws_text", "page", b"\0" + pb_bytes(1, page))
+    seed_file("ws_text", "names", b"\1" + b"".join(pb_bytes(1, pb_bytes(1, pb_fixed64(1, w) + pb_bytes(10, n)))
+                                                for w, n in AUTHORS.items()))
+    seed_file("ws_text", "text", b"\2" + LONG_TEXT.encode() + DESCRIPTION.encode())
+    seed_file("ws_text", "url", b"\3https://images.steamusercontent.com" + picture_path(2900000001).encode())
     names = [name.encode("utf-8", "surrogateescape") for i in items for name in i.depot.files]
     seed_file("ws_names", "items", b"\0".join(names[:8]))
     seed_file("ws_names", "real", b"\0".join([b"maps\\AvalancheAIBattleground.map", b"ModInfo.json",

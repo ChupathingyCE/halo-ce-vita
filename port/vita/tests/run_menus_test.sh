@@ -338,12 +338,22 @@
 #            progress, the end (Halo CE's made-up files in the case's own folder, revoked and logged
 #            off), Circle back; with HALO_TEST_SHOTS, each screen's picture (HALO_TEST_STEAM_SPANISH=1:
 #            in Spanish, the Vita's buttons)
-#   h3workshop  DOWNLOAD FROM STEAM's STEAM WORKSHOP (menus/halo3/workshop.xml; port/steamdl/steam_workshop.c)
+#   h3workshop  DOWNLOAD FROM STEAM's STEAM WORKSHOP browser (menus/halo3/workshop.xml; port/steamdl)
 #            against steam_fake_server.py (a Steam Workshop test build alone: configure.py --steam-workshop
-#            --steam-test-ca; else SKIP): the screen, SIGN IN, the QR, the list (page 1, page 2, a search typed,
-#            the order changed), two items marked and downloaded, then installed by the game's own map check
-#            (2900000001's map a real MCC map of this PC - HALO_TEST_WORKSHOP_MAP, default MCC's chillout.map;
-#            else SKIP - taken; 2900000008's made-up map refused), revoked and logged off, no token written
+#            --steam-test-ca; else SKIP), its pictures from the fake's image server (HALO_STEAM_TEST_IMAGES), at
+#            the Vita's picture with the Vita's C heap (HALO_HEAP_LIMIT_KB, HALO_WINDOW_FLOOR_KB): the screen,
+#            SIGN IN, the QR, the grid (POPULAR's page 1, its cards' pictures), two cards marked (Square), a
+#            card's details page (its pictures - Right -, its description scrolled, what it holds), the tabs
+#            (NEWEST, TOP RATED, SUBSCRIBED), Right past the edge (pages 2 and 3: the fake's hostile pictures
+#            refused, the long and odd text cut), a search typed, Start downloads the two, the install by the
+#            game's own map check (2900000001's map a real MCC map of this PC - HALO_TEST_WORKSHOP_MAP, default
+#            MCC's chillout.map; else SKIP - taken; 2900000002's made-up map refused); then signed in again:
+#            2900000001 INSTALLED, Triangle twice removes it (mods/<id> and its version record gone); revoked and
+#            logged off each time, no token written, no picture fetched from a host not Steam's image CDN, the
+#            memory said. With HALO_TEST_SHOTS, each screen's picture at 960x544 (HALO_TEST_STEAM_SPANISH=1: in
+#            Spanish, the Vita's buttons)
+#   h3workshoptouch  the same browser by touch (HALO_TEST_TAPS): a tap on a card opens its details page, a tap
+#            on Back closes it, a swipe turns the page, a tap on SUBSCRIBED changes the tab
 #   h3mods   the Halo 3 MOD MANAGER (menus/halo3/mods.xml, the main menu's) over
 #            content made at test time (mods_data: a modded Xbox map made from
 #            Blood Gulch, a corrupt file, a Custom Edition header with nothing
@@ -507,7 +517,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3workshop h3workshoppicker h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3workshop h3workshoptouch h3workshoppicker h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -2384,60 +2394,113 @@ for case in $cases; do
 		grep -aqF "$fake_token" "$log" && fail h3steam "the token is in the log"
 		grep -raqF "$fake_token" "$out/h3steam/card" && fail h3steam "the token is in a file written"
 		;;
-	h3workshop)
+	h3workshop|h3workshoptouch)
 		ws_map=${HALO_TEST_WORKSHOP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/chillout.map}
-		if ! grep -aq "port h3 workshop" "$binary" || ! grep -aq "HALO_STEAM_TEST_CM" "$binary"; then
-			echo "--- h3workshop"; echo "SKIP (h3workshop): not a Steam Workshop test build (configure.py --steam-workshop --steam-test-ca)"
+		if ! grep -aq "port h3 workshop mark" "$binary" || ! grep -aq "HALO_STEAM_TEST_IMAGES" "$binary"; then
+			echo "--- $case"; echo "SKIP ($case): not a Steam Workshop browser test build (configure.py --steam-workshop --steam-test-ca)"
 			continue
 		fi
 		if [ ! -f "$ws_map" ]; then
-			echo "--- h3workshop"; echo "SKIP (h3workshop): no MCC map to serve (HALO_TEST_WORKSHOP_MAP)"
+			echo "--- $case"; echo "SKIP ($case): no MCC map to serve (HALO_TEST_WORKSHOP_MAP)"
 			continue
 		fi
-		mkdir -p "$out/h3workshop-fake"
-		rm -f "$out/h3workshop-fake/stdin"; mkfifo "$out/h3workshop-fake/stdin"
-		python3 -I "$here/steam_fake_server.py" --work "$out/h3workshop-fake" --chunk-kb 1024 --workshop-map "$ws_map" \
-			< "$out/h3workshop-fake/stdin" > "$out/h3workshop-fake/server.json" &
+		mkdir -p "$out/$case-fake"
+		rm -f "$out/$case-fake/stdin" "$out/$case-fake/transcript.txt"; mkfifo "$out/$case-fake/stdin"
+		# (mode slow: each CDN answer a quarter second late - the download's progress shows a while)
+		python3 -I "$here/steam_fake_server.py" --work "$out/$case-fake" --chunk-kb 1024 --workshop-map "$ws_map" \
+			--mode slow < "$out/$case-fake/stdin" > "$out/$case-fake/server.json" &
 		fake_pid=$!
-		exec 7> "$out/h3workshop-fake/stdin"
-		for i in $(seq 300); do [ -s "$out/h3workshop-fake/server.json" ] && break; sleep 0.1; done
-		fake_cm=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cm"])' "$out/h3workshop-fake/server.json")
-		fake_cdn=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cdn"])' "$out/h3workshop-fake/server.json")
-		fake_token=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$out/h3workshop-fake/server.json")
-		# (GAME MANAGER; the row after Halo CE: DOWNLOAD FROM STEAM; down twice to STEAM WORKSHOP, A; SIGN IN, A;
-		# the QR, approved; the list: R (page 2), L (page 1), Triangle (a search, typed: "rebalanced"), Cross marks
-		# its one item; Right (the order: the search cleared), down seven, Cross marks 2900000008; Square downloads;
-		# the install; Circle back)
-		mods_data "$out/h3workshop-data"
-		run h3workshop "$out/h3workshop-data" 130 "$h3gmpad down:150:500 a wait:150:3000 down:150:500 down:150:500 a wait:150:2500 @ws_notice a wait:150:400 @ws_qr wait:150:8000 @ws_list rt wait:150:2500 @ws_page2 lt wait:150:2500 y wait:150:3000 @ws_search a wait:150:800 right wait:150:4000 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 wait:150:800 a wait:150:1000 @ws_marked x wait:150:20000 @ws_done wait:150:1000 b wait:150:3000" \
+		exec 7> "$out/$case-fake/stdin"
+		for i in $(seq 300); do [ -s "$out/$case-fake/server.json" ] && break; sleep 0.1; done
+		fake_cm=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cm"])' "$out/$case-fake/server.json")
+		fake_cdn=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cdn"])' "$out/$case-fake/server.json")
+		fake_token=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$out/$case-fake/server.json")
+		ws_shots=$out/$case-shots
+		rm -rf "$ws_shots"; mkdir -p "$ws_shots"
+		# (GAME MANAGER; the row after Halo CE: DOWNLOAD FROM STEAM; down twice to STEAM WORKSHOP, A: the notice;
+		# A: SIGN IN, the QR, approved; the grid)
+		ws_reach="$h3gmpad down:150:500 a wait:150:3000 down:150:500 down:150:500 a wait:150:2500 @ws_notice wait:150:300 a wait:150:500 @ws_qr wait:150:14000 @ws_grid"
+		if [ "$case" = h3workshop ]; then
+			# (Square marks card 0, Right, Square card 1; Left, Cross: card 0's details page; Right: its second
+			# picture; Down: the description on; B. R, R, R: NEWEST, TOP RATED, SUBSCRIBED; R: POPULAR again.
+			# Right four times: past the edge, page 2; Down, Right three times, Cross: the long-titled card's page;
+			# B; Right: page 3. Triangle: a search typed. Start: the two marked downloaded; the end, B.
+			# Then A: signed in again, Cross: 2900000001's page (INSTALLED), Triangle, Triangle: removed;
+			# B, B: signed out; B)
+			ws_pad="$ws_reach x:150:700 right:150:700 x:150:700 wait:150:500 @ws_marked wait:150:300 left:150:700 a wait:150:4500 @ws_details wait:150:300 right:150:3000 @ws_details_picture wait:150:300 down:150:900 @ws_details_scrolled wait:150:300 b wait:150:1500 rt wait:150:4000 @ws_newest wait:150:300 rt wait:150:4000 @ws_top wait:150:300 rt wait:150:4000 @ws_subscribed wait:150:300 rt wait:150:4000 right:150:600 right:150:600 right:150:600 right:150:5000 @ws_page2 wait:150:300 down:150:600 right:150:600 right:150:600 right:150:600 a wait:150:4000 @ws_details_long wait:150:300 b wait:150:1500 right:150:5000 @ws_page3 wait:150:300 y wait:150:4000 @ws_search wait:150:300 start wait:150:1200 @ws_progress wait:150:20000 @ws_done wait:150:300 b wait:150:3000 a wait:150:3000 @ws_reopened wait:150:300 a wait:150:15500 @ws_again wait:150:300 a wait:150:4500 @ws_installed wait:150:300 y wait:150:800 @ws_remove_ask wait:150:300 y wait:150:1500 @ws_removed wait:150:300 b wait:150:1500 b wait:150:5000 @ws_end wait:150:300 b wait:150:3000"
+			ws_seconds=420
+			ws_taps=
+		else
+			# (taps in the menus' units: card 2's middle, then the Back key, a finger from right to left across
+			# the cards, then the SUBSCRIBED tab; the pad signs out at the end)
+			ws_pad="$ws_reach wait:150:26000 b wait:150:5000 b wait:150:3000"
+			ws_seconds=110
+			ws_taps="HALO_TEST_TAPS=52000:410,161 58000:600,431 63000:560,200>220,200 70000:517,65"
+		fi
+		mods_data "$out/$case-data"
+		run $case "$out/$case-data" $ws_seconds "$ws_pad" \
 			HALO_MENU_STYLE=halo3 HALO_STEAM_TEST_CM="ws://127.0.0.1:$fake_cm/cmsocket/" \
-			HALO_STEAM_TEST_CDN="http://127.0.0.1:$fake_cdn" HALO_TEST_TEXT_INPUT=rebalanced \
-			${HALO_TEST_STEAM_SPANISH:+HALO_LANGUAGE=es "HALO_TEST_LANG_DIR=$root/port/vita/app0/lang" HALO_BUTTON_ICONS=playstation}
+			HALO_STEAM_TEST_CDN="http://127.0.0.1:$fake_cdn" HALO_STEAM_TEST_IMAGES="http://127.0.0.1:$fake_cdn" \
+			HALO_TEST_TEXT_INPUT=rebalanced HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1 HALO_SCREENSHOT_DIR="$ws_shots" \
+			HALO_SCREENSHOT_EVERY=100000000 HALO_HEAP_LIMIT_KB=48988 HALO_WINDOW_FLOOR_KB=66752 ${ws_taps:+"$ws_taps"} \
+			HALO_BUTTON_ICONS=playstation ${HALO_TEST_STEAM_SPANISH:+HALO_LANGUAGE=es "HALO_TEST_LANG_DIR=$root/port/vita/app0/lang"}
 		exec 7>&-
 		wait "$fake_pid" 2>/dev/null || true
-		check_h3 h3workshop halo3
-		log=$out/h3workshop/run.log
-		grep -aq "ui: screen pc.h3.workshop.screen" "$log" || fail h3workshop "STEAM WORKSHOP did not open"
-		grep -aq "menus: workshop: sign-in begun" "$log" || fail h3workshop "the sign-in did not begin"
-		grep -aq "steam job: QR 1 up" "$log" || fail h3workshop "no QR"
-		grep -aq "steam job: workshop page 1 (order 0): 10 items of 11" "$log" || fail h3workshop "page 1 not listed"
-		grep -aq "steam job: workshop page 2 (order 0): 1 items of 11" "$log" || fail h3workshop "R did not turn to page 2"
-		grep -aq "steam job: workshop page 1 (order 0, a search): 1 items of 1" "$log" || fail h3workshop "the search did not list its item"
-		grep -aq "steam job: workshop page 1 (order 1): 10 items" "$log" || fail h3workshop "Right did not change the order"
-		grep -aq "menus: workshop: 2900000001 marked (1)" "$log" && grep -aq "menus: workshop: 2900000008 marked (2)" "$log" ||
-			fail h3workshop "the two items were not marked"
-		grep -aq "steam job: workshop: 2 items chosen" "$log" || fail h3workshop "Square did not download the two"
-		grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log" ||
-			fail h3workshop "the session did not end done, revoked and logged off"
-		grep -aq "menus: workshop: 2900000001 installed in mods" "$log" || fail h3workshop "2900000001 (a real map) not installed"
-		grep -aq "menus: workshop: 2900000008 refused: maps/badcheck.map refused" "$log" ||
-			fail h3workshop "2900000008 (a made-up map) not refused by the game's map check"
-		[ -s "$out/h3workshop/data/mods/2900000001/maps/$(basename "$ws_map")" ] || fail h3workshop "the map is not in mods/2900000001"
-		cmp -s "$ws_map" "$out/h3workshop/data/mods/2900000001/maps/$(basename "$ws_map")" || fail h3workshop "the map's bytes differ"
-		[ -e "$out/h3workshop/data/mods/2900000008" ] && fail h3workshop "2900000008 was installed"
-		[ -z "$(ls -A "$out/h3workshop/data/workshop" 2>/dev/null)" ] || fail h3workshop "the staging folder is not empty"
-		grep -aqF "$fake_token" "$log" && fail h3workshop "the token is in the log"
-		grep -raqF "$fake_token" "$out/h3workshop/data" "$out/h3workshop/save" && fail h3workshop "the token is in a file written"
+		check_h3 $case halo3
+		log=$out/$case/run.log
+		transcript=$out/$case-fake/transcript.txt
+		grep -aq "ui: screen pc.h3.workshop.screen" "$log" || fail $case "STEAM WORKSHOP did not open"
+		grep -aq "menus: workshop: sign-in begun" "$log" || fail $case "the sign-in did not begin"
+		grep -aq "steam job: QR 1 up" "$log" || fail $case "no QR"
+		grep -aq "steam job: workshop page 1 (list 0): 8 items of 19" "$log" || fail $case "POPULAR's page 1 not listed"
+		[ "$(grep -ac "steam job: workshop picture [0-7]: made" "$log")" -ge 8 ] || fail $case "the cards' pictures were not made"
+		grep -aq "menus: workshop: memory: the C heap" "$log" || fail $case "the memory not said"
+		grep -aE "img: (2900000015|2900000001 9)" "$transcript" && fail $case "a picture fetched from a host not Steam's image CDN"
+		grep -aqF "$fake_token" "$log" && fail $case "the token is in the log"
+		grep -raqF "$fake_token" "$out/$case/data" "$out/$case/save" && fail $case "the token is in a file written"
+		ls "$ws_shots"/*.bmp > /dev/null 2>&1 || fail $case "no screen's picture saved"
+		if [ -n "${HALO_TEST_SHOTS:-}" ]; then
+			mkdir -p "$HALO_TEST_SHOTS/$case"
+			cp "$ws_shots"/*.bmp "$HALO_TEST_SHOTS/$case/" 2>/dev/null
+		fi
+		if [ "$case" = h3workshoptouch ]; then
+			grep -aq "menus: workshop: card 2 tapped" "$log" && grep -aq "menus: workshop: details of 2900000003" "$log" ||
+				fail $case "a tap on card 2 did not open its details page"
+			grep -aq "menus: workshop: details closed" "$log" || fail $case "a tap on Back did not close the details page"
+			grep -aq "menus: workshop: a swipe to page 2" "$log" && grep -aq "steam job: workshop page 2 (list 0)" "$log" ||
+				fail $case "a swipe did not turn the page"
+			grep -aq "menus: workshop: tab 3" "$log" && grep -aq "steam job: workshop page 1 (list 4)" "$log" ||
+				fail $case "a tap on SUBSCRIBED did not change the tab"
+			grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log" ||
+				fail $case "the session did not end done, revoked and logged off"
+			continue
+		fi
+		grep -aq "menus: workshop: 2900000001 marked (1)" "$log" && grep -aq "menus: workshop: 2900000002 marked (2)" "$log" ||
+			fail $case "the two cards were not marked"
+		grep -aq "menus: workshop: details of 2900000001" "$log" &&
+			grep -aq "steam job: workshop details 2900000001: here (4 pictures)" "$log" &&
+			grep -aq "steam job: workshop contents 2900000001: read" "$log" &&
+			grep -aq "steam job: workshop details picture 1: made" "$log" || fail $case "the details page, its pictures or what it holds"
+		grep -aq "steam job: workshop page 1 (list 1)" "$log" && grep -aq "steam job: workshop page 1 (list 2)" "$log" &&
+			grep -aq "steam job: workshop page 1 (list 4): 3 items of 3" "$log" || fail $case "the tabs (NEWEST, TOP RATED, SUBSCRIBED)"
+		grep -aq "cm: workshop subscribed page 1" "$transcript" || fail $case "SUBSCRIBED was not asked of the signed-in account"
+		grep -aq "steam job: workshop page 2 (list 0): 8 items of 19" "$log" && grep -aq "steam job: workshop page 3 (list 0): 3 items" "$log" ||
+			fail $case "Right past the edge did not turn to pages 2 and 3"
+		[ "$(grep -ac "steam job: workshop picture [0-7]: \(the picture\|a picture\|a 16-bit\)" "$log")" -ge 7 ] ||
+			fail $case "the fake's hostile pictures were not all refused"
+		grep -aq "menus: workshop: details of 2900000016" "$log" || fail $case "the long-titled card's page did not open"
+		grep -aq "steam job: workshop page 1 (list 0, a search): 1 items of 1" "$log" || fail $case "the search did not list its item"
+		grep -aq "steam job: workshop: 2 items chosen" "$log" || fail $case "Start did not download the two"
+		[ "$(grep -ac "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log")" = 2 ] ||
+			fail $case "the two sessions did not each end done, revoked and logged off"
+		grep -aq "menus: workshop: 2900000001 installed in mods" "$log" || fail $case "2900000001 (a real map) not installed"
+		grep -aq "menus: workshop: 2900000002 refused: maps/fakegulch.map refused" "$log" ||
+			fail $case "2900000002 (a made-up map) not refused by the game's map check"
+		grep -aq "menus: workshop: 2900000001 removed from mods" "$log" || fail $case "Triangle twice did not remove 2900000001"
+		[ -e "$out/$case/data/mods/2900000001" ] && fail $case "mods/2900000001 is still there"
+		[ -e "$out/$case/data/workshop/installed/2900000001.gid" ] && fail $case "its version record is still there"
+		[ -z "$(ls -A "$out/$case/data/workshop" 2>/dev/null | grep -v -x -e installed -e previews)" ] ||
+			fail $case "the staging folder is not empty"
 		;;
 	h3mods)
 		# (the list; mygulch off and on; its details; broken.map: Square, Circle keeps it, Square,

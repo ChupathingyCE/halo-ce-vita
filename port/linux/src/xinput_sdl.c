@@ -910,7 +910,7 @@ static struct
 		int sticks;
 		unsigned int hold_ms;
 		unsigned int pause_ms;
-	} steps[96];
+	} steps[160];
 } test_pad;
 enum
 {

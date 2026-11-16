@@ -779,25 +779,213 @@ done:
 	return ok;
 }
 
+/* a manifest's file seen for the details page: maps named, files counted */
+static int contents_file(void *context, const struct steam_manifest_file *file)
+{
+	struct steam_workshop_contents *contents = context;
+	char relative[STEAM_WORKSHOP_NAME_MAXIMUM + 1];
+	enum steam_plan_kind kind = STEAM_KIND_WORKSHOP_TEXT;
+	int taken;
+
+	if (file->flags & STEAM_FILE_FLAG_DIRECTORY)
+		return 0;
+	if (file->flags & STEAM_FILE_FLAG_SYMLINK)
+	{
+		contents->skipped++;
+		return 0;
+	}
+	taken = steam_workshop_name(file->name, relative, sizeof(relative), &kind);
+	if (taken == STEAM_WORKSHOP_NAME_REFUSE)
+	{
+		contents->refused = 1;
+		snprintf(contents->why, sizeof(contents->why), "a file name that is not allowed");
+		return 0;
+	}
+	if (taken == STEAM_WORKSHOP_NAME_SKIP)
+	{
+		contents->skipped++;
+		return 0;
+	}
+	contents->files++;
+	contents->bytes += file->size;
+	if (kind == STEAM_KIND_MCC_MAP)
+	{
+		if (contents->maps < STEAM_WORKSHOP_MAP_NAMES)
+		{
+			const char *base = strrchr(relative, '/');
+			size_t length;
+
+			base = base ? base + 1 : relative;
+			length = strlen(base);
+			if (length > 4)
+				length -= 4;
+			snprintf(contents->map_names[contents->maps], sizeof(contents->map_names[0]), "%.*s",
+				(int)(length < sizeof(contents->map_names[0]) - 1 ? length : sizeof(contents->map_names[0]) - 1), base);
+		}
+		contents->maps++;
+	}
+	return 0;
+}
+
+int steam_download_workshop_contents(struct steam_session *session, const struct steam_workshop_item *item,
+	const char *const *cdn_override, int cdn_override_count, struct steam_workshop_contents *contents, char *error,
+	int error_size)
+{
+	struct steam_cdn_server servers[4];
+	char urls[4][STEAM_HOST_MAXIMUM + 16], path[128];
+	const char *cdn[4];
+	struct steam_manifest_metadata metadata;
+	const uint8_t *key;
+	uint8_t *zipped = NULL, *manifest = NULL;
+	size_t zipped_size = 0, manifest_size = 0;
+	uint64_t code = 0;
+	int count = 0, index, ok = 0;
+
+	memset(contents, 0, sizeof(*contents));
+	error[0] = 0;
+	if (!item->hcontent)
+	{
+		snprintf(error, (size_t)error_size, "the item has no files");
+		return 0;
+	}
+	if (cdn_override && cdn_override_count > 0)
+	{
+		for (index = 0; index < cdn_override_count && count < 4; index++)
+			cdn[count++] = cdn_override[index];
+	}
+	else
+	{
+		int found = steam_session_cdn_servers(session, servers, 4, error, error_size);
+
+		for (index = 0; index < found; index++)
+		{
+			snprintf(urls[index], sizeof(urls[index]), "https://%.253s", servers[index].host);
+			cdn[count++] = urls[index];
+		}
+		if (count <= 0)
+			return 0;
+	}
+	key = steam_session_depot_key(session, STEAM_WORKSHOP_APP, STEAM_WORKSHOP_DEPOT, error, error_size);
+	if (!key || !steam_session_manifest_code(session, STEAM_WORKSHOP_APP, STEAM_WORKSHOP_DEPOT, item->hcontent,
+		"public", &code, error, error_size))
+	{
+		return 0;
+	}
+	snprintf(path, sizeof(path), "/depot/%u/manifest/%llu/5/%llu", (unsigned int)STEAM_WORKSHOP_DEPOT,
+		(unsigned long long)item->hcontent, (unsigned long long)code);
+	for (index = 0; index < count && !zipped; index++)
+	{
+		struct steam_http http;
+		int status = 0;
+
+		if (!steam_net_http_open(&http, cdn[index], error, error_size))
+			continue;
+		zipped = steam_http_get(&http, path, STEAM_MANIFEST_ZIPPED_MAXIMUM, &zipped_size, &status, MANIFEST_TIMEOUT_MS / 4,
+			error, error_size);
+		steam_http_close(&http);
+	}
+	steam_wipe(path, sizeof(path));
+	code = 0;
+	if (!zipped)
+	{
+		if (!error[0])
+			snprintf(error, (size_t)error_size, "the item's list of files did not come");
+		return 0;
+	}
+	if (!steam_zip_entry_size(zipped, zipped_size, STEAM_MANIFEST_MAXIMUM, &manifest_size) ||
+		!(manifest = malloc(manifest_size + 1)) ||
+		!steam_zip_extract(zipped, zipped_size, manifest, manifest_size, error, error_size))
+	{
+		snprintf(error, (size_t)error_size, "the item's list of files is not a zip of one file");
+		goto done;
+	}
+	if (steam_manifest_parse(manifest, manifest_size, key, &metadata, contents_file, contents, error, error_size) != 0)
+	{
+		snprintf(error, (size_t)error_size, "the item's list of files was refused");
+		goto done;
+	}
+	if (metadata.depot_id != STEAM_WORKSHOP_DEPOT || metadata.gid != item->hcontent ||
+		!steam_manifest_crc_ok(manifest, manifest_size, &metadata))
+	{
+		snprintf(error, (size_t)error_size, "the item's list of files is not the one asked for");
+		goto done;
+	}
+	ok = 1;
+done:
+	free(zipped);
+	free(manifest);
+	if (!ok)
+		memset(contents, 0, sizeof(*contents));
+	return ok;
+}
+
 int steam_download_workshop_query(struct steam_session *session, int page, enum steam_workshop_sort sort,
 	const char *search, struct steam_workshop_item *items, int maximum, uint32_t *total, char *error, int error_size)
 {
 	uint8_t body[256];
 	const uint8_t *reply;
-	size_t size = steam_workshop_query_request(body, sizeof(body), page, sort, search), reply_size;
-	int count;
+	size_t size, reply_size;
+	int count, subscribed = (int)sort == STEAM_WORKSHOP_LIST_SUBSCRIBED;
 
+	/* (SUBSCRIBED: the signed-in account's own list - its steamid the session's, as Steam gave it at the logon) */
+	size = subscribed ? steam_workshop_subscribed_request(body, sizeof(body), session->steamid, page) :
+		steam_workshop_query_request(body, sizeof(body), page, sort, search);
 	if (!size)
 	{
-		snprintf(error, (size_t)error_size, "a search too long");
+		snprintf(error, (size_t)error_size, subscribed ? "not signed in" : "a search too long");
 		return -1;
 	}
-	if (!steam_session_call(session, "PublishedFile.QueryFiles#1", body, size, &reply, &reply_size, error, error_size))
+	if (!steam_session_call(session, subscribed ? "PublishedFile.GetUserFiles#1" : "PublishedFile.QueryFiles#1", body,
+		size, &reply, &reply_size, error, error_size))
+	{
 		return -1;
-	count = steam_workshop_parse_query(reply, reply_size, items, maximum, total);
+	}
+	count = subscribed ? steam_workshop_parse_subscribed(reply, reply_size, items, maximum, total) :
+		steam_workshop_parse_query(reply, reply_size, items, maximum, total);
 	if (count < 0)
 		snprintf(error, (size_t)error_size, "the Workshop's list was malformed");
 	return count;
+}
+
+int steam_download_workshop_page(struct steam_session *session, uint64_t id, struct steam_workshop_details *details,
+	char *error, int error_size)
+{
+	uint8_t body[64];
+	const uint8_t *reply;
+	size_t size = steam_workshop_page_request(body, sizeof(body), id), reply_size;
+	int found;
+
+	memset(details, 0, sizeof(*details));
+	if (!size || !steam_session_call(session, "PublishedFile.GetDetails#1", body, size, &reply, &reply_size, error,
+		error_size))
+	{
+		if (!size)
+			snprintf(error, (size_t)error_size, "no such item");
+		return 0;
+	}
+	found = steam_workshop_parse_page(reply, reply_size, id, details);
+	if (found <= 0)
+		snprintf(error, (size_t)error_size, found < 0 ? "the item's details were malformed" : "Steam gave no details of it");
+	return found > 0;
+}
+
+int steam_download_workshop_names(struct steam_session *session, const uint64_t *steamids, int count,
+	char (*names)[STEAM_WORKSHOP_AUTHOR_SIZE])
+{
+	uint8_t body[512];
+	const uint8_t *reply;
+	size_t size = steam_workshop_names_request(body, sizeof(body), steamids, count), reply_size;
+	char error[160];
+	int index;
+
+	for (index = 0; index < count; index++)
+		names[index][0] = 0;
+	if (!size || !steam_session_call(session, "Player.GetPlayerLinkDetails#1", body, size, &reply, &reply_size, error,
+		sizeof(error)))
+	{
+		return -1;
+	}
+	return steam_workshop_parse_names(reply, reply_size, steamids, count, names);
 }
 
 /* the chosen items' details (one call), each checked, then each downloaded */

@@ -22,6 +22,12 @@ STEAM_FUZZ_SECONDS, under AddressSanitizer and UBSan):
   ws_list       the Workshop's QueryFiles and GetDetails responses (steam_workshop.c), each item checked
   ws_names      a Workshop item's file names (NUL-separated) through the name rule: a taken name must be plain, of
                 our characters, inside the item's folder, and two taken names that collide caught
+  ws_image      a preview picture's bytes through the bounded decoder (steam_image.c: stb_image, JPEG and PNG), made a
+                card's picture (filled) and a details page's (fitted)
+  ws_text       byte 0 picks: 0 a details page's GetDetails, 1 GetPlayerLinkDetails' names, 2 Steam's text through
+                the text rule (with and without lines, a small and a large buffer), 3 a picture's URL through the URL
+                rule, 4 a GetUserFiles list: every text out is ours (UTF-8 of ASCII and Latin-1, no control
+                character, no '|'), every URL taken is https to Steam's image CDN
 Every input must only be taken or refused: no crash, no leak, no read or
 write out of bounds.
 */
@@ -31,6 +37,7 @@ write out of bounds.
 #include "steam_crypto.h"
 #include "steam_file.h"
 #include "steam_http.h"
+#include "steam_image.h"
 #include "steam_kv.h"
 #include "steam_manifest.h"
 #include "steam_net.h"
@@ -125,6 +132,30 @@ static int cm_visit(void *context, const struct steam_cm_message *message)
 	(void)context;
 	walk(message->body, message->body_size, 0);
 	return 0;
+}
+
+/* a text of the text rule's: UTF-8 of printable ASCII (no '|') and Latin-1's U+00A0-U+00FF, '\n' only with lines */
+static void text_ours(const char *text, size_t capacity, int lines)
+{
+	size_t length = strnlen(text, capacity), at;
+
+	if (length >= capacity)
+		abort();
+	for (at = 0; at < length; at++)
+	{
+		unsigned char c = (unsigned char)text[at];
+
+		if (c == '\n' && lines)
+			continue;
+		if (c >= 0x20 && c < 0x7f && c != '|')
+			continue;
+		if ((c == 0xc2 || c == 0xc3) && at + 1 < length && ((unsigned char)text[at + 1] & 0xc0) == 0x80)
+		{
+			at++;
+			continue;
+		}
+		abort();
+	}
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
@@ -235,13 +266,12 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			abort();
 		for (index = 0; index < count; index++)
 		{
-			size_t length = strlen(items[index].title), at;
-
-			if (length >= STEAM_WORKSHOP_TITLE_SIZE)
+			text_ours(items[index].title, sizeof(items[index].title), 0);
+			if (strnlen(items[index].preview_url, sizeof(items[index].preview_url)) >= sizeof(items[index].preview_url) ||
+				items[index].score < -1 || items[index].score > 100)
+			{
 				abort();
-			for (at = 0; at < length; at++)
-				if (items[index].title[at] < 0x20 || items[index].title[at] > 0x7e)
-					abort();
+			}
 			steam_workshop_item_ok(&items[index], why, sizeof(why));
 		}
 		count = steam_workshop_parse_details(data, size, items, 3);
@@ -285,6 +315,110 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			for (index = 0; index < count; index++)
 				steam_workshop_names_collide(taken[index], taken[count]);
 			count++;
+		}
+	}
+	else if (!strcmp(target, "ws_image"))
+	{
+		static uint8_t card[STEAM_IMAGE_CARD_WIDTH * STEAM_IMAGE_CARD_HEIGHT * 4];
+		static uint8_t large[STEAM_IMAGE_LARGE_WIDTH * STEAM_IMAGE_LARGE_HEIGHT * 4];
+		char why[160];
+
+		if (steam_image_decode(data, size, STEAM_IMAGE_CARD_WIDTH, STEAM_IMAGE_CARD_HEIGHT, STEAM_IMAGE_FILL, card, why,
+			sizeof(why)))
+		{
+			steam_image_decode(data, size, STEAM_IMAGE_LARGE_WIDTH, STEAM_IMAGE_LARGE_HEIGHT, STEAM_IMAGE_FIT, large, why,
+				sizeof(why));
+		}
+		if (steam_image_decode_peak() > STEAM_IMAGE_DECODE_BYTES_MAXIMUM)
+			abort();
+	}
+	else if (!strcmp(target, "ws_text"))
+	{
+		const uint8_t *rest = data + 1;
+		size_t rest_size = size ? size - 1 : 0;
+
+		if (!size)
+			return 0;
+		switch (data[0] % 5)
+		{
+		case 0:
+		{
+			struct steam_workshop_details *details = malloc(sizeof(*details));
+			int index;
+
+			if (details && steam_workshop_parse_page(rest, rest_size, 2900000001ull, details) > 0)
+			{
+				text_ours(details->item.title, sizeof(details->item.title), 0);
+				text_ours(details->description, sizeof(details->description), 1);
+				if (details->preview_count < 0 || details->preview_count > STEAM_WORKSHOP_PREVIEWS)
+					abort();
+				for (index = 0; index < details->preview_count; index++)
+				{
+					char host[256], path[512], why[160];
+
+					if (steam_image_url(details->previews[index], 256, 144, host, sizeof(host), path, sizeof(path), why,
+						sizeof(why)) && strncmp(path, "/ugc/", 5))
+					{
+						abort();
+					}
+				}
+			}
+			free(details);
+			break;
+		}
+		case 1:
+		{
+			uint64_t steamids[4] = { 76561198000000001ull, 76561198000000002ull, 76561198000000003ull, 0 };
+			char names[4][STEAM_WORKSHOP_AUTHOR_SIZE];
+			int index, found = steam_workshop_parse_names(rest, rest_size, steamids, 4, names);
+
+			if (found > 4)
+				abort();
+			for (index = 0; index < 4; index++)
+				text_ours(names[index], sizeof(names[index]), 0);
+			break;
+		}
+		case 2:
+		{
+			char small[24], big[2048];
+
+			steam_workshop_text(small, sizeof(small), rest, rest_size, 0);
+			text_ours(small, sizeof(small), 0);
+			steam_workshop_text(big, sizeof(big), rest, rest_size, 1);
+			text_ours(big, sizeof(big), 1);
+			break;
+		}
+		case 3:
+		{
+			char url[400], host[256], path[512], why[160];
+			size_t length = rest_size < sizeof(url) - 1 ? rest_size : sizeof(url) - 1;
+
+			memcpy(url, rest, length);
+			url[length] = 0;
+			if (steam_image_url(url, 256, 144, host, sizeof(host), path, sizeof(path), why, sizeof(why)))
+			{
+				/* (taken: https, one of the two hosts, a /ugc/ path of plain characters, our query) */
+				if (strncmp(url, "https://", 8) || (strcmp(host, "images.steamusercontent.com") &&
+					strcmp(host, "steamuserimages-a.akamaihd.net")) || strncmp(path, "/ugc/", 5) || strstr(path, "..") ||
+					strstr(path, "//") || !strstr(path, "?imw=256&imh=144&") || strchr(path, ' ') || strchr(path, '\r'))
+				{
+					abort();
+				}
+			}
+			break;
+		}
+		default:
+		{
+			struct steam_workshop_item items[STEAM_WORKSHOP_PAGE_ITEMS];
+			uint32_t total;
+			int count = steam_workshop_parse_subscribed(rest, rest_size, items, STEAM_WORKSHOP_PAGE_ITEMS, &total), index;
+
+			if (count > STEAM_WORKSHOP_PAGE_ITEMS)
+				abort();
+			for (index = 0; index < count; index++)
+				text_ours(items[index].title, sizeof(items[index].title), 0);
+			break;
+		}
 		}
 	}
 	else if (!strcmp(target, "cdn_list"))
