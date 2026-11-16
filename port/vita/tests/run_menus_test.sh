@@ -3394,15 +3394,19 @@ PY
 			echo "SKIP: msgboxes' campaign: no HALO_TEST_PROFILE (a blam.sav with every level)"; continue
 		fi
 		# (a level from the Halo 3 lobby - SELECT MISSION: HALO CE, A, down three, A, SELECT DIFFICULTY
-		# on Normal, A; down two to START GAME -, its pause: REVERT TO CHECKPOINT, Circle; again, down to
+		# on Normal, A; down two to START GAME -, its pause (once b30's opening, to its save_mission_start
+		# at tick 1111, is over: 40 s of the level): REVERT TO CHECKPOINT, Circle; again, down to
 		# REVERT TO CHECKPOINT, Cross; the pause, RESTART MISSION, Circle; SAVE AND QUIT)
-		profile_from=$HALO_TEST_PROFILE run msgboxes_campaign "$menus_data" 200 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 a wait:150:1500 down:150:600 down:150:600 down:150:600 a wait:150:2500 a wait:150:2500 down:150:600 down:150:600 a level:150:25000 start:150:3000 until/h3\\pause down:150:1200 a:150:1500 until/dlg\\revert @revert b:150:1500 until/h3\\pause @pause_again a:150:1500 until/dlg\\revert down:150:800 @revert_yes a:1000:8000 start:150:3000 until/h3\\pause down:150:800 down:150:800 a:150:1500 until/dlg\\restart @restart b:150:1500 until/h3\\pause down:150:800 a:150:1000 until/dlg\\savequit @saving wait:150:1000 until/h3\\main:150:3000 @menu" \
+		profile_from=$HALO_TEST_PROFILE run msgboxes_campaign "$menus_data" 200 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 a wait:150:1500 down:150:600 down:150:600 down:150:600 a wait:150:2500 a wait:150:2500 down:150:600 down:150:600 a level:150:40000 start:150:3000 until/h3\\pause down:150:1200 a:150:1500 until/dlg\\revert @revert b:150:1500 until/h3\\pause @pause_again a:150:1500 until/dlg\\revert down:150:800 @revert_yes a:1000:8000 start:150:3000 until/h3\\pause down:150:800 down:150:800 a:150:1500 until/dlg\\restart @restart b:150:1500 until/h3\\pause down:150:800 a:150:1000 until/dlg\\savequit @saving wait:150:1000 until/h3\\main:150:3000 @menu" \
 			HALO_MENU_STYLE=halo3 HALO_TEST_COMMANDS="L150:@skip;L300:@skip"
 		log=$out/msgboxes_campaign/run.log
 		echo "--- msgboxes (a level's pause)"
 		grep -aE "h3 dialog|ui: screen|pause menu" "$log" | tail -24
 		[ "$(cat "$out/msgboxes_campaign/exit")" = 0 ] || fail msgboxes "campaign: exit $(cat "$out/msgboxes_campaign/exit")"
-		grep -aqiE "assert|exception|halt" "$log" && fail msgboxes "campaign: an assertion, exception or halt"
+		# (the threaded render's "render assertion skipped (torn read?)", logged and passed over, as the other
+		# tests take it)
+		grep -av "render assertion skipped" "$log" | grep -aqiE "assert|exception|halt" &&
+			fail msgboxes "campaign: an assertion, exception or halt"
 		[ "$(grep -ac 'menus: h3 dialog: pc.h3.dlg.revert.screen "REVERT TO CHECKPOINT"' "$log")" = 2 ] ||
 			fail msgboxes "campaign: REVERT TO CHECKPOINT's question did not open twice"
 		[ "$(grep -ac 'pause menu: restart at checkpoint' "$log")" = 1 ] ||
