@@ -258,6 +258,13 @@ int mcc_content_picture_frame(char const *stem)
 	return map ? map->frame : -1;
 }
 
+int mcc_content_pc_exclusive(char const *stem)
+{
+	struct mcc_content_map const *map = mcc_content_map_find(stem);
+
+	return map && map->kind == _mcc_content_multiplayer && map->frame < 0;
+}
+
 char const *mcc_content_campaign_stem(int index)
 {
 	return index >= 0 && index < MCC_CONTENT_CAMPAIGN_LEVELS ? mcc_content_maps[index].stem : NULL;

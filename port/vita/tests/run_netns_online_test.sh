@@ -1936,6 +1936,40 @@ badmap)
 			fail "the joiner without the level's map was not told so"
 	fi
 	;;
+pcmapjoin)
+	# (1.1.4, Command on the big team maps) a host with MCC's files plays one
+	# of Halo PC's six maps (HALO_TEST_PCMAP_GAME, host:mcc_deathisland:slayer;
+	# HALO_TEST_MCC_ROOT its Halo content folder, halo1/maps in it: SKIP
+	# without one); a joiner with the Xbox's maps alone (no content folder)
+	# joins from the server browser: it must be told, in the owner's words,
+	# that the map is a PC-exclusive one from Halo MCC that is never
+	# downloaded or shared, never offered a download, and stay up at the
+	# menus (never hang, never the dashboard)
+	game=${HALO_TEST_PCMAP_GAME:-host:mcc_deathisland:slayer}
+	mcc_root=${HALO_TEST_MCC_ROOT:-}
+	[ -n "$mcc_root" ] && [ -d "$mcc_root/halo1/maps" ] || { echo "SKIP ($mode): no HALO_TEST_MCC_ROOT with halo1/maps"; exit 0; }
+	stem=$(echo "$game" | cut -d: -f2 | sed 's/^mcc_//')
+	run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NETWORK_TEST=$game HALO_CONTENT_ROOT="$mcc_root" \
+		HALO_NETWORK_TEST_START=${HALO_TEST_PCMAP_START:-60} HALO_NET_HOST_PUBLIC=true HALO_NET_LOBBY_NAME=PcMapHost; host_pid=$last_pid
+	code=$(wait_code)
+	[ -n "$code" ] || { fail "the host never showed a code"; tail -20 "$out/host/run.log"; exit 1; }
+	echo "host's code: $code"
+	run_copy joiner "$join_machine" "${HALO_TEST_VITA_JOINER:-$vita}" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=join-public \
+		HALO_TEST_INPUT=bot:2 HALO_CONTENT_ROOT=none; join_pid=$last_pid
+	wait $join_pid $host_pid 2>/dev/null
+	log=$out/joiner/run.log
+	echo "--- joiner"; grep -aE "network test: (join|the public)|system link: in |damaged disc|error dialog|map: |platform: message|XLaunchNewImage" "$log" | head -12
+	grep -aq "network test: joining" "$log" || fail "the joiner never joined the host's game"
+	grep -aq "XLaunchNewImage" "$log" && fail "the joiner went to the dashboard"
+	grep -aq "damaged disc error\|error dialog [0-9]* (the disc" "$log" && fail "the joiner showed the damaged disc error"
+	grep -aq "map: the host's .*mcc_$stem.* is a PC-exclusive map not here: refused, never downloaded" "$log" ||
+		fail "the joiner was not refused the PC-exclusive map in the owner's words"
+	grep -aq "a PC-exclusive map from Halo MCC on Steam. It can't be downloaded or shared here" "$log" ||
+		fail "the joiner was not shown the PC-exclusive note"
+	grep -aiq "download it from\|Download .*?" "$log" && fail "the joiner was offered a download"
+	grep -aq "exiting after debug.exit_after" "$log" || fail "the joiner did not run to the end (hung?)"
+	grep -aq "exiting after debug.exit_after" "$out/host/run.log" || fail "the host did not run to the end"
+	;;
 fullcache)
 	prefill_cache joiner
 	# (the jitter: the routers' netem, set with the sides unless given)
@@ -6811,7 +6845,7 @@ command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|h3command)
 	command_case
 	;;
 *)
-	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b|command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|h3command" >&2
+	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b|command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|h3command|pcmapjoin" >&2
 	exit 2
 	;;
 esac

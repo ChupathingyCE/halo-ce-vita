@@ -70,6 +70,20 @@ static void test_names(void)
 	CHECK(mcc_content_picture_frame("a10") == 0 && mcc_content_picture_frame("d40") == 9);
 	CHECK(mcc_content_picture_frame("beavercreek") == 0 && mcc_content_picture_frame("bloodgulch") == 9 &&
 		mcc_content_picture_frame("longest") == 12 && mcc_content_picture_frame("icefields") == -1);
+	/* (1.1.4) Halo PC's six: the PC-exclusive maps, none of the Xbox's or the campaign's */
+	CHECK(mcc_content_pc_exclusive("dangercanyon") && mcc_content_pc_exclusive("deathisland") &&
+		mcc_content_pc_exclusive("gephyrophobia") && mcc_content_pc_exclusive("icefields") &&
+		mcc_content_pc_exclusive("infinity") && mcc_content_pc_exclusive("timberland") && mcc_content_pc_exclusive("DeathIsland"));
+	CHECK(!mcc_content_pc_exclusive("bloodgulch") && !mcc_content_pc_exclusive("longest") && !mcc_content_pc_exclusive("a10") &&
+		!mcc_content_pc_exclusive("d40") && !mcc_content_pc_exclusive("mygulch") && !mcc_content_pc_exclusive("") &&
+		!mcc_content_pc_exclusive(NULL));
+	{
+		int pc = 0;
+
+		for (index = 0; mcc_content_multiplayer_stem(index); index++)
+			pc += mcc_content_pc_exclusive(mcc_content_multiplayer_stem(index)) != 0;
+		CHECK(pc == 6);
+	}
 	for (index = 0; mcc_content_campaign_stem(index); index++)
 	{
 		CHECK(mcc_content_campaign_index(mcc_content_campaign_stem(index)) == index);

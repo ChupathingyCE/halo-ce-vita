@@ -372,9 +372,21 @@ static void decode_level(const struct xgpu_texture_description *description, uns
 	}
 	{
 		struct swizzle_masks masks = swizzle_masks(width, height, depth);
+		/* (the C heap full - the Vita's fixed heap, or the harness's
+		HALO_HEAP_LIMIT_KB -: no table, each offset spread as it is needed;
+		a Command game on Danger Canyon under the Vita's budget faulted
+		here writing through the NULL) */
 		unsigned long *x_offsets = malloc(width * sizeof(unsigned long));
 
-		for (x = 0; x < width; x++)
+		if (!x_offsets)
+		{
+			static unsigned long said;
+
+			if (said++ < 4)
+				platform_log("texture upload: no room for the offset table of a %lux%lux%lu texture (%lu bytes): spread as it goes",
+					width, height, depth, (unsigned long)(width * sizeof(unsigned long)));
+		}
+		for (x = 0; x_offsets && x < width; x++)
 			x_offsets[x] = spread(masks.x, x);
 		for (z = 0; z < depth; z++)
 		{
@@ -386,7 +398,8 @@ static void decode_level(const struct xgpu_texture_description *description, uns
 
 				for (x = 0; x < width; x++)
 				{
-					const unsigned char *texel = source + (x_offsets[x] | y_offset) * information.bytes;
+					unsigned long x_offset = x_offsets ? x_offsets[x] : spread(masks.x, x);
+					const unsigned char *texel = source + (x_offset | y_offset) * information.bytes;
 
 					destination[(z * height + y) * width + x] = convert_texel(information.kind, texel, palette, x, texel);
 				}
@@ -716,6 +729,22 @@ static void upload(GLuint texture, GLenum target, const struct xgpu_texture_desc
 	decode_compressed = description->compressed && !xgpu_capabilities.s3tc;
 #endif
 	converted = description->compressed && !decode_compressed ? NULL : malloc(largest * sizeof(unsigned long));
+	/* (the C heap full - the Vita's fixed heap, or the harness's
+	HALO_HEAP_LIMIT_KB -: the texels cannot be converted now; the texture
+	keeps what it had (nothing, the first time) and is tried again on its
+	next change, rather than written through the NULL: a Command game on
+	Danger Canyon, Ice Fields and Death Island under the Vita's budget
+	faulted so, the 1024x256 glyph cache's 1 MB refused) */
+	if (!converted && !(description->compressed && !decode_compressed))
+	{
+		static unsigned long said;
+
+		if (said++ < 4)
+			platform_log("texture upload: no memory to convert a %lux%lux%lu texture (format %02lx, %lu KB): left as it was",
+				description->width, description->height, description->depth, (unsigned long)description->format,
+				largest * sizeof(unsigned long) / 1024);
+		return;
+	}
 	glBindTexture(target, texture);
 	xgpu_gl_state_invalidate();
 	/* the channel of the texture each channel is sampled from, set on every

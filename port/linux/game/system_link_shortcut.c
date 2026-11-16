@@ -62,6 +62,7 @@ Forge page does (run_forge_test.sh panel).
 
 #include "../src/system_link_shortcut.h"
 #include "forge.h"
+#include "map_checks.h"
 #include "command.h"
 #include "../src/lang.h"
 #include "../src/port_config.h"
@@ -528,10 +529,13 @@ void system_link_shortcut_update(
 			snprintf(why, sizeof(why), "%s", T("Leave the network game's lobby first"));
 		}
 		else if (halo_forge_request_map < 0 || halo_forge_request_map >= forge_map_count() ||
-			!forge_map_available((short)halo_forge_request_map))
+			forge_map_state((short)halo_forge_request_map, why, sizeof(why)) != _map_check_playable)
 		{
+			/* (1.1.4: a map that cannot be played says why - a PC-exclusive
+			map whose MCC copy is not here, the owner's note) */
 			answer = SYSTEM_LINK_ANSWER_UNAVAILABLE;
-			snprintf(why, sizeof(why), "%s", T("No multiplayer map is in the maps folder."));
+			if (!why[0])
+				snprintf(why, sizeof(why), "%s", T("No multiplayer map is in the maps folder."));
 		}
 		/* (on the network: the profile, then the game hosted and its lobby,
 		menu_functions.c; no network up: said) */
@@ -557,17 +561,17 @@ void system_link_shortcut_update(
 		else
 		{
 			/* (1.1.4: Start Command - a local Command game of the map, as the
-			Command lobby's START COMMAND: command.c plays on Blood Gulch) */
+			Command lobby's START COMMAND: command.c plays on Blood Gulch and
+			the PC-exclusive big team maps, forge_map_command) */
 			boolean command = halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_COMMAND;
 			short prepare;
 			/* (1.1.5: Start Firefight - a local FIREFIGHT game of the map and
 			layout, as the Firefight lobby's START FIREFIGHT: forge_modes.inc) */
 			boolean firefight = halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT;
 
-			if (command && (!forge_map_short((short)halo_forge_request_map) ||
-				strcmp(forge_map_short((short)halo_forge_request_map), "bloodgulch")))
+			if (command && !forge_map_command((short)halo_forge_request_map))
 			{
-				snprintf(why, sizeof(why), "%s", T("Command mode plays on Blood Gulch for now:\nchoose it under SELECT MAP."));
+				snprintf(why, sizeof(why), "%s", T("Command mode plays on Blood Gulch and the big team maps:\nchoose one under SELECT MAP."));
 				answer = SYSTEM_LINK_ANSWER_UNAVAILABLE;
 			}
 			/* (1.1.4 polish: the mode's packs - its soldiers, dropships and

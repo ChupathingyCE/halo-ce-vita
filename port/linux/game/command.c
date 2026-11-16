@@ -164,6 +164,7 @@ void platform_translate_path(const char *xbox_path, char *host_path, unsigned lo
 #include <string.h>
 
 void platform_log(const char *format, ...);
+void platform_memory_log(const char *when, const char *map_name);
 int halo_linux_mouse_look(short gamepad_index, float *yaw, float *pitch);
 unsigned long halo_linux_forge_keys(float *wheel_notches);
 long hud_get_font_index(void);
@@ -1145,6 +1146,12 @@ bump, a rock or a base's roof barely moves the view */
 /* (a hill between the camera and the focus) the camera rises over it, at
 once; it comes down again this slowly */
 #define COMMAND_CAMERA_RISE_DOWN_RATE 0.8f
+/* (the big team maps) the rise at most; a hit this near the focus is cover
+over it, not a hill between; the camera kept this far under the level's sky */
+#define COMMAND_CAMERA_RISE_MAXIMUM 10.f
+#define COMMAND_CAMERA_COVER_DISTANCE 2.5f
+#define COMMAND_CAMERA_CEILING_MARGIN 2.f
+static real command_ceiling(real_point3d const *ground);
 
 static boolean command_ground_smooth(
 	real_point3d const *point,
@@ -1235,9 +1242,17 @@ static void command_camera_pose(
 				from.z + (collision.point.z + COMMAND_CLIP_MARGIN - from.z) * across / hit :
 				collision.point.z + COMMAND_CLIP_MARGIN;
 
+			/* (the focus under cover - a roof over it, a wall beside it:
+			Timberland's and Gephyrophobia's flags stand inside their bases
+			- is not a hill between: no height clears it, and rising for it
+			took the camera 70-100 wu up, out of the level, the map a
+			floating island in its fog's colour. The view keeps its height:
+			from above the cover, the floor under it) */
+			if (collision.plane.n.k < -0.5f || hit < COMMAND_CAMERA_COVER_DISTANCE)
+				break;
 			if (wanted - position->z <= rise + 0.05f)
 				break;
-			rise = wanted - position->z;
+			rise = MIN(wanted - position->z, COMMAND_CAMERA_RISE_MAXIMUM);
 		}
 	}
 	/* (up at once, down eased: a hill passing behind does not jolt it) */
@@ -1245,8 +1260,59 @@ static void command_camera_pose(
 		rise = command_camera_rise + (rise - command_camera_rise) * PIN(seconds * COMMAND_CAMERA_RISE_DOWN_RATE, 0.f, 1.f);
 	command_camera_rise = rise;
 	position->z += rise;
-	if (command_ground_top(position, &ground) && position->z < ground.z + COMMAND_CLIP_MARGIN)
-		position->z = ground.z + COMMAND_CLIP_MARGIN;
+	if (command_ground_top(position, &ground))
+	{
+		/* (and under the level's sky over it: past it the camera is out of
+		the level - no sky drawn, the fog's colour all round) */
+		real ceiling = command_ceiling(&ground) - COMMAND_CAMERA_CEILING_MARGIN;
+
+		if (position->z > ceiling)
+			position->z = ceiling;
+		if (position->z < ground.z + COMMAND_CLIP_MARGIN)
+			position->z = ground.z + COMMAND_CLIP_MARGIN;
+	}
+	/* (out of the level all the same - over a canyon's rim, Danger Canyon's,
+	where no ceiling stands over the rock: the level drawn from outside, no
+	sky, its fog's colour past the rim): brought along the line toward the
+	focus until it is in the level's open air */
+	{
+		struct location location;
+
+		scenario_location_from_point(&location, position);
+		if (location.cluster_index == NONE)
+		{
+			real_point3d inside = *position;
+			real_vector3d toward;
+			real length;
+			short step;
+
+			toward.i = from.x - position->x;
+			toward.j = from.y - position->y;
+			toward.k = from.z - position->z;
+			length = normalize3d(&toward);
+			for (step = 1; (real)step <= length - COMMAND_CLIP_MINIMUM; step++)
+			{
+				inside.x = position->x + toward.i * (real)step;
+				inside.y = position->y + toward.j * (real)step;
+				inside.z = position->z + toward.k * (real)step;
+				scenario_location_from_point(&location, &inside);
+				if (location.cluster_index != NONE)
+				{
+					/* (a little further in: off the level's skin) */
+					real more = MIN(COMMAND_CAMERA_CEILING_MARGIN, length - COMMAND_CLIP_MINIMUM - (real)step);
+
+					if (more > 0.f)
+					{
+						inside.x += toward.i * more;
+						inside.y += toward.j * more;
+						inside.z += toward.k * more;
+					}
+					*position = inside;
+					break;
+				}
+			}
+		}
+	}
 	/* (the view toward the focus from where the camera is) */
 	look.i = command_globals.focus.x - position->x;
 	look.j = command_globals.focus.y - position->y;
@@ -3339,15 +3405,112 @@ static void command_edge_scroll(
 
 static boolean command_ground_top(real_point3d const *point, real_point3d *ground);
 
+/* (the big team maps: Timberland's and Gephyrophobia's flags stand inside
+their bases, under a roof of rock - from above, the view of a base is its
+roof) a point under cover moved to the nearest open ground about it, at its
+level: the base's door, its yard. FALSE if it is under the open sky already
+or nothing near is */
+#define COMMAND_OPEN_SKY_HEIGHT 12.f
+#define COMMAND_OPEN_SKY_REACH 32.f
+#define COMMAND_OPEN_SKY_LEVEL 10.f
+
+static boolean command_open_sky_near(
+	real_point3d *point)
+{
+	real_point3d ground;
+	real radius;
+
+	if (!command_ground_top(point, &ground) || command_ceiling(&ground) - ground.z >= COMMAND_OPEN_SKY_HEIGHT)
+		return FALSE;
+	for (radius = 4.f; radius <= COMMAND_OPEN_SKY_REACH; radius += 4.f)
+	{
+		short step;
+
+		for (step = 0; step < 16; step++)
+		{
+			real angle = (real)step * _pi / 8.f;
+			real_point3d sample = *point;
+			real_point3d below;
+
+			sample.x += (real)cos(angle) * radius;
+			sample.y += (real)sin(angle) * radius;
+			if (command_ground(&sample, &below, NULL) && (real)fabs(below.z - point->z) <= COMMAND_OPEN_SKY_LEVEL &&
+				command_ceiling(&below) - below.z >= COMMAND_OPEN_SKY_HEIGHT)
+			{
+				*point = below;
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
+}
+
+/* whether the camera at its distance and pitch, this yaw, would stand in the
+level's open air with nothing of the level between it and the focus */
+static boolean command_camera_spot_clear(
+	real yaw)
+{
+	struct collision_result collision;
+	struct location location;
+	real_point3d from = command_globals.focus;
+	real_point3d spot;
+	real_vector3d back;
+
+	from.z += 0.5f;
+	spot.x = command_globals.focus.x - (real)(cos(command_globals.pitch) * cos(yaw)) * command_globals.distance;
+	spot.y = command_globals.focus.y - (real)(cos(command_globals.pitch) * sin(yaw)) * command_globals.distance;
+	spot.z = command_globals.focus.z - (real)sin(command_globals.pitch) * command_globals.distance;
+	scenario_location_from_point(&location, &spot);
+	if (location.cluster_index == NONE)
+		return FALSE;
+	back.i = spot.x - from.x;
+	back.j = spot.y - from.y;
+	back.k = spot.z - from.z;
+	return !collision_test_vector(FLAG(_collision_test_structure_bit) | FLAG(_collision_test_front_facing_surfaces_bit) |
+		FLAG(_collision_test_back_facing_surfaces_bit), &from, &back, NONE, &collision);
+}
+
 static void command_camera_jump(
 	real_point3d const *point,
 	char const *what)
 {
 	real_point3d ground;
+	real_point3d open = *point;
 
 	command_globals.focus = *point;
-	if (command_ground_top(point, &ground))
+	if (command_open_sky_near(&open))
+	{
+		platform_log("command: camera: %s at %.2f %.2f %.2f is under cover: its open ground at %.2f %.2f %.2f", what,
+			point->x, point->y, point->z, open.x, open.y, open.z);
+		command_globals.focus = open;
+	}
+	if (command_ground_top(&command_globals.focus, &ground))
 		command_globals.focus.z = ground.z;
+	/* (and seen from the open side: a camera that would stand in the rock
+	or behind a wall - Gephyrophobia's yard, under its cliff - turned about
+	the focus, 45 degrees at a time, the nearest way round that is clear) */
+	if (!command_camera_spot_clear(command_globals.yaw))
+	{
+		short turn;
+
+		for (turn = 1; turn <= 4; turn++)
+		{
+			real way = (real)turn * _pi / 4.f;
+
+			if (command_camera_spot_clear(command_globals.yaw + way))
+			{
+				command_globals.yaw += way;
+				break;
+			}
+			if (turn < 4 && command_camera_spot_clear(command_globals.yaw - way))
+			{
+				command_globals.yaw -= way;
+				break;
+			}
+		}
+		if (turn <= 4)
+			platform_log("command: camera: turned %.0f degrees to see %s from the open side", command_globals.yaw * 180.f / _pi, what);
+	}
 	command_globals.camera_jump = TRUE;
 	platform_log("command: camera to %s at %.2f %.2f %.2f", what, command_globals.focus.x, command_globals.focus.y,
 		command_globals.focus.z);
@@ -3804,8 +3967,15 @@ static boolean command_rally_point(
 	*point = base;
 	if (length > 1.f)
 	{
-		point->x += dx / length * COMMAND_RALLY_DISTANCE;
-		point->y += dy / length * COMMAND_RALLY_DISTANCE;
+		/* (1.1.4, the big team maps: bases near each other - Danger Canyon's
+		face each other 24 wu apart across a chasm, a bridge between - the
+		rally points are kept 16 wu from each other, each nearer its own
+		base, so the two sides' reinforcements do not land in one spot) */
+		real distance = MIN(COMMAND_RALLY_DISTANCE, (length - COMMAND_RALLY_DISTANCE) / 2.f);
+
+		distance = MAX(distance, 2.f);
+		point->x += dx / length * distance;
+		point->y += dy / length * distance;
 	}
 	if (command_ground(point, &ground, NULL))
 		*point = ground;
@@ -6481,6 +6651,9 @@ supply point (a hill) on one is let go */
 #define COMMAND_OBJECTIVE_FLANK_FARTHEST 30.f
 #define COMMAND_OBJECTIVE_FLANK_NEAREST 14.f
 #define COMMAND_OBJECTIVE_SUPPLY_APART 14.f
+/* (1.1.4) how far from the spot wanted one of the map's hills may stand in
+for it (the big team maps) */
+#define COMMAND_OBJECTIVE_HILL_REACH 60.f
 
 /* whether a spot is flat open ground near a height (its ground in *ground) */
 static boolean command_objective_spot_flat(
@@ -6511,6 +6684,8 @@ static void command_objective_territories_choose(
 {
 	real_point3d bases[NUMBER_OF_COMMAND_SIDES];
 	real_point3d middle, middle_ground, spots[COMMAND_OBJECTIVE_TERRITORIES];
+	boolean placed[COMMAND_OBJECTIVE_TERRITORIES];
+	boolean middle_valid;
 	real along_x, along_y, across_x, across_y, length;
 	short index, spot;
 
@@ -6570,8 +6745,17 @@ static void command_objective_territories_choose(
 	along_x = bases[1].x - bases[0].x;
 	along_y = bases[1].y - bases[0].y;
 	length = (real)sqrt(along_x * along_x + along_y * along_y);
-	if (length < 1.f || !command_ground(&middle, &middle_ground, NULL))
+	if (length < 1.f)
 		return;
+	/* (1.1.4, the big team maps: no ground between the bases at all -
+	Danger Canyon's bases face each other across a chasm -: the objectives
+	are the map's own hills, below) */
+	middle_valid = command_ground(&middle, &middle_ground, NULL);
+	if (!middle_valid)
+	{
+		middle_ground = middle;
+		platform_log("command: objectives: no ground between the bases (%.2f %.2f): the map's own hills", middle.x, middle.y);
+	}
 	along_x /= length;
 	along_y /= length;
 	/* (red's left, looking toward blue) */
@@ -6584,7 +6768,8 @@ static void command_objective_territories_choose(
 		boolean found = FALSE;
 		short step;
 
-		for (step = 0; step < 24 && !found; step++)
+		placed[spot] = FALSE;
+		for (step = 0; step < 24 && !found && middle_valid; step++)
 		{
 			real_point3d point = middle_ground;
 			real offset, shift;
@@ -6605,16 +6790,75 @@ static void command_objective_territories_choose(
 			point.x += across_x * offset + along_x * shift;
 			point.y += across_y * offset + along_y * shift;
 			found = command_objective_spot_flat(&point, middle_ground.z, &spots[spot]);
+			/* (1.1.4, the big team maps: flat ground scarce - Death Island's
+			A found 5 wu from B, two rings on one spot - an objective is
+			apart from the ones chosen before it by the supply points' gap) */
+			{
+				short other;
+
+				for (other = 0; found && other < spot; other++)
+				{
+					if (command_distance2d(&spots[spot], &spots[other]) < COMMAND_OBJECTIVE_SUPPLY_APART)
+						found = FALSE;
+				}
+			}
+		}
+		/* (1.1.4, the big team maps: no flat open ground where the spot was
+		wanted - Gephyrophobia's bridge over its chasm, Danger Canyon's chasm
+		-: the map's own hill nearest it, as its maker placed them, one not
+		taken by a spot before; the old spot near the middle only when the
+		map has no hill within reach) */
+		if (!found)
+		{
+			real_point3d wanted = middle_ground;
+			real best_distance = COMMAND_OBJECTIVE_HILL_REACH;
+			short best = NONE;
+
+			wanted.x += across_x * side * (COMMAND_OBJECTIVE_FLANK_FARTHEST + COMMAND_OBJECTIVE_FLANK_NEAREST) / 2.f;
+			wanted.y += across_y * side * (COMMAND_OBJECTIVE_FLANK_FARTHEST + COMMAND_OBJECTIVE_FLANK_NEAREST) / 2.f;
+			for (index = 0; index < command_territory_count; index++)
+			{
+				real distance = command_distance2d(&command_territories[index].center, &wanted);
+				short other;
+
+				/* (a hill taken by a spot before stands for no other; hills
+				as near each other as the map's maker set them may both be
+				objectives: Gephyrophobia's bridge) */
+				for (other = 0; other < spot; other++)
+				{
+					if (placed[other] && command_distance2d(&command_territories[index].center, &spots[other]) < 0.5f)
+						distance = COMMAND_OBJECTIVE_HILL_REACH;
+				}
+				if (distance < best_distance)
+				{
+					best_distance = distance;
+					best = index;
+				}
+			}
+			if (best != NONE)
+			{
+				spots[spot] = command_territories[best].center;
+				found = TRUE;
+				platform_log("command: objective territory %c: no flat open ground found: the map's hill %d (%.1f wu from the spot wanted)",
+					'A' + spot, command_territories[best].hill, best_distance);
+			}
 		}
 		if (!found)
 		{
-			platform_log("command: objective territory %c: no flat open ground found", 'A' + spot);
+			platform_log("command: objective territory %c: no flat open ground found%s", 'A' + spot,
+				middle_valid ? "" : ", no ground between the bases, no hill in reach");
+			if (!middle_valid)
+				continue;
 			spots[spot] = middle_ground;
 			spots[spot].x += across_x * side * COMMAND_OBJECTIVE_FLANK_NEAREST;
 			spots[spot].y += across_y * side * COMMAND_OBJECTIVE_FLANK_NEAREST;
 			if (!command_ground(&spots[spot], &spots[spot], NULL))
-				return;
+			{
+				platform_log("command: objective territory %c: no ground there either: left out", 'A' + spot);
+				continue;
+			}
 		}
+		placed[spot] = TRUE;
 	}
 	/* (a supply point on one let go) */
 	{
@@ -6626,7 +6870,7 @@ static void command_objective_territories_choose(
 
 			for (spot = 0; spot < COMMAND_OBJECTIVE_TERRITORIES; spot++)
 			{
-				if (command_distance2d(&command_territories[index].center, &spots[spot]) < COMMAND_OBJECTIVE_SUPPLY_APART)
+				if (placed[spot] && command_distance2d(&command_territories[index].center, &spots[spot]) < COMMAND_OBJECTIVE_SUPPLY_APART)
 					near = TRUE;
 			}
 			if (near)
@@ -6640,8 +6884,11 @@ static void command_objective_territories_choose(
 	}
 	for (spot = 0; spot < COMMAND_OBJECTIVE_TERRITORIES && command_territory_count < COMMAND_TERRITORIES; spot++)
 	{
-		struct command_territory *territory = &command_territories[command_territory_count++];
+		struct command_territory *territory;
 
+		if (!placed[spot])
+			continue;
+		territory = &command_territories[command_territory_count++];
 		csmemset(territory, 0, sizeof(*territory));
 		territory->center = spots[spot];
 		territory->radius = COMMAND_OBJECTIVE_RADIUS;
@@ -7941,9 +8188,12 @@ void command_map_loaded(
 	if (!command_globals.game_requested)
 		return;
 	command_globals.game_requested = FALSE;
-	if (!forge_game || !scenario_name || !strstr(scenario_name, "bloodgulch"))
+	/* (1.1.4: Blood Gulch and the PC-exclusive big team maps, forge.c's
+	forge_map_command; MCC's copy of a map loads under its own level name) */
+	if (!forge_game || !scenario_name || !forge_map_command(forge_map_of_scenario(scenario_name)))
 	{
-		platform_log("command: a Command game asked for, but %s is not Blood Gulch's Forge game", scenario_name ? scenario_name : "?");
+		platform_log("command: a Command game asked for, but %s is not a Forge game of one of Command's maps",
+			scenario_name ? scenario_name : "?");
 		return;
 	}
 	/* (the map built out now, as it loads: in memory, nothing on the card) */
@@ -8013,6 +8263,11 @@ static void command_where_scores(
 		command_objectives.scores[0], command_objectives.scores[1], command_objectives.score_limit, command_globals.resources[0],
 		command_globals.resources[1], command_ai_alive(_command_side_red), command_ai_alive(_command_side_blue),
 		command_ai_squad_count(_command_side_red), command_ai_squad_count(_command_side_blue));
+	/* (the memory meanwhile: the C heap - the Vita's fixed 48 MB - and the
+	window; with HALO_HEAP_CENSUS=1 the sites that hold and grew: a Command
+	game on Danger Canyon under the Vita's budget filled the heap by its
+	first minute) */
+	platform_memory_log("command where", NULL);
 	/* (the match's lag, Ben's report: what piles up - bodies, dropped
 	weapons, projectiles - counted by type) */
 	{
