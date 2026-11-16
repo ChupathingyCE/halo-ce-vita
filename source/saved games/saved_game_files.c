@@ -2850,6 +2850,10 @@ static short enumerate_default_playlist_profiles(
 		while (profile_index < number_of_profiles)
 		{
 			wchar_t *display_name = unicode_string_list_get_string(string_list_index, profile_index);
+#ifdef HALO_LINUX
+			/* (port: the Xbox's name, not MCC's "Classic Slayer": playlist_profile.c) */
+			display_name = playlist_profile_default_name(display_name);
+#endif
 
 			_snprintf(path, MAXIMUM_FILENAME_LENGTH, "z:\\saved\\playlists\\default_playlist\\%02d\\blam.lst", profile_index);
 

@@ -49,6 +49,12 @@ void playlist_profiles_enumerate_available_to_local_player_index(
 	short local_player_index,
 	word *number_of_profiles,
 	long *playlist_profile_indices);
+#ifdef HALO_LINUX
+/* port: a default game type's name as the map's list gives it, the Xbox's
+(MCC's "Classic Slayer" is "Slayer"): playlist_profile.c */
+wchar_t *playlist_profile_default_name(
+	wchar_t *name);
+#endif
 
 /* ---------- globals */
 
