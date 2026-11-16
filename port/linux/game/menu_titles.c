@@ -25,7 +25,8 @@ Custom Edition one), HALO_MENU_TITLES=0 - is the port's drawn picture
 game's data folder (t:\menu_titles_<lang>_<name>.rgba, with the pictures'
 checksum): made again only when the map's pictures change. The tool's
 memory (some MB as it builds) is let go once the menus' pictures are read
-(menu_titles_release). HALO_MENU_TITLES_DUMP=1: each heading made, as PAM,
+(menu_titles_release); a heading that cannot be made is kept as such too, so
+the letters are made only when a heading has never been tried. HALO_MENU_TITLES_DUMP=1: each heading made, as PAM,
 in the data folder (t:\menu_titles_<lang>_<name>.pam).
 */
 
@@ -320,24 +321,29 @@ static boolean heading_words(char const *english, char *words, int size)
 	return text[index] == 0;
 }
 
-/* the heading kept in the data folder, if it is of these pictures and words */
-static boolean cache_read(char const *path, unsigned long checksum, unsigned char *pixels)
+/* the heading kept in the data folder, if it is of these pictures and
+words: 1 its pixels read, -1 kept as one that cannot be made (no pixels: the
+port's picture, without making the letters again), 0 none */
+static int cache_read(char const *path, unsigned long checksum, unsigned char *pixels)
 {
 	unsigned long header[3];
 	FILE *file;
-	boolean read = FALSE;
+	int read = 0;
 
 	if ((file = fopen(path, "rb")) == NULL)
-		return FALSE;
-	if (fread(header, sizeof(header), 1, file) == 1 && header[0] == TITLES_FILE_SIGNATURE && header[1] == checksum &&
-		header[2] == HEADING_BYTES)
+		return 0;
+	if (fread(header, sizeof(header), 1, file) == 1 && header[0] == TITLES_FILE_SIGNATURE && header[1] == checksum)
 	{
-		read = fread(pixels, HEADING_BYTES, 1, file) == 1;
+		if (header[2] == 0)
+			read = -1;
+		else if (header[2] == HEADING_BYTES)
+			read = fread(pixels, HEADING_BYTES, 1, file) == 1;
 	}
 	fclose(file);
 	return read;
 }
 
+/* the heading kept, or (pixels NULL) that it cannot be made */
 static void cache_write(char const *path, unsigned long checksum, unsigned char const *pixels)
 {
 	unsigned long header[3];
@@ -345,10 +351,10 @@ static void cache_write(char const *path, unsigned long checksum, unsigned char 
 
 	header[0] = TITLES_FILE_SIGNATURE;
 	header[1] = checksum;
-	header[2] = HEADING_BYTES;
+	header[2] = pixels ? HEADING_BYTES : 0;
 	if ((file = fopen(path, "wb")) == NULL)
 		return;
-	if (fwrite(header, sizeof(header), 1, file) != 1 || fwrite(pixels, HEADING_BYTES, 1, file) != 1)
+	if (fwrite(header, sizeof(header), 1, file) != 1 || (pixels && fwrite(pixels, HEADING_BYTES, 1, file) != 1))
 	{
 		fclose(file);
 		remove(path);
@@ -425,10 +431,14 @@ unsigned char *menu_titles_frame(
 	checksum = crc32(menu_titles.checksum, (Bytef const *)words, (uInt)strlen(words));
 	checksum = crc32(checksum, (Bytef const *)&headings[index].left, sizeof(headings[index].left));
 	snprintf(path, sizeof(path), "t:\\menu_titles_%s_%s.rgba", code, name);
-	if (cache_read(path, checksum, pixels))
+	switch (cache_read(path, checksum, pixels))
 	{
+	case 1:
 		heading_dump(code, name, pixels);
 		return pixels;
+	case -1:
+		free(pixels);
+		return NULL;
 	}
 	free(pixels);
 	if (!menu_titles_tool())
@@ -450,6 +460,8 @@ unsigned char *menu_titles_frame(
 	{
 		if (made)
 			title_tool_picture_free(made);
+		else if (!title_tool_can_set(menu_titles.tool, words, HEADING_WIDTH, headings[index].left))
+			cache_write(path, checksum, NULL);
 		platform_log("menu titles: %s cannot be set in the game's letters: the port's picture", words);
 		return NULL;
 	}

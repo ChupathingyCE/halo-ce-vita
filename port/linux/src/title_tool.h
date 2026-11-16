@@ -61,6 +61,10 @@ the title of that size nearest its width: 8-bit RGBA, width by height
 (malloc'd); NULL if a letter has no shape, the word does not fit, or no
 title is of that size */
 unsigned char *title_tool_set(const struct title_tool *tool, const char *text, int width, int height, float left);
+/* whether title_tool_set can set text (every letter has a shape, and it
+fits width): FALSE is lasting while the pictures are the same, unlike a
+NULL from title_tool_set for want of memory */
+int title_tool_can_set(const struct title_tool *tool, const char *text, int width, float left);
 void title_tool_free(struct title_tool *tool);
 /* a picture the tool gave (title_tool_dxt_decode, _copy, _set) let go:
 the tool's own allocator's, which the caller's may not be */

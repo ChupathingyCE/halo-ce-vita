@@ -1158,6 +1158,10 @@ struct title_tool *title_tool_new(const struct title_tool_title *titles, long co
 		picture->height = heights[index];
 		if (!picture->texels || !picture_read(picture) || !instances_add(tool, index, &titles[index]))
 			continue;
+		/* (this port: the coverage is in the instances' samples now; the
+		Vita's memory) */
+		free(picture->coverage);
+		picture->coverage = NULL;
 		picture->present = 1;
 		found++;
 	}
@@ -1165,6 +1169,20 @@ struct title_tool *title_tool_new(const struct title_tool_title *titles, long co
 	{
 		title_tool_free(tool);
 		return NULL;
+	}
+	/* (the samples are in the shapes now: let go, the instances' places
+	kept for the spacing) */
+	for (index = 0; index < tool->instance_count; index++)
+	{
+		struct instance *instance = &tool->instances[index];
+
+		free(instance->px);
+		free(instance->py);
+		free(instance->value);
+		free(instance->keep);
+		instance->px = instance->py = instance->value = NULL;
+		instance->keep = NULL;
+		instance->count = 0;
 	}
 	for (character = 0; character < 256; character++)
 	{
@@ -1444,6 +1462,19 @@ static void title_span(const struct title_tool *tool, const struct picture *pict
 
 	*left = first->x + first->dx + tool->shapes[first->character].ink_left;
 	*right = last->x + last->dx + tool->shapes[last->character].ink_right;
+}
+
+int title_tool_can_set(const struct title_tool *tool, const char *text, int width, float left)
+{
+	int characters[64];
+	float xs[64];
+	long letters;
+
+	if (!tool || !text || width <= 0)
+		return 0;
+	letters = word_layout(tool, text, left, characters, xs, (long)(sizeof(xs) / sizeof(*xs)));
+	return letters > 0 && xs[0] + tool->shapes[characters[0]].ink_left >= 1 &&
+		xs[letters - 1] + tool->shapes[characters[letters - 1]].ink_right <= (float)width - 2;
 }
 
 unsigned char *title_tool_set(const struct title_tool *tool, const char *text, int width, int height, float left)
