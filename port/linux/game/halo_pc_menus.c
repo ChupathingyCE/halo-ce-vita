@@ -237,6 +237,7 @@ enum
 	XBOX_DELETE_VARIANT_REQUEST = 75,
 	XBOX_NEW_CAMPAIGN_CHOSEN = 96,
 	XBOX_NEW_CAMPAIGN_DECISION = 97,
+	XBOX_NEW_GAME_IF_NO_PROFILES = 101,
 };
 
 /* ---------- the rows: each spinner or row by its widget's name (the leaf of
@@ -807,6 +808,23 @@ static void text_set(struct widget_instance *widget, wchar_t const *text)
 		widget->parameters.text_box.text[index] = text[index];
 	widget->parameters.text_box.text[length] = 0;
 	widget->parameters.text_box.string_list_index = NONE;
+}
+
+/* a text box with a string list of its own shows text in its place for
+this render (the renderer takes the list's string again each frame:
+ui_widget_port_text_override) */
+static void text_override_ascii(struct widget_instance *widget, char const *text)
+{
+	void ui_widget_port_text_override(struct widget_instance *widget, wchar_t const *text);
+	wchar_t wide[256];
+	size_t index;
+
+	if (!widget)
+		return;
+	for (index = 0; text && text[index] && index < NUMBEROF(wide) - 1; index++)
+		wide[index] = (wchar_t)(unsigned char)text[index];
+	wide[index] = 0;
+	ui_widget_port_text_override(widget, wide);
 }
 
 static void text_set_ascii(struct widget_instance *widget, char const *text)
@@ -1971,9 +1989,20 @@ static void controls_update(struct widget_instance *list)
 		item->disabled = !have;
 		if (!have)
 			continue;
-		text_set_ascii(find_leaf(item, "command_1_label"), label);
+		text_override_ascii(find_leaf(item, "command_1_label"), label);
 		text_set_ascii(find_leaf(item, "command_1_button"), value);
 		shown(find_leaf(item, "command_mk_button_container"), FALSE);
+	}
+	/* (Halo PC's ADVANCED panel, a child of the screen drawn over the list
+	until its button shows it: greyed here, so never shown) */
+	{
+		struct widget_instance *advanced = find_leaf(screen, "advanced_settings_screen");
+
+		if (advanced)
+		{
+			advanced->visible = FALSE;
+			advanced->disabled = TRUE;
+		}
 	}
 	/* (a row gone with the group: the focus to CATEGORY) */
 	if (list->focused_child && controls_row_empty(list->focused_child))
@@ -1984,7 +2013,11 @@ static void controls_update(struct widget_instance *list)
 			ui_widget_port_give_focus(list, group);
 	}
 	{
-		struct widget_instance *help = find_leaf(screen, "controls_setup_help");
+		/* (the help line is the list's extended description, not a child) */
+		struct widget_instance *help = find_leaf(list->parameters.list.extended_description, "controls_setup_help");
+
+		if (!help)
+			help = find_leaf(screen, "controls_setup_help");
 
 		if (pc_controls.status[0])
 			snprintf(text, sizeof(text), "%s", pc_controls.status);
@@ -1992,7 +2025,7 @@ static void controls_update(struct widget_instance *list)
 			snprintf(text, sizeof(text), "%s", "The Vita's buttons for each action (the settings panel's Controls tab sets them).");
 		else
 			snprintf(text, sizeof(text), "%s", "A asks for a key or mouse button for the action (its first free one). DEFAULTS: Halo MCC's keys.");
-		text_set_ascii(help, text);
+		text_override_ascii(help, text);
 	}
 }
 
@@ -2317,6 +2350,21 @@ boolean halo_pc_menu_xbox_function_invoke(
 	case XBOX_NEW_CAMPAIGN_CHOSEN:
 		*result = new_profile_chosen(event);
 		return TRUE;
+	case XBOX_NEW_GAME_IF_NO_PROFILES:
+	{
+		/* (the main menu's CAMPAIGN and PROFILES: with no profile, the
+		keyboard asks a name (the Xbox's asked into its own buffer, which
+		97 here does not read) and the row's branch on failure opens it) */
+		long indices[1];
+		word count = 1;
+
+		player_profiles_enumerate_available_to_local_player_index(NONE, &count, indices, FALSE);
+		if (count > 0)
+			return TRUE;
+		new_profile_chosen(event);
+		*result = FALSE;
+		return TRUE;
+	}
 	case XBOX_NEW_CAMPAIGN_DECISION:
 		*result = new_profile_decision();
 		return TRUE;
