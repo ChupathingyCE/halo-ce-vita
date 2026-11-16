@@ -83,7 +83,7 @@ def child_of(parent, widget, **attrs):
 L, R = -54, 290
 W = R - L
 RIGHT = 486
-ROW = dict(bitmap='online/item', font='h3/font_item', color='#FFA6B0A7', text_x=8, text_y=2, width=W, height=18)
+ROW = dict(bitmap='online/item', font='h3/font_item', color='#FFF0F4F8', text_x=8, text_y=2, width=W, height=18)
 items = []
 add = items.append
 for name, png in (('online/panel', 'panel'), ('online/card', 'card'), ('online/backing', 'backing'),
@@ -125,7 +125,7 @@ def plates(widget):
             e.set('font', 'h3/font_item')
         if e.get('font') == 'h3/font_small' and e.get('color') == '#FF10220A':
             e.set('font', 'h3/font_item')
-            e.set('color', '#FFEDEFEE')
+            e.set('color', '#FFF4F6F8')
             e.set('text_y', '1')
             # (the name near the bar's left, as the online party list's: no emblem square)
             if e.get('text_x') == '22':
@@ -152,7 +152,7 @@ def switcher(kind):
     made = []
     for index, (label, target) in enumerate(SWITCH_TARGETS):
         row = el('widget', name='online/%s/switch_%d' % (kind, index), type='text', width=176, height=18,
-                 bitmap='online/item', font='h3/font_item', color='#FFA6B0A7', text_x=8, text_y=2,
+                 bitmap='online/item', font='h3/font_item', color='#FFF0F4F8', text_x=8, text_y=2,
                  string_list='online/lobby_text', string_index=3 + index)
         if (kind == 'mp' and label == 'MULTIPLAYER') or (kind == 'forge' and label == 'FORGE'):
             row.append(el('on', event='a start', run='port online switch close'))
@@ -162,7 +162,7 @@ def switcher(kind):
     made.append(el('widget', name='online/%s/switch_panel' % kind, left=L + 166, top=63, width=W - 166, height=96,
                    bitmap='online/dropdown'))
     made.append(el('widget', name='online/%s/switch_text' % kind, type='text', left=R + 10, top=66, width=300,
-                   height=80, font='h3/font_item', color='#FFEDEFEE', string_list='online/switch_text'))
+                   height=80, font='h3/font_item', color='#FFF0F4F8', string_list='online/switch_text'))
     return made
 
 
@@ -200,7 +200,7 @@ def foot(kind, leave_list, leave_index):
             x += 19
         else:
             made.append(el('widget', name='online/%s/%s' % (kind, name), type='text', left=x, top=426, width=width,
-                           height=18, font='h3/font_item', color='#FFEDEFEE', text_y=1, string_list=text,
+                           height=18, font='h3/font_item', color='#FFF0F4F8', text_y=1, string_list=text,
                            string_index=index))
             x += width
     return made, x
@@ -213,7 +213,7 @@ def lobby(kind, h3_screen, rows, extra_rows, title_widget):
         add(w)
     add(switch_row(kind))
     add(el('widget', name='online/%s/host_label' % kind, type='text', left=0, top=0, width=160, height=18,
-           font='h3/font_item', color='#FFEDEFEE', text_x=8, text_y=2, string_list='online/lobby_text',
+           font='h3/font_item', color='#FFF0F4F8', text_x=8, text_y=2, string_list='online/lobby_text',
            string_index=1))
     add(host_row(kind))
     add(take('h3/%s/network_status' % kind, left=150, top=3, width=W - 158, height=14, align='right'))
@@ -272,9 +272,9 @@ card = lobby('mp', 'h3/mp/screen',
              'h3/mp/title')
 add(take('h3/mp/map_picture', left=L + 6, top=card + 5, width=140, height=114))
 add(el('widget', name='online/mp/map_value', type='text', left=L + 156, top=card + 6, width=W - 162, height=20,
-       font='h3/font_title', color='#FFEDEFEE'))
+       font='h3/font_title', color='#FFF2F6FA'))
 add(el('widget', name='online/mp/map_text', type='text', left=L + 156, top=card + 30, width=W - 162, height=90,
-       font='h3/font_small', color='#FFB0B9B1',
+       font='h3/font_small', color='#FFC4D2E2',
        string_list='ui\\shell\\main_menu\\multiplayer_type_select\\mp_map_select\\map_data'))
 add(take('h3/mp/caption', left=L + 8, top=card + 119, width=W - 16, height=20))
 made, x = foot('mp', None, 0)
@@ -331,11 +331,11 @@ add(el('widget', name='online/pick/card', left=216, top=80, width=290, height=23
 add(el('widget', name='online/pick/foot', left=0, top=326, width=640, height=24, bitmap='online/footer'))
 add(el('widget', name='online/pick/a_butn', left=P, top=330, width=16, height=16, bitmap='h3/glyph_cross'))
 add(el('widget', name='online/pick/select', type='text', left=P + 20, top=329, width=70, height=18, font='h3/font_item',
-       color='#FFEDEFEE', text_y=1, string_list='h3/campaign_text', string_index=5))
+       color='#FFF0F4F8', text_y=1, string_list='h3/campaign_text', string_index=5))
 add(el('widget', name='online/pick/b_butn', left=P + 90, top=330, width=16, height=16, bitmap='h3/glyph_circle'))
 add(el('widget', name='online/pick/back', type='text', left=P + 110, top=329, width=70, height=18, font='h3/font_item',
-       color='#FFEDEFEE', text_y=1, string_list='h3/main_items', string_index=10))
-PROW = dict(bitmap='online/item', font='h3/font_item', color='#FFA6B0A7', text_x=8, text_y=1, width=150, height=17)
+       color='#FFF0F4F8', text_y=1, string_list='h3/main_items', string_index=10))
+PROW = dict(bitmap='online/item', font='h3/font_item', color='#FFF0F4F8', text_x=8, text_y=1, width=150, height=17)
 for kind, rows, extra in [('network', ['item_%d' % i for i in range(4)], []),
                           ('map', ['item_%d' % i for i in range(13)], ['map_picture', 'map_text', 'map_why']),
                           ('gametype', ['item_%d' % i for i in range(1, 13)], ['gametype_text'])]:

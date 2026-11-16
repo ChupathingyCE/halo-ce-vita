@@ -52,12 +52,12 @@
 	</widget>
 	<widget name="online/forge/browser/panel" left="456" top="24" width="268" height="432" bitmap="online/f_panel" />
 	<widget name="online/forge/browser/strip" left="456" top="24" width="268" height="30" bitmap="online/f_foot" />
-	<widget name="online/forge/browser/title" type="text" left="466" top="27" width="190" height="24" font="online/font_item" color="#FFEDEFEE" text_y="1" string_list="h3/forge_menu" string_index="0" />
-	<widget name="online/forge/browser/budget" type="text" left="640" top="31" width="76" height="16" align="right" font="online/font_small" color="#FF9AA59C" />
+	<widget name="online/forge/browser/title" type="text" left="466" top="27" width="190" height="24" font="online/font_item" color="#FFF2F6FA" text_y="1" string_list="h3/forge_menu" string_index="0" />
+	<widget name="online/forge/browser/budget" type="text" left="640" top="31" width="76" height="16" align="right" font="online/font_small" color="#FF9FB6CC" />
 	<widget name="online/forge/browser/rule" left="456" top="54" width="268" height="2" bitmap="online/f_rule" />
-	<widget name="online/forge/browser/crumb" type="text" left="468" top="60" width="244" height="16" font="online/font_small" color="#FF6A726B" />
+	<widget name="online/forge/browser/crumb" type="text" left="468" top="60" width="244" height="16" font="online/font_small" color="#FF77879A" />
 	<widget name="online/forge/browser/info_rule" left="456" top="320" width="268" height="2" bitmap="online/f_rule" />
-	<widget name="online/forge/browser/info_name" type="text" left="468" top="326" width="244" height="18" font="online/font_item" color="#FFEDEFEE" text_y="1" />
+	<widget name="online/forge/browser/info_name" type="text" left="468" top="326" width="244" height="18" font="online/font_item" color="#FFF2F6FA" text_y="1" />
 	<widget name="online/forge/browser/info_text" type="text" left="468" top="346" width="244" height="80" font="online/font_small" color="#FFC3CBD3" />
 	<widget name="online/forge/browser/buttons" left="456" top="430" width="268" height="26" bitmap="online/f_foot" />
 	<widget name="online/forge/browser/a_butn" left="466" top="435" width="16" height="16" bitmap="h3/glyph_cross" />
@@ -89,8 +89,8 @@
 		<child widget="online/forge/browser/row_name" />
 		<child widget="online/forge/browser/row_count" />
 	</widget>
-	<widget name="online/forge/browser/row_name" type="text" left="8" top="1" width="172" height="17" font="online/font_item" color="#FFA6B0A7" />
-	<widget name="online/forge/browser/row_count" type="text" left="176" top="2" width="70" height="15" align="right" font="online/font_small" color="#FF6A726B" />
+	<widget name="online/forge/browser/row_name" type="text" left="8" top="1" width="172" height="17" font="online/font_item" color="#FFC5D0DD" />
+	<widget name="online/forge/browser/row_count" type="text" left="176" top="2" width="70" height="15" align="right" font="online/font_small" color="#FF77879A" />
 	<widget name="online/forge/browser/row_1" width="252" height="18" bitmap="online/f_row">
 		<on event="a" run="port forge browser choose" />
 		<child widget="online/forge/browser/row_name" />
@@ -174,7 +174,7 @@
 	<widget name="online/forge/pause/column" left="28" top="122" width="236" height="288" bitmap="online/f_panel" />
 	<widget name="online/forge/pause/status" type="text" left="36" top="414" width="488" height="34" font="online/font_small" color="#FF9FD8FF" />
 	<widget name="online/forge/pause/controls_panel" left="280" top="150" width="320" height="224" bitmap="online/f_panel" />
-	<widget name="online/forge/pause/controls_caption" type="text" left="292" top="156" width="296" height="16" font="online/font_small" color="#FF9AA59C" string_list="h3/forge_menu" string_index="6" />
+	<widget name="online/forge/pause/controls_caption" type="text" left="292" top="156" width="296" height="16" font="online/font_small" color="#FF9FB6CC" string_list="h3/forge_menu" string_index="6" />
 	<widget name="online/forge/pause/controls_rule" left="292" top="174" width="296" height="2" bitmap="online/f_rule" />
 	<widget name="online/forge/pause/controls" type="text" left="292" top="180" width="304" height="190" font="online/font_small" color="#FFD3CBC3">
 		<data input="port forge controls" />
@@ -195,46 +195,46 @@
 		<child widget="online/forge/pause/newround" x="0" y="240" />
 		<child widget="online/forge/pause/leave" x="0" y="260" />
 	</widget>
-	<widget name="online/forge/pause/resume" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="4">
+	<widget name="online/forge/pause/resume" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFE6ECF2" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="4">
 		<on event="a" close="all" />
 	</widget>
-	<widget name="online/forge/pause/toggle" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="online/forge/pause/toggle" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" run="port forge toggle" close="all" />
 	</widget>
-	<widget name="online/forge/pause/save" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="10">
+	<widget name="online/forge/pause/save" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="10">
 		<on event="a" run="port forge save" />
 	</widget>
-	<widget name="online/forge/pause/undo" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="online/forge/pause/undo" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" run="port forge undo" />
 	</widget>
-	<widget name="online/forge/pause/redo" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="online/forge/pause/redo" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" run="port forge redo" />
 	</widget>
-	<widget name="online/forge/pause/snap" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="online/forge/pause/snap" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a left right" run="port forge snap" />
 	</widget>
-	<widget name="online/forge/pause/magnets" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="online/forge/pause/magnets" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a left right" run="port forge magnets" />
 	</widget>
-	<widget name="online/forge/pause/nudge" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="online/forge/pause/nudge" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a left right" run="port forge nudge step" />
 	</widget>
-	<widget name="online/forge/pause/allai" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="online/forge/pause/allai" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a left right" run="port forge all ai" />
 	</widget>
-	<widget name="online/forge/pause/cleardead" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="online/forge/pause/cleardead" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" run="port forge clear dead ai" />
 	</widget>
-	<widget name="online/forge/pause/clearall" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3">
+	<widget name="online/forge/pause/clearall" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3">
 		<on event="a" open="h3/forge/clearai/screen" />
 	</widget>
-	<widget name="online/forge/pause/deleteall" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="18">
+	<widget name="online/forge/pause/deleteall" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="18">
 		<on event="a" open="h3/forge/deleteall/screen" />
 	</widget>
-	<widget name="online/forge/pause/newround" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="14">
+	<widget name="online/forge/pause/newround" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="14">
 		<on event="a" run="port forge new round" close="all" />
 	</widget>
-	<widget name="online/forge/pause/leave" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFA6B0A7" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="5">
+	<widget name="online/forge/pause/leave" type="text" width="220" height="20" bitmap="online/f_item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="3" string_list="h3/forge_menu" string_index="5">
 		<on event="a start" open="h3/forge/leave/screen" />
 	</widget>
 </menus>

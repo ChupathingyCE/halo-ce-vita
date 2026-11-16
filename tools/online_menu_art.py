@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""The Online menu style's own art (port/vita/app0/menus/online): the
-charcoal see-through panels, the bronze selection bars, the header band and its
+"""The Online menu style's own art (port/vita/app0/menus/online): the deep
+navy see-through panels, the orange selection bars, the header band and its
 tabs, the colour grid's tiles, the boxes and rules, the title, and the fonts -
 drawn here from rectangles, gradients and lines, not taken from any game.
 The fonts are Saira Semi Condensed (SIL OFL, tools/fonts/OFL.txt), as the
@@ -25,18 +25,15 @@ import sys
 from PIL import Image, ImageDraw, ImageFilter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from halo3_menu_art import (ART_SOURCES, BRONZE, BRONZE_END, PANEL,  # noqa: E402
-                            PANEL_TOP, PLAYER_COLOURS, RULE, alpha, bar, font_file, grade,
+from halo3_menu_art import (ART_SOURCES, PLAYER_COLOURS, alpha, font_file,  # noqa: E402
                             horizontal_gradient, vertical_gradient)
 
-# the palette (Nov 2026, 1.1.3: after Halo 3's and ODST's menus,
-# halo3_menu_art.py's): charcoal see-through panels, light-grey text (the
-# XML's), the bronze of the bars and rims
-CHARCOAL = PANEL
-CHARCOAL_TOP = PANEL_TOP
-BAR_COLOUR = BRONZE
-BRONZE_DARK = BRONZE_END
-LINE = RULE
+# the palette: deep navy, ice-white text (the XML's), the orange of the bars
+NAVY = (14, 27, 52)
+NAVY_TOP = (24, 44, 80)
+ORANGE = (196, 112, 58)
+ORANGE_DARK = (150, 82, 44)
+LINE = (150, 178, 214)
 # (the pixels a unit is on a 1920x1080 display: the pictures' scale)
 S = 2.25
 
@@ -44,21 +41,37 @@ S = 2.25
 def haze_light():
     # CUSTOMIZATION's: the Spartan at the right stays bright, the rows' side dark
     return horizontal_gradient((128, 4), [
-        (0.0, (6, 8, 8, alpha(.84))),
-        (0.5, (6, 8, 8, alpha(.62))),
-        (0.75, (6, 8, 8, alpha(.18))),
-        (1.0, (6, 8, 8, alpha(.30))),
+        (0.0, (6, 14, 34, alpha(.84))),
+        (0.5, (6, 14, 34, alpha(.62))),
+        (0.75, (6, 14, 34, alpha(.18))),
+        (1.0, (6, 14, 34, alpha(.30))),
     ])
 
 
 def haze():
-    # the main menu's grade over the live scene (halo3_menu_art.py grade():
-    # dark and cool, a low fog, darker toward the sides)
-    return grade(256, 128)
+    # over the live scene: a deep, calm blue cast, darker toward the bottom
+    # and the sides (a widget as wide as the 640 columns stretches over the
+    # wide screen)
+    width, height = 256, 128
+    image = vertical_gradient((width, height), [
+        (0.0, (8, 18, 44, alpha(.76))),
+        (0.55, (6, 14, 36, alpha(.80))),
+        (1.0, (2, 6, 18, alpha(.88))),
+    ])
+    shade = Image.new('L', (width, height), 0)
+    ImageDraw.Draw(shade).ellipse([-width * .25, -height * .35, width * 1.25, height * 1.3], fill=255)
+    shade = shade.filter(ImageFilter.GaussianBlur(28))
+    pixels, mask = image.load(), shade.load()
+    for y in range(height):
+        for x in range(width):
+            r, g, b, a = pixels[x, y]
+            edge = 1.0 - mask[x, y] / 255.0
+            pixels[x, y] = (r, g, b, min(255, round(a + (250 - a) * edge * .55)))
+    return image
 
 
 def flat_panel(top, body, opacity, height=256, lip=.06):
-    # a see-through block: one flat charcoal, a short lighter gradient at its top
+    # a see-through block: one flat navy, a short lighter gradient at its top
     return vertical_gradient((4, height), [
         (0.0, top + (alpha(opacity),)),
         (lip, body + (alpha(opacity),)),
@@ -67,22 +80,32 @@ def flat_panel(top, body, opacity, height=256, lip=.06):
 
 
 def main_panel():
-    return flat_panel(CHARCOAL_TOP, CHARCOAL, .60)
+    return flat_panel(NAVY_TOP, NAVY, .80)
 
 
 def panel():
-    return flat_panel(CHARCOAL_TOP, CHARCOAL, .66, lip=.04)
+    return flat_panel(NAVY_TOP, (16, 30, 58), .82, lip=.04)
 
 
 def footer():
-    return Image.new('RGBA', (4, 4), (8, 9, 9, alpha(.74)))
+    return Image.new('RGBA', (4, 4), (4, 9, 22, alpha(.86)))
 
 
 def item_on():
-    # the selection: halo3_menu_art.py's bar (bronze, fading to the right),
-    # about the 1080p display's pixels (226 units: 508 pixels, 512 texels;
-    # 18: 40, 64 texels - a power of two's, as the menus' textures are)
-    return bar(512, 64)
+    # the selection: an orange bar with hard ends, a little deeper toward the
+    # right, a light edge on top and a dark one under it, about the 1080p
+    # display's pixels (226 units: 508 pixels, 512 texels; 18: 40, 64 texels -
+    # a power of two's, as the menus' textures are)
+    width, height = 512, 64
+    image = horizontal_gradient((width, height), [
+        (0.0, ORANGE + (255,)),
+        (0.75, (176, 98, 52, 255)),
+        (1.0, ORANGE_DARK + (255,)),
+    ])
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([0, 0, width - 1, 2], fill=(255, 210, 160, alpha(.55)))
+    draw.rectangle([0, height - 3, width - 1, height - 1], fill=(60, 26, 10, alpha(.55)))
+    return image
 
 
 def item_off():
@@ -97,22 +120,22 @@ def row_dim_on():
 
 def rule():
     # a thin line: flat, see-through (its widget one unit tall)
-    return Image.new('RGBA', (4, 4), LINE + (alpha(.40),))
+    return Image.new('RGBA', (4, 4), LINE + (alpha(.42),))
 
 
 def header():
     # the header band (a screen's title and its tabs), full width: dark for
-    # the title, a charcoal strip for the tabs, a hard edge between
+    # the title, a navy strip for the tabs, a hard edge between
     return vertical_gradient((4, 256), [
-        (0.0, (5, 6, 6, alpha(.84))),
-        (0.62, (8, 9, 9, alpha(.84))),
-        (0.625, (34, 37, 35, alpha(.88))),
-        (1.0, (28, 30, 29, alpha(.88))),
+        (0.0, (4, 9, 20, alpha(.84))),
+        (0.62, (6, 12, 26, alpha(.84))),
+        (0.625, (22, 40, 72, alpha(.88))),
+        (1.0, (18, 34, 62, alpha(.88))),
     ])
 
 
 def tab(on):
-    # a tab of the header: the chosen one a lighter charcoal block with an
+    # a tab of the header: the chosen one a lighter navy block with an
     # orange line under it, each ending in a slanted edge
     width, height = 256, 64
     image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
@@ -120,35 +143,35 @@ def tab(on):
     slant = 24
     if on:
         draw.polygon([(0, 0), (width - slant - 1, 0), (width - 1, height - 1), (0, height - 1)],
-                     fill=(62, 66, 62, alpha(.95)))
-        draw.rectangle([0, height - 5, width - 1, height - 1], fill=BAR_COLOUR + (255,))
+                     fill=(44, 70, 112, alpha(.95)))
+        draw.rectangle([0, height - 5, width - 1, height - 1], fill=ORANGE + (255,))
     draw.line([(width - slant - 1, 0), (width - 1, height - 1)], fill=LINE + (alpha(.6),), width=2)
     return image
 
 
 def card():
     return vertical_gradient((4, 256), [
-        (0.0, (62, 66, 62, alpha(.72))),
-        (0.04, (40, 43, 40, alpha(.64))),
-        (0.8, (40, 43, 40, alpha(.58))),
-        (1.0, (40, 43, 40, 0)),
+        (0.0, (40, 64, 104, alpha(.72))),
+        (0.04, (28, 48, 84, alpha(.64))),
+        (0.8, (28, 48, 84, alpha(.58))),
+        (1.0, (28, 48, 84, 0)),
     ])
 
 
 def box():
     # a value's box (the colour's hex): dark, a hard orange rim of 2 texels
     width, height = 256, 32
-    image = Image.new('RGBA', (width, height), (8, 9, 9, alpha(.9)))
-    ImageDraw.Draw(image).rectangle([0, 0, width - 1, height - 1], outline=BAR_COLOUR + (255,), width=2)
+    image = Image.new('RGBA', (width, height), (6, 12, 28, alpha(.9)))
+    ImageDraw.Draw(image).rectangle([0, 0, width - 1, height - 1], outline=ORANGE + (255,), width=2)
     return image
 
 
 def tile(on):
     width = height = 128
-    image = Image.new('RGBA', (width, height), (36, 39, 36, alpha(.8)))
+    image = Image.new('RGBA', (width, height), (24, 42, 74, alpha(.8)))
     draw = ImageDraw.Draw(image)
     if on:
-        draw.rectangle([0, 0, width - 1, height - 1], outline=BAR_COLOUR + (255,), width=3)
+        draw.rectangle([0, 0, width - 1, height - 1], outline=ORANGE + (255,), width=3)
     else:
         draw.rectangle([0, 0, width - 1, height - 1], outline=LINE + (alpha(.3),), width=2)
     return image
@@ -159,7 +182,7 @@ def select_frame():
     width, height = 64, 32
     image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    draw.rectangle([0, 0, width - 1, height - 1], outline=BAR_COLOUR + (255,), width=3)
+    draw.rectangle([0, 0, width - 1, height - 1], outline=ORANGE + (255,), width=3)
     draw.rectangle([3, 3, width - 4, height - 4], outline=(255, 240, 220, alpha(.85)), width=1)
     return image
 
@@ -179,8 +202,8 @@ def colour_tile(colour):
 
 def name_bar():
     return horizontal_gradient((256, 4), [
-        (0.0, BAR_COLOUR + (255,)),
-        (1.0, BAR_COLOUR + (0,)),
+        (0.0, ORANGE + (255,)),
+        (1.0, ORANGE + (0,)),
     ])
 
 
@@ -206,14 +229,14 @@ def title():
 
 
 def plate(colour):
-    # the party list's nameplate, after ODST's lobby card: a charcoal card,
-    # its left edge and a band of hazard stripes along its foot in the
-    # player's colour (frame 0, no colour: a muted olive), a light edge on
-    # top; 128x16 texels for a widget 256x18 units (the stripes' slant
-    # survives the stretch)
+    # the party list's nameplate card (1.1.3, the card's shape after ODST's
+    # lobby, in this set's navy): a navy card, its left edge and a band of
+    # hazard stripes along its foot in the player's colour (frame 0, no
+    # colour: a muted olive), a light edge on top; 128x16 texels for a widget
+    # 256x18 units (the stripes' slant survives the stretch)
     import colorsys
     if colour is None:
-        rgb = (124, 132, 84)
+        rgb = (124, 140, 64)
     else:
         r, g, b = (((colour >> 16) & 0xFF) / 255, ((colour >> 8) & 0xFF) / 255, (colour & 0xFF) / 255)
         h, sat, v = colorsys.rgb_to_hsv(r, g, b)
@@ -222,9 +245,9 @@ def plate(colour):
         rgb = tuple(round(c * 255) for c in colorsys.hsv_to_rgb(h, sat, v))
     width, height = 128, 16
     image = vertical_gradient((width, height), [
-        (0.0, (70, 74, 70, alpha(.90))),
-        (0.12, (46, 49, 46, alpha(.88))),
-        (1.0, (34, 36, 34, alpha(.90))),
+        (0.0, (44, 70, 112, alpha(.92))),
+        (0.12, NAVY_TOP + (alpha(.90),)),
+        (1.0, NAVY + (alpha(.92),)),
     ])
     draw = ImageDraw.Draw(image)
     draw.rectangle([0, 0, 2, height - 1], fill=rgb + (255,))
@@ -232,30 +255,30 @@ def plate(colour):
     for x in range(3, width + height, 6):
         draw.polygon([(x, height - band), (x + 3, height - band), (x, height), (x - 3, height)],
                      fill=rgb + (alpha(.85),))
-    draw.line([(3, height - band - 1), (width - 1, height - band - 1)], fill=(10, 11, 10, alpha(.5)))
+    draw.line([(3, height - band - 1), (width - 1, height - band - 1)], fill=(4, 9, 20, alpha(.5)))
     return image
 
 
 def backing():
     # the party list's header: a subtle dark strip
     return horizontal_gradient((64, 4), [
-        (0.0, (6, 7, 7, 0)),
-        (0.25, (6, 7, 7, alpha(.55))),
-        (1.0, (6, 7, 7, alpha(.65))),
+        (0.0, (4, 9, 22, 0)),
+        (0.25, (4, 9, 22, alpha(.55))),
+        (1.0, (4, 9, 22, alpha(.65))),
     ])
 
 
 def dropdown():
-    # SWITCH LOBBY's list: a lighter see-through charcoal block
-    return flat_panel((70, 74, 70), (52, 56, 52), .92, lip=.03)
+    # SWITCH LOBBY's list: a lighter see-through navy block
+    return flat_panel((54, 78, 118), (38, 60, 98), .90, lip=.03)
 
 
 def hazard():
-    # START's header strip, after ODST's start menu: a dark band, hazard
-    # stripes across its left half fading out to the right, a light edge
-    # under it
+    # START's header strip (1.1.3, after ODST's start menu, in this set's
+    # navy and orange): a dark navy band, orange hazard stripes across its
+    # left half fading out to the right, a light edge under it
     width, height = 512, 32
-    image = Image.new('RGBA', (width, height), (14, 15, 14, alpha(.94)))
+    image = Image.new('RGBA', (width, height), (6, 12, 26, alpha(.94)))
     pixels = image.load()
     for y in range(height):
         for x in range(width):
@@ -263,7 +286,8 @@ def hazard():
             if fade > 0 and (x + y) % 22 < 11:
                 r, g, b, a = pixels[x, y]
                 t = .55 * fade
-                pixels[x, y] = (round(r + (112 - r) * t), round(g + (98 - g) * t), round(b + (50 - b) * t), a)
+                pixels[x, y] = (round(r + (ORANGE[0] - r) * t), round(g + (ORANGE[1] - g) * t),
+                                round(b + (ORANGE[2] - b) * t), a)
     draw = ImageDraw.Draw(image)
     draw.line([(0, height - 1), (width - 1, height - 1)], fill=LINE + (alpha(.45),))
     return image

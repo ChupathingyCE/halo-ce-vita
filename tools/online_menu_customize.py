@@ -71,13 +71,13 @@ w('''	</strings>
 
 	<!-- the rows: a label, the value beside it (the focused row's arrows), as the Halo 3 editor's
 	children named alike (value, arrow_left, arrow_right) -->
-	<widget name="online/custom/value" type="text" left="150" top="0" width="140" height="18" align="center" font="h3/font_item" color="#FFA0AAA2" text_y="2" text_flags="no_focus_test"/>
-	<widget name="online/custom/na/value" type="text" left="150" top="0" width="140" height="18" align="center" font="h3/font_small" color="#FF6A726B" text_y="3" text_flags="no_focus_test"/>
+	<widget name="online/custom/value" type="text" left="150" top="0" width="140" height="18" align="center" font="h3/font_item" color="#FFAFC4DE" text_y="2" text_flags="no_focus_test"/>
+	<widget name="online/custom/na/value" type="text" left="150" top="0" width="140" height="18" align="center" font="h3/font_small" color="#FF6A7C94" text_y="3" text_flags="no_focus_test"/>
 	<widget name="online/custom/arrow_left" left="146" top="1" width="8" height="16" bitmap="h3/arrow_left"/>
 	<widget name="online/custom/arrow_right" left="286" top="1" width="8" height="16" bitmap="h3/arrow_right"/>''')
 for i, (row, label) in enumerate(zip(ROWS, LABELS)):
     dim = row.startswith('na_')
-    colour = '#FF737C75' if dim else '#FFEDEFEE'
+    colour = '#FF7E8EA4' if dim else '#FFF0F4F8'
     w('	<widget name="online/custom/%s_label" type="text" left="0" top="0" width="150" height="18" font="h3/font_item" color="%s" text_x="7" text_y="2" string_list="online/custom_labels" string_index="%d"/>' % (row, colour, i))
     if dim:
         w('	<widget name="online/custom/%s" width="300" height="18" flags="pass_unhandled_to_focused_child" bitmap="online/row_dim">' % row)
@@ -109,26 +109,26 @@ w('	</widget>')
 w('''
 	<!-- the header band (full width), CUSTOMIZATION and the tabs -->
 	<widget name="online/custom/header" left="0" top="0" width="640" height="80" bitmap="online/header"/>
-	<widget name="online/custom/title" type="text" left="%d" top="12" width="400" height="34" font="online/font_header" color="#FFEDEFEE" string_list="online/custom_text" string_index="0"/>''' % X)
+	<widget name="online/custom/title" type="text" left="%d" top="12" width="400" height="34" font="online/font_header" color="#FFF2F6FA" string_list="online/custom_text" string_index="0"/>''' % X)
 for i in range(3):
     w('	<widget name="online/custom/tab_%d" left="%d" top="52" width="118" height="24" bitmap="online/tab"/>' % (i, X - 8 + i * 118))
-    w('	<widget name="online/custom/tab_label_%d" type="text" left="%d" top="52" width="100" height="24" font="online/font_tab" color="#FFD8DED9" text_y="4" string_list="online/custom_text" string_index="%d"/>' % (i, X + i * 118, i + 1))
-w('''	<widget name="online/custom/profile_name" type="text" left="%d" top="57" width="190" height="16" align="right" font="h3/font_small" color="#FF9AA59C"/>''' % (X + 360))
+    w('	<widget name="online/custom/tab_label_%d" type="text" left="%d" top="52" width="100" height="24" font="online/font_tab" color="#FFE8EEF6" text_y="4" string_list="online/custom_text" string_index="%d"/>' % (i, X + i * 118, i + 1))
+w('''	<widget name="online/custom/profile_name" type="text" left="%d" top="57" width="190" height="16" align="right" font="h3/font_small" color="#FF9FB6CC"/>''' % (X + 360))
 w('''
 	<!-- under the rows: a rule, the colour's name, the row's help, the editor's word (a name
 	refused, a model that cannot be built) -->
 	<widget name="online/custom/rule" left="%d" top="268" width="300" height="2" bitmap="online/rule"/>
-	<widget name="online/custom/colour_name" type="text" left="%d" top="274" width="290" height="20" font="h3/font_item" color="#FFEDEFEE" text_x="7"/>
-	<widget name="online/custom/custom_help" type="text" left="%d" top="296" width="300" height="60" font="h3/font_small" color="#FFB0B9B1" text_x="7" string_list="h3/custom_help"/>
-	<widget name="online/custom/na_help" type="text" left="%d" top="296" width="300" height="60" font="h3/font_small" color="#FFB0B9B1" text_x="7"/>
+	<widget name="online/custom/colour_name" type="text" left="%d" top="274" width="290" height="20" font="h3/font_item" color="#FFF0F4F8" text_x="7"/>
+	<widget name="online/custom/custom_help" type="text" left="%d" top="296" width="300" height="60" font="h3/font_small" color="#FFC4D2E2" text_x="7" string_list="h3/custom_help"/>
+	<widget name="online/custom/na_help" type="text" left="%d" top="296" width="300" height="60" font="h3/font_small" color="#FFC4D2E2" text_x="7"/>
 	<widget name="online/custom/status" type="text" left="%d" top="362" width="300" height="34" font="h3/font_small" color="#FFF0B070" text_x="7"/>
-	<widget name="online/custom/preview_name" type="text" left="460" top="453" width="270" height="16" align="right" font="h3/font_small" color="#FF9AA59C"/>''' % (X, X, X, X, X))
+	<widget name="online/custom/preview_name" type="text" left="460" top="453" width="270" height="16" align="right" font="h3/font_small" color="#FF9FB6CC"/>''' % (X, X, X, X, X))
 GX, GY = 248, 112
 w('''
 	<!-- COLORS: the hex of the chosen colour in its box, then the grid (RANDOM, then the game's
 	eighteen in its order), the chosen one framed (online_custom_update moves the frame) -->
 	<widget name="online/custom/hex_box" left="%d" top="92" width="100" height="16" bitmap="online/box"/>
-	<widget name="online/custom/hex" type="text" left="%d" top="92" width="100" height="16" align="center" font="h3/font_small" color="#FFEDEFEE" text_y="1"/>''' % (GX, GX))
+	<widget name="online/custom/hex" type="text" left="%d" top="92" width="100" height="16" align="center" font="h3/font_small" color="#FFF0F4F8" text_y="1"/>''' % (GX, GX))
 tiles = ['online/colour_random'] + ['online/colour_%02d' % i for i in range(18)]
 for i, bitmap in enumerate(tiles):
     w('	<widget name="online/custom/cell_%d" left="%d" top="%d" width="32" height="16" bitmap="%s"/>' % (i, GX + (i % 3) * 34, GY + (i // 3) * 18, bitmap))
@@ -144,17 +144,17 @@ w('''
 	<!-- the foot: Circle closes (and saves), Cross changes, L and R the tabs -->
 	<widget name="online/custom/foot" left="0" top="446" width="640" height="34" bitmap="online/footer"/>
 	<widget name="online/custom/b_butn" left="%d" top="452" width="16" height="16" bitmap="h3/glyph_circle"/>
-	<widget name="online/custom/close" type="text" left="%d" top="451" width="60" height="18" font="h3/font_item" color="#FFEDEFEE" text_y="1" string_list="online/custom_text" string_index="4"/>
+	<widget name="online/custom/close" type="text" left="%d" top="451" width="60" height="18" font="h3/font_item" color="#FFF0F4F8" text_y="1" string_list="online/custom_text" string_index="4"/>
 	<widget name="online/custom/a_butn" left="%d" top="452" width="16" height="16" bitmap="h3/glyph_cross"/>
-	<widget name="online/custom/change" type="text" left="%d" top="451" width="60" height="18" font="h3/font_item" color="#FFEDEFEE" text_y="1" string_list="online/custom_text" string_index="5"/>
+	<widget name="online/custom/change" type="text" left="%d" top="451" width="60" height="18" font="h3/font_item" color="#FFF0F4F8" text_y="1" string_list="online/custom_text" string_index="5"/>
 	<widget name="online/custom/l_butn" left="%d" top="452" width="16" height="16" bitmap="h3/glyph_l"/>
 	<widget name="online/custom/r_butn" left="%d" top="452" width="16" height="16" bitmap="h3/glyph_r"/>
-	<widget name="online/custom/tabs" type="text" left="%d" top="451" width="60" height="18" font="h3/font_item" color="#FFEDEFEE" text_y="1" string_list="online/custom_text" string_index="6"/>''' % (X, X + 20, X + 84, X + 104, X + 172, X + 190, X + 210))
+	<widget name="online/custom/tabs" type="text" left="%d" top="451" width="60" height="18" font="h3/font_item" color="#FFF0F4F8" text_y="1" string_list="online/custom_text" string_index="6"/>''' % (X, X + 20, X + 84, X + 104, X + 172, X + 190, X + 210))
 w('''
 	<!-- the profiles first (the Halo 3 SELECT PROFILE's widgets, profiles.xml), under the header
 	band: CUSTOMIZATION, the line saying to choose one -->
-	<widget name="online/custprof/title" type="text" left="%d" top="12" width="400" height="34" font="online/font_header" color="#FFEDEFEE" string_list="online/custom_text" string_index="0"/>
-	<widget name="online/custprof/subtitle" type="text" left="%d" top="56" width="500" height="16" font="h3/font_small" color="#FFB0B9B1" string_list="h3/profile_text" string_index="3"/>
+	<widget name="online/custprof/title" type="text" left="%d" top="12" width="400" height="34" font="online/font_header" color="#FFF2F6FA" string_list="online/custom_text" string_index="0"/>
+	<widget name="online/custprof/subtitle" type="text" left="%d" top="56" width="500" height="16" font="h3/font_small" color="#FFC4D2E2" string_list="h3/profile_text" string_index="3"/>
 	<widget name="online/custprof/panel" left="40" top="86" width="560" height="330" bitmap="online/panel"/>
 	<widget name="online/custprof/screen" flags="pass_unhandled_to_focused_child" scene="multiplayer -40 -1.8 15.5 25 0">
 		<on event="created" run="port h3 profiles customize"/>

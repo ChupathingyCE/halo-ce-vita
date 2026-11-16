@@ -85,7 +85,7 @@ swatches are the game's colours). -->
 	PROFILE. A row's Cross plays the profile (the campaign) or edits it (CUSTOMIZATION): the
 	screen's mode picks, the other's handler fails -->
 	<widget name="h3/profiles/row_swatch" left="6" top="2" width="16" height="16" bitmap="h3/swatch"/>
-	<widget name="h3/profiles/row_name" type="text" left="30" top="0" width="190" height="20" font="h3/font_item" color="#FFD2D9D3" text_y="2"/>
+	<widget name="h3/profiles/row_name" type="text" left="30" top="0" width="190" height="20" font="h3/font_item" color="#FFE6ECF2" text_y="2"/>
 	<widget name="h3/profiles/row_note" type="text" left="200" top="0" width="84" height="20" align="right" font="h3/font_small" color="#FFF0B070" text_y="3"/>
 	<widget name="h3/profiles/row_1" width="290" height="20" bitmap="h3/row">
 		<on event="a start" run="port h3 profile play" open="ui\shell\main_menu\solo_level_select\solo_level_select_screen"/>
@@ -181,25 +181,25 @@ swatches are the game's colours). -->
 	none for CREATE NEW PROFILE, a damaged file, the scenes off or no pack (the swatch stays) -->
 	<widget name="h3/profiles/panel" left="40" top="40" width="560" height="400" bitmap="h3/profiles_panel"/>
 	<widget name="h3/profiles/info_swatch" left="368" top="104" width="40" height="40" bitmap="h3/swatch"/>
-	<widget name="h3/profiles/info_name" type="text" left="418" top="110" width="172" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1"/>
-	<widget name="h3/profiles/info_level_label" type="text" left="368" top="156" width="116" height="16" font="h3/font_small" color="#FF9AA59C" string_list="h3/profile_text" string_index="6"/>
-	<widget name="h3/profiles/info_level" type="text" left="368" top="172" width="116" height="38" font="h3/font_item" color="#FFA0AAA2" text_y="2"/>
-	<widget name="h3/profiles/info_skill_label" type="text" left="368" top="214" width="116" height="16" font="h3/font_small" color="#FF9AA59C" string_list="h3/profile_text" string_index="7"/>
-	<widget name="h3/profiles/info_skill" type="text" left="368" top="230" width="116" height="20" font="h3/font_item" color="#FFA0AAA2" text_y="2"/>
-	<widget name="h3/profiles/info_controls_label" type="text" left="368" top="256" width="116" height="16" font="h3/font_small" color="#FF9AA59C" string_list="h3/profile_text" string_index="8"/>
-	<widget name="h3/profiles/info_controls" type="text" left="368" top="272" width="116" height="38" font="h3/font_item" color="#FFA0AAA2" text_y="2"/>
-	<widget name="h3/profiles/info_text" type="text" left="368" top="156" width="220" height="140" font="h3/font_small" color="#FFB8C1B9"/>
+	<widget name="h3/profiles/info_name" type="text" left="418" top="110" width="172" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1"/>
+	<widget name="h3/profiles/info_level_label" type="text" left="368" top="156" width="116" height="16" font="h3/font_small" color="#FF9FB6CC" string_list="h3/profile_text" string_index="6"/>
+	<widget name="h3/profiles/info_level" type="text" left="368" top="172" width="116" height="38" font="h3/font_item" color="#FFAABED6" text_y="2"/>
+	<widget name="h3/profiles/info_skill_label" type="text" left="368" top="214" width="116" height="16" font="h3/font_small" color="#FF9FB6CC" string_list="h3/profile_text" string_index="7"/>
+	<widget name="h3/profiles/info_skill" type="text" left="368" top="230" width="116" height="20" font="h3/font_item" color="#FFAABED6" text_y="2"/>
+	<widget name="h3/profiles/info_controls_label" type="text" left="368" top="256" width="116" height="16" font="h3/font_small" color="#FF9FB6CC" string_list="h3/profile_text" string_index="8"/>
+	<widget name="h3/profiles/info_controls" type="text" left="368" top="272" width="116" height="38" font="h3/font_item" color="#FFAABED6" text_y="2"/>
+	<widget name="h3/profiles/info_text" type="text" left="368" top="156" width="220" height="140" font="h3/font_small" color="#FFCFD9E3"/>
 	<widget name="h3/profiles/status" type="text" left="52" top="340" width="536" height="34" font="h3/font_small" color="#FFF0B070" text_y="1"/>
 
 	<!-- the buttons: Cross Select, Circle Back, Square Delete, Triangle New Profile (the icons are
 	named as the game's keys, a tap presses them: x_butn is the Xbox's X, the Vita's Square) -->
 	<widget name="h3/profiles/x_butn" left="240" top="422" width="16" height="16" bitmap="h3/glyph_square"/>
-	<widget name="h3/profiles/delete" type="text" left="260" top="421" width="70" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/profile_text" string_index="4"/>
+	<widget name="h3/profiles/delete" type="text" left="260" top="421" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/profile_text" string_index="4"/>
 	<widget name="h3/profiles/y_butn" left="334" top="422" width="16" height="16" bitmap="h3/glyph_triangle"/>
-	<widget name="h3/profiles/new" type="text" left="354" top="421" width="120" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/profile_text" string_index="5"/>
+	<widget name="h3/profiles/new" type="text" left="354" top="421" width="120" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/profile_text" string_index="5"/>
 
-	<widget name="h3/profiles/title" type="text" left="52" top="46" width="400" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/profile_text" string_index="0"/>
-	<widget name="h3/profiles/subtitle" type="text" left="52" top="72" width="536" height="16" font="h3/font_small" color="#FFB8C1B9" string_list="h3/profile_text" string_index="1"/>
+	<widget name="h3/profiles/title" type="text" left="52" top="46" width="400" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/profile_text" string_index="0"/>
+	<widget name="h3/profiles/subtitle" type="text" left="52" top="72" width="536" height="16" font="h3/font_small" color="#FFCFD9E3" string_list="h3/profile_text" string_index="1"/>
 	<!-- (the campaign's: CAMPAIGN, the Xbox's load_campaign_player_profile; behind it the
 	editor's camera, customize.xml's h3/custom/screen, in ui.map's multiplayer point, for the card's
 	Spartan; gone, the Spartan goes with it) -->
@@ -240,15 +240,15 @@ swatches are the game's colours). -->
 	<!-- Square's question, a Halo 3 dialog: CANCEL first (focused), then DELETE PROFILE, which
 	deletes it as the Xbox's "final del player profile" does; both go back to the list -->
 	<widget name="h3/profdel/panel" left="120" top="150" width="400" height="180" bitmap="h3/panel"/>
-	<widget name="h3/profdel/title" type="text" left="132" top="156" width="376" height="24" font="h3/font_title" color="#FFEDEFEE" text_y="1" string_list="h3/profile_text" string_index="9"/>
+	<widget name="h3/profdel/title" type="text" left="132" top="156" width="376" height="24" font="h3/font_title" color="#FFF2F6FA" text_y="1" string_list="h3/profile_text" string_index="9"/>
 	<widget name="h3/profdel/rule" left="120" top="184" width="400" height="2" bitmap="h3/rule"/>
-	<widget name="h3/profdel/question" type="text" left="132" top="194" width="376" height="40" font="h3/font_small" color="#FFB8C1B9">
+	<widget name="h3/profdel/question" type="text" left="132" top="194" width="376" height="40" font="h3/font_small" color="#FFCFD9E3">
 		<data input="port h3 profile delete text"/>
 	</widget>
-	<widget name="h3/profdel/op_cancel" type="text" width="376" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="10" text_y="3" string_list="h3/profile_text" string_index="10">
+	<widget name="h3/profdel/op_cancel" type="text" width="376" height="20" bitmap="h3/item" font="h3/font_item" color="#FFF2F6FA" text_x="10" text_y="3" string_list="h3/profile_text" string_index="10">
 		<on event="a start" back="true"/>
 	</widget>
-	<widget name="h3/profdel/op_delete" type="text" width="376" height="20" bitmap="h3/item" font="h3/font_item" color="#FFA6B0A7" text_x="10" text_y="3" string_list="h3/profile_text" string_index="9">
+	<widget name="h3/profdel/op_delete" type="text" width="376" height="20" bitmap="h3/item" font="h3/font_item" color="#FFF2F6FA" text_x="10" text_y="3" string_list="h3/profile_text" string_index="9">
 		<on event="a start" run="port h3 profile delete" back="true"/>
 	</widget>
 	<widget name="h3/profdel/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
@@ -257,9 +257,9 @@ swatches are the game's colours). -->
 	</widget>
 	<widget name="h3/profdel/strip" left="120" top="310" width="400" height="20" bitmap="h3/strip"/>
 	<widget name="h3/profdel/a_butn" left="132" top="312" width="16" height="16" bitmap="h3/glyph_cross"/>
-	<widget name="h3/profdel/select" type="text" left="152" top="311" width="70" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/campaign_text" string_index="5"/>
+	<widget name="h3/profdel/select" type="text" left="152" top="311" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/campaign_text" string_index="5"/>
 	<widget name="h3/profdel/b_butn" left="226" top="312" width="16" height="16" bitmap="h3/glyph_circle"/>
-	<widget name="h3/profdel/back" type="text" left="246" top="311" width="70" height="18" font="h3/font_item" color="#FFE4E8E5" text_y="1" string_list="h3/main_items" string_index="10"/>
+	<widget name="h3/profdel/back" type="text" left="246" top="311" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/main_items" string_index="10"/>
 	<widget name="h3/profdel/screen" flags="pass_unhandled_to_focused_child">
 		<on event="b back" back="true"/>
 		<child widget="h3/main/haze"/>
