@@ -1140,6 +1140,12 @@ bump, a rock or a base's roof barely moves the view */
 /* (a hill between the camera and the focus) the camera rises over it, at
 once; it comes down again this slowly */
 #define COMMAND_CAMERA_RISE_DOWN_RATE 0.8f
+/* (the big team maps) the rise at most; a hit this near the focus is cover
+over it, not a hill between; the camera kept this far under the level's sky */
+#define COMMAND_CAMERA_RISE_MAXIMUM 10.f
+#define COMMAND_CAMERA_COVER_DISTANCE 2.5f
+#define COMMAND_CAMERA_CEILING_MARGIN 2.f
+static real command_ceiling(real_point3d const *ground);
 
 static boolean command_ground_smooth(
 	real_point3d const *point,
@@ -1230,9 +1236,17 @@ static void command_camera_pose(
 				from.z + (collision.point.z + COMMAND_CLIP_MARGIN - from.z) * across / hit :
 				collision.point.z + COMMAND_CLIP_MARGIN;
 
+			/* (the focus under cover - a roof over it, a wall beside it:
+			Timberland's and Gephyrophobia's flags stand inside their bases
+			- is not a hill between: no height clears it, and rising for it
+			took the camera 70-100 wu up, out of the level, the map a
+			floating island in its fog's colour. The view keeps its height:
+			from above the cover, the floor under it) */
+			if (collision.plane.n.k < -0.5f || hit < COMMAND_CAMERA_COVER_DISTANCE)
+				break;
 			if (wanted - position->z <= rise + 0.05f)
 				break;
-			rise = wanted - position->z;
+			rise = MIN(wanted - position->z, COMMAND_CAMERA_RISE_MAXIMUM);
 		}
 	}
 	/* (up at once, down eased: a hill passing behind does not jolt it) */
@@ -1240,8 +1254,59 @@ static void command_camera_pose(
 		rise = command_camera_rise + (rise - command_camera_rise) * PIN(seconds * COMMAND_CAMERA_RISE_DOWN_RATE, 0.f, 1.f);
 	command_camera_rise = rise;
 	position->z += rise;
-	if (command_ground_top(position, &ground) && position->z < ground.z + COMMAND_CLIP_MARGIN)
-		position->z = ground.z + COMMAND_CLIP_MARGIN;
+	if (command_ground_top(position, &ground))
+	{
+		/* (and under the level's sky over it: past it the camera is out of
+		the level - no sky drawn, the fog's colour all round) */
+		real ceiling = command_ceiling(&ground) - COMMAND_CAMERA_CEILING_MARGIN;
+
+		if (position->z > ceiling)
+			position->z = ceiling;
+		if (position->z < ground.z + COMMAND_CLIP_MARGIN)
+			position->z = ground.z + COMMAND_CLIP_MARGIN;
+	}
+	/* (out of the level all the same - over a canyon's rim, Danger Canyon's,
+	where no ceiling stands over the rock: the level drawn from outside, no
+	sky, its fog's colour past the rim): brought along the line toward the
+	focus until it is in the level's open air */
+	{
+		struct location location;
+
+		scenario_location_from_point(&location, position);
+		if (location.cluster_index == NONE)
+		{
+			real_point3d inside = *position;
+			real_vector3d toward;
+			real length;
+			short step;
+
+			toward.i = from.x - position->x;
+			toward.j = from.y - position->y;
+			toward.k = from.z - position->z;
+			length = normalize3d(&toward);
+			for (step = 1; (real)step <= length - COMMAND_CLIP_MINIMUM; step++)
+			{
+				inside.x = position->x + toward.i * (real)step;
+				inside.y = position->y + toward.j * (real)step;
+				inside.z = position->z + toward.k * (real)step;
+				scenario_location_from_point(&location, &inside);
+				if (location.cluster_index != NONE)
+				{
+					/* (a little further in: off the level's skin) */
+					real more = MIN(COMMAND_CAMERA_CEILING_MARGIN, length - COMMAND_CLIP_MINIMUM - (real)step);
+
+					if (more > 0.f)
+					{
+						inside.x += toward.i * more;
+						inside.y += toward.j * more;
+						inside.z += toward.k * more;
+					}
+					*position = inside;
+					break;
+				}
+			}
+		}
+	}
 	/* (the view toward the focus from where the camera is) */
 	look.i = command_globals.focus.x - position->x;
 	look.j = command_globals.focus.y - position->y;
@@ -3334,14 +3399,61 @@ static void command_edge_scroll(
 
 static boolean command_ground_top(real_point3d const *point, real_point3d *ground);
 
+/* (the big team maps: Timberland's and Gephyrophobia's flags stand inside
+their bases, under a roof of rock - from above, the view of a base is its
+roof) a point under cover moved to the nearest open ground about it, at its
+level: the base's door, its yard. FALSE if it is under the open sky already
+or nothing near is */
+#define COMMAND_OPEN_SKY_HEIGHT 12.f
+#define COMMAND_OPEN_SKY_REACH 32.f
+#define COMMAND_OPEN_SKY_LEVEL 10.f
+
+static boolean command_open_sky_near(
+	real_point3d *point)
+{
+	real_point3d ground;
+	real radius;
+
+	if (!command_ground_top(point, &ground) || command_ceiling(&ground) - ground.z >= COMMAND_OPEN_SKY_HEIGHT)
+		return FALSE;
+	for (radius = 4.f; radius <= COMMAND_OPEN_SKY_REACH; radius += 4.f)
+	{
+		short step;
+
+		for (step = 0; step < 16; step++)
+		{
+			real angle = (real)step * _pi / 8.f;
+			real_point3d sample = *point;
+			real_point3d below;
+
+			sample.x += (real)cos(angle) * radius;
+			sample.y += (real)sin(angle) * radius;
+			if (command_ground(&sample, &below, NULL) && (real)fabs(below.z - point->z) <= COMMAND_OPEN_SKY_LEVEL &&
+				command_ceiling(&below) - below.z >= COMMAND_OPEN_SKY_HEIGHT)
+			{
+				*point = below;
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
+}
+
 static void command_camera_jump(
 	real_point3d const *point,
 	char const *what)
 {
 	real_point3d ground;
+	real_point3d open = *point;
 
 	command_globals.focus = *point;
-	if (command_ground_top(point, &ground))
+	if (command_open_sky_near(&open))
+	{
+		platform_log("command: camera: %s at %.2f %.2f %.2f is under cover: its open ground at %.2f %.2f %.2f", what,
+			point->x, point->y, point->z, open.x, open.y, open.z);
+		command_globals.focus = open;
+	}
+	if (command_ground_top(&command_globals.focus, &ground))
 		command_globals.focus.z = ground.z;
 	command_globals.camera_jump = TRUE;
 	platform_log("command: camera to %s at %.2f %.2f %.2f", what, command_globals.focus.x, command_globals.focus.y,
