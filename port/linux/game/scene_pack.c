@@ -61,6 +61,7 @@ correct.
 #include "tag_relocate.h"
 #include "../../third_party/zlib/zlib_prefixed.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1777,6 +1778,17 @@ static boolean grow(void **array, long *capacity, long count, long element_size,
 	*array = grown;
 	*capacity = wanted;
 	return TRUE;
+}
+
+/* (a write's failure, errno as the call left it) why, when the card says:
+no space left on it (ENOSPC; a file limit's EFBIG and a quota's EDQUOT say
+the same) - PREPARING COMMAND tells the player to free some, not that the
+maps could not be read */
+static char const *write_fail_detail(void)
+{
+	int error = errno;
+
+	return error == ENOSPC || error == EFBIG || error == EDQUOT ? ": no space left" : "";
 }
 
 static void build_fail(struct build_state *state, char const *format, char const *detail)
@@ -4132,7 +4144,7 @@ static void build_items(struct build_state *state, FILE *data, unsigned long *da
 					if (!pack_write(data, zeros, more))
 					{
 						written = FALSE;
-						snprintf(why, sizeof(why), "the pack cannot be written");
+						snprintf(why, sizeof(why), "the pack cannot be written%s", write_fail_detail());
 						break;
 					}
 					*data_crc = crc_bytes(*data_crc, zeros, more);
@@ -4262,7 +4274,7 @@ static boolean scene_pack_build_custom_edition(
 	{
 		data = fopen(data_path, "w+b");
 		if (!data)
-			build_fail(&state, "the pack cannot be written%s", NULL);
+			build_fail(&state, "the pack cannot be written%s", write_fail_detail());
 	}
 	if (!state.failed)
 		build_items(&state, data, &data_size, &data_crc);
@@ -4275,7 +4287,7 @@ static boolean scene_pack_build_custom_edition(
 		if (!file || fwrite(pack_header, 1, sizeof(pack_header), file) != sizeof(pack_header) ||
 			!pack_write(file, state.blob, state.blob_size) || fflush(data) || fseek(data, 0, SEEK_SET))
 		{
-			build_fail(&state, "the pack cannot be written%s", NULL);
+			build_fail(&state, "the pack cannot be written%s", write_fail_detail());
 		}
 		else
 		{
@@ -4287,7 +4299,7 @@ static boolean scene_pack_build_custom_edition(
 				unsigned long chunk = data_size - done > BOUNCE_SIZE ? BOUNCE_SIZE : data_size - done;
 
 				if (fread(bounce, 1, chunk, data) != chunk || !pack_write(file, bounce, chunk))
-					build_fail(&state, "the pack cannot be written%s", NULL);
+					build_fail(&state, "the pack cannot be written%s", write_fail_detail());
 				done += chunk;
 			}
 			if (!bounce)
@@ -4302,7 +4314,7 @@ static boolean scene_pack_build_custom_edition(
 		remove(data_path);
 	}
 	if (file && fclose(file))
-		build_fail(&state, "the pack cannot be written%s", NULL);
+		build_fail(&state, "the pack cannot be written%s", write_fail_detail());
 	if (!state.failed)
 	{
 		remove(pack_path);
@@ -4611,7 +4623,7 @@ static boolean build_many_once(
 			if (!job->file || fwrite(placeholder, 1, sizeof(placeholder), job->file) != sizeof(placeholder) ||
 				!pack_write(job->file, state->blob, state->blob_size))
 			{
-				build_fail(state, "the pack cannot be written%s", NULL);
+				build_fail(state, "the pack cannot be written%s", write_fail_detail());
 			}
 		}
 		/* (its working memory let go before the next one's) */
@@ -4716,7 +4728,7 @@ static boolean build_many_once(
 						break;
 					if (from < position || !pack_write(job->file, reader.bounce + (from - position), to - from))
 					{
-						build_fail(&job->state, "the pack cannot be written%s", NULL);
+						build_fail(&job->state, "the pack cannot be written%s", write_fail_detail());
 						break;
 					}
 					job->data_crc = crc_bytes(job->data_crc, reader.bounce + (from - position), to - from);
@@ -4753,11 +4765,11 @@ static boolean build_many_once(
 			if (fseek(job->file, 0, SEEK_SET) || fwrite(pack_header, 1, sizeof(pack_header), job->file) != sizeof(pack_header) ||
 				fflush(job->file))
 			{
-				build_fail(state, "the pack cannot be written%s", NULL);
+				build_fail(state, "the pack cannot be written%s", write_fail_detail());
 			}
 		}
 		if (job->file && fclose(job->file))
-			build_fail(state, "the pack cannot be written%s", NULL);
+			build_fail(state, "the pack cannot be written%s", write_fail_detail());
 		if (!state->failed)
 		{
 			remove(pack_paths[job_index]);

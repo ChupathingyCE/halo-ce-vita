@@ -359,7 +359,8 @@ static short system_link_shortcut_command_prepare(
 #endif
 	static boolean began;
 	static long said_percent;
-	char line[96];
+	/* (the prepare's note, two lines when the card is full: command.c's size) */
+	char line[256];
 	char text[320];
 	real progress = 0.f;
 	short state;

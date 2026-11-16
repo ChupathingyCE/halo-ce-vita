@@ -153,6 +153,9 @@ Each logs what it did ("command: ...").
 #endif
 #include "halo_ui_pointer.h"
 #include "../src/lang.h"
+#include "../src/posix.h"
+
+void platform_translate_path(const char *xbox_path, char *host_path, unsigned long host_path_size);
 
 #include <math.h>
 #include <stdarg.h>
@@ -8231,9 +8234,69 @@ boolean command_prepare_needed(
 	return command_prepare_needed_for(FALSE);
 }
 
+/* the packs' failure, as the note says it: the maps unread - or, a write's
+failure, the card: full when the pack's build says so ("no space left",
+scene_pack.c) */
+static void command_prepare_failed(
+	char const *name,
+	char const *why)
+{
+	char const *reason = why && why[0] ? why : "?";
+
+	if (strstr(reason, "no space left"))
+		snprintf(command_prepare.note, sizeof(command_prepare.note), "%s",
+			T("No space left for this mode's packs: they take up to 120 MB\n(70 MB from Halo MCC's maps). Free some and start again."));
+	else if (strstr(reason, "cannot be written") || strstr(reason, "cannot be put in its place"))
+		snprintf(command_prepare.note, sizeof(command_prepare.note), "%s %s", T("This mode's packs couldn't be written:"), reason);
+	else
+		snprintf(command_prepare.note, sizeof(command_prepare.note), "%s %s",
+			T("Your Halo CE campaign maps couldn't be read for this mode:"), reason);
+	command_prepare.state = _command_prepare_failed;
+	platform_log("command: prepare: %s failed: %s", name, reason);
+}
+
+/* (a first build: no pack of the mode's on the card yet) whether the card
+has no room for even the smallest set of them (MCC's 53 MB, the Xbox maps'
+107, and the pixels' own file beside the largest while it is made): told
+before minutes of reading end in a failed write; free_mb the room found */
+enum { COMMAND_PACKS_SPACE_FLOOR_MB = 64 };
+
+static boolean command_prepare_space_short(
+	char const *const *names,
+	short count,
+	long *free_mb)
+{
+	char path[1024];
+	posix_ulong free_low = 0, free_high = 0, total_low = 0, total_high = 0;
+	short index;
+
+	*free_mb = -1;
+	for (index = 0; index < count; index++)
+		if (scene_packs_file_current(names[index]))
+			return FALSE;
+	platform_translate_path("t:\\packs", path, sizeof(path));
+	if (posix_disk_space(path, &free_low, &free_high, &total_low, &total_high) != 0)
+	{
+		platform_translate_path("t:\\", path, sizeof(path));
+		if (posix_disk_space(path, &free_low, &free_high, &total_low, &total_high) != 0)
+			return FALSE;
+	}
+	*free_mb = free_high ? 0x7fffffffL : (long)(free_low / (1024UL * 1024UL));
+#ifndef HALO_RELEASE
+	/* (the test's card: HALO_TEST_FREE_MB stands in for the room found) */
+	if (getenv("HALO_TEST_FREE_MB"))
+		*free_mb = atol(getenv("HALO_TEST_FREE_MB"));
+#endif
+	return *free_mb < COMMAND_PACKS_SPACE_FLOOR_MB;
+}
+
 boolean command_prepare_begin_for(
 	boolean firefight)
 {
+	char const *const *names;
+	short count;
+	long free_mb;
+
 	if (command_prepare.state == _command_prepare_building)
 		return TRUE;
 	csmemset(&command_prepare, 0, sizeof(command_prepare));
@@ -8244,6 +8307,12 @@ boolean command_prepare_begin_for(
 	command_prepare.started_progress = -1;
 	command_prepare.forge_packs = forge_packs_building(NULL, 0, NULL);
 	platform_log("command: prepare: the %s packs' builds wanted now", firefight ? "Firefight" : "Command");
+	command_mode_packs_get(firefight, &names, &count);
+	if (command_prepare_space_short(names, count, &free_mb))
+	{
+		command_prepare_failed(names[0], "no space left before the build");
+		platform_log("command: prepare: %ld MB free where the packs go, none of them built yet: not begun", free_mb);
+	}
 	return TRUE;
 }
 
@@ -8326,12 +8395,7 @@ short command_prepare_update(
 				done += 100;
 			}
 			else if (state == _scene_pack_state_failed)
-			{
-				snprintf(command_prepare.note, sizeof(command_prepare.note), "%s %s",
-					T("Your Halo CE campaign maps couldn't be read for this mode:"), why[0] ? why : "?");
-				command_prepare.state = _command_prepare_failed;
-				platform_log("command: prepare: %s failed: %s", names[index], why[0] ? why : "?");
-			}
+				command_prepare_failed(names[index], why);
 			else
 			{
 				done += PIN(pack_progress, 0, 99);

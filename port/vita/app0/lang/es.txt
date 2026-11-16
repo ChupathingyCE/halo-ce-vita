@@ -3291,6 +3291,8 @@
 "TERRITORIES AND FLAG" = "TERRITORIOS Y BANDERA"
 "AI COMMANDER" = "COMANDANTE IA"
 "Your Halo CE campaign maps couldn't be read for this mode:" = "No se pudieron leer tus mapas de la campaña de Halo CE para este modo:"
+"No space left for this mode's packs: they take up to 120 MB\n(70 MB from Halo MCC's maps). Free some and start again." = "No queda espacio para los paquetes de este modo: hasta 120 MB\n(70 MB con los mapas de Halo MCC). Libera espacio y vuelve a empezar."
+"This mode's packs couldn't be written:" = "No se pudieron escribir los paquetes de este modo:"
 "%ld%% - about %ld minutes left" = "%ld%% - quedan unos %ld minutos"
 "%ld%% - about %ld seconds left" = "%ld%% - quedan unos %ld segundos"
 "%ld%% - working out the time left..." = "%ld%% - calculando el tiempo restante..."

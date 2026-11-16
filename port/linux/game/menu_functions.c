@@ -18703,7 +18703,8 @@ static struct
 {
 	short state;
 	real progress;
-	char line[96];
+	/* (the prepare's note too, two lines when the card is full: command.c's size) */
+	char line[256];
 } h3_command_prepare;
 
 static void h3_command_prepare_frame(void)
@@ -18743,7 +18744,19 @@ static void h3_command_prepare_update(struct widget_instance *widget)
 	short piece;
 
 	/* (the render thread's, perhaps: what the game thread's frame left) */
-	text_show(named(screen, "progress"), h3_command_prepare.line);
+	/* (1.1.4 polish: a failed prepare's note - the card full, the maps
+	unread - in the paragraph's place, where two lines fit; the progress
+	line under the bar holds one) */
+	if (h3_command_prepare.state == 4 && h3_command_prepare.line[0])
+	{
+		text_show(named(screen, "text"), h3_command_prepare.line);
+		text_show(named(screen, "progress"), "");
+	}
+	else
+	{
+		text_show(named(screen, "text"), T("Command mode builds its soldiers, dropships and turrets\nfrom your Halo CE campaign maps once, and keeps them\non the memory card for every game after."));
+		text_show(named(screen, "progress"), h3_command_prepare.line);
+	}
 	text_show(named(screen, "title"), T("PREPARING COMMAND"));
 	for (piece = 0; piece < 20; piece++)
 	{
