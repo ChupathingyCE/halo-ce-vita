@@ -18664,7 +18664,13 @@ static struct
 static void h3_command_prepare_frame(void)
 {
 	real progress = 0.f;
-	short state = command_prepare_update(h3_command_prepare.line, (int)sizeof(h3_command_prepare.line), &progress);
+	short state;
+
+	/* (the settings panel's own prepare, system_link_shortcut.c: not this
+	screen's to drive or to start a game from) */
+	if (command_prepare_panels())
+		return;
+	state = command_prepare_update(h3_command_prepare.line, (int)sizeof(h3_command_prepare.line), &progress);
 
 	h3_command_prepare.progress = progress;
 

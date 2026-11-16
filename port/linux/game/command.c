@@ -8126,6 +8126,9 @@ static struct
 	char note[256];
 	/* (the console's "command prepare": the packs alone, no game after) */
 	boolean no_game;
+	/* (the settings panel's Start Command, system_link_shortcut.c: its own
+	prepare - the Command lobby's PREPARING COMMAND frame leaves it alone) */
+	boolean panel;
 	/* (the Forge lobby's own packs - EXTRA OBJECTS, which these games load
 	too - still being built when it began: waited for as one more piece) */
 	boolean forge_packs;
@@ -8154,6 +8157,12 @@ void command_packs_prebuild(
 		platform_log("command: packs: %s wanted for the %s lobby: %s", names[index], firefight ? "Firefight" : "Command",
 			scene_packs_state_name(state));
 	}
+	/* (and the Forge lobby's own, which these games load too - EXTRA
+	OBJECTS' vehicles, dropships, the map's blocks -: wanted now as the Forge
+	lobby wants them, so that PREPARING COMMAND waits for them and the map's
+	load does not build them (b30 and b40 read again: minutes on a Vita);
+	the settings panel's Start Command never opened the Forge lobby) */
+	forge_packs_prebuild();
 }
 
 /* (a joiner of a network Command game, in its lobby: forge_net.inc) whether
@@ -8210,7 +8219,9 @@ boolean command_prepare_needed_for(
 			return TRUE;
 	}
 	/* (and the Forge lobby's packs these games load: never built as the
-	map loads, a Vita's minute behind the loading screen) */
+	map loads, a Vita's minute behind the loading screen; not wanted yet -
+	the panel's way in, no Forge lobby opened -: wanted now) */
+	forge_packs_prebuild();
 	return forge_packs_building(NULL, 0, NULL);
 }
 
@@ -8246,6 +8257,23 @@ boolean command_prepare_starts_game(
 	void)
 {
 	return !command_prepare.no_game;
+}
+
+boolean command_prepare_begin_panel(
+	void)
+{
+	/* (one under way - the Command lobby's, the panel opened over it -
+	taken over, not begun again) */
+	if (command_prepare.state != _command_prepare_building)
+		command_prepare_begin_for(FALSE);
+	command_prepare.panel = TRUE;
+	return TRUE;
+}
+
+boolean command_prepare_panels(
+	void)
+{
+	return command_prepare.panel && command_prepare.state != _command_prepare_idle;
 }
 
 boolean command_prepare_firefight(

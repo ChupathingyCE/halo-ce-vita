@@ -159,6 +159,13 @@ void command_prepare_cancel(
 	void);
 boolean command_prepare_starts_game(
 	void);
+/* (the settings panel's Start Command, system_link_shortcut.c) its own
+prepare begun; whether the prepare under way is the panel's (the Command
+lobby's PREPARING COMMAND frame leaves it alone) */
+boolean command_prepare_begin_panel(
+	void);
+boolean command_prepare_panels(
+	void);
 boolean command_prepare_firefight(
 	void);
 /* (a joiner of a network Command game, in its lobby: forge_net.inc) whether
