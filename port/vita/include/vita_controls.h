@@ -215,6 +215,9 @@ values and as the panel shows them; "none" leaves it on no button */
 /* the Vita button (a VITA_BUTTON_* bit, 0 for none) a settings value names,
 or `fallback` if it names none */
 unsigned long vita_button_named(const char *value, unsigned long fallback);
+/* the name (a VITA_BUTTON_NAMES entry, a touch zone's row, or "None") of what
+holds Xbox button `xbox` in the settings now: an English key for T() */
+const char *vita_xbox_button_name(int xbox_button);
 
 /* the settings variable of each zone's Xbox button, and of each Xbox
 button's Vita button (NULL for Off) */
