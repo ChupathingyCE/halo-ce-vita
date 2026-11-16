@@ -322,6 +322,9 @@ struct forge_modes_pending
 	boolean dropship;
 	real yaw;
 	long wait_since;
+	/* (1.1.5) its ship could not fly (no open sky, every ship flying, no
+	ship to make): said once, the squad the ground's from then on */
+	boolean air_failed;
 };
 
 /* ---------- globals */
@@ -819,6 +822,7 @@ static boolean forge_modes_spawn(
 	short slot;
 	short index;
 	boolean flown = FALSE;
+	boolean in_sight = FALSE;
 	short room = pending->ally ? (short)MAX(0, FORGE_MODES_TEAM_AI - forge_modes_alive(TRUE)) : forge_modes_enemy_room();
 	short count = (short)MIN(pending->count, COMMAND_SQUADS_MEMBERS);
 	boolean boss = pending->boss_kind != NONE;
@@ -887,8 +891,10 @@ static boolean forge_modes_spawn(
 
 		handle = NONE;
 		/* (by dropship: the zone's, or a ground squad that has waited too long
-		for a place out of sight) */
-		if (pending->dropship || waited)
+		for a place out of sight; a ship that could not fly is not asked
+		again - 1.1.5: it was, every think, and with every point of the zone
+		in sight the squad never came) */
+		if ((pending->dropship || waited) && !pending->air_failed)
 		{
 			real yaw;
 			short ship;
@@ -896,8 +902,11 @@ static boolean forge_modes_spawn(
 			forge_modes_drop_point(pending, &place, &yaw, &ship);
 			handle = forge_modes_squad_send_by_air(team, composition, &place, yaw, ship);
 			if (handle == NONE)
+			{
+				pending->air_failed = TRUE;
 				platform_log("forge modes: a squad of %s cannot come by dropship to %.2f %.2f %.2f: on the ground", composition,
 					place.x, place.y, place.z);
+			}
 			else
 			{
 				flown = TRUE;
@@ -915,7 +924,13 @@ static boolean forge_modes_spawn(
 					pending->wait_since = game_time_get();
 					platform_log("forge modes: a squad of %s waits: every point of its zone is in a player's sight", composition);
 				}
-				return FALSE;
+				/* (waited, and no ship for it: in sight then, rather than never) */
+				if (!waited || !pending->air_failed)
+					return FALSE;
+				forge_modes_place_in(&pending->at, pending->radius, &place);
+				in_sight = TRUE;
+				platform_log("forge modes: a squad of %s comes in sight after %d s: no dropship for it", composition,
+					FORGE_MODES_HIDDEN_WAIT_SECONDS);
 			}
 			handle = forge_modes_squad_spawn_team(team, composition, &place);
 		}
@@ -948,7 +963,8 @@ static boolean forge_modes_spawn(
 	}
 	pending->count = (short)(pending->count - count);
 	platform_log("forge modes: %s squad of %s %s %.2f %.2f %.2f (enemies %d, allies %d)", boss ? "a boss's" :
-		pending->ally ? "an allied" : pending->bonus ? "a bonus round's" : pending->heavy ? "a heavy wave's" : "an enemy", composition, flown ? "flying in to" : "made out of sight at", place.x, place.y,
+		pending->ally ? "an allied" : pending->bonus ? "a bonus round's" : pending->heavy ? "a heavy wave's" : "an enemy", composition,
+		flown ? "flying in to" : in_sight ? "made in sight at" : "made out of sight at", place.x, place.y,
 		place.z, forge_modes_alive(FALSE), forge_modes_alive(TRUE));
 	/* (Warzone's boss: no banner of Firefight's - Firefight has none) */
 	if (boss)
