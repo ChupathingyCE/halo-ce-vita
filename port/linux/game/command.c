@@ -3439,6 +3439,31 @@ static boolean command_open_sky_near(
 	return FALSE;
 }
 
+/* whether the camera at its distance and pitch, this yaw, would stand in the
+level's open air with nothing of the level between it and the focus */
+static boolean command_camera_spot_clear(
+	real yaw)
+{
+	struct collision_result collision;
+	struct location location;
+	real_point3d from = command_globals.focus;
+	real_point3d spot;
+	real_vector3d back;
+
+	from.z += 0.5f;
+	spot.x = command_globals.focus.x - (real)(cos(command_globals.pitch) * cos(yaw)) * command_globals.distance;
+	spot.y = command_globals.focus.y - (real)(cos(command_globals.pitch) * sin(yaw)) * command_globals.distance;
+	spot.z = command_globals.focus.z - (real)sin(command_globals.pitch) * command_globals.distance;
+	scenario_location_from_point(&location, &spot);
+	if (location.cluster_index == NONE)
+		return FALSE;
+	back.i = spot.x - from.x;
+	back.j = spot.y - from.y;
+	back.k = spot.z - from.z;
+	return !collision_test_vector(FLAG(_collision_test_structure_bit) | FLAG(_collision_test_front_facing_surfaces_bit) |
+		FLAG(_collision_test_back_facing_surfaces_bit), &from, &back, NONE, &collision);
+}
+
 static void command_camera_jump(
 	real_point3d const *point,
 	char const *what)
@@ -3455,6 +3480,31 @@ static void command_camera_jump(
 	}
 	if (command_ground_top(&command_globals.focus, &ground))
 		command_globals.focus.z = ground.z;
+	/* (and seen from the open side: a camera that would stand in the rock
+	or behind a wall - Gephyrophobia's yard, under its cliff - turned about
+	the focus, 45 degrees at a time, the nearest way round that is clear) */
+	if (!command_camera_spot_clear(command_globals.yaw))
+	{
+		short turn;
+
+		for (turn = 1; turn <= 4; turn++)
+		{
+			real way = (real)turn * _pi / 4.f;
+
+			if (command_camera_spot_clear(command_globals.yaw + way))
+			{
+				command_globals.yaw += way;
+				break;
+			}
+			if (turn < 4 && command_camera_spot_clear(command_globals.yaw - way))
+			{
+				command_globals.yaw -= way;
+				break;
+			}
+		}
+		if (turn <= 4)
+			platform_log("command: camera: turned %.0f degrees to see %s from the open side", command_globals.yaw * 180.f / _pi, what);
+	}
 	command_globals.camera_jump = TRUE;
 	platform_log("command: camera to %s at %.2f %.2f %.2f", what, command_globals.focus.x, command_globals.focus.y,
 		command_globals.focus.z);
