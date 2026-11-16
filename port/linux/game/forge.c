@@ -505,7 +505,25 @@ static struct
 	{ "levels\\test\\wizard\\wizard", N_("Wizard") },
 	{ "levels\\test\\putput\\putput", N_("Chiron TL-34") },
 	{ "levels\\test\\longest\\longest", N_("Longest") },
+	/* (1.1.4, Command on the big team maps - the owner, Nov 15) Halo PC's six
+	multiplayer maps, in MCC's halo1\maps and never on the Xbox disc: Command
+	mode's maps beside Blood Gulch (forge_map_command), none of Forge's lists
+	(forge_map_pc_exclusive); played from the player's own MCC copy alone
+	(forge_map_path), never downloaded or shared (map_share_protocol.c's
+	mcc_pc_map_names) */
+	{ "levels\\test\\dangercanyon\\dangercanyon", N_("Danger Canyon") },
+	{ "levels\\test\\deathisland\\deathisland", N_("Death Island") },
+	{ "levels\\test\\gephyrophobia\\gephyrophobia", N_("Gephyrophobia") },
+	{ "levels\\test\\icefields\\icefields", N_("Ice Fields") },
+	{ "levels\\test\\infinity\\infinity", N_("Infinity") },
+	{ "levels\\test\\timberland\\timberland", N_("Timberland") },
 };
+/* the Xbox's thirteen come first (ui.map's picture order, mp_map_grafix's
+frames: the menus' map pictures and descriptions by index), the PC's six
+after them */
+#define FORGE_XBOX_MAP_COUNT 13
+#define FORGE_PC_MAP_COUNT 6
+typedef char forge_maps_are_the_xboxs_then_the_pcs[NUMBEROF(forge_maps) == FORGE_XBOX_MAP_COUNT + FORGE_PC_MAP_COUNT ? 1 : -1];
 
 /* the scene packs Forge offers (scene_packs.h: app0:packs/<name>.txt, built
 on the player's machine from the player's own campaign maps), in the order
@@ -5152,12 +5170,105 @@ char const *forge_map_path(
 
 	if (map_index < 0 || map_index >= forge_map_count())
 		return NULL;
-	if (map_check(forge_maps[map_index].path, NULL, 0) == _map_check_missing &&
+	/* (a PC-exclusive map: MCC's copy alone, whatever file of its name the
+	maps folder has) */
+	if ((forge_map_pc_exclusive(map_index) || map_check(forge_maps[map_index].path, NULL, 0) == _map_check_missing) &&
 		map_check_mcc_level(forge_maps[map_index].path, mcc_levels[map_index], sizeof(mcc_levels[map_index])))
 	{
 		return mcc_levels[map_index];
 	}
 	return forge_maps[map_index].path;
+}
+
+/* (1.1.4) one of Halo PC's six multiplayer maps (the table's last): in MCC's
+halo1\maps alone, never on the Xbox disc - Command's, never Forge's */
+boolean forge_map_pc_exclusive(
+	short map_index)
+{
+	return map_index >= FORGE_XBOX_MAP_COUNT && map_index < forge_map_count();
+}
+
+/* (1.1.4) a map Command mode plays: Blood Gulch and the PC-exclusive big
+team maps (command.c's command_map_loaded takes these alone) */
+boolean forge_map_command(
+	short map_index)
+{
+	if (map_index < 0 || map_index >= forge_map_count())
+		return FALSE;
+	return forge_map_pc_exclusive(map_index) || !strcmp(forge_map_short(map_index), "bloodgulch");
+}
+
+/* how many of Command's maps, and the nth of them (0 the first; NONE past
+them): the Command lobby's pickers list these, PC-exclusive ones whose MCC
+copy is not here too (not chosen: forge_map_pc_exclusive_note says why) */
+short forge_map_command_count(
+	void)
+{
+	short map_index, count = 0;
+
+	for (map_index = 0; map_index < forge_map_count(); map_index++)
+	{
+		if (forge_map_command(map_index))
+			count++;
+	}
+	return count;
+}
+
+short forge_map_command_nth(
+	short nth)
+{
+	short map_index;
+
+	for (map_index = 0; nth >= 0 && map_index < forge_map_count(); map_index++)
+	{
+		if (forge_map_command(map_index) && nth-- == 0)
+			return map_index;
+	}
+	return NONE;
+}
+
+/* the menus' picture of a lobby map (ui.map's mp_map_grafix, the Xbox's
+thirteen in order): its frame, NONE for a PC-exclusive map (no picture of
+it in the Xbox's files: the menus show its words instead) */
+short forge_map_picture_frame(
+	short map_index)
+{
+	return map_index >= 0 && map_index < FORGE_XBOX_MAP_COUNT ? map_index : NONE;
+}
+
+/* (the owner, Nov 15: Xbox players told in plain words) why a PC-exclusive
+map whose MCC copy is not here cannot be played: never offered for download
+or sharing (map_share_protocol.c) */
+char const *forge_map_pc_exclusive_note(
+	void)
+{
+	return T("PC-exclusive map from Halo MCC on Steam. It can't be downloaded or shared here: add your Steam copy of Halo MCC to play it.");
+}
+
+/* our own words for a PC-exclusive map (ui.map's map descriptions are the
+Xbox's thirteen alone); "" for the others */
+char const *forge_map_pc_exclusive_words(
+	short map_index)
+{
+	static char const *const words[FORGE_PC_MAP_COUNT] =
+	{
+		N_("A canyon between two bases, joined by tunnels through the rock and a bridge over the middle."),
+		N_("An island: a base at each end of the shore, the beach and the hills between them."),
+		N_("A chasm crossed by a great bridge, a base at each end of it."),
+		N_("A frozen valley, two bases facing each other across the ice."),
+		N_("A wide valley, two bases far apart and the sky between them."),
+		N_("A forest valley, two bases among the trees."),
+	};
+
+	if (!forge_map_pc_exclusive(map_index))
+		return "";
+	return T(words[map_index - FORGE_XBOX_MAP_COUNT]);
+}
+
+short forge_map_of_scenario(
+	char const *level_name)
+{
+	return forge_map_of_level(level_name);
 }
 
 /* (port) the lobby map whose level `level_name` is (the Xbox's, or MCC's
@@ -5190,6 +5301,16 @@ short forge_map_state(
 		why[0] = 0;
 	if (map_index < 0 || map_index >= forge_map_count())
 		return _map_check_missing;
+	/* (1.1.4) a PC-exclusive map: MCC's copy, or not here - said in the
+	owner's words, never as a file to copy to the maps folder */
+	if (forge_map_pc_exclusive(map_index))
+	{
+		if (map_check_mcc_level(forge_maps[map_index].path, NULL, 0))
+			return _map_check_playable;
+		if (why && why_size > 0)
+			snprintf(why, (size_t)why_size, "%s", forge_map_pc_exclusive_note());
+		return _map_check_missing;
+	}
 	/* (looked at once a run, map_checks.c: the lobby and its map picker ask
 	every frame, and each look was an fopen of the map - on Ben's insider.17
 	Vita the lobby ran at 10 frames a second, its game thread waiting on the
@@ -5419,6 +5540,28 @@ int forge_panel_map_available(
 	int map_index)
 {
 	return map_index >= 0 && map_index < forge_map_count() && forge_map_available((short)map_index) ? 1 : 0;
+}
+
+/* (1.1.4, the panel's Command page) Command's maps, and why one of them
+cannot be played (the PC-exclusive note; 1 when it can) */
+int forge_panel_map_command(
+	int map_index)
+{
+	return forge_map_command((short)map_index) ? 1 : 0;
+}
+
+int forge_panel_map_playable(
+	int map_index,
+	char *why,
+	int why_size)
+{
+	return forge_map_state((short)map_index, why, why_size) == _map_check_playable ? 1 : 0;
+}
+
+int forge_panel_map_pc_exclusive(
+	int map_index)
+{
+	return forge_map_pc_exclusive((short)map_index) ? 1 : 0;
 }
 
 char const *forge_map_short(

@@ -7935,9 +7935,12 @@ void command_map_loaded(
 	if (!command_globals.game_requested)
 		return;
 	command_globals.game_requested = FALSE;
-	if (!forge_game || !scenario_name || !strstr(scenario_name, "bloodgulch"))
+	/* (1.1.4: Blood Gulch and the PC-exclusive big team maps, forge.c's
+	forge_map_command; MCC's copy of a map loads under its own level name) */
+	if (!forge_game || !scenario_name || !forge_map_command(forge_map_of_scenario(scenario_name)))
 	{
-		platform_log("command: a Command game asked for, but %s is not Blood Gulch's Forge game", scenario_name ? scenario_name : "?");
+		platform_log("command: a Command game asked for, but %s is not a Forge game of one of Command's maps",
+			scenario_name ? scenario_name : "?");
 		return;
 	}
 	/* (the map built out now, as it loads: in memory, nothing on the card) */

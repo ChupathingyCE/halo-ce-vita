@@ -335,6 +335,26 @@ short forge_map_state(
 	long why_size);
 boolean forge_map_available(
 	short map_index);
+/* (1.1.4, Command on the big team maps) the table's last six: Halo PC's
+multiplayer maps, in MCC's halo1\maps alone (never on the Xbox disc, never
+downloaded or shared); Command's maps = Blood Gulch and those; a map by its
+level name (the Xbox's or MCC's copy's), or NONE */
+boolean forge_map_pc_exclusive(
+	short map_index);
+boolean forge_map_command(
+	short map_index);
+short forge_map_command_count(
+	void);
+short forge_map_command_nth(
+	short nth);
+short forge_map_picture_frame(
+	short map_index);
+char const *forge_map_pc_exclusive_note(
+	void);
+char const *forge_map_pc_exclusive_words(
+	short map_index);
+short forge_map_of_scenario(
+	char const *level_name);
 
 /* (the lobby's START FORGE) a local game of the map, in Forge mode: the
 game variant (free for all, no score or time limit) and the map set, and

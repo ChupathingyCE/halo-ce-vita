@@ -191,8 +191,8 @@ volatile int halo_chat_players_local[HALO_CHAT_PLAYERS_MAXIMUM];
 char halo_chat_players_names[HALO_CHAT_PLAYERS_MAXIMUM][HALO_CHAT_PLAYER_NAME_SIZE];
 volatile int halo_chat_mute_request;
 char halo_chat_mute_request_name[HALO_CHAT_PLAYER_NAME_SIZE];
-static const char *const test_forge_maps[3][2] = {
-	{ "Battle Creek", "beavercreek" }, { "Blood Gulch", "bloodgulch" }, { "Chill Out", "chillout" },
+static const char *const test_forge_maps[4][2] = {
+	{ "Battle Creek", "beavercreek" }, { "Blood Gulch", "bloodgulch" }, { "Chill Out", "chillout" }, { "Death Island", "deathisland" },
 };
 /* (the Player model row's: player_models.c's models - none found unless a
 test says so - and the profile's choice, as the game keeps it) */
@@ -215,10 +215,29 @@ int player_cosmetics_panel_color_chosen(void) { return test_color_chosen; }
 int player_cosmetics_panel_visor_chosen(void) { return test_visor_chosen; }
 void player_cosmetics_panel_choose_color(int index) { test_color_chosen = index; }
 void player_cosmetics_panel_choose_visor(int index) { test_visor_chosen = index; }
-int forge_panel_map_count(void) { return 3; }
-const char *forge_panel_map_name(int map_index) { return map_index >= 0 && map_index < 3 ? test_forge_maps[map_index][0] : ""; }
-const char *forge_panel_map_short(int map_index) { return map_index >= 0 && map_index < 3 ? test_forge_maps[map_index][1] : ""; }
+int forge_panel_map_count(void) { return 4; }
+const char *forge_panel_map_name(int map_index) { return map_index >= 0 && map_index < 4 ? test_forge_maps[map_index][0] : ""; }
+const char *forge_panel_map_short(int map_index) { return map_index >= 0 && map_index < 4 ? test_forge_maps[map_index][1] : ""; }
 int forge_panel_map_available(int map_index) { return map_index == 1 || map_index == 2; }
+/* (1.1.4, the Command page: Command's maps - Blood Gulch here; a PC-exclusive
+map not here, Death Island, says the note) */
+static const char *const test_pc_note = "PC-exclusive map from Halo MCC on Steam. It can't be downloaded or shared here: add your Steam copy of Halo MCC to play it.";
+static int test_pc_map_here;
+int forge_panel_map_count(void);
+int forge_panel_map_command(int map_index) { return map_index == 1 || map_index == 3; }
+int forge_panel_map_pc_exclusive(int map_index) { return map_index == 3; }
+int forge_panel_map_playable(int map_index, char *why, int why_size)
+{
+	if (why && why_size > 0)
+		why[0] = 0;
+	if (map_index == 3)
+	{
+		if (!test_pc_map_here && why && why_size > 0)
+			snprintf(why, (size_t)why_size, "%s", test_pc_note);
+		return test_pc_map_here;
+	}
+	return forge_panel_map_available(map_index);
+}
 /* (port/linux/game/map_checks.c: the map lists' looks forgotten as a map is deleted) */
 void map_checks_forget(void) { }
 /* (a Forge game played, with its placed characters alive and dead; what
@@ -493,12 +512,17 @@ int sceRtcGetCurrentClockLocalTime(SceDateTime *time)
 
 static int failures, checks;
 
+static char menu[3072];
+
 static void check(int condition, const char *what)
 {
 	checks++;
 	printf("%s %s\n", condition ? "PASS" : "FAIL", what);
 	if (!condition)
 		failures++;
+	/* (VITA_SETTINGS_TEST_DUMP=1: the panel's text as a check fails) */
+	if (!condition && getenv("VITA_SETTINGS_TEST_DUMP"))
+		printf("--- menu:\n%s\n---\n", menu);
 }
 
 /* ---------- what the panel calls, recorded */
@@ -3143,19 +3167,54 @@ static void test_forge_page(void)
 		press(VITA_BUTTON_R);
 		press(VITA_BUTTON_L);
 		check(to_tab("Game") && strstr(menu, "\nCommand\x02  >") && open_page("Command") &&
-			strstr(menu, "\n\x03Game > Command\n") && !strcmp(menu_line(2, line, sizeof(line)), "Layout\x02  Command's own >") &&
-			!strcmp(menu_line(3, line, sizeof(line)), "Command objective\x02< Both >") &&
-			!strcmp(menu_line(4, line, sizeof(line)), "AI commander\x02< Heroic >") &&
-			!strcmp(menu_line(5, line, sizeof(line)), "Start Command\x02  >") && menu_fits() && menu_height_fits(),
-			"Command (Menu style Halo CE): Layout (Command's own, Blood Gulch's two variants next), Command objective (Both), "
-			"AI commander (Heroic), Start Command; it fits");
+			strstr(menu, "\n\x03Game > Command\n") && !strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Blood Gulch >") &&
+			!strcmp(menu_line(3, line, sizeof(line)), "Layout\x02  Command's own >") &&
+			!strcmp(menu_line(4, line, sizeof(line)), "Command objective\x02< Both >") &&
+			!strcmp(menu_line(5, line, sizeof(line)), "AI commander\x02< Heroic >") &&
+			!strcmp(menu_line(6, line, sizeof(line)), "Start Command\x02  >") && menu_fits() && menu_height_fits(),
+			"Command (Menu style Halo CE): Map (Blood Gulch), Layout (Command's own, Blood Gulch's two variants next), "
+			"Command objective (Both), AI commander (Heroic), Start Command; it fits");
 		to_line("Command objective");
 		press(VITA_BUTTON_RIGHT);
-		check(!strcmp(menu_line(3, line, sizeof(line)), "Command objective\x02< Territories >"), "Command objective: right, Territories");
+		check(!strcmp(menu_line(4, line, sizeof(line)), "Command objective\x02< Territories >"), "Command objective: right, Territories");
 		to_line("Layout");
 		press(VITA_BUTTON_RIGHT);
-		check(!strncmp(menu_line(2, line, sizeof(line)), "Layout\x02< Gulch A", 15), "Layout: right, Blood Gulch's first variant");
+		check(!strncmp(menu_line(3, line, sizeof(line)), "Layout\x02< Gulch A", 15), "Layout: right, Blood Gulch's first variant");
 		press(VITA_BUTTON_LEFT);
+		/* (1.1.4, Command on the big team maps) the Map row: right, Death
+		Island - a PC-exclusive map, its MCC copy not here: listed, marked, the
+		owner's note as its help, Start Command refused with it; here (MCC's
+		files), plain, Start Command takes it; left, Blood Gulch again (its
+		layouts: the map's own) */
+		to_line("Map");
+		check(strstr(menu, "\n\x05" "Command's map: Blood Gulch, or one of Halo MCC's PC-only big team maps\n") != NULL &&
+			strstr(menu, "Left/right: change"), "Map: its help, left/right");
+		press(VITA_BUTTON_RIGHT);
+		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Death Island (PC) >") &&
+			strstr(menu, "\n\x05" "From Halo MCC on Steam only: never downloaded or shared here\n") != NULL &&
+			!strcmp(menu_line(3, line, sizeof(line)), "Layout\x02  Command's own  ") && menu_fits(),
+			"Map: right, Death Island (PC), the note's first part as its help, no layouts of it; it fits");
+		to_line("Start Command");
+		press(VITA_BUTTON_CROSS);
+		check(menu_visible && strstr(menu, "Add your Steam copy of Halo MCC to play it") != NULL &&
+			halo_system_link_request == SYSTEM_LINK_REQUEST_NONE && menu_fits(),
+			"Start Command on Death Island without its MCC copy: the note's second part, nothing started");
+		test_pc_map_here = 1;
+		to_line("Map");
+		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Death Island >"), "Death Island here: plain");
+		to_line("Start Command");
+		press(VITA_BUTTON_CROSS);
+		check(!menu_visible && halo_system_link_request == SYSTEM_LINK_REQUEST_FORGE && halo_forge_request_map == 3 &&
+			halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_COMMAND && !halo_forge_request_network,
+			"Start Command on Death Island: asked for (map 3, Command, local); closed");
+		halo_system_link_request = SYSTEM_LINK_REQUEST_NONE;
+		test_pc_map_here = 0;
+		frame(0);
+		open_panel();
+		check(to_tab("Game") && open_page("Command"), "the Command page again");
+		to_line("Map");
+		press(VITA_BUTTON_LEFT);
+		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Blood Gulch >"), "Map: left, Blood Gulch");
 		press(VITA_BUTTON_CIRCLE);
 		vita_settings_set("HALO_MENU_STYLE", saved);
 		press(VITA_BUTTON_R);

@@ -3210,10 +3210,72 @@ static struct
 	Command, command.c's command_net.inc) */
 	short command_network;
 	boolean command_network_set;
+	/* (1.1.4, Command on the big team maps: the two lobbies' maps differ -
+	a PC-exclusive map is Command's alone -) the Forge lobby's map and
+	variant kept while the Command lobby is up, back when it closes */
+	short map_kept;
+	char variant_file_kept[FORGE_FILE_NAME_SIZE];
+	char variant_title_kept[FORGE_FILE_TITLE_SIZE];
 } h3_forge;
 
 /* (1 stays 1.2.0's FIREFIGHT, not in 1.1.4) */
 enum { H3_FORGE_MODE_FORGE, H3_FORGE_MODE_FIREFIGHT, H3_FORGE_MODE_COMMAND };
+
+/* (1.1.4) whether a lobby map is one the lobby up offers and can play: the
+Command lobby's are Command's maps (forge_map_command), the Forge lobby's
+every other (a PC-exclusive map is never Forge's) */
+static boolean h3_forge_map_fits(short map)
+{
+	if (!forge_map_available(map))
+		return FALSE;
+	return h3_forge.mode == H3_FORGE_MODE_COMMAND ? forge_map_command(map) : !forge_map_pc_exclusive(map);
+}
+
+/* (1.1.4) a lobby map's picture widget: ui.map's frame of the Xbox's maps;
+hidden for a PC-exclusive map, whose words stand in its place */
+static void h3_forge_map_picture(struct widget_instance *found, short map)
+{
+	short frame = forge_map_picture_frame(map);
+
+	if (!found)
+		return;
+	widget_instance_set_visibility_recursive(found, frame != NONE);
+	if (frame != NONE)
+		found->animation.current_frame_index = frame;
+}
+
+/* (1.1.4) the map pickers' rows and the lobby's maps: the Forge lobby's
+rows are the Xbox's thirteen maps in order (ui.map's), the Command lobby's
+Command's maps (Blood Gulch, then the PC-exclusive six, those not here
+too, marked); a row's map (NONE past them), and a map's row */
+static short h3_forge_maps_row_map(short row)
+{
+	if (h3_forge.mode == H3_FORGE_MODE_COMMAND)
+		return forge_map_command_nth(row);
+	return row >= 0 && row < forge_map_count() && !forge_map_pc_exclusive(row) ? row : NONE;
+}
+
+static short h3_forge_maps_map_row(short map)
+{
+	short row;
+
+	for (row = 0; h3_forge_maps_row_map(row) != NONE; row++)
+	{
+		if (h3_forge_maps_row_map(row) == map)
+			return row;
+	}
+	return 0;
+}
+
+/* a PC-exclusive map's words for a picker's description: ours, and - its
+MCC copy not here - the note (forge_map_pc_exclusive_note) */
+static void h3_forge_pc_map_words(short map, char *text, int size)
+{
+	char why[FORGE_STORE_WHY_SIZE];
+	boolean playable = forge_map_state(map, why, sizeof(why)) == _map_check_playable;
+
+	snprintf(text, (size_t)size, "%s%s%s", forge_map_pc_exclusive_words(map), playable ? "" : "\n\n", playable ? "" : why);
+}
 
 static void h3_forge_variant_check(void);
 /* (the lobby's NETWORK, its live game's players and status: below, with
@@ -3231,7 +3293,7 @@ static void h3_forge_lobby_initialize(void)
 		h3_forge.initialized = TRUE;
 		h3_forge.map = 9;
 	}
-	for (index = 0; index < forge_map_count() && !forge_map_available(h3_forge.map); index++)
+	for (index = 0; index < forge_map_count() && !h3_forge_map_fits(h3_forge.map); index++)
 		h3_forge.map = (short)((h3_forge.map + 1) % forge_map_count());
 	h3_forge_variant_check();
 	h3_forge.note[0] = 0;
@@ -3347,8 +3409,7 @@ static void h3_forge_lobby_update(struct widget_instance *widget)
 		snprintf(h3_forge.said, sizeof(h3_forge.said), "%s", text);
 		platform_log("menus: forge lobby caption: %s", text);
 	}
-	if ((found = named(screen, "map_picture")) != NULL)
-		found->animation.current_frame_index = h3_forge.map;
+	h3_forge_map_picture(named(screen, "map_picture"), h3_forge.map);
 	h3_forge_lobby_network_update(screen);
 }
 
@@ -3377,37 +3438,54 @@ static void h3_forge_maps_update(struct widget_instance *list)
 		widget_instance_set_visibility_recursive(found, FALSE);
 	if ((found = named(screen, "variant_text")) != NULL)
 		widget_instance_set_visibility_recursive(found, FALSE);
+	focused = h3_forge_maps_row_map(0);
 	for (child = list->child; child; child = child->next, index++)
 	{
 		/* (a map whose file is there but cannot be played - cut short,
 		damaged -: shown, marked, its reason in the description's place, and
-		not chosen, h3_forge_map_pick) */
-		short state = forge_map_state(index, NULL, 0);
-		boolean shown = state != _map_check_missing;
+		not chosen, h3_forge_map_pick; the Command lobby's PC-exclusive maps
+		whose MCC copy is not here: shown and marked too, the note in the
+		description's place) */
+		short map = h3_forge_maps_row_map(index);
+		short state = forge_map_state(map, NULL, 0);
+		boolean pc_only = map != NONE && forge_map_pc_exclusive(map) && state == _map_check_missing;
+		boolean shown = map != NONE && (state != _map_check_missing || pc_only);
 		char text[96];
 
 		widget_instance_set_visibility_recursive(child, shown);
 		child->disabled = !shown;
-		snprintf(text, sizeof(text), "%s", T(forge_map_name(index)));
+		snprintf(text, sizeof(text), "%s", T(forge_map_name(map)));
 		h3_capitals(text);
 		if (state == _map_check_unusable)
 			snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s", T(" (DAMAGED)"));
+		else if (pc_only)
+			snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s", T(" (PC ONLY)"));
 		text_show(child, text);
-		if (child == list->focused_child)
-			focused = index;
+		if (child == list->focused_child && map != NONE)
+			focused = map;
 	}
-	if ((found = named(screen, "maps_picture")) != NULL)
-		found->animation.current_frame_index = focused;
+	h3_forge_map_picture(named(screen, "maps_picture"), focused);
 	{
-		char why[160];
+		char why[FORGE_STORE_WHY_SIZE];
 		boolean unusable = forge_map_state(focused, why, sizeof(why)) == _map_check_unusable;
+		boolean words = unusable || forge_map_pc_exclusive(focused);
 
 		if ((found = named(screen, "maps_text")) != NULL)
-			widget_instance_set_visibility_recursive(found, !unusable);
+			widget_instance_set_visibility_recursive(found, !words);
 		if ((found = named(screen, "variant_text")) != NULL)
-			widget_instance_set_visibility_recursive(found, unusable);
+			widget_instance_set_visibility_recursive(found, words);
 		if (unusable)
 			text_show(named(screen, "variant_text"), why);
+		else if (forge_map_pc_exclusive(focused))
+		{
+			char text[256];
+
+			h3_forge_pc_map_words(focused, text, sizeof(text));
+			text_show(named(screen, "variant_text"), text);
+			/* (the note read by the tests as the maps' reasons are) */
+			if (forge_map_state(focused, why, sizeof(why)) != _map_check_playable)
+				unusable = TRUE;
+		}
 		else
 			string_show(named(screen, "maps_text"), focused);
 		/* (the focused map said, once: the tests read it) */
@@ -11154,10 +11232,10 @@ static boolean h3_forge_map_pick(struct widget_instance *widget)
 
 	if (!h3_forge.picking_variant)
 	{
-		short map = (short)h3_child_index(widget);
+		short map = h3_forge_maps_row_map((short)h3_child_index(widget));
 		char why[160];
 
-		if (forge_map_state(map, why, sizeof(why)) != _map_check_playable)
+		if (map == NONE || forge_map_state(map, why, sizeof(why)) != _map_check_playable)
 		{
 			platform_log("menus: forge maps: %s can't be chosen: %s", forge_map_name(map), why);
 			return FALSE;
@@ -18307,16 +18385,23 @@ static void h3_live_forge_follow(void)
 static void h3_live_lobby_show(struct widget_instance *screen);
 
 /* (START COMMAND) whether the lobby's map may be a Command game's (Blood
-Gulch alone for now, playable): why not in the lobby's note */
+Gulch or one of the PC-exclusive big team maps, playable here): why not in
+the lobby's note (a PC-exclusive map whose MCC copy is not here: the
+owner's note, forge_map_pc_exclusive_note) */
 static boolean h3_forge_command_startable(void)
 {
-	if (!forge_map_short(h3_forge.map) || strcmp(forge_map_short(h3_forge.map), "bloodgulch"))
+	if (!forge_map_command(h3_forge.map))
 	{
-		snprintf(h3_forge.note, sizeof(h3_forge.note), "%s", T("Command mode plays on Blood Gulch for now:\nchoose it under SELECT MAP."));
-		platform_log("menus: forge lobby: START COMMAND: not Blood Gulch");
+		snprintf(h3_forge.note, sizeof(h3_forge.note), "%s", T("Command mode plays on Blood Gulch and the big team maps:\nchoose one under SELECT MAP."));
+		platform_log("menus: forge lobby: START COMMAND: %s is not one of Command's maps", forge_map_name(h3_forge.map));
 		return FALSE;
 	}
-	return forge_map_state(h3_forge.map, h3_forge.note, sizeof(h3_forge.note)) == _map_check_playable;
+	if (forge_map_state(h3_forge.map, h3_forge.note, sizeof(h3_forge.note)) != _map_check_playable)
+	{
+		platform_log("menus: forge lobby: START COMMAND: %s can't be played: %s", forge_map_name(h3_forge.map), h3_forge.note);
+		return FALSE;
+	}
+	return TRUE;
 }
 
 /* (START COMMAND) the Command game started: a local Forge game of the
@@ -20892,7 +20977,7 @@ static struct
 	{ "campaign", N_("Play the story of Halo CE.") },
 	{ "multiplayer", N_("Host a game, or browse games to join.") },
 	{ "forge", N_("Change a map's objects, then play it.") },
-	{ "command", N_("Lead squads in battle on Blood Gulch.") },
+	{ "command", N_("Lead squads in battle on Blood Gulch and the big team maps.") },
 	{ "exit", N_("Close Halo CE.") },
 };
 
@@ -21043,11 +21128,17 @@ static short cascade_forge_maps[CASCADE_MAXIMUM_GROUPS];
 
 static int cascade_forge_groups(void)
 {
+	boolean command = h3_forge.mode == H3_FORGE_MODE_COMMAND;
 	short map, count = 0;
 
 	for (map = 0; map < forge_map_count() && count < CASCADE_MAXIMUM_GROUPS; map++)
 	{
-		if (forge_map_state(map, NULL, 0) != _map_check_missing)
+		/* (1.1.4: the Command lobby lists Command's maps - the PC-exclusive
+		ones not here too, marked, the note in the panel -; the Forge lobby
+		the Xbox's maps in the maps folder) */
+		if (command ? !forge_map_command(map) : forge_map_pc_exclusive(map))
+			continue;
+		if (forge_map_state(map, NULL, 0) != _map_check_missing || (command && forge_map_pc_exclusive(map)))
 			cascade_forge_maps[count++] = map;
 	}
 	return count;
@@ -21056,11 +21147,14 @@ static int cascade_forge_groups(void)
 static void cascade_forge_group_name(int group, char *text, int size)
 {
 	short map = cascade_forge_maps[group];
+	short state = forge_map_state(map, NULL, 0);
 
 	snprintf(text, (size_t)size, "%s", T(forge_map_name(map)));
 	h3_capitals(text);
-	if (forge_map_state(map, NULL, 0) == _map_check_unusable)
+	if (state == _map_check_unusable)
 		snprintf(text + strlen(text), (size_t)size - strlen(text), "%s", T(" (DAMAGED)"));
+	else if (state == _map_check_missing && forge_map_pc_exclusive(map))
+		snprintf(text + strlen(text), (size_t)size - strlen(text), "%s", T(" (PC ONLY)"));
 }
 
 static int cascade_forge_items(int group)
@@ -21092,11 +21186,7 @@ static void cascade_forge_panel(struct widget_instance *screen, int group, int i
 	struct forge_store_entry const *entry = NULL;
 	char why[160], text[256];
 
-	if ((found = named(screen, "map_picture")) != NULL)
-	{
-		found->animation.current_frame_index = map;
-		widget_instance_set_visibility_recursive(found, TRUE);
-	}
+	h3_forge_map_picture(named(screen, "map_picture"), map);
 	if (forge_map_state(map, why, sizeof(why)) == _map_check_unusable)
 	{
 		cascade_panel_words(screen, NULL, why, NULL);
@@ -21109,6 +21199,14 @@ static void cascade_forge_panel(struct widget_instance *screen, int group, int i
 	}
 	if (!entry)
 	{
+		/* (1.1.4: a PC-exclusive map - no picture or words of it in ui.map
+		-: our words, and the note when its MCC copy is not here) */
+		if (forge_map_pc_exclusive(map))
+		{
+			h3_forge_pc_map_words(map, text, sizeof(text));
+			cascade_panel_words(screen, NULL, text, NULL);
+			return;
+		}
 		/* (the map's own words, ui.map's, and its players) */
 		if ((found = named(screen, "maps_text")) != NULL)
 		{
@@ -21119,8 +21217,8 @@ static void cascade_forge_panel(struct widget_instance *screen, int group, int i
 		variants, an Ark Editor layout among them - a layout's bases,
 		objectives, drop points and flags: command.c) */
 		cascade_panel_words(screen, NULL, NULL, h3_forge.mode == H3_FORGE_MODE_COMMAND ?
-			(forge_map_short(map) && !strcmp(forge_map_short(map), "bloodgulch") ? T("Command's own layout.") :
-			T("Command mode plays on Blood Gulch for now.")) :
+			(forge_map_command(map) ? T("Command's own layout.") :
+			T("Command mode plays on Blood Gulch and the big team maps.")) :
 			item == 0 ? T("The original map: nothing placed yet.") : NULL);
 		return;
 	}
@@ -22440,11 +22538,26 @@ boolean pc_menu_event_function_invoke(
 		cascade_tab(function_index == _function_cascade_tab_next ? 1 : -1);
 		return TRUE;
 	case _function_forge_lobby_init:
-		/* (back from the Command lobby: the Forge lobby's own NETWORK) */
+		/* (back from the Command lobby: the Forge lobby's own NETWORK, and
+		its own map and variant - a PC-exclusive map is none of Forge's) */
 		if (h3_forge.mode != H3_FORGE_MODE_FORGE)
 		{
 			h3_forge.mode = H3_FORGE_MODE_FORGE;
 			h3_forge.network = h3_forge.network_kept;
+			if (h3_forge.map_kept == NONE)
+			{
+				/* (the Command lobby came first this run: the Forge lobby's
+				own first map, no variant) */
+				h3_forge.initialized = FALSE;
+				h3_forge.variant_file[0] = 0;
+				h3_forge.variant_title[0] = 0;
+			}
+			else if (h3_forge.map != h3_forge.map_kept)
+			{
+				h3_forge.map = h3_forge.map_kept;
+				snprintf(h3_forge.variant_file, sizeof(h3_forge.variant_file), "%s", h3_forge.variant_file_kept);
+				snprintf(h3_forge.variant_title, sizeof(h3_forge.variant_title), "%s", h3_forge.variant_title_kept);
+			}
 		}
 		h3_forge_lobby_initialize();
 		/* (the first time this run, MAP focused, as before NETWORK came
@@ -22459,19 +22572,23 @@ boolean pc_menu_event_function_invoke(
 		}
 		return TRUE;
 	case _function_forge_map_set:
-		if (forge_map_available((short)h3_child_index(widget)) && h3_forge.map != (short)h3_child_index(widget))
 		{
-			h3_forge.map = (short)h3_child_index(widget);
-			/* (another map: its own variants, none chosen) */
-			h3_forge.variant_file[0] = 0;
-			h3_forge.variant_title[0] = 0;
-			h3_forge.note[0] = 0;
+			short map = h3_forge_maps_row_map((short)h3_child_index(widget));
+
+			if (map != NONE && forge_map_available(map) && h3_forge.map != map)
+			{
+				h3_forge.map = map;
+				/* (another map: its own variants, none chosen) */
+				h3_forge.variant_file[0] = 0;
+				h3_forge.variant_title[0] = 0;
+				h3_forge.note[0] = 0;
+			}
 		}
 		platform_log("menus: forge lobby: %s", forge_map_name(h3_forge.map));
 		return TRUE;
 	case _function_forge_map_focus:
 		h3_forge.picking_variant = FALSE;
-		h3_focus_child(widget, h3_forge.map);
+		h3_focus_child(widget, h3_forge_maps_map_row(h3_forge.map));
 		return TRUE;
 	case _function_forge_start:
 		/* (START FORGE: the local game of the map, in Forge mode; nothing
@@ -22514,32 +22631,37 @@ boolean pc_menu_event_function_invoke(
 			short was = h3_forge.mode;
 
 			if (h3_forge.mode == H3_FORGE_MODE_FORGE)
+			{
 				h3_forge.network_kept = h3_forge.network_set ? h3_forge.network : _h3_network_offline;
+				/* (1.1.4: the Forge lobby's map and variant kept for its
+				return; Command's maps are its own; the Forge lobby never
+				opened: none, its own first map then) */
+				h3_forge.map_kept = h3_forge.initialized ? h3_forge.map : NONE;
+				snprintf(h3_forge.variant_file_kept, sizeof(h3_forge.variant_file_kept), "%s", h3_forge.variant_file);
+				snprintf(h3_forge.variant_title_kept, sizeof(h3_forge.variant_title_kept), "%s", h3_forge.variant_title);
+			}
 			h3_forge.mode = H3_FORGE_MODE_COMMAND;
 			/* (Command's NETWORK its own - LOCAL until chosen, as its picker
 			left it when the lobby opens again from it) */
 			if (was != H3_FORGE_MODE_COMMAND || !h3_forge.network_set)
 				h3_forge.network = h3_forge.command_network_set ? h3_forge.command_network : _h3_network_offline;
 			h3_forge.network_set = TRUE;
-		}
-		h3_forge_lobby_initialize();
-		{
-			short map;
-
-			for (map = 0; map < forge_map_count(); map++)
+			/* (the lobby's map: the Command map chosen last if it still
+			plays, else Blood Gulch, else the first of Command's maps here -
+			h3_forge_lobby_initialize) */
+			if (was != H3_FORGE_MODE_COMMAND || !h3_forge_map_fits(h3_forge.map))
 			{
-				if (forge_map_short(map) && !strcmp(forge_map_short(map), "bloodgulch") && forge_map_available(map))
+				short gulch = forge_map_of_short("bloodgulch");
+
+				if (gulch != NONE && gulch != h3_forge.map)
 				{
-					if (h3_forge.map != map)
-					{
-						h3_forge.map = map;
-						h3_forge.variant_file[0] = 0;
-						h3_forge.variant_title[0] = 0;
-					}
-					break;
+					h3_forge.map = gulch;
+					h3_forge.variant_file[0] = 0;
+					h3_forge.variant_title[0] = 0;
 				}
 			}
 		}
+		h3_forge_lobby_initialize();
 		platform_log("menus: command lobby");
 		/* (the mode's packs begun now, at the lobby's pace: START then
 		rarely waits) */

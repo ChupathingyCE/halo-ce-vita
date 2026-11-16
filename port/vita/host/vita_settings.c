@@ -673,7 +673,7 @@ static struct setting settings[] = {
 	PAGE_ROW("Forge and File Share", "Forge a map; your map variants (File Share)", TAB_GAME, PAGE_FORGE),
 	/* (1.1.4: Command mode for the original menus - the Halo 3 and ElDewrito
 	main menus have COMMAND, Classic+ its EXTRAS -, at the menus) */
-	PAGE_ROW("Command", "Lead squads in battle on Blood Gulch", TAB_GAME, PAGE_COMMAND),
+	PAGE_ROW("Command", "Lead squads in battle on Blood Gulch and the big team maps", TAB_GAME, PAGE_COMMAND),
 	/* (File Share with friends, for the original menus: p2p_fileshare.h) */
 	PAGE_ROW("Share with friends", "Share your variants, send one, a friend's File Share", PAGE_FORGE,
 		PAGE_FSFRIENDS),
@@ -1552,6 +1552,11 @@ int forge_panel_map_count(void);
 const char *forge_panel_map_name(int map_index);
 const char *forge_panel_map_short(int map_index);
 int forge_panel_map_available(int map_index);
+/* (1.1.4, the Command page) Command's maps - Blood Gulch, the PC-exclusive
+big team maps -, and whether one plays here (why not: the owner's note) */
+int forge_panel_map_command(int map_index);
+int forge_panel_map_playable(int map_index, char *why, int why_size);
+int forge_panel_map_pc_exclusive(int map_index);
 /* the Forge game's placed characters alive and dead (FALSE: no Forge game
 is played), and its dead or all of them cleared, at its next update */
 int forge_panel_ai_counts(int *alive, int *dead);
@@ -1601,7 +1606,8 @@ enum
 	/* (1.1.4, at the menus, its own page PAGE_COMMAND: Command mode - its
 	layout, its objective, its AI commander's difficulty, Start Command -, the
 	Command lobby's rows for Menu style Halo CE: a local Command game of Blood
-	Gulch) */
+	Gulch or one of the PC-exclusive big team maps - 1.1.4's Map row) */
+	FORGE_LINE_COMMAND_MAP,
 	FORGE_LINE_COMMAND_LAYOUT,
 	FORGE_LINE_COMMAND_OBJECTIVE,
 	FORGE_LINE_COMMAND_AI,
@@ -3782,22 +3788,64 @@ static const struct forge_store_entry *forge_map_variant(int number, int *count)
 	return found;
 }
 
-/* (the Command page) Blood Gulch's map variants that can be played - an
-Ark Editor layout among them -: how many, the nth (1 the first), NULL past
-them; the one chosen (0: Command's own layout) */
-static int command_variant;
+/* (the Command page) Command's map (forge_panel_map_command: Blood Gulch
+and the PC-exclusive big team maps, those not here listed too - the help
+line says why -), its map variants that can be played - an Ark Editor layout
+among them -: how many, the nth (1 the first), NULL past them; the one
+chosen (0: Command's own layout) */
+static int command_map = -1, command_variant;
+
+/* the page's map: the one chosen while it is Command's, else Blood Gulch,
+else the first of Command's maps that plays here, else the first listed */
+static void command_map_check(void)
+{
+	int index, count = forge_panel_map_count();
+
+	if (command_map >= 0 && command_map < count && forge_panel_map_command(command_map))
+		return;
+	command_map = -1;
+	command_variant = 0;
+	for (index = 0; index < count; index++)
+		if (forge_panel_map_command(index) && forge_panel_map_available(index) &&
+			(command_map < 0 || !strcmp(forge_panel_map_short(index), "bloodgulch")))
+			command_map = index;
+	for (index = 0; command_map < 0 && index < count; index++)
+		if (forge_panel_map_command(index))
+			command_map = index;
+}
 
 static const struct forge_store_entry *command_map_variant(int number, int *count)
 {
 	const struct forge_store_entry *found = NULL;
 	int index, seen = 0;
 
-	for (index = 0; index < forge_entry_count; index++)
-		if (!forge_entries[index].damaged && !strcmp(forge_entries[index].map_name, "bloodgulch") && ++seen == number)
+	command_map_check();
+	for (index = 0; command_map >= 0 && index < forge_entry_count; index++)
+		if (!forge_entries[index].damaged && !strcmp(forge_entries[index].map_name, forge_panel_map_short(command_map)) &&
+			++seen == number)
 			found = &forge_entries[index];
 	if (count)
 		*count = seen;
 	return found;
+}
+
+/* the Map row's help: what Command's maps are, or - the map chosen a
+PC-exclusive one whose MCC copy is not here - why it cannot be played */
+static const char *command_map_help(void)
+{
+	static char why[160];
+
+	command_map_check();
+	if (command_map >= 0 && !forge_panel_map_playable(command_map, why, sizeof(why)))
+	{
+		/* (the panel's one help line: the owner's note in two parts - this,
+		and Start Command's notice) */
+		if (forge_panel_map_pc_exclusive(command_map))
+			return T("From Halo MCC on Steam only: never downloaded or shared here");
+		if (why[0])
+			return why;
+	}
+	return T("Command's map: Blood Gulch, or one of Halo MCC's PC-only big team maps");
 }
 
 /* a map's name by its short name (bloodgulch: Blood Gulch) */
@@ -3849,23 +3897,29 @@ static void forge_start_mode(int mode)
 	halo_forge_request_network = forge_network;
 	halo_forge_request_mode = mode;
 	snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s", variant ? variant->file_name : "");
-	/* (Command, its own page: a local game of Blood Gulch, the page's layout -
-	an Ark Editor layout or a Forge map variant: its bases, objectives, drop
-	points and flags -, else Command's own) */
+	/* (Command, its own page: a local game of the page's map - Blood Gulch
+	or a PC-exclusive big team map -, the page's layout - an Ark Editor
+	layout or a Forge map variant: its bases, objectives, drop points and
+	flags -, else Command's own) */
 	if (mode == HALO_FORGE_REQUEST_MODE_COMMAND)
 	{
-		int index;
+		char why[160];
 
 		variant = command_variant ? command_map_variant(command_variant, NULL) : NULL;
-		halo_forge_request_map = -1;
-		for (index = 0; index < forge_panel_map_count(); index++)
-			if (forge_panel_map_available(index) && !strcmp(forge_panel_map_short(index), "bloodgulch"))
-				halo_forge_request_map = index;
-		if (halo_forge_request_map < 0)
+		command_map_check();
+		if (command_map < 0)
 		{
-			set_notice("%s", T("Command plays on Blood Gulch: it is not in the maps folder"));
+			set_notice("%s", T("No multiplayer map is in the maps folder."));
 			return;
 		}
+		/* (a PC-exclusive map whose MCC copy is not here: the owner's note,
+		its second part - the help line has the first) */
+		if (!forge_panel_map_playable(command_map, why, sizeof(why)))
+		{
+			set_notice("%s", forge_panel_map_pc_exclusive(command_map) ? T("Add your Steam copy of Halo MCC to play it") : why);
+			return;
+		}
+		halo_forge_request_map = command_map;
 		halo_forge_request_network = 0;
 		snprintf(halo_forge_request_variant, sizeof(halo_forge_request_variant), "%s", variant ? variant->file_name : "");
 	}
@@ -4650,8 +4704,10 @@ static int page_lines(struct line *lines)
 	}
 	if (page == PAGE_COMMAND)
 	{
-		static const int command_lines[] = { FORGE_LINE_COMMAND_LAYOUT, FORGE_LINE_COMMAND_OBJECTIVE, FORGE_LINE_COMMAND_AI,
-			FORGE_LINE_START_COMMAND };
+		static const int command_lines[] = { FORGE_LINE_COMMAND_MAP, FORGE_LINE_COMMAND_LAYOUT, FORGE_LINE_COMMAND_OBJECTIVE,
+			FORGE_LINE_COMMAND_AI, FORGE_LINE_START_COMMAND };
+
+		command_map_check();
 
 		for (index = 0; index < (int)(sizeof(command_lines) / sizeof(command_lines[0])); index++)
 		{
@@ -4671,8 +4727,8 @@ static int page_lines(struct line *lines)
 				continue;
 			}
 			/* (Command's rows: its own page, PAGE_COMMAND) */
-			if (index == FORGE_LINE_COMMAND_LAYOUT || index == FORGE_LINE_COMMAND_OBJECTIVE || index == FORGE_LINE_COMMAND_AI ||
-				index == FORGE_LINE_START_COMMAND)
+			if (index == FORGE_LINE_COMMAND_MAP || index == FORGE_LINE_COMMAND_LAYOUT || index == FORGE_LINE_COMMAND_OBJECTIVE ||
+				index == FORGE_LINE_COMMAND_AI || index == FORGE_LINE_START_COMMAND)
 			{
 				continue;
 			}
@@ -5118,10 +5174,11 @@ static void help_line(char *text, int size, const struct line *line)
 			line->index == FORGE_LINE_CLEAR_ALL ? T("Every AI you placed, alive or dead, out of the layout") :
 			line->index == FORGE_LINE_DELETE_GROUP ? T("Everything you placed of one kind, out of the layout") :
 			line->index == FORGE_LINE_MAGNETS ? T("A block held near another snaps flush to its edges") :
-			line->index == FORGE_LINE_COMMAND_LAYOUT ? T("Command's own layout, or a Blood Gulch layout you saved or got") :
+			line->index == FORGE_LINE_COMMAND_MAP ? command_map_help() :
+			line->index == FORGE_LINE_COMMAND_LAYOUT ? T("Command's own layout, or a layout of the map you saved or got") :
 			line->index == FORGE_LINE_COMMAND_OBJECTIVE ? T("Command: what wins - territories, the flag, or both") :
 			line->index == FORGE_LINE_COMMAND_AI ? T("Command: how well the AI commander plays the other side") :
-			line->index == FORGE_LINE_START_COMMAND ? T("Command your squads from above on Blood Gulch (local)") :
+			line->index == FORGE_LINE_START_COMMAND ? T("Command your squads from above on Blood Gulch or a big team map (local)") :
 			line->index == FORGE_LINE_NUDGE ? T("Each nudge's move: hold L, click the right stick, flick") :
 			T("A local game: you fly as the monitor and place objects"));
 	else if (line && line->type == LINE_VARIANT)
@@ -5556,6 +5613,15 @@ static int list_text(char *text, int size, const struct line *lines, int count, 
 				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02  %d  >",
 					line->index == FORGE_LINE_CLEAR_DEAD ? T("Clear dead AI") : T("Clear all AI"),
 					line->index == FORGE_LINE_CLEAR_DEAD ? dead : alive + dead);
+			}
+			else if (line->index == FORGE_LINE_COMMAND_MAP)
+			{
+				char why[160];
+
+				command_map_check();
+				length += snprintf(text + length, (size_t)(size - length), "\n%s\x02< %s%s >", T("Map"),
+					command_map >= 0 ? T(forge_panel_map_name(command_map)) : T("none"),
+					command_map >= 0 && !forge_panel_map_playable(command_map, why, sizeof(why)) ? T(" (PC)") : "");
 			}
 			else if (line->index == FORGE_LINE_COMMAND_LAYOUT)
 			{
@@ -8525,6 +8591,26 @@ int vita_settings_input(const struct vita_host_pad *pad)
 					command_map_variant(0, &layouts);
 					if (command_variant + step >= 0 && command_variant + step <= layouts)
 						command_variant += step;
+				}
+				/* (Command's map: the next of Command's maps either way - one
+				not here too, the help line saying why -, its own layouts) */
+				else if (line->index == FORGE_LINE_COMMAND_MAP && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
+				{
+					int count = forge_panel_map_count(), map;
+
+					command_map_check();
+					map = command_map;
+					for (tries = 0; map >= 0 && tries < count; tries++)
+					{
+						map = (map + step + count) % count;
+						if (forge_panel_map_command(map))
+							break;
+					}
+					if (map >= 0 && map != command_map)
+					{
+						command_map = map;
+						command_variant = 0;
+					}
 				}
 				else if (line->index == FORGE_LINE_MAP && forge_map >= 0 && (pressed & (VITA_BUTTON_LEFT | VITA_BUTTON_RIGHT)))
 				{
