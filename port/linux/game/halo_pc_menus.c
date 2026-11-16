@@ -388,6 +388,12 @@ static boolean halo_pc_menus_active(void)
 	return original;
 }
 
+/* (ui_widget.c) whether Halo PC's own menus are up */
+boolean halo_pc_menu_active(void)
+{
+	return halo_pc_menus_active();
+}
+
 static char const *tag_leaf(long tag_index)
 {
 	char const *name = tag_index != NONE ? tag_get_name(tag_index) : NULL;
@@ -2331,6 +2337,25 @@ boolean halo_pc_menu_game_data_invoke(
 		return FALSE;
 	if (list_find(widget) || list_kind_of(widget) != _pc_list_none)
 		return TRUE;
+	/* (7, the Xbox's "difficulty menu update desc": Halo PC's CHOOSE
+	DIFFICULTY panel has a third child, the profile's name, which the
+	Xbox's update asserts against (its line 568, skipped each frame): the
+	same update, the picture and words of the focused difficulty) */
+	if (function == 7 && widget->type == _pc_widget_type_column_list && widget->parameters.list.extended_description)
+	{
+		struct widget_instance *panel = widget->parameters.list.extended_description;
+		char const *leaf = tag_leaf(panel->definition_tag_index);
+		short index = child_index(widget->focused_child);
+
+		if (!leaf || strcmp(leaf, "difficulty_ext_desc") || !panel->child || !panel->child->next)
+			return FALSE;
+		if (index != NONE && index < 4)
+		{
+			frame_set(panel->child, index);
+			string_index_set(panel->child->next, index);
+		}
+		return TRUE;
+	}
 	return function >= 40 && function < 256;
 }
 

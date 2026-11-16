@@ -3842,10 +3842,42 @@ static void event_handler_dispatch(
 					{
 						if (conditional->widget_tag.index != NONE)
 						{
+#ifdef HALO_LINUX
+							/* port: on Halo PC's own menus (MCC's ui.map: port/linux/game/
+							halo_pc_menus.c) a screen whose "created" handler failed and was
+							replaced by its conditional widget as it opened (the campaign menu
+							with nothing to continue: CHOOSE DIFFICULTY) is not kept behind it:
+							B from the conditional would only make it again, and it would only
+							replace itself again (rc.8: no way back from CHOOSE DIFFICULTY) */
+							long replaced_tag = widget_instance_get_topmost_parent(widget)->definition_tag_index;
+							boolean replaced_as_created = handler->event_type == _widget_event_created;
+#endif
 							if (!ui_widget_launch_widget(widget, conditional->widget_tag.index))
 								error(_error_silent, "condition handler failed to spawn widget");
 							else
+							{
 								widget_deleted = TRUE;
+#ifdef HALO_LINUX
+								{
+									extern boolean halo_pc_menu_active(void);
+									long stack_index;
+
+									for (stack_index = 0;
+										replaced_as_created && halo_pc_menu_active() &&
+											stack_index < MAXIMUM_NUMBER_OF_LOCAL_PLAYERS;
+										stack_index++)
+									{
+										if (widget_globals.widget_stack[stack_index] &&
+											widget_globals.widget_stack[stack_index]->data.previous_widget_tag == replaced_tag)
+										{
+											struct widget_stack_data dropped;
+
+											pop_widget(&widget_globals.widget_stack[stack_index], &dropped);
+										}
+									}
+								}
+#endif
+							}
 						}
 					}
 					else
