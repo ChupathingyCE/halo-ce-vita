@@ -248,6 +248,7 @@ symbols in this file:
 #ifdef HALO_LINUX
 /* (HALO_TICK_PROFILE) the lines of sight's time and counts (lines_profile.c) */
 #include "lines_profile.h"
+#include "native_switch.h" /* (perf/113-ce-fights) HALO_LINE_OF_FIRE_TABLE */
 #endif
 
 #undef COLLISIONS_EXTERNAL_COLLISION_TEST_LINE
@@ -2179,6 +2180,98 @@ static void ai_generate_line_of_fire_pill(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* (perf/f6-cefights) the actor's props read once for a line of fire: the walk
+below asked prop_get_active_by_unit_index for every friend of the encounter -
+each a walk of the actor's props (1800 prop visits a tick on b30's beach, 140
+asks) - and then walked them once more for the other bipeds. One walk writes
+what both read into a table on the stack (the same fields, in the props'
+order; nothing between the reads writes a prop), the friends' lookups scan
+the table with prop_get_active_by_unit_index's own tests and the second loop
+takes its matches from it: the same pills in the same order. More props than
+the table holds: the original walks (below). HALO_LINE_OF_FIRE_TABLE=0: off */
+#define LINE_OF_FIRE_PROP_TABLE 96
+struct line_of_fire_prop
+{
+	long prop_index;
+	long unit_index;
+	long swarm_actor_index; /* (NONE unless the prop is a swarm's with an actor) */
+	boolean active;         /* (prop_get_active_by_unit_index's state test) */
+	boolean other_biped;    /* (the second loop's tests, the cap aside) */
+};
+
+static int line_of_fire_table_mode = -1;
+static unsigned long line_of_fire_table_seen;
+
+static long line_of_fire_table_make(
+	long actor_index,
+	struct actor_datum const *actor,
+	struct line_of_fire_prop *table)
+{
+	struct prop_iterator iterator;
+	struct prop_datum *prop;
+	long count = 0;
+
+	prop_iterator_new(&iterator, actor_index);
+	while ((prop = prop_iterator_next(&iterator)) != NULL)
+	{
+		struct line_of_fire_prop *entry = &table[count];
+
+		if (count >= LINE_OF_FIRE_PROP_TABLE)
+			return NONE;
+		entry->prop_index = iterator.index;
+		entry->unit_index = prop->unit_index;
+		entry->swarm_actor_index = prop->swarm && prop->actor_index != NONE ? prop->actor_index : NONE;
+		entry->active = !(prop->state >= _prop_state_unacknowledged && prop->state <= _prop_state_becoming_acknowledged);
+		entry->other_biped = FALSE;
+		if (!prop->enemy &&
+			!prop->dead &&
+			prop->state == _prop_state_acknowledged &&
+			prop->vehicle_index == NONE)
+		{
+			struct object_datum *object = object_get(prop->unit_index);
+
+			if (TEST_FLAG(_object_mask_biped, object->object.type) &&
+				(actor->meta.encounter_index == NONE ||
+				prop->actor_index == NONE ||
+				actor_get(prop->actor_index)->meta.encounter_index != actor->meta.encounter_index))
+			{
+				entry->other_biped = TRUE;
+			}
+		}
+		count++;
+	}
+	return count;
+}
+
+/* prop_get_active_by_unit_index's answer from the table */
+static long line_of_fire_table_active_by_unit(
+	struct line_of_fire_prop const *table,
+	long count,
+	long unit_index)
+{
+	struct unit_datum *unit = unit_get(unit_index);
+	long target_actor_index = unit->unit.swarm_actor_index != NONE ?
+		unit->unit.swarm_actor_index :
+		unit->unit.actor_index;
+	long index;
+
+	for (index = 0; index < count; index++)
+	{
+		struct line_of_fire_prop const *entry = &table[index];
+
+		if (!entry->active)
+			continue;
+		if (entry->unit_index == unit_index ||
+			(entry->swarm_actor_index != NONE && entry->swarm_actor_index == target_actor_index))
+		{
+			return entry->prop_index;
+		}
+	}
+	return NONE;
+}
+#endif
+
 static short ai_find_line_of_fire_friend_pills(
 	long actor_index,
 	short maximum_pill_count,
@@ -2186,6 +2279,54 @@ static short ai_find_line_of_fire_friend_pills(
 {
 	struct actor_datum *actor = actor_get(actor_index);
 	short pill_count = 0;
+#ifdef HALO_LINUX
+	struct line_of_fire_prop table[LINE_OF_FIRE_PROP_TABLE];
+	long table_count = NONE;
+
+	halo_native_switch("HALO_LINE_OF_FIRE_TABLE", &line_of_fire_table_mode, &line_of_fire_table_seen);
+	if (line_of_fire_table_mode)
+		table_count = line_of_fire_table_make(actor_index, actor, table);
+	if (table_count != NONE)
+	{
+		long index;
+
+		if (actor->meta.encounter_index != NONE)
+		{
+			struct encounter_actor_iterator iterator;
+			struct actor_datum *friend;
+
+			encounter_actor_iterator_new(&iterator, actor->meta.encounter_index);
+			friend = encounter_actor_iterator_next(&iterator);
+			while (friend)
+			{
+				if (iterator.index != actor_index &&
+					pill_count < maximum_pill_count &&
+					friend->meta.unit_index != NONE &&
+					friend->input.vehicle_index == NONE)
+				{
+					ai_generate_line_of_fire_pill(
+						friend->meta.unit_index,
+						line_of_fire_table_active_by_unit(table, table_count, friend->meta.unit_index),
+						&pills[pill_count]);
+					pill_count++;
+				}
+				friend = encounter_actor_iterator_next(&iterator);
+			}
+		}
+		for (index = 0; index < table_count; index++)
+		{
+			if (table[index].other_biped && pill_count < maximum_pill_count)
+			{
+				ai_generate_line_of_fire_pill(
+					table[index].unit_index,
+					table[index].prop_index,
+					&pills[pill_count]);
+				pill_count++;
+			}
+		}
+		return pill_count;
+	}
+#endif
 
 	if (actor->meta.encounter_index != NONE)
 	{
