@@ -530,9 +530,15 @@ void system_link_shortcut_update(
 		platform_log("system link: the settings panel's Steam Workshop: %s", answer == SYSTEM_LINK_ANSWER_OPENED ?
 			"the STEAM WORKSHOP screen opened" : answer == SYSTEM_LINK_ANSWER_IN_PLAY ? "not at the menus" :
 			answer == SYSTEM_LINK_ANSWER_IN_LOBBY ? "in a lobby" : "not in this build, or the screen did not open");
-		if (answer == SYSTEM_LINK_ANSWER_IN_PLAY || answer == SYSTEM_LINK_ANSWER_IN_LOBBY)
+		/* (unavailable: the screen is one of the port's menus, which are built from the Halo PC files - MCC's
+		custom_edition ones or Halo PC's -; with the Xbox files alone the game keeps its own menus and the screen is
+		not there. Said, not left silent) */
+		if (answer != SYSTEM_LINK_ANSWER_OPENED)
 			platform_show_message(T("STEAM WORKSHOP"), answer == SYSTEM_LINK_ANSWER_IN_PLAY ?
-				T("Leave the level first: Start, then Quit") : T("Leave the network game's lobby first"));
+				T("Leave the level first: Start, then Quit") : answer == SYSTEM_LINK_ANSWER_IN_LOBBY ?
+				T("Leave the network game's lobby first") :
+				T("The Steam Workshop needs your MCC or Halo PC files: its screen is one of the new menus, which are "
+					"built from them. With the Xbox files alone it can't open."));
 		halo_system_link_answer = answer;
 		__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_NONE, __ATOMIC_RELEASE);
 		return;

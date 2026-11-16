@@ -3599,6 +3599,7 @@
 # ---------- DOWNLOAD FROM STEAM: STEAM WORKSHOP (halo3/workshop.xml, menu_functions.c h3_workshop_*)
 "STEAM WORKSHOP" = "STEAM WORKSHOP"
 "STEAM WORKSHOP: MCC MODS AND MAPS" = "STEAM WORKSHOP: MODS Y MAPAS DE MCC"
+"The Steam Workshop needs your MCC or Halo PC files: its screen is one of the new menus, which are built from them. With the Xbox files alone it can't open." = "El Steam Workshop necesita tus archivos de MCC o de Halo PC: su pantalla es uno de los menús nuevos, que se hacen con ellos. Solo con los archivos de Xbox no se puede abrir."
 "Search" = "Buscar"
 "not in the game's folder" = "no está en la carpeta del juego"
 "Not installed (%llu): %s\n" = "No instalado (%llu): %s\n"
