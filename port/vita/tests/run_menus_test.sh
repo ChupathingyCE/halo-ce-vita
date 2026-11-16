@@ -658,6 +658,12 @@ check_h3() { # NAME halo3|classic
 	fi
 }
 h3pad="wait:150:3000"
+# (1.1.3's menu rework: the Halo 3 and ElDewrito main menus' rows are CAMPAIGN, MULTIPLAYER, FORGE (EXIT
+# on a PC), the row last focused kept; CUSTOMIZATION is Start > SETTINGS > APPEARANCE, MOD MANAGER
+# Start > MEDIA > GAME MANAGER, FILE SHARE Start > MEDIA > FILE SHARE, FRIENDS Triangle (or Start >
+# MEDIA > FRIENDS). B from those goes back to Start's MEDIA | SETTINGS, B again to the main menu)
+h3custpad="start:150:2500 right:150:1000 down:150:500 a wait:150:3000"
+h3modsrow="start:150:2500 down:150:500 down:150:500 down:150:500 a"
 # (a profile's file, blam.sav: name, colour, flags, the levels' flags, the last level, the
 # controller settings - source/saved games/player_profile.h - as "name color stick buttons look
 # invert flight autocenter vibration_off levels")
@@ -683,8 +689,8 @@ h3_no_xbox_profiles() { # NAME
 # (internet play on, nothing reached: its brokers, STUN and relays TEST-NET addresses)
 h3net="HALO_NET_ONLINE=true HALO_NET_BROKERS=198.51.100.1:1883 HALO_NET_STUN=198.51.100.1:3478"
 h3net="$h3net HALO_NET_RELAYS=198.51.100.1:47320 HALO_NET_ALLOW_UPNP=false HALO_DISCORD_APPLICATION="
-# (FRIENDS on the main menu: down six, A)
-h3friendspad="wait:150:3000 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000"
+# (FRIENDS: Triangle on the main menu - a main menu row until 1.1.3)
+h3friendspad="wait:150:3000 y wait:150:3000"
 # a save folder's friends (run_p2p_friends_test.sh seed: made at test time, never in the repository)
 friends_seed() { # FOLDER
 	rm -rf "$1"
@@ -705,7 +711,15 @@ mods_data() { # FOLDER
 	local folder=$1 file
 	rm -rf "$folder"
 	mkdir -p "$folder/maps" "$folder/mods/TestMod/maps" "$folder/mods/TestMod/assets" "$folder/outside"
+	# (the game's own maps alone: the menus data's folder may hold other lanes' files - Halo 2's
+	# shared.map and zanzibar.map since Oct 2026 -, which the mod manager would list as the player's)
 	for file in "$menus_data"/maps/*; do
+		case $(basename "$file") in
+		a[135]0.map|b[34]0.map|c[124]0.map|d[24]0.map|beavercreek.map|bloodgulch.map|boardingaction.map|carousel.map) ;;
+		chillout.map|damnation.map|hangemhigh.map|longest.map|prisoner.map|putput.map|ratrace.map|sidewinder.map) ;;
+		wizard.map|ui.map|bitmaps.map|loc.map|sounds.map) ;;
+		*) continue ;;
+		esac
 		ln -s "$(readlink -f "$file")" "$folder/maps/$(basename "$file")"
 	done
 	cp --reflink=auto "$(readlink -f "$menus_data/maps/bloodgulch.map")" "$folder/maps/mygulch.map"
@@ -720,11 +734,11 @@ mods_data() { # FOLDER
 	ln -s "$folder/outside" "$folder/mods/TestMod/assets/outside"
 	ln -s "$folder/outside/sentinel.txt" "$folder/mods/TestMod/assets/linked.txt"
 }
-# (the main menu: down four to MOD MANAGER, A: its list, broken.map first)
-h3modspad="wait:150:3000 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:4000"
-# (MOD MANAGER, mygulch's row - two down -, A; B: the main menu, on MOD MANAGER; up three to MULTIPLAYER, A;
-# down two to MAP, A: the map picker (the lists custom maps are offered in), B)
-h3pickerpad="$h3modspad down:150:500 down:150:500 a wait:150:2000 b wait:150:3000 up:150:500 up:150:500 up:150:500 a wait:150:3000 down:150:500 down:150:500 a wait:150:3000 b wait:150:3000"
+# (MOD MANAGER - Start > MEDIA > GAME MANAGER since 1.1.3 -, A: its list, broken.map first)
+h3modspad="wait:150:3000 $h3modsrow wait:150:4000"
+# (MOD MANAGER, mygulch's row - two down -, A; B: Start, B: the main menu, on CAMPAIGN; down to MULTIPLAYER,
+# A; down to MAP, A: the map picker (the lists custom maps are offered in), B)
+h3pickerpad="$h3modspad down:150:500 down:150:500 a wait:150:2000 b wait:150:3000 b wait:150:3000 down:150:500 a wait:150:3000 down:150:500 a wait:150:3000 b wait:150:3000"
 # (Menu style Halo CE: Multiplayer, down four to CREATE GAME INTERNET, A: OpenCE's Server Setup)
 cmp_create="wait:150:3000 down:150:800 a wait:150:3000 down:150:500 down:150:500 down:150:500 a wait:150:4000"
 
@@ -821,9 +835,10 @@ for case in $cases; do
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- h3pause"; echo "SKIP: no HALO_TEST_PROFILE (a blam.sav with every level)"; continue
 		fi
-		# (the lobby: Mission, The Silent Cartographer, Start Game; in the level - a10's start
-		# is the cryo tube, no pausing - Start: the Halo 3 pause screen; down to SAVE AND QUIT, A)
-		profile_from=$campaign_profile run h3pause "$menus_data" 170 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 down:150:600 down:150:600 down:150:600 a wait:150:2500 down:150:600 down:150:600 a wait:150:60000 start:150:4000 wait:150:4000 down:150:1500 wait:150:4000 down:150:800 down:150:800 a:150:4000 wait:150:20000" \
+		# (the lobby: Mission - SELECT MISSION: HALO CE, A, down three, A: The Silent Cartographer;
+		# SELECT DIFFICULTY on Normal, A -, Start Game; in the level - a10's start is the cryo tube,
+		# no pausing - Start: the Halo 3 pause screen; down to SAVE AND QUIT, A)
+		profile_from=$campaign_profile run h3pause "$menus_data" 170 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 a wait:150:1500 down:150:600 down:150:600 down:150:600 a wait:150:2500 a wait:150:2500 down:150:600 down:150:600 a wait:150:60000 start:150:4000 wait:150:4000 down:150:1500 wait:150:4000 down:150:800 down:150:800 a:150:4000 wait:150:20000" \
 			HALO_MENU_STYLE=halo3 HALO_TEST_COMMANDS=L150:@skip
 		log=$out/h3pause/run.log
 		echo "--- h3pause"
@@ -839,9 +854,10 @@ for case in $cases; do
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- h3campaign"; echo "SKIP: no HALO_TEST_PROFILE (a blam.sav with every level)"; continue
 		fi
-		# (the main menu: down to CAMPAIGN, A; the profile, A; the lobby: Mission, down three, A;
-		# Difficulty - the picker opens on Normal -, down one, A; Start Game)
-		profile_from=$campaign_profile run h3campaign "$menus_data" 75 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 down:150:600 down:150:600 down:150:600 a wait:150:2500 down:150:700 a wait:150:2500 down:150:600 a wait:150:2500 down:150:700 a wait:150:15000" \
+		# (the main menu: CAMPAIGN, A; the profile, A; the lobby: Mission - SELECT MISSION, the cascade
+		# (1.1.3): HALO CE, A into its missions, down three, A; SELECT DIFFICULTY in the same screen,
+		# on Normal, down one, A -; down two to Start Game)
+		profile_from=$campaign_profile run h3campaign "$menus_data" 75 "wait:150:3000 a wait:150:3000 a wait:150:3000 a wait:150:2500 a wait:150:1500 down:150:600 down:150:600 down:150:600 a wait:150:2500 down:150:600 a wait:150:2500 down:150:700 down:150:700 a wait:150:15000" \
 			HALO_MENU_STYLE=halo3
 		check_h3 h3campaign halo3
 		log=$out/h3campaign/run.log
@@ -904,7 +920,9 @@ for case in $cases; do
 			# 3 rows' worth, up past the end, down past the top)
 			case $style in
 			halo3) reach="$h3mppad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:2000 a wait:150:2000 a wait:150:5000" ;;
-			online) reach="wait:150:3000 a wait:150:3000 a wait:150:3000" ;;
+			# (online: the title's A; MULTIPLAYER, its lobby's BROWSE GAMES - the main menu's SERVER
+			# BROWSER until 1.1.3 -, the profile)
+			online) reach="wait:150:3000 a wait:150:3000 down:150:500 a wait:150:4000 down:150:400 down:150:400 down:150:400 down:150:400 down:150:400 down:150:400 a wait:150:3000 wait:150:3000" ;;
 			esac
 			run touchdrag_$style "$menus_data" 46 "$reach wait:150:28000" \
 				HALO_MENU_STYLE=$style $h3net HALO_TEST_BROWSER_GAMES=16 HALO_TEST_BROWSER_PC=1 \
@@ -1018,16 +1036,16 @@ for case in $cases; do
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- h3hostonline"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
-		# (ONLINE, its brokers unreachable: MULTIPLAYER; down two to MAP, A: the picker, down nine to
-		# BLOOD GULCH, A; down to START GAME, A: SELECT PROFILE (A joins, A the profile, A): the game
+		# (ONLINE, its brokers unreachable: MULTIPLAYER; down to MAP (above GAME TYPE since 1.1.3), A:
+		# SELECT MAP, on Battle Creek, down nine to BLOOD GULCH, A; down two to START GAME, A: SELECT PROFILE (A joins, A the profile, A): the game
 		# hosted on Blood Gulch, its lobby - its code and PUBLIC not shown while the brokers are not
 		# reached: Connecting..., then why -; B: the multiplayer lobby (the brokers unreachable, the
 		# connection stays Online, its status line saying so - insider.21 fell back to Same Wi-Fi,
 		# its ONLINE rows then saying internet play was off); Menu style Halo CE: CREATE GAME
 		# INTERNET is OpenCE's Server Setup as before)
-		hostonline_pad="$h3mppad down:150:500 down:150:500 a wait:150:2500"
+		hostonline_pad="$h3mppad down:150:500 a wait:150:2500"
 		for row in $(seq 1 9); do hostonline_pad="$hostonline_pad down:150:300"; done
-		hostonline_pad="$hostonline_pad a wait:150:2500 down:150:500 a wait:150:3000 a wait:150:2000 a wait:150:2000 a wait:150:5000"
+		hostonline_pad="$hostonline_pad a wait:150:2500 down:150:500 down:150:500 a wait:150:3000 a wait:150:2000 a wait:150:2000 a wait:150:5000"
 		hostonline_pad="$hostonline_pad @01-pregame:0:300 b wait:150:4000 @02-lobby:0:300"
 		rm -rf "$out/h3hostonline_shots"; mkdir -p "$out/h3hostonline_shots"
 		profile_from=$HALO_TEST_PROFILE run h3hostonline "$menus_data" 60 "$hostonline_pad" HALO_MENU_STYLE=halo3 $h3net \
@@ -1068,9 +1086,9 @@ for case in $cases; do
 		# lobby counted machines. The h3hostonline route to the game's lobby, Bots online full and 3:
 		# the bots join, the lobby says Ready (never Waiting for other players), and Cross, the host
 		# alone, starts the countdown and then the game)
-		hostbots_pad="$h3mppad down:150:500 down:150:500 a wait:150:2500"
+		hostbots_pad="$h3mppad down:150:500 a wait:150:2500"
 		for row in $(seq 1 9); do hostbots_pad="$hostbots_pad down:150:300"; done
-		hostbots_pad="$hostbots_pad a wait:150:2500 down:150:500 a wait:150:3000 a wait:150:2000 a wait:150:2000 a wait:150:12000"
+		hostbots_pad="$hostbots_pad a wait:150:2500 down:150:500 down:150:500 a wait:150:3000 a wait:150:2000 a wait:150:2000 a wait:150:12000"
 		hostbots_pad="$hostbots_pad a wait:150:32000"
 		for bots in full 3; do
 			profile_from=$HALO_TEST_PROFILE run h3hostbots_$bots "$menus_data" 90 "$hostbots_pad" HALO_MENU_STYLE=halo3 $h3net \
@@ -1242,12 +1260,14 @@ for case in $cases; do
 		if [ -n "${HALO_TEST_SHOTS:-}" ]; then echo "frames in $HALO_TEST_SHOTS/h3groups*"; fi ;;
 	h3mptouch)
 		skip_null h3mptouch "taps" && continue
-		# (MULTIPLAYER on the main menu; the lobby's MAP; BLOOD GULCH in the picker; the lobby's Back)
+		# (MULTIPLAYER on the main menu; the lobby's MAP - its second row since 1.1.3 -; BLOOD GULCH in
+		# SELECT MAP, the cascade's tenth row; the lobby's Back)
 		run h3mptouch "$menus_data" 30 "wait:150:20000" HALO_MENU_STYLE=halo3 \
-			"HALO_TEST_TAPS=4000:60,298 8000:60,118 12000:100,263 16000:140,455"
+			"HALO_TEST_TAPS=4000:60,298 8000:60,98 12000:100,263 16000:140,455"
 		check_h3 h3mptouch halo3
 		log=$out/h3mptouch/run.log
-		grep -aq "ui: screen pc.h3.map.screen" "$log" || fail h3mptouch "a tap on MAP did not open its picker"
+		grep -aq "ui: screen pc.h3.cascade.screen" "$log" && grep -aq "menus: cascade: mp maps$" "$log" ||
+			fail h3mptouch "a tap on MAP did not open its picker"
 		grep -aq "menus: h3 mp: map Blood Gulch" "$log" || fail h3mptouch "a tap on BLOOD GULCH did not choose it"
 		grep -a "ui: screen" "$log" | tail -1 | grep -q 'pc.h3.main.screen' ||
 			fail h3mptouch "a tap on the lobby's Back did not go back to the main menu" ;;
@@ -1509,10 +1529,10 @@ for case in $cases; do
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- h3customize"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
-		# (CUSTOMIZATION: the profile, Cross; PLAYER NAME, Cross: typed; COLOR, right three times: RED;
+		# (CUSTOMIZATION (Start > SETTINGS > APPEARANCE): the profile, Cross; PLAYER NAME, Cross: typed; COLOR, right three times: RED;
 		# past VISOR and MODEL; STICK LAYOUT, right: SOUTHPAW; down two to LOOK SENSITIVITY, right twice; INVERT
 		# LOOK, Cross: YES; Circle: saved; Circle)
-		custom_pad="$h3pad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:3000 a wait:150:2000"
+		custom_pad="$h3pad $h3custpad a wait:150:3000 a wait:150:2000"
 		# (COLOR, then down past ARMOR VISOR and MODEL - shown as N/A with the player models off - to
 		# STICK LAYOUT: three rows)
 		custom_pad="$custom_pad down:150:600 right:150:500 right:150:500 right:150:500 down:150:600 down:150:600 down:150:600 right:150:600"
@@ -1566,7 +1586,7 @@ for case in $cases; do
 		rm -rf "$out/h3customize_saved"
 		cp -r "$out/h3customize/save" "$out/h3customize_saved"
 		save_from=$out/h3customize_saved run h3customize_again "$menus_data" 25 \
-			"$h3pad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:3000 b wait:150:3000" HALO_MENU_STYLE=halo3 \
+			"$h3pad $h3custpad a wait:150:3000 b wait:150:3000" HALO_MENU_STYLE=halo3 \
 			HALO_SCENE_PACKS=0
 		check_h3 h3customize_again halo3
 		grep -aqE "menus: h3 customize: the preview shows the Spartan|h3 scene object 6: .* made" "$out/h3customize_again/run.log" &&
@@ -1582,7 +1602,7 @@ for case in $cases; do
 		# (CUSTOMIZATION: the profile, Cross: the editor on PLAYER NAME, the preview's Spartan made;
 		# then down through the nine rows below to VIBRATION, a second and a half on each, up to
 		# AUTO-CENTER, down to VIBRATION again; Circle, Circle)
-		rows_pad="$h3pad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:5000"
+		rows_pad="$h3pad $h3custpad a wait:150:5000"
 		rows_pad="$rows_pad @rows-start:0:300"
 		for row in 1 2 3 4 5 6 7 8 9; do rows_pad="$rows_pad down:150:1500"; done
 		rows_pad="$rows_pad up:150:1500 down:150:1500 @rows-end:0:300 b wait:150:2500 b wait:150:2500"
@@ -1618,13 +1638,13 @@ for case in $cases; do
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- onlinegridnav"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
-		# (Menu style Online: CUSTOMIZATION, COLORS (RT), Cross on ARMOR PRIMARY: the colour grid
+		# (Menu style Online: CUSTOMIZATION (Start > SETTINGS > APPEARANCE since 1.1.3), COLORS (RT), Cross on ARMOR PRIMARY: the colour grid
 		# (43 cells, six a row, its last row of one). Up eight times: a row up each (from the top row
 		# the column's last cell), then Down eight times, the same cells back. The left stick up and
 		# down likewise. Then ARMOR VISOR (two rows of six): Cross, Up, Up, Down, Down: row 0, 1, 0, 1
 		# wrapping. Each press logs the cell it lands on)
 		u="up:150:500"; d="down:150:500"
-		grid_pad="wait:150:2000 a:150:2500 $d $d $d $d a:150:3000 a:150:3000 rt:150:1500 a:150:800"
+		grid_pad="wait:150:2000 a:150:2500 $h3custpad a:150:3000 rt:150:1500 a:150:800"
 		grid_pad="$grid_pad $u $u $u $u $u $u $u $u $d $d $d $d $d $d $d $d lup:150:500 ldown:150:500 a:150:800 $d $d a:150:800"
 		grid_pad="$grid_pad $u $u $d $d @gridnav:0:300 a:150:800 b wait:150:2000 b wait:150:2500"
 		profile_from=$HALO_TEST_PROFILE run onlinegridnav "$menus_data" 60 "$grid_pad" HALO_MENU_STYLE=online
@@ -1668,12 +1688,13 @@ for case in $cases; do
 			echo "--- h3nameplate"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
 		# (the main menu at a start: the nameplate; then CUSTOMIZATION as h3customize - the name typed,
-		# COLOR right three times: RED -, Circle: saved, Circle: the main menu again, its nameplate)
+		# COLOR right three times: RED -, Circle: saved, Circle: Start, Circle: the main menu again, its
+		# nameplate)
 		plate_name=$(profile_fields "$HALO_TEST_PROFILE" | cut -d'|' -f1)
 		plate_color=$(profile_fields "$HALO_TEST_PROFILE" | cut -d'|' -f2)
-		plate_pad="$h3pad @00-plate-at-start:0:300 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000"
+		plate_pad="$h3pad @00-plate-at-start:0:300 $h3custpad"
 		plate_pad="$plate_pad a wait:150:3000 a wait:150:2000 down:150:600 right:150:500 right:150:500 right:150:500"
-		plate_pad="$plate_pad b wait:150:3000 b wait:150:3000 up:150:500 up:150:500 up:150:500 up:150:500 up:150:500 wait:150:1000"
+		plate_pad="$plate_pad b wait:150:3000 b wait:150:3000 b wait:150:3000 wait:150:1000"
 		plate_pad="$plate_pad @01-plate-customized:0:300"
 		rm -rf "$out/h3nameplate_shots"
 		mkdir -p "$out/h3nameplate_shots"
@@ -1719,7 +1740,7 @@ for case in $cases; do
 		done
 		models=$(ls "$out/switch_data/maps" | grep -cE '^(extinction|Covenant_V_Marines_Beta_5|z_sanctuary_h2_pb2)\.map$')
 		d="down:150:500"
-		switch_pad="wait:150:2000 a:150:2500 $d $d $d $d a:150:3000 a:150:3000 $d $d"
+		switch_pad="wait:150:2000 a:150:2500 $h3custpad a:150:3000 $d $d"
 		for index in $(seq 1 $((models * 2))); do switch_pad="$switch_pad right:150:9000"; done
 		switch_pad="$switch_pad right:150:900 right:150:900 left:150:900 right:150:900 right:150:9000"
 		for index in $(seq 1 $models); do switch_pad="$switch_pad left:150:9000"; done
@@ -1782,7 +1803,7 @@ for case in $cases; do
 		done
 		# (CUSTOMIZATION: the profile, Cross; down three to MODEL, past VISOR; right: the Extinction Spartan, built and
 		# shown; right: the protected map's; left: the Spartan (Extinction) again; Circle; Circle)
-		models_pad="$h3pad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:3000"
+		models_pad="$h3pad $h3custpad a wait:150:3000"
 		models_pad="$models_pad down:150:600 down:150:600 down:150:600 right:150:500 wait:150:8000 right:150:500 wait:150:8000"
 		models_pad="$models_pad left:150:500 wait:150:4000 b wait:150:3000 b wait:150:3000"
 		profile_from=$HALO_TEST_PROFILE run h3models "$out/models_data" 55 "$models_pad" HALO_MENU_STYLE=halo3 HALO_PLAYER_MODELS=1
@@ -1806,7 +1827,7 @@ for case in $cases; do
 		rm -rf "$out/h3models_saved"
 		cp -r "$out/h3models/save" "$out/h3models_saved"
 		save_from=$out/h3models_saved run h3models_again "$out/models_data" 25 \
-			"$h3pad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:5000 b wait:150:3000" \
+			"$h3pad $h3custpad a wait:150:5000 b wait:150:3000" \
 			HALO_MENU_STYLE=halo3 HALO_PLAYER_MODELS=1
 		grep -aq "menus: h3 customize: 2 player models in the maps folder's Custom Edition maps; this profile's: 0" \
 			"$out/h3models_again/run.log" || fail h3models "started again, the editor did not show the choice"
@@ -1815,7 +1836,7 @@ for case in $cases; do
 		# through for models, the MODEL row shown as N/A and right on it changing nothing, no model
 		# pack built, the saved choice ignored and t:\player_models.txt left as it was)
 		save_from=$out/h3models_saved run h3models_off "$out/models_data" 30 \
-			"$h3pad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:3000 down:150:600 down:150:600 down:150:600 right:150:600 wait:150:3000 b wait:150:3000 b wait:150:3000" \
+			"$h3pad $h3custpad a wait:150:3000 down:150:600 down:150:600 down:150:600 right:150:600 wait:150:3000 b wait:150:3000 b wait:150:3000" \
 			HALO_MENU_STYLE=halo3
 		log=$out/h3models_off/run.log
 		echo "--- h3models_off"
@@ -1849,7 +1870,7 @@ for case in $cases; do
 		done
 		# (CUSTOMIZATION: the profile, Cross; down three to MODEL, past VISOR; right fourteen times, each model left to
 		# rest and show; then right eight times quickly, and a rest)
-		many_pad="$h3pad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:3000"
+		many_pad="$h3pad $h3custpad a wait:150:3000"
 		many_pad="$many_pad down:150:600 down:150:600 down:150:600"
 		for index in 01 02 03 04 05 06 07 08 09 10 11 12 13 14; do many_pad="$many_pad right:150:3500"; done
 		many_pad="$many_pad left:80:80 left:80:80 left:80:80 left:80:80 left:80:80 left:80:80 left:80:80 left:80:4000 b wait:150:3000"
@@ -1880,7 +1901,7 @@ for case in $cases; do
 		# (CAMPAIGN: Cross on each, refused; CREATE NEW PROFILE, Cross: Rookie, the lobby; Circle twice:
 		# the main menu, where no profile is in use; CUSTOMIZATION, on the first listed - a damaged
 		# one: Rookie, made last, is listed last -: Cross, refused)
-		save_from=$out/h3damaged_save run h3damaged "$menus_data" 45 "$h3pad a wait:150:3000 a wait:150:2000 down:150:700 a wait:150:2000 down:150:700 a wait:150:4000 b wait:150:3000 b wait:150:3000 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:2500 b wait:150:2000" \
+		save_from=$out/h3damaged_save run h3damaged "$menus_data" 45 "$h3pad a wait:150:3000 a wait:150:2000 down:150:700 a wait:150:2000 down:150:700 a wait:150:4000 b wait:150:3000 b wait:150:3000 $h3custpad a wait:150:2500 b wait:150:2000" \
 			HALO_MENU_STYLE=halo3 HALO_TEST_TEXT_INPUT=Rookie
 		check_h3 h3damaged halo3
 		log=$out/h3damaged/run.log
@@ -2345,7 +2366,7 @@ for case in $cases; do
 		run h3modspicker_on "$out/h3mods-data" 50 "$h3pickerpad" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch
 		for name in h3modspicker h3modspicker_on; do
 			check_h3 $name halo3
-			grep -aq "ui: screen pc.h3.map.screen" "$out/$name/run.log" || fail $name "MAP did not open the lobby's map picker"
+			grep -aq "menus: cascade: mp maps$" "$out/$name/run.log" || fail $name "MAP did not open the lobby's map picker"
 		done
 		grep -aq "mod manager: mygulch turned off" "$out/h3modspicker/run.log" || fail h3modspicker "mygulch was not turned off"
 		grep -aq "menus: h3 mp: the map picker: 13 maps (0 custom)" "$out/h3modspicker/run.log" ||
@@ -2368,8 +2389,9 @@ for case in $cases; do
 			ln -s "$(readlink -f "$ce_maps/extinction.map")" "$renamed_data/maps/extinction.map"
 			ln -s "$(readlink -f "$ce_maps/extinction.map")" "$renamed_data/maps/cursed-extinction.map"
 		fi
-		# (MULTIPLAYER, down two to MAP, A: the picker; down thirteen to the first custom row, A)
-		renamed_pad="$h3mppad down:150:500 down:150:500 a wait:150:2000"
+		# (MULTIPLAYER, down to MAP (above GAME TYPE since 1.1.3), A: SELECT MAP; down thirteen to the
+		# first custom row, A)
+		renamed_pad="$h3mppad down:150:500 a wait:150:2000"
 		for row in $(seq 1 13); do renamed_pad="$renamed_pad down:150:400"; done
 		renamed_pad="$renamed_pad a wait:150:3000"
 		run h3renamed "$renamed_data" 35 "$renamed_pad" HALO_MENU_STYLE=halo3 HALO_CUSTOM_EDITION=${renamed_ce:-0}
@@ -2416,13 +2438,13 @@ PY
 		grep -aq "starting precaching of map 'cursed-bloodgulch'" "$out/h3renamed_again/data/debug.txt" &&
 			fail h3renamed_again "the renamed copy's cache file was not found by its name (copied again)" ;;
 	h3mpcustom)
-		# (MULTIPLAYER: the lobby on SYSTEM LINK; down two to MAP, A: the picker; down thirteen: past the
-		# last row it scrolls to MYGULCH; A: chosen; down to START GAME, A: the profile, A to join, A
+		# (MULTIPLAYER: the lobby on SYSTEM LINK; down to MAP (above GAME TYPE since 1.1.3), A: SELECT
+		# MAP; down thirteen: past the last row it scrolls to MYGULCH; A: chosen; down two to START GAME, A: the profile, A to join, A
 		# the profile, A: the game hosted on mygulch, its lobby)
 		mods_data "$out/h3mods-data"
-		mpcustom_pad="$h3mppad down:150:500 down:150:500 a wait:150:2000 @00-picker:0:300"
+		mpcustom_pad="$h3mppad down:150:500 a wait:150:2000 @00-picker:0:300"
 		for row in $(seq 1 13); do mpcustom_pad="$mpcustom_pad down:150:400"; done
-		mpcustom_pad="$mpcustom_pad @01-picker-custom:0:300 a wait:150:2000 @02-lobby-custom:0:300 down:150:500 a wait:150:3000"
+		mpcustom_pad="$mpcustom_pad @01-picker-custom:0:300 a wait:150:2000 @02-lobby-custom:0:300 down:150:500 down:150:500 a wait:150:3000"
 		mpcustom_pad="$mpcustom_pad a wait:150:3000 a wait:150:3000 a wait:150:3000 wait:150:4000 @03-pregame:0:300"
 		rm -rf "$out/h3mpcustom_shots"
 		mkdir -p "$out/h3mpcustom_shots"
@@ -2431,14 +2453,15 @@ PY
 		rm -rf "$out/h3mpcustom_saved"
 		cp -r "$out/h3mpcustom/save" "$out/h3mpcustom_saved"
 		save_from=$out/h3mpcustom_saved run h3mpcustom_off "$out/h3mods-data" 30 \
-			"$h3mppad down:150:500 down:150:500 a wait:150:2000 b wait:150:2000" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch
+			"$h3mppad down:150:500 a wait:150:2000 b wait:150:2000" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch
 		check_h3 h3mpcustom halo3
 		check_h3 h3mpcustom_off halo3
 		log=$out/h3mpcustom/run.log
 		grep -aE "menus: h3 mp|menus: h3 maps|join: the host's map" "$log" | tail -8
 		grep -aq "menus: h3 mp: the map picker: 14 maps (1 custom)" "$log" ||
 			fail h3mpcustom "the picker did not list the custom map after the thirteen"
-		grep -aq "menus: h3 maps: Mygulch (14 of 14)" "$log" || fail h3mpcustom "the rows did not scroll to MYGULCH"
+		grep -aq "menus: cascade: mp maps: column 1, -, row 14 of 14: MYGULCH (CUSTOM)$" "$log" ||
+			fail h3mpcustom "the rows did not scroll to MYGULCH"
 		grep -aq "menus: h3 mp: map Mygulch (a custom map: levels.test.mygulch.mygulch)" "$log" ||
 			fail h3mpcustom "choosing MYGULCH did not set the lobby's map to it"
 		grep -aq "menus: h3 mp lobby: NETWORK: SYSTEM LINK, GAME: SLAYER, MAP: MYGULCH" "$log" ||
@@ -2462,10 +2485,11 @@ PY
 			cp "$out"/h3mpcustom_shots/*.bmp "$HALO_TEST_SHOTS/h3mpcustom/" 2>/dev/null ;;
 	h3modstouch)
 		skip_null h3modstouch "taps" && continue
-		# (MOD MANAGER's row on the main menu; mygulch's row, the third; the screen's Back: icon and label)
+		# (Start, then taps - MOD MANAGER is Start > MEDIA > GAME MANAGER since 1.1.3 -: GAME MANAGER's
+		# row; mygulch's row, the third; the screen's Back: icon and label, Start again; B: the main menu)
 		mods_data "$out/h3mods-data"
-		run h3modstouch "$out/h3mods-data" 25 "wait:150:16000" HALO_MENU_STYLE=halo3 \
-			"HALO_TEST_TAPS=4000:60,358 8000:200,142 12000:560,452"
+		run h3modstouch "$out/h3mods-data" 25 "wait:150:2500 start:150:11000 b:150:4000" HALO_MENU_STYLE=halo3 \
+			"HALO_TEST_TAPS=4000:120,166 8000:200,142 12000:560,452"
 		check_h3 h3modstouch halo3
 		log=$out/h3modstouch/run.log
 		grep -aq "ui: screen pc.h3.mods.screen" "$log" || fail h3modstouch "a tap on MOD MANAGER did not open it"
@@ -2473,7 +2497,7 @@ PY
 		grep -a "ui: screen" "$log" | tail -1 | grep -q 'pc.h3.main.screen' ||
 			fail h3modstouch "a tap on Back did not go back to the main menu" ;;
 	h3friends)
-		# (FRIENDS, the seventh item; ADD FRIEND: a code typed; APPEAR OFFLINE; FRIENDS CAN JOIN;
+		# (FRIENDS - Triangle on the main menu since 1.1.3 -; ADD FRIEND: a code typed; APPEAR OFFLINE; FRIENDS CAN JOIN;
 		# PARTY and FRIEND CODE BACKUP passed; Delta's request: Square declines; Bravo (focused
 		# then): Cross joins (offline: go online first), Triangle, down to REMOVE FRIEND, A; B)
 		friends_seed "$out/h3friends-save"
@@ -2533,7 +2557,8 @@ PY
 		mkdir -p "$out/h3friendsrestore-save"
 		cp "$out/h3friendsbackup/save/my-code.hfb" "$out/h3friendsrestore-save/"
 		restore_pad="$backup_pad down:150:500 down:150:500 a wait:150:5000 wait:150:2000"
-		restore_pad="$restore_pad $backup_pad down:150:500 down:150:500 a wait:150:6000 down:150:500 a wait:150:3000 b wait:150:2000"
+		# (the second try: FRIENDS keeps its row - FRIEND CODE BACKUP - after the wrong password's note, A again)
+		restore_pad="$restore_pad a wait:150:2500 down:150:500 down:150:500 a wait:150:6000 down:150:500 a wait:150:3000 b wait:150:2000"
 		save_from="$out/h3friendsrestore-save" run h3friendsrestore "$menus_data" 50 "$h3friendspad $restore_pad" \
 			HALO_MENU_STYLE=halo3 "HALO_TEST_TEXT_INPUT=my-code|hunter2hunter3|my-code|hunter2hunter2"
 		check_h3 h3friendsrestore halo3
@@ -3027,7 +3052,8 @@ PY
 		gt_pad="$gt_pad a $w a wait:150:1500 @03-editor-new:0:300 $d $d a $w $r $r @04-general:0:300 b $w $d a $w $r $r"
 		gt_pad="$gt_pad @05-respawn:0:300 b $w $d a $w $r @06-player:0:300 b $w $d a $w $d $d $r @07-weapons-vehicles:0:300 b $w"
 		gt_pad="$gt_pad $d $d a $w @08-slayer-settings:0:300 b $w $d @09-editor-save:0:300 a wait:150:3000 @10-saved:0:300"
-		gt_pad="$gt_pad b wait:150:4000 @11-lobby:0:300 $u $u $u a $w @12-game-picker:0:300 b $w $d $d a wait:150:4000"
+		# (1.1.3: GAME TYPE the lobby's third row - MAP above it -, up two from EDIT GAME TYPES; START GAME one below)
+		gt_pad="$gt_pad b wait:150:4000 @11-lobby:0:300 $u $u a $w @12-game-picker:0:300 b $w $d a wait:150:4000"
 		gt_pad="$gt_pad @13-pregame:0:300 b wait:150:4000"
 		# (then on that save: EDIT GAME TYPES, on the lobby's GAME, Vita Slayer: its options, COPY
 		# (typed); the copy's options, RENAME (typed); its options, DELETE: the question, DELETE GAME
@@ -3067,7 +3093,9 @@ PY
 		grep -aq "menus: h3 live lobby: now Vita Slayer on Battle Creek, sent to its joiners" "$log" &&
 			grep -aq "menus: h3 mp: the game's rules: slayer, score 50, lives 0, respawn 300, growth 0, suicide 300, shields 0, .*vehicles 3" "$log" ||
 			fail h3gametypes "the live lobby's game was not hosted with the saved game type's rules"
-		grep -aq "ui: screen pc.h3.gametype.screen" "$log" || fail h3gametypes "the lobby's GAME picker did not open"
+		# (GAME TYPE opens the cascade picker since 1.1.3: SELECT GAME TYPE, the base games, then their game types)
+		grep -aq "ui: screen pc.h3.cascade.screen" "$log" && grep -aq "menus: cascade: game types$" "$log" ||
+			fail h3gametypes "the lobby's GAME picker did not open"
 		grep -aq "menus: h3 live lobby: START GAME: the game's lobby" "$log" || fail h3gametypes "START GAME did not open the game's lobby"
 		grep -aq "menus: h3 gametypes: Vita Slayer copied as Vita Copy." "$log" || fail h3gametypes "COPY did not copy it"
 		grep -aq "menus: h3 gametypes: Vita Copy renamed Night Copy." "$log" || fail h3gametypes "RENAME did not rename the copy"
@@ -3255,30 +3283,31 @@ PY
 			echo "--- h3offline"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
 		# (MULTIPLAYER; NETWORK, A: its picker on SYSTEM LINK, down two to OFFLINE (past AD HOC: the
-		# harness is a Vita's, config_adhoc_offered), A; down to GAME, A: its
-		# picker on SLAYER, down seven to ODDBALL, A; down to MAP, A, down six to CHILL OUT, A; down to
-		# START GAME, A: split screen's SELECT PROFILE; A joins, A the profile, A: the game; in it,
-		# Start: the pause)
+		# harness is a Vita's, config_adhoc_offered), A; down to MAP (above GAME TYPE since 1.1.3), A:
+		# SELECT MAP on Battle Creek, down six to CHILL OUT, A; down to GAME TYPE, A: SELECT GAME TYPE
+		# on SLAYER, down two to ODDBALL, A: its game types, A: Oddball; down to START GAME, A: split
+		# screen's SELECT PROFILE; A joins, A the profile, A: the game; in it, Start: the pause)
 		off_d="down:150:500"
 		off_lobby="$h3mppad wait:150:1000 a:150:2000 $off_d $off_d a:150:2500"
 		off_start="@01-lobby:0:300 $off_d a:150:3000 @02-select-profile:0:300 a:150:1500 a:150:1500 @03-ready:0:300 a:150:1000"
 		off_start="$off_start @04-starting:0:300"
 		off_pad="$off_lobby $off_d a:150:2500"
-		for row in $(seq 7); do off_pad="$off_pad down:150:300"; done
-		off_pad="$off_pad a:150:2500 $off_d a:150:2500"
 		for row in $(seq 6); do off_pad="$off_pad down:150:300"; done
-		off_pad="$off_pad a:150:2500 $off_start level:150:6000 @05-game:0:300 start:150:2500 @06-pause:0:300"
+		off_pad="$off_pad a:150:2500 $off_d a:150:2500 $off_d $off_d a:150:1500 a:150:2500"
+		off_pad="$off_pad $off_start level:150:6000 @05-game:0:300 start:150:2500 @06-pause:0:300"
 		profile_from=$HALO_TEST_PROFILE run h3offline "$menus_data" 80 "$off_pad" HALO_MENU_STYLE=halo3 HALO_BOTS=1
 		# (a saved game type: Infection copied in GAME TYPES, as h3gametypes_infection does; then the lobby's
-		# GAME up to it - the player's own first, the picker on SLAYER -, MAP Blood Gulch, START GAME)
+		# MAP Blood Gulch; GAME TYPE: SELECT GAME TYPE on SLAYER, up to INFECTION - the last -, A: its game
+		# types, the player's own first: A; START GAME)
 		d="down:150:450" w="wait:150:2300"
 		off_inf=""; for row in $(seq 26); do off_inf="$off_inf $d"; done
 		profile_from=$HALO_TEST_PROFILE run h3offline_copy "$menus_data" 60 \
 			"wait:150:3000 down:150:700 a wait:150:6000 $d $d $d $d a $w$off_inf $w a $w $d a wait:150:4000" \
 			HALO_MENU_STYLE=halo3 "HALO_TEST_TEXT_INPUT=Vita Infect"
-		off_pad="$off_lobby $off_d a:150:2500 up:150:500 a:150:2500 $off_d a:150:2500"
+		off_pad="$off_lobby $off_d a:150:2500"
 		for row in $(seq 9); do off_pad="$off_pad down:150:300"; done
-		off_pad="$off_pad a:150:2500 $off_start level:150:8000 @05-game:0:300"
+		off_pad="$off_pad a:150:2500 $off_d a:150:2500 up:150:500 a:150:1500 a:150:2500"
+		off_pad="$off_pad $off_start level:150:8000 @05-game:0:300"
 		save_from=$out/h3offline_copy/save run h3offline_infection "$menus_data" 85 "$off_pad" HALO_MENU_STYLE=halo3 HALO_BOTS=3
 		# (alone: the lobby's GAME and MAP as they are - down past them to START GAME -, no bots)
 		profile_from=$HALO_TEST_PROFILE run h3offline_alone "$menus_data" 60 \
@@ -3404,15 +3433,20 @@ PY
 		grep -aq "h3 dialog\|pc.h3.dlg" "$log" && fail msgboxes "campaign, Halo CE: a Halo 3 dialog opened"
 		grep -aq "pause menu: restart at checkpoint" "$log" && fail msgboxes "campaign, Halo CE: Circle reverted" ;;
 	ceplusmain)
-		# (the main menu's rows under SETTINGS: down three to FORGE, four to FRIENDS, five to FILE
-		# SHARE, six to MOD MANAGER - each in the original look; A, then B back)
+		# (the main menu's rows under SETTINGS, 1.1.3's: down three to MEDIA - its FILE SHARE, FRIENDS
+		# and MOD MANAGER, rows of the main menu until 1.1.3 -, four to FORGE; each in the original
+		# look; A, then B back - B twice from MEDIA's rows)
 		d="down:150:500"
-		for row in "3 forge pc.cp.forge.lobby" "4 friends pc.classic.friends.screen" "5 fileshare pc.ce.fileshare.screen" \
-			"6 mods pc.ce.mods.screen"; do
+		for row in "4:0 forge pc.cp.forge.lobby" "3:1 friends pc.classic.friends.screen" "3:0 fileshare pc.ce.fileshare.screen" \
+			"3:2 mods pc.ce.mods.screen"; do
 			set -- $row
-			downs=""
-			for i in $(seq "$1"); do downs="$downs $d"; done
-			run "ceplusmain_$2" "$menus_data" 20 "wait:150:3000$downs a:150:4000 b:150:3000" HALO_SCENE_PACKS=0
+			downs="" media=""
+			for i in $(seq "${1%%:*}"); do downs="$downs $d"; done
+			if [ "${1%%:*}" = 3 ]; then
+				media=" a:150:3000"
+				for i in $(seq 0 "$((${1##*:} - 1))"); do [ "${1##*:}" -gt 0 ] && media="$media $d"; done
+			fi
+			run "ceplusmain_$2" "$menus_data" 24 "wait:150:3000$downs$media a:150:4000 b:150:3000${media:+ b:150:3000}" HALO_SCENE_PACKS=0
 			log=$out/ceplusmain_$2/run.log
 			echo "--- ceplusmain ($2)"
 			grep -aE "ui: screen|menus: Menu style" "$log" | head -6
@@ -3589,10 +3623,10 @@ PY
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- ceplusforge"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
-		# (FORGE, the fourth row; up to NETWORK, A, down past LOCAL - the picker goes round - to
-		# ONLINE, down to SYSTEM LINK, A; down three to START FORGE, A: the profile, A, A)
+		# (FORGE, the fifth row since 1.1.3's MEDIA; up to NETWORK, A, down past LOCAL - the picker goes
+		# round - to ONLINE, down to SYSTEM LINK, A; down three to START FORGE, A: the profile, A, A)
 		d="down:150:600"
-		profile_from=$HALO_TEST_PROFILE run ceplusforge "$menus_data" 45 "wait:150:3000 $d $d $d a:150:4000 up:150:600 a:150:2500 $d $d a:150:3000 $d $d $d a:150:4000 a:150:2500 a:150:2500 a:150:6000" \
+		profile_from=$HALO_TEST_PROFILE run ceplusforge "$menus_data" 45 "wait:150:3000 $d $d $d $d a:150:4000 up:150:600 a:150:2500 $d $d a:150:3000 $d $d $d a:150:4000 a:150:2500 a:150:2500 a:150:6000" \
 			HALO_NET_ONLINE=false
 		log=$out/ceplusforge/run.log
 		echo "--- ceplusforge"

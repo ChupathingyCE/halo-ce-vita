@@ -3181,15 +3181,16 @@ h3live|h3liveleave|h3liveagain)
 	}
 	old_joiner=${HALO_TEST_VITA_JOINER:-}
 	# (the host: MULTIPLAYER, the lobby on SYSTEM LINK, live once up (its game open, Slayer on
-	# Battle Creek); a while for the joiner; then h3live: MAP (down two, A), BLOOD GULCH (down
-	# nine, A); GAME (up, A), the next game type (down, A); START GAME (down two, A): the game's
-	# lobby, its countdown at once; h3liveleave: B, the lobby left)
+	# Battle Creek); a while for the joiner; then h3live: MAP (down one - above GAME TYPE since
+	# 1.1.3 -, A: SELECT MAP on Battle Creek), BLOOD GULCH (down nine, A); GAME TYPE (down, A:
+	# SELECT GAME TYPE on SLAYER; A: its game types on Slayer), the next game type (down, A); START
+	# GAME (down, A): the game's lobby, its countdown at once; h3liveleave: B, the lobby left)
 	live_pad="wait:150:3000 down:150:700 a wait:150:${HALO_TEST_LIVE_WAIT:-45000} @live-01-lobby-joined:0:300"
 	if [ $mode = h3live ] || [ $mode = h3liveagain ]; then
-		live_pad="$live_pad down:150:500 down:150:500 a wait:150:2500"
+		live_pad="$live_pad down:150:500 a wait:150:2500"
 		for row in $(seq 1 9); do live_pad="$live_pad down:150:300"; done
-		live_pad="$live_pad a wait:150:8000 @live-02-map-changed:0:300 up:150:500 a wait:150:2500 down:150:500 a wait:150:8000"
-		live_pad="$live_pad @live-03-game-changed:0:300 down:150:500 down:150:500 a wait:150:3000 @live-04-countdown:0:300"
+		live_pad="$live_pad a wait:150:8000 @live-02-map-changed:0:300 down:150:500 a wait:150:2500 a wait:150:1500 down:150:500 a wait:150:8000"
+		live_pad="$live_pad @live-03-game-changed:0:300 down:150:500 a wait:150:3000 @live-04-countdown:0:300"
 		# (h3liveagain: the game over, the host back in the lobby, START GAME focused: A again)
 		[ $mode = h3liveagain ] && live_pad="$live_pad wait:150:${HALO_TEST_AGAIN_WAIT:-110000} @live-05-lobby-again:0:300 ${HALO_TEST_AGAIN_PAD:-a wait:150:4000 @live-06-second-countdown:0:300}"
 	else
