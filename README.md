@@ -939,6 +939,13 @@ This port stands on a lot of other people's work:
   (CC0), the OpenCE fork: Custom Edition models of up to 64 nodes drawn a
   part's own nodes at a time, and other Custom Edition map fixes, brought
   over from it (each commit says which).
+- **[ChupathingyCE](https://github.com/ChupathingyCE/chupathingyce)** by
+  Milenko and its contributors (GPL-3.0-or-later from its 0.8.0), the
+  OpenCE fork: its title tool, which rebuilds Halo's own heading lettering
+  from the player's ui.map (Milenko, with OpenRift412), now sets Menu style
+  Classic+'s headings for this port's screens (`port/linux/src/title_tool.c`,
+  `port/linux/game/menu_titles.c`); the keyboard defaults' layout, and the
+  crossplay rules of its network versions (each commit says which).
 - **[Invader](https://github.com/SnowyMouse/invader)** by SnowyMouse: the
   tag definitions `port/linux/src/tag_layouts.h` is generated from (by
   `tools/gen_tag_layouts.py`), which let the port relocate the maps' tags.

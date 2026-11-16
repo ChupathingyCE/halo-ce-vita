@@ -2459,6 +2459,8 @@ static char const *menu_png_language_path(char const *png, char const *code, cha
 }
 
 unsigned char *menu_words_frame(char const *png, long width, long height);
+unsigned char *menu_titles_frame(char const *png, long width, long height);
+void menu_titles_release(void);
 
 static boolean menu_png_frame_load(struct menu_png_frame const *frame)
 {
@@ -2469,8 +2471,11 @@ static boolean menu_png_frame_load(struct menu_png_frame const *frame)
 	byte *data = png ? NULL : halo_menus_art_png(frame->png, &size);
 	byte *pixels;
 
-	/* (the main menu's new rows: the game's own letters, menu_words.c) */
+	/* (the main menu's new rows: the game's own letters, menu_words.c; the
+	port's screens' headings: the game's own heading letters, menu_titles.c) */
 	pixels = menu_words_frame(frame->png, bitmap->width, bitmap->height);
+	if (!pixels)
+		pixels = menu_titles_frame(frame->png, bitmap->width, bitmap->height);
 	if (pixels)
 	{
 		if (data)
@@ -2542,6 +2547,8 @@ static boolean menu_tags_art_load(void)
 		success = menu_resource_strings_load(&locale, &menu_tags.string_resources[index]);
 	for (index = 0; index < menu_tags.png_frame_count && success; index++)
 		success = menu_png_frame_load(&menu_tags.png_frames[index]);
+	/* (the heading letters' memory, menu_titles.c) */
+	menu_titles_release();
 	menu_resource_close(&bitmaps, TRUE);
 	menu_resource_close(&locale, TRUE);
 	success = success && !build.failed;

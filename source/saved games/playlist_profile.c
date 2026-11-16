@@ -538,6 +538,29 @@ static boolean playlist_profile_default_file_same(
 }
 #endif
 
+#ifdef HALO_LINUX
+/* port: a default game type's name as the map's list gives it, the Xbox's:
+MCC's ui.map names the Xbox's 26 "Classic Slayer", "Classic Elimination",
+..., longer than a game type's eleven characters, so they came out "Classic
+Sla"; one that would be cut is the rest of it, "Slayer", "Elimination"
+(saved_game_files.c lists them by it too) */
+wchar_t *playlist_profile_default_name(
+	wchar_t *name)
+{
+	static wchar_t const classic[] = L"Classic ";
+	long index;
+
+	if (!name || ustrlen(name) <= MAXIMUM_GAME_VARIANT_NAME_LENGTH - 1)
+		return name;
+	for (index = 0; classic[index]; index++)
+	{
+		if (name[index] != classic[index])
+			return name;
+	}
+	return name[index] ? name + index : name;
+}
+
+#endif
 static void playlist_profile_create_default_profiles_on_disk(
 	void)
 {
@@ -580,6 +603,9 @@ static void playlist_profile_create_default_profiles_on_disk(
 			display_name = unicode_string_list_get_string(
 				string_list_index,
 				(short)profile_index);
+#ifdef HALO_LINUX
+			display_name = playlist_profile_default_name(display_name);
+#endif
 
 			csmemcpy(
 				block,
