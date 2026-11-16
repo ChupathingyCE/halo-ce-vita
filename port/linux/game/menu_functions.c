@@ -3267,14 +3267,17 @@ static short h3_forge_maps_map_row(short map)
 	return 0;
 }
 
-/* a PC-exclusive map's words for a picker's description: ours, and - its
-MCC copy not here - the note (forge_map_pc_exclusive_note) */
+/* a PC-exclusive map's words for a picker's description: ours when it can
+be played; its MCC copy not here, the note alone (forge_map_pc_exclusive_note:
+the panels show five lines - Halo 3's, Online's - to seven - Classic+'s -,
+and the description and the note together ran past them, the note cut to
+"PC-exclusive map from Halo") */
 static void h3_forge_pc_map_words(short map, char *text, int size)
 {
 	char why[FORGE_STORE_WHY_SIZE];
 	boolean playable = forge_map_state(map, why, sizeof(why)) == _map_check_playable;
 
-	snprintf(text, (size_t)size, "%s%s%s", forge_map_pc_exclusive_words(map), playable ? "" : "\n\n", playable ? "" : why);
+	snprintf(text, (size_t)size, "%s", playable ? forge_map_pc_exclusive_words(map) : why);
 }
 
 static void h3_forge_variant_check(void);
@@ -3458,7 +3461,10 @@ static void h3_forge_maps_update(struct widget_instance *list)
 		h3_capitals(text);
 		if (state == _map_check_unusable)
 			snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s", T(" (DAMAGED)"));
-		else if (pc_only)
+		/* (not in Menu style Classic+: its rows hold about sixteen of these
+		capitals - "DANGER CANYON (PC ONLY)" was cut to "DANGER CANYON",
+		"DEATH ISLAND (PC" -; its panel's note marks the map) */
+		else if (pc_only && !halo_menu_style_classic_plus())
 			snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s", T(" (PC ONLY)"));
 		text_show(child, text);
 		if (child == list->focused_child && map != NONE)
