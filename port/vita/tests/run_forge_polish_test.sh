@@ -273,12 +273,14 @@ PYEOF
 		# 4.125 on it (its top 4.25); a block at 87 with a block at 4.0 on it (top 4.5); a
 		# block at 93 (top 3.5) with a large block 0.3 into it at 3.3 (top 4.3); a bridge at
 		# 99 (its underside at 2.875); the items held at 3.8, 3.3, 3.3 and 2.0, listed 5 s on)
+		# (each block: the camera set, spawned 12 ticks on, let go 22 on - a block let go
+		# before the hold follows the camera lands elsewhere on a loaded machine)
 		cmd="L240:forge snap off"
-		t=250
+		t=300
 		for b in "76 block_large 3" "76 platform_small 4.125" "82 block 3" "82 block 4" "88 block 3" "88 block_large 3.3" "94 bridge 3"; do
 			set -- $b
-			cmd="$cmd;L$t:forge camera $1 -140 $3 0 0;L$((t + 8)):forge spawn $2;L$((t + 9)):forge distance 5;L$((t + 16)):forge drop"
-			t=$((t + 20))
+			cmd="$cmd;L$t:forge camera $1 -140 $3 0 0;L$((t + 12)):forge spawn $2;L$((t + 13)):forge distance 5;L$((t + 22)):forge drop"
+			t=$((t + 28))
 		done
 		for i in "78 3.8 Assault Rifle" "84 3.3 Frag Grenade" "90 3.3 Assault Rifle" "96 2.0 Assault Rifle"; do
 			set -- $i
@@ -288,8 +290,9 @@ PYEOF
 			t=$((t + 32))
 		done
 		cmd="$cmd;L$((t + 150)):forge objects;L$((t + 152)):forge camera 80 -147 7 40 -25;L$((t + 165)):@shot 00-stacks"
-		run $c 60 "$cmd"
+		run $c 70 "$cmd"
 		checked $c || continue
+		expect $c "the large block where it was put" "forge: dropped Large Block \(block_large\) at (80\.9|81\.0)[0-9] -1(39\.9|40\.0)[0-9] 3\.0"
 		# (objects 7..10: the four items; "state z" of listing 1)
 		item() {
 			awk -v k="$1" '/test command at tick [0-9]+: forge objects/ { l++ }
