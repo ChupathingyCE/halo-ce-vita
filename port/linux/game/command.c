@@ -8112,6 +8112,10 @@ static struct
 	short state;
 	boolean firefight;
 	real progress;
+	/* (the bar never steps back: three packs' builds share two maps'
+	reads, and a pack's own part begins at 0 when the read it shared ends -
+	the sum dipped 60% to 33% on the PC) */
+	real shown;
 	/* (the build's start and the progress then: the time left from the
 	rate since) */
 	unsigned long long started_us;
@@ -8322,6 +8326,9 @@ short command_prepare_update(
 				}
 			}
 			command_prepare.progress = (real)done / (real)(total * 100);
+			if (command_prepare.progress < command_prepare.shown)
+				command_prepare.progress = command_prepare.shown;
+			command_prepare.shown = command_prepare.progress;
 			if (ready == total)
 			{
 				command_prepare.state = _command_prepare_done;
