@@ -11,6 +11,14 @@
 #               is left out of the monitor's frames and drawn again for the
 #               Spartan (forge off)
 #
+#   onlinemenu  Menu style Online's Forge menu (online/forge.xml, written from
+#               halo3/forge.xml by tools/online_menu_forge.py) has every row of
+#               the Halo 3 one: by the pad, Start, six down (past RESUME, PLAY AS
+#               SPARTAN, SAVE MAP VARIANT, UNDO, REDO, SNAP) lands on MAGNETS, A
+#               turns them off; down, A steps NUDGE to 10 cm (1.1.3's file was
+#               never written again after 1.1.2 added the two rows: it had
+#               neither, and its fourteenth row was RESUME again)
+#
 #
 #   run_forge_polish_test.sh [CASE...]      (default: all)
 #   HALO_TEST_VITA        the harness (default build/linux/halo of this tree)
@@ -26,7 +34,7 @@ out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_forge_polish_test.$$}
 export HALO_MENUS_FOLDER=${HALO_MENUS_FOLDER:-$root/port/vita/app0/menus/}
 . "$here/test_out.sh"
 test_out_begin "$out"
-cases=${*:-monitorprompt}
+cases=${*:-monitorprompt onlinemenu}
 status=0
 fail() { echo "FAIL: $1"; status=1; }
 
@@ -108,6 +116,15 @@ for c in $cases; do
 			sed 's/.*prompt //' | tr '\n' ',')
 		[ "$seq" = "not drawn for the monitor,drawn again,not drawn for the monitor," ] && echo "  ok: $c: in order" || \
 			fail "$c: the prompt's log order: $seq"
+		;;
+	onlinemenu)
+		d="down:150:400"
+		run $c 40 "L700:forge where" HALO_MENU_STYLE=online \
+			"HALO_TEST_PAD=level:150:3000 start:150:2000 @00-menu:0:300 $d $d $d $d $d $d @01-magnets:0:300 a:150:800 $d a:150:800 @02-nudge:0:300 b:150:1500"
+		checked $c || continue
+		expect $c "the Forge menu opened (Menu style Online)" "ui: screen pc.online.forge.pause.screen"
+		expect $c "MAGNETS: A on the seventh row turns them off" "forge: magnets off"
+		expect $c "NUDGE: A on the eighth row steps it to 10 cm" "forge: nudge step 10 cm"
 		;;
 	*)
 		fail "unknown case $c"
