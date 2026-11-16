@@ -3798,8 +3798,15 @@ static boolean command_rally_point(
 	*point = base;
 	if (length > 1.f)
 	{
-		point->x += dx / length * COMMAND_RALLY_DISTANCE;
-		point->y += dy / length * COMMAND_RALLY_DISTANCE;
+		/* (1.1.4, the big team maps: bases near each other - Danger Canyon's
+		face each other 24 wu apart across a chasm, a bridge between - the
+		rally points are kept 16 wu from each other, each nearer its own
+		base, so the two sides' reinforcements do not land in one spot) */
+		real distance = MIN(COMMAND_RALLY_DISTANCE, (length - COMMAND_RALLY_DISTANCE) / 2.f);
+
+		distance = MAX(distance, 2.f);
+		point->x += dx / length * distance;
+		point->y += dy / length * distance;
 	}
 	if (command_ground(point, &ground, NULL))
 		*point = ground;
@@ -6475,6 +6482,9 @@ supply point (a hill) on one is let go */
 #define COMMAND_OBJECTIVE_FLANK_FARTHEST 30.f
 #define COMMAND_OBJECTIVE_FLANK_NEAREST 14.f
 #define COMMAND_OBJECTIVE_SUPPLY_APART 14.f
+/* (1.1.4) how far from the spot wanted one of the map's hills may stand in
+for it (the big team maps) */
+#define COMMAND_OBJECTIVE_HILL_REACH 60.f
 
 /* whether a spot is flat open ground near a height (its ground in *ground) */
 static boolean command_objective_spot_flat(
@@ -6505,6 +6515,8 @@ static void command_objective_territories_choose(
 {
 	real_point3d bases[NUMBER_OF_COMMAND_SIDES];
 	real_point3d middle, middle_ground, spots[COMMAND_OBJECTIVE_TERRITORIES];
+	boolean placed[COMMAND_OBJECTIVE_TERRITORIES];
+	boolean middle_valid;
 	real along_x, along_y, across_x, across_y, length;
 	short index, spot;
 
@@ -6564,8 +6576,17 @@ static void command_objective_territories_choose(
 	along_x = bases[1].x - bases[0].x;
 	along_y = bases[1].y - bases[0].y;
 	length = (real)sqrt(along_x * along_x + along_y * along_y);
-	if (length < 1.f || !command_ground(&middle, &middle_ground, NULL))
+	if (length < 1.f)
 		return;
+	/* (1.1.4, the big team maps: no ground between the bases at all -
+	Danger Canyon's bases face each other across a chasm -: the objectives
+	are the map's own hills, below) */
+	middle_valid = command_ground(&middle, &middle_ground, NULL);
+	if (!middle_valid)
+	{
+		middle_ground = middle;
+		platform_log("command: objectives: no ground between the bases (%.2f %.2f): the map's own hills", middle.x, middle.y);
+	}
 	along_x /= length;
 	along_y /= length;
 	/* (red's left, looking toward blue) */
@@ -6578,7 +6599,8 @@ static void command_objective_territories_choose(
 		boolean found = FALSE;
 		short step;
 
-		for (step = 0; step < 24 && !found; step++)
+		placed[spot] = FALSE;
+		for (step = 0; step < 24 && !found && middle_valid; step++)
 		{
 			real_point3d point = middle_ground;
 			real offset, shift;
@@ -6599,16 +6621,75 @@ static void command_objective_territories_choose(
 			point.x += across_x * offset + along_x * shift;
 			point.y += across_y * offset + along_y * shift;
 			found = command_objective_spot_flat(&point, middle_ground.z, &spots[spot]);
+			/* (1.1.4, the big team maps: flat ground scarce - Death Island's
+			A found 5 wu from B, two rings on one spot - an objective is
+			apart from the ones chosen before it by the supply points' gap) */
+			{
+				short other;
+
+				for (other = 0; found && other < spot; other++)
+				{
+					if (command_distance2d(&spots[spot], &spots[other]) < COMMAND_OBJECTIVE_SUPPLY_APART)
+						found = FALSE;
+				}
+			}
+		}
+		/* (1.1.4, the big team maps: no flat open ground where the spot was
+		wanted - Gephyrophobia's bridge over its chasm, Danger Canyon's chasm
+		-: the map's own hill nearest it, as its maker placed them, one not
+		taken by a spot before; the old spot near the middle only when the
+		map has no hill within reach) */
+		if (!found)
+		{
+			real_point3d wanted = middle_ground;
+			real best_distance = COMMAND_OBJECTIVE_HILL_REACH;
+			short best = NONE;
+
+			wanted.x += across_x * side * (COMMAND_OBJECTIVE_FLANK_FARTHEST + COMMAND_OBJECTIVE_FLANK_NEAREST) / 2.f;
+			wanted.y += across_y * side * (COMMAND_OBJECTIVE_FLANK_FARTHEST + COMMAND_OBJECTIVE_FLANK_NEAREST) / 2.f;
+			for (index = 0; index < command_territory_count; index++)
+			{
+				real distance = command_distance2d(&command_territories[index].center, &wanted);
+				short other;
+
+				/* (a hill taken by a spot before stands for no other; hills
+				as near each other as the map's maker set them may both be
+				objectives: Gephyrophobia's bridge) */
+				for (other = 0; other < spot; other++)
+				{
+					if (placed[other] && command_distance2d(&command_territories[index].center, &spots[other]) < 0.5f)
+						distance = COMMAND_OBJECTIVE_HILL_REACH;
+				}
+				if (distance < best_distance)
+				{
+					best_distance = distance;
+					best = index;
+				}
+			}
+			if (best != NONE)
+			{
+				spots[spot] = command_territories[best].center;
+				found = TRUE;
+				platform_log("command: objective territory %c: no flat open ground found: the map's hill %d (%.1f wu from the spot wanted)",
+					'A' + spot, command_territories[best].hill, best_distance);
+			}
 		}
 		if (!found)
 		{
-			platform_log("command: objective territory %c: no flat open ground found", 'A' + spot);
+			platform_log("command: objective territory %c: no flat open ground found%s", 'A' + spot,
+				middle_valid ? "" : ", no ground between the bases, no hill in reach");
+			if (!middle_valid)
+				continue;
 			spots[spot] = middle_ground;
 			spots[spot].x += across_x * side * COMMAND_OBJECTIVE_FLANK_NEAREST;
 			spots[spot].y += across_y * side * COMMAND_OBJECTIVE_FLANK_NEAREST;
 			if (!command_ground(&spots[spot], &spots[spot], NULL))
-				return;
+			{
+				platform_log("command: objective territory %c: no ground there either: left out", 'A' + spot);
+				continue;
+			}
 		}
+		placed[spot] = TRUE;
 	}
 	/* (a supply point on one let go) */
 	{
@@ -6620,7 +6701,7 @@ static void command_objective_territories_choose(
 
 			for (spot = 0; spot < COMMAND_OBJECTIVE_TERRITORIES; spot++)
 			{
-				if (command_distance2d(&command_territories[index].center, &spots[spot]) < COMMAND_OBJECTIVE_SUPPLY_APART)
+				if (placed[spot] && command_distance2d(&command_territories[index].center, &spots[spot]) < COMMAND_OBJECTIVE_SUPPLY_APART)
 					near = TRUE;
 			}
 			if (near)
@@ -6634,8 +6715,11 @@ static void command_objective_territories_choose(
 	}
 	for (spot = 0; spot < COMMAND_OBJECTIVE_TERRITORIES && command_territory_count < COMMAND_TERRITORIES; spot++)
 	{
-		struct command_territory *territory = &command_territories[command_territory_count++];
+		struct command_territory *territory;
 
+		if (!placed[spot])
+			continue;
+		territory = &command_territories[command_territory_count++];
 		csmemset(territory, 0, sizeof(*territory));
 		territory->center = spots[spot];
 		territory->radius = COMMAND_OBJECTIVE_RADIUS;
