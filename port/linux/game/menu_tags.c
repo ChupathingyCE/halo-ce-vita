@@ -561,6 +561,10 @@ static struct
 	long *fit_bitmaps;
 	long fit_bitmap_count;
 	boolean loaded;
+	/* (1.1.3-insider.4) the Steam screens alone (steam.txt) in ui.map, the Halo PC files not there (or an
+	MCC-only install's Menu style Classic, Halo PC's own menus): the game's menus stay as they are (no screen
+	stands for theirs), and the settings panel's rows open these by name */
+	boolean alone;
 	/* the art: not read yet (0), read (1), failed (-1: the Xbox's screen) */
 	int art;
 	long root_tag;
@@ -2538,6 +2542,20 @@ static boolean menu_tags_art_load(void)
 	halo_menus_art_wait();
 	platform_heap_usage(&heap_before, &heap_capacity);
 	platform_contiguous_usage(&window_before, &window_free);
+	/* (the Steam screens alone, an Xbox-only install: the port's own PNGs, no Halo PC file to open) */
+	if (menu_tags.alone)
+	{
+		for (index = 0; index < menu_tags.png_frame_count && success; index++)
+			success = menu_png_frame_load(&menu_tags.png_frames[index]);
+		success = success && !build.failed && !menu_tags.bitmap_resource_count && !menu_tags.string_resource_count;
+		platform_heap_usage(&heap_after, &heap_capacity);
+		platform_contiguous_usage(&window_after, &window_free);
+		platform_log("menus: the Steam screens' pictures %s in %lu ms (%ld PNGs); C heap %+ld KB, memory window %+ld KB "
+			"(%lu KB free)", success ? "read" : "could not be read", (unsigned long)((vita_host_time_us() - started) / 1000),
+			menu_tags.png_frame_count, ((long)heap_after - (long)heap_before) / 1024,
+			((long)window_after - (long)window_before) / 1024, window_free / 1024);
+		return success;
+	}
 	if (!menu_resource_open(&bitmaps, "bitmaps", _resource_map_bitmaps, TRUE))
 	{
 		halo_menus_art_release();
@@ -2844,6 +2862,7 @@ void menu_tags_loaded(
 
 	menu_tags_changes++;
 	menu_tags.root_tag = menu_tags.xbox_root_tag = NONE;
+	menu_tags.alone = FALSE;
 	menu_tags.classic_count = 0;
 	menu_tags.classic_applied = 0;
 	menu_tags.stub_count = 0;
@@ -2855,9 +2874,47 @@ void menu_tags_loaded(
 	/* (the player's Halo PC data: only that the files are there; what they
 	are, when the screens first open) */
 	if (!menu_resource_files_present())
+	{
+#if defined(HALO_STEAM_DOWNLOAD) || defined(HALO_STEAM_WORKSHOP)
+		/* (1.1.3-insider.4: an Xbox-only install - the Xbox's own menus, as ever - gets the Steam screens alone,
+		steam.txt, the port's own art and fonts: the settings panel's Download from Steam and Steam Workshop rows
+		open them over the Xbox's main menu. Without them such a player could never reach the download that gives
+		them MCC's files. Nothing else of the menus is added, and no screen of the Xbox's is replaced) */
+		if (!ingame)
+			menu_tags.alone = TRUE;
+#endif
+		if (!menu_tags.alone)
+			return;
+	}
+	/* (the Xbox's screens this ui.map has not: an empty widget each) */
+	stub_count = 0;
+	for (index = 0; !ingame && !menu_tags.alone && index < NUMBEROF(xbox_only_widgets); index++)
+		stub_wanted[index] = tag_loaded(UI_WIDGET_DEFINITION_TAG, xbox_only_widgets[index]) == NONE ? TRUE : FALSE;
+	for (index = 0; !ingame && !menu_tags.alone && index < NUMBEROF(xbox_only_widgets); index++)
+		stub_count += stub_wanted[index];
+	/* (an MCC-only install, Menu style Classic: Halo PC's own menus as before the stand-ins, 1.1.3 -
+	the Xbox's screens as they shipped, which a Halo PC ui.map has not. Classic+ (rc.8) has the set:
+	its main menu rows on the map's list, and the Halo 3 set's screens - with Classic+'s own where
+	it has them - for the Xbox screens the map lacks, menu_tags_screen; the Online and Halo 3 styles
+	replace them. Menu style is read here, when the map loads) */
+	if (stub_count && !halo_menu_style_halo3() && !halo_menu_style_classic_plus())
+	{
+		platform_log("menus: this ui.map is Halo PC's (no Xbox screens) and Menu style is Classic: "
+			"the game's own menus; Classic+, Online or Halo 3 style adds OpenCE's screens (restart after changing it)");
+#if defined(HALO_STEAM_DOWNLOAD) || defined(HALO_STEAM_WORKSHOP)
+		/* (1.1.3-insider.4: and the Steam screens alone over them, for the settings panel's rows, as on an
+		Xbox-only install. The whole set's read begun as ui.map loaded, menu_tags_preload, waited for and
+		kept as before - its thread joined -, not built) */
+		(void)halo_menus_load();
+		menu_tags.alone = TRUE;
+		stub_count = 0;
+		memset(stub_wanted, 0, sizeof(stub_wanted));
+#else
 		return;
+#endif
+	}
 	checked = vita_host_time_us();
-	menus = ingame ? halo_menus_load_ingame() : halo_menus_load();
+	menus = ingame ? halo_menus_load_ingame() : menu_tags.alone ? halo_menus_load_steam() : halo_menus_load();
 	if (!menus)
 		return;
 	read = vita_host_time_us();
@@ -2881,30 +2938,13 @@ void menu_tags_loaded(
 			problem(menus->widgets[index].file, menus->widgets[index].line, "two widgets are named",
 				menus->widgets[index].name);
 	}
-	menu_tags.xbox_root_tag = ingame ? NONE : tag_loaded(UI_WIDGET_DEFINITION_TAG, XBOX_MULTIPLAYER_SCREEN);
-	if (!ingame && (menu_tags.xbox_root_tag == NONE || widget_named(menus->root) == NONE))
+	menu_tags.xbox_root_tag = ingame || menu_tags.alone ? NONE : tag_loaded(UI_WIDGET_DEFINITION_TAG, XBOX_MULTIPLAYER_SCREEN);
+	if (!ingame && !menu_tags.alone && (menu_tags.xbox_root_tag == NONE || widget_named(menus->root) == NONE))
 	{
 		platform_log("menus: there is no screen %s (the Xbox's, or ours: %s)", XBOX_MULTIPLAYER_SCREEN, menus->root);
 		goto failed;
 	}
 	total = widget_count + own_lists + menus->string_list_count + menus->bitmap_count + menus->font_count;
-	/* (the Xbox's screens this ui.map has not: an empty widget each) */
-	stub_count = 0;
-	for (index = 0; !ingame && index < NUMBEROF(xbox_only_widgets); index++)
-		stub_wanted[index] = tag_loaded(UI_WIDGET_DEFINITION_TAG, xbox_only_widgets[index]) == NONE ? TRUE : FALSE;
-	for (index = 0; !ingame && index < NUMBEROF(xbox_only_widgets); index++)
-		stub_count += stub_wanted[index];
-	/* (an MCC-only install, Menu style Classic: Halo PC's own menus as before the stand-ins, 1.1.3 -
-	the Xbox's screens as they shipped, which a Halo PC ui.map has not. Classic+ (rc.8) has the set:
-	its main menu rows on the map's list, and the Halo 3 set's screens - with Classic+'s own where
-	it has them - for the Xbox screens the map lacks, menu_tags_screen; the Online and Halo 3 styles
-	replace them. Menu style is read here, when the map loads) */
-	if (stub_count && !halo_menu_style_halo3() && !halo_menu_style_classic_plus())
-	{
-		platform_log("menus: this ui.map is Halo PC's (no Xbox screens) and Menu style is Classic: "
-			"the game's own menus; Classic+, Online or Halo 3 style adds OpenCE's screens (restart after changing it)");
-		goto failed;
-	}
 	total += stub_count;
 	build.halo_pc_ui = stub_count != 0;
 	instances = build.failed ? NULL : instances_grow(total, &build.first_index, &build.first_salt);
@@ -3032,7 +3072,7 @@ void menu_tags_loaded(
 	}
 	if (build.failed)
 		goto failed;
-	menu_tags.root_tag = ingame ? NONE : build.widget_tags[widget_named(menus->root)];
+	menu_tags.root_tag = ingame || menu_tags.alone ? NONE : build.widget_tags[widget_named(menus->root)];
 	/* (the Halo 3 set: each screen and the Xbox screen it stands for, both
 	there) */
 	menu_tags.h3_count = 0;
@@ -3139,19 +3179,24 @@ void menu_tags_loaded(
 			halo_menu_style_halo3() ? "Halo 3" : "Halo CE");
 	menu_tags.loaded = TRUE;
 	classic_patches_apply();
-	if (!ingame)
+	/* (the Steam screens alone: the menus are still the Xbox's, for the settings panel's word on them; their
+	PNGs read the first time a row opens one - nothing read ahead, nothing of Halo PC's to read) */
+	if (!ingame && !menu_tags.alone)
 		halo_pc_menus_state = 1;
-	menu_tags_art_preread();
+	if (!menu_tags.alone)
+		menu_tags_art_preread();
 	platform_log("menus: %s: %ld widgets, %ld string lists and %ld bitmaps added to "
 		"%s.map's %ld tags in %lu us (the Halo PC files checked %lu, the XML read %lu, the tags %lu; the pictures "
-		"and text are read when they first open)", ingame ? "the in-game screens" : "OpenCE's multiplayer screens",
+		"and text are read when they first open)", ingame ? "the in-game screens" : menu_tags.alone ?
+		"the Steam screens alone (the game's own menus)" : "OpenCE's multiplayer screens",
 		widget_count, own_lists + menus->string_list_count, menus->bitmap_count, map_name, build.first_index,
 		(unsigned long)(vita_host_time_us() - started), (unsigned long)(checked - started),
 		(unsigned long)(read - checked), (unsigned long)(vita_host_time_us() - read));
 	goto done;
 
 failed:
-	platform_log("menus: %s not added; the game's own", ingame ? "the in-game screens" : "OpenCE's multiplayer screens");
+	platform_log("menus: %s not added; the game's own", ingame ? "the in-game screens" : menu_tags.alone ?
+		"the Steam screens alone" : "OpenCE's multiplayer screens");
 	menu_tags_release();
 
 done:
@@ -3387,6 +3432,10 @@ long menu_tags_screen(
 	if (tag_index != NONE && getenv("HALO_MENUS_DUMP") && !strcmp(getenv("HALO_MENUS_DUMP"), tag_get_name(tag_index)))
 		menu_tags_dump(tag_index, 0);
 	if (!menu_tags.loaded || tag_index == NONE)
+		return tag_index;
+	/* (the Steam screens alone, an Xbox-only install: the Xbox's menus as they are, whatever the Menu style;
+	ours open only by name, menu_tags_ingame_screen) */
+	if (menu_tags.alone)
 		return tag_index;
 	/* (the Xbox screens with Menu style Halo CE's rows, or without) */
 	classic_patches_apply();

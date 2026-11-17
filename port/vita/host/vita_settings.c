@@ -477,6 +477,9 @@ enum
 	/* (Modded maps, a build with the Steam Workshop) the STEAM WORKSHOP
 	screen over the game's main menu (SYSTEM_LINK_REQUEST_WORKSHOP) */
 	ACTION_WORKSHOP,
+	/* (Modded maps, a build with the Steam download) DOWNLOAD FROM STEAM
+	over the game's main menu (SYSTEM_LINK_REQUEST_STEAM) */
+	ACTION_STEAM_DOWNLOAD,
 };
 
 struct setting
@@ -1074,6 +1077,15 @@ static struct setting settings[] = {
 	MCC mods with the game's own checks, turned off and on, deleted;
 	port/linux/game/mod_manager.c answers, mod_manager_share.h) */
 	PAGE_ROW("Mod manager", "Custom maps and MCC mods: check, on, off, delete", PAGE_MAPS, PAGE_MODS),
+#ifdef HALO_STEAM_DOWNLOAD
+	/* (1.1.3-insider.4: the Steam download - Halo CE's files from the
+	player's own MCC on Steam - for every Menu style and every install: an
+	Xbox-only one, whose menus are the Xbox's, has no GAME MANAGER, and this
+	is how it gets MCC's files. The game opens DOWNLOAD FROM STEAM over the
+	main menu, SYSTEM_LINK_REQUEST_STEAM) */
+	{ "Download from Steam", NULL, 0, 0, { NULL }, { NULL }, "Halo CE's MCC files from your own Steam", 0,
+		PAGE_MAPS, KIND_ACTION, ACTION_STEAM_DOWNLOAD },
+#endif
 #ifdef HALO_STEAM_WORKSHOP
 	/* (the Steam Workshop - MCC's Halo CE mods and multiplayer maps from the
 	player's own Steam sign-in - for every Menu style: the game opens its
@@ -7258,8 +7270,10 @@ static void act(const struct setting *setting)
 	case ACTION_SAVE_REPORT:
 		report_start();
 		break;
-	/* (the STEAM WORKSHOP screen, at the game's main menu) */
+	/* (the STEAM WORKSHOP screen, or DOWNLOAD FROM STEAM, at the game's
+	main menu) */
 	case ACTION_WORKSHOP:
+	case ACTION_STEAM_DOWNLOAD:
 	{
 		int state = multiplayer_state();
 
@@ -7269,8 +7283,10 @@ static void act(const struct setting *setting)
 			set_notice("%s", T("Leave the network game's lobby first"));
 		else
 		{
-			__atomic_store_n(&halo_system_link_request, SYSTEM_LINK_REQUEST_WORKSHOP, __ATOMIC_RELEASE);
-			vita_host_log("settings: Steam Workshop asked for (settings panel)");
+			__atomic_store_n(&halo_system_link_request, setting->action == ACTION_STEAM_DOWNLOAD ?
+				SYSTEM_LINK_REQUEST_STEAM : SYSTEM_LINK_REQUEST_WORKSHOP, __ATOMIC_RELEASE);
+			vita_host_log(setting->action == ACTION_STEAM_DOWNLOAD ? "settings: Download from Steam asked for (settings panel)" :
+				"settings: Steam Workshop asked for (settings panel)");
 			close_panel();
 		}
 		break;

@@ -241,6 +241,13 @@ void halo_menus_preload(void);
 /* the menus a level's map gets (ingame.txt: the Halo 3 pause screen), read
 the first time one loads; NULL when there are none or they have a problem */
 struct halo_menus const *halo_menus_load_ingame(void);
+/* (1.1.3-insider.4) the Steam screens alone (steam.txt: DOWNLOAD FROM STEAM and
+STEAM WORKSHOP, the port's own art and fonts, nothing of Halo PC's), which
+ui.map gets when the Halo PC files are not there - an Xbox-only install, whose
+menus are the Xbox's: the settings panel's rows open them over those, and the
+download is how such a player gets MCC's files. Read the first time; NULL
+when there are none or they have a problem */
+struct halo_menus const *halo_menus_load_steam(void);
 /* a file of the menus folder (a frame's PNG), read whole, NULL if it cannot
 be read; halo_menus_file_free lets it go (the platform layer's heap, not
 the game's) */

@@ -354,6 +354,19 @@
 #            Spanish, the Vita's buttons)
 #   h3workshoptouch  the same browser by touch (HALO_TEST_TAPS): a tap on a card opens its details page, a tap
 #            on Back closes it, a swipe turns the page, a tap on SUBSCRIBED changes the tab
+#   steampanel  (1.1.3-insider.4) the settings panel's Download from Steam and Steam Workshop rows
+#            (HALO_SYSTEM_LINK_TEST=steam, workshop) in every Menu style (original, classic, halo3,
+#            online) on every install: the Xbox files alone (HALO_TEST_DATA, HALO_CONTENT_ROOT=none:
+#            the Xbox's menus and ui.map's Steam screens alone, steam.txt), MCC's files alone (a data
+#            folder with no map, HALO_TEST_MCC_ROOT's halo1 linked into a content folder; Classic: Halo
+#            PC's own menus and the Steam screens alone) and both: DOWNLOAD FROM STEAM or STEAM WORKSHOP
+#            opens over the main menu, B goes back to that main menu, no assertion (a build with the
+#            Steam download alone; else SKIP)
+#   steampanelget  (1.1.3-insider.4) the Xbox files alone, Menu style Classic, against steam_fake_server.py
+#            (a Steam Workshop test build alone; else SKIP): the panel's Download from Steam - SIGN IN, the
+#            QR, the fake's approval, Halo CE's 23 made-up files, the end's restart line, B back to the
+#            Xbox's main menu -, then the panel's Steam Workshop - SIGN IN, POPULAR's page 1 listed with its
+#            pictures at the Vita's C heap, signed out, B back; with HALO_TEST_SHOTS, the screens' pictures
 #   h3mods   the Halo 3 MOD MANAGER (menus/halo3/mods.xml, the main menu's) over
 #            content made at test time (mods_data: a modded Xbox map made from
 #            Blood Gulch, a corrupt file, a Custom Edition header with nothing
@@ -517,7 +530,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3workshop h3workshoptouch h3workshoppicker h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -813,7 +826,8 @@ for case in $cases; do
 			HALO_TEST_WIDGET_FUNCTION=76
 		check_pause ;;
 	xbox)
-		run xbox "$data" 40 "$pad"
+		# (no Halo content folder: this PC's own MCC, found by itself, would bring the Halo PC files)
+		run xbox "$data" 40 "$pad" HALO_CONTENT_ROOT=none
 		check xbox xbox ;;
 	h3probe)
 		run h3probe "$menus_data" 20 "$h3pad" HALO_MENU_STYLE=halo3
@@ -822,7 +836,7 @@ for case in $cases; do
 		run h3classic "$menus_data" 20 "$h3pad" HALO_MENU_STYLE=classic
 		check_h3 h3classic classic ;;
 	h3xbox)
-		run h3xbox "$data" 20 "$h3pad" HALO_MENU_STYLE=halo3
+		run h3xbox "$data" 20 "$h3pad" HALO_MENU_STYLE=halo3 HALO_CONTENT_ROOT=none
 		check_h3 h3xbox classic
 		grep -aq "menus: OpenCE" "$out/h3xbox/run.log" && fail h3xbox "OpenCE's screens were added without the Halo PC files" ;;
 	h3broken)
@@ -2394,6 +2408,144 @@ for case in $cases; do
 		grep -aqF "$fake_token" "$log" && fail h3steam "the token is in the log"
 		grep -raqF "$fake_token" "$out/h3steam/card" && fail h3steam "the token is in a file written"
 		;;
+	steampanel)
+		if ! grep -aq "menus: steam: the screen opened" "$binary"; then
+			echo "--- steampanel"; echo "SKIP (steampanel): not a Steam download build (configure.py --steam-download)"
+			continue
+		fi
+		sp_mcc=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
+		sp_installs="xbox both mcc"
+		if [ ! -r "$sp_mcc/maps/ui.map" ] || [ ! -r "$sp_mcc/maps/custom_edition/bitmaps.map" ]; then
+			echo "(steampanel: no MCC halo1 folder at $sp_mcc - HALO_TEST_MCC_ROOT -: the Xbox files alone)"
+			sp_installs=xbox
+		else
+			# (MCC's maps and its custom_edition folder, linked read only, never copied; and a data folder
+			# with no map, for MCC's files alone)
+			rm -rf "$out/sp-content" "$out/sp-none"
+			mkdir -p "$out/sp-content/halo1/maps" "$out/sp-none/maps"
+			for file in "$sp_mcc"/maps/*.map "$sp_mcc"/maps/custom_edition; do
+				ln -sfn "$file" "$out/sp-content/halo1/maps/"
+			done
+		fi
+		for sp_install in $sp_installs; do
+			case $sp_install in
+			xbox) sp_folder=$data sp_content=none ;;
+			both) sp_folder=$data sp_content=$out/sp-content ;;
+			mcc) sp_folder=$out/sp-none sp_content=$out/sp-content ;;
+			esac
+			for sp_style in original classic halo3 online; do
+				for sp_row in steam workshop; do
+					[ $sp_row = workshop ] && ! grep -aq "port h3 workshop mark" "$binary" && continue
+					# (B well after the screen opened: Menu style Online's live background fades in first, the
+					# main menu's scene packs built - input waits for it)
+					run sp-$sp_install-$sp_style-$sp_row "$sp_folder" 25 "wait:150:14000 b wait:150:5000" \
+						HALO_MENU_STYLE=$sp_style HALO_CONTENT_ROOT="$sp_content" HALO_SYSTEM_LINK_TEST=$sp_row &
+				done
+				[ $sp_style = classic ] && wait
+			done
+			wait
+			for sp_style in original classic halo3 online; do
+				for sp_row in steam workshop; do
+					sp_name=sp-$sp_install-$sp_style-$sp_row
+					[ -e "$out/$sp_name/exit" ] || continue
+					log=$out/$sp_name/run.log
+					echo "--- $sp_name"
+					grep -aE "menus: (the Steam|OpenCE|Halo 3 set)|ui: screen|system link: the settings" "$log" | head -8
+					[ "$(cat "$out/$sp_name/exit")" = 0 ] || fail $sp_name "exit $(cat "$out/$sp_name/exit")"
+					grep -av "render assertion skipped" "$log" | grep -aqiE "assert|exception|halt" &&
+						fail $sp_name "an assertion, exception or halt"
+					grep -aq "system link: the settings panel's .*: the $( [ $sp_row = steam ] && echo DOWNLOAD FROM STEAM ||
+						echo STEAM WORKSHOP) screen opened" "$log" || fail $sp_name "the panel's row did not open its screen"
+					grep -aq "ui: screen pc.h3.$sp_row.screen" "$log" || fail $sp_name "the screen did not open"
+					# (B: back to the screen it opened over - the main menu, whichever)
+					awk -v want="pc\\\\h3\\\\$sp_row\\\\screen" '/ui: screen / { name = $NF; if (name == want) { seen = 1; next }
+						if (!seen) before = name; else if (name == before) back = 1 } END { exit !back }' "$log" ||
+						fail $sp_name "B did not go back to the screen it opened over"
+					# (the Xbox files alone, or MCC's alone with Menu style Classic: the game's own menus, the Steam
+					# screens alone; else the whole set)
+					if [ $sp_install = xbox ] || { [ $sp_install = mcc ] && [ $sp_style = original ]; }; then
+						grep -aq "menus: the Steam screens alone (the game's own menus):" "$log" ||
+							fail $sp_name "the Steam screens alone were not added"
+						grep -aq "menus: OpenCE" "$log" && fail $sp_name "OpenCE's screens were added"
+						grep -aq "menus: Halo 3 screen" "$log" && fail $sp_name "a Halo 3 screen stood for one of the game's"
+					else
+						grep -aq "menus: the Steam screens alone" "$log" && fail $sp_name "the Steam screens alone with the whole set"
+					fi
+				done
+			done
+		done ;;
+	steampanelget)
+		if ! grep -aq "port h3 workshop mark" "$binary" || ! grep -aq "HALO_STEAM_TEST_IMAGES" "$binary"; then
+			echo "--- steampanelget"; echo "SKIP (steampanelget): not a Steam Workshop test build (configure.py --steam-workshop --steam-test-ca)"
+			continue
+		fi
+		ws_map=${HALO_TEST_WORKSHOP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/chillout.map}
+		[ -f "$ws_map" ] || ws_map=$data/maps/chillout.map
+		for sp_row in steam workshop; do
+			sp_name=spget-$sp_row
+			mkdir -p "$out/$sp_name-fake"
+			rm -f "$out/$sp_name-fake/stdin" "$out/$sp_name-fake/transcript.txt"; mkfifo "$out/$sp_name-fake/stdin"
+			python3 -I "$here/steam_fake_server.py" --work "$out/$sp_name-fake" --chunk-kb 1024 --workshop-map "$ws_map" \
+				--mode slow < "$out/$sp_name-fake/stdin" > "$out/$sp_name-fake/server.json" &
+			fake_pid=$!
+			exec 7> "$out/$sp_name-fake/stdin"
+			for i in $(seq 300); do [ -s "$out/$sp_name-fake/server.json" ] && break; sleep 0.1; done
+			fake_cm=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cm"])' "$out/$sp_name-fake/server.json")
+			fake_cdn=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cdn"])' "$out/$sp_name-fake/server.json")
+			fake_token=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$out/$sp_name-fake/server.json")
+			sp_shots=$out/$sp_name-shots
+			rm -rf "$sp_shots"; mkdir -p "$sp_shots"
+			if [ $sp_row = steam ]; then
+				# (the screen over the Xbox's main menu, its first row focused: down to SIGN IN, A; the QR, approved; the
+				# download; the end; B)
+				sp_pad="wait:150:8000 @steam_notice wait:150:300 down:150:500 a wait:150:1200 @steam_qr wait:150:12000 @steam_progress wait:150:25000 @steam_done wait:150:300 b wait:150:3000 @steam_back"
+				sp_seconds=75
+			else
+				# (SIGN IN, the QR, approved; the grid; B signs out, B leaves)
+				sp_pad="wait:150:8000 @ws_notice wait:150:300 a wait:150:500 @ws_qr wait:150:14000 @ws_grid wait:150:300 b wait:150:5000 @ws_end wait:150:300 b wait:150:3000 @ws_back"
+				sp_seconds=60
+			fi
+			run $sp_name "$data" $sp_seconds "$sp_pad" \
+				HALO_MENU_STYLE=original HALO_CONTENT_ROOT=none HALO_SYSTEM_LINK_TEST=$sp_row \
+				HALO_STEAM_TEST_CM="ws://127.0.0.1:$fake_cm/cmsocket/" HALO_STEAM_TEST_CDN="http://127.0.0.1:$fake_cdn" \
+				HALO_STEAM_TEST_IMAGES="http://127.0.0.1:$fake_cdn" HALO_STEAM_TEST_ROOT="$out/$sp_name/card" \
+				HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1 HALO_SCREENSHOT_DIR="$sp_shots" HALO_SCREENSHOT_EVERY=100000000 \
+				HALO_HEAP_LIMIT_KB=48988 HALO_WINDOW_FLOOR_KB=66752 HALO_BUTTON_ICONS=playstation \
+				${HALO_TEST_STEAM_SPANISH:+HALO_LANGUAGE=es "HALO_TEST_LANG_DIR=$root/port/vita/app0/lang"}
+			exec 7>&-
+			wait "$fake_pid" 2>/dev/null || true
+			log=$out/$sp_name/run.log
+			echo "--- $sp_name"
+			grep -aE "menus: (the Steam|steam:|workshop: (sign|memory))|ui: screen|system link: the settings|steam job: (QR|sign-in|workshop page 1 )" "$log" | head -16
+			[ "$(cat "$out/$sp_name/exit")" = 0 ] || fail $sp_name "exit $(cat "$out/$sp_name/exit")"
+			grep -aqiE "assert|exception|halt" "$log" && fail $sp_name "an assertion, exception or halt"
+			grep -aq "menus: the Steam screens alone (the game's own menus):" "$log" || fail $sp_name "the Steam screens alone were not added"
+			grep -aq "menus: OpenCE" "$log" && fail $sp_name "OpenCE's screens were added without the Halo PC files"
+			grep -aq "ui: screen pc.h3.$sp_row.screen" "$log" || fail $sp_name "the screen did not open"
+			grep -aq "steam job: QR 1 up" "$log" || fail $sp_name "no QR"
+			grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log" ||
+				fail $sp_name "the session did not end done, revoked and logged off"
+			awk '/ui: screen pc.h3.(steam|workshop).screen/ { seen = 1; next } seen && /ui: screen ui.shell.main_menu.main_menu$/ { back = 1 }
+				END { exit !back }' "$log" || fail $sp_name "B did not go back to the Xbox's main menu"
+			grep -aqF "$fake_token" "$log" && fail $sp_name "the token is in the log"
+			grep -raqF "$fake_token" "$out/$sp_name/data" "$out/$sp_name/save" "$out/$sp_name/card" 2>/dev/null &&
+				fail $sp_name "the token is in a file written"
+			if [ $sp_row = steam ]; then
+				grep -aq "menus: steam: sign-in begun (games 3)" "$log" || fail $sp_name "the sign-in did not begin for Halo CE with the banks"
+				[ "$(find "$out/$sp_name/card/haloce-vita/mcc/halo1" -type f 2>/dev/null | wc -l)" = 23 ] ||
+					fail $sp_name "not the 23 made-up Halo CE files"
+				grep -aq "menus: steam: left after the download (23 files new: a restart said)" "$log" ||
+					fail $sp_name "the end did not say to restart"
+			else
+				grep -aq "menus: workshop: sign-in begun" "$log" || fail $sp_name "the sign-in did not begin"
+				grep -aq "steam job: workshop page 1 (list 0): 8 items of 19" "$log" || fail $sp_name "POPULAR's page 1 not listed"
+				[ "$(grep -ac "steam job: workshop picture [0-7]: made" "$log")" -ge 8 ] || fail $sp_name "the cards' pictures were not made"
+			fi
+			if [ -n "${HALO_TEST_SHOTS:-}" ]; then
+				mkdir -p "$HALO_TEST_SHOTS/$sp_name"
+				cp "$sp_shots"/*.bmp "$HALO_TEST_SHOTS/$sp_name/" 2>/dev/null
+			fi
+		done ;;
 	h3workshop|h3workshoptouch)
 		ws_map=${HALO_TEST_WORKSHOP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/chillout.map}
 		if ! grep -aq "port h3 workshop mark" "$binary" || ! grep -aq "HALO_STEAM_TEST_IMAGES" "$binary"; then

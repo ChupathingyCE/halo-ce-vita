@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The Steam screens alone (steam.txt): the fonts, pictures and pieces DOWNLOAD FROM STEAM (steam.xml) and STEAM
+WORKSHOP (workshop.xml) take from the Halo 3 set's other files (main.xml, campaign.xml, fileshare.xml,
+multiplayer.xml), the same names and art, for ui.map without the Halo PC files - an Xbox-only install, the Xbox's
+own menus, the settings panel's rows opening these over them. Keep them as those files have them. -->
+<menus>
+	<!-- the Halo 3 menus' own fonts (tools/halo3_menu_art.py, Saira Semi Condensed, SIL OFL) -->
+	<font name="h3/font_title" file="halo3/font_title.bin"/>
+	<font name="h3/font_item" file="halo3/font_item.bin"/>
+	<font name="h3/font_small" file="halo3/font_small.bin"/>
+	<bitmap name="h3/haze">
+		<frame png="halo3/haze.png" width="64" height="64"/>
+	</bitmap>
+	<bitmap name="h3/panel">
+		<frame png="halo3/panel.png" width="64" height="64"/>
+	</bitmap>
+	<bitmap name="h3/strip">
+		<frame png="halo3/strip.png" width="64" height="16"/>
+	</bitmap>
+	<bitmap name="h3/rule">
+		<frame png="halo3/rule.png" width="128" height="2"/>
+	</bitmap>
+	<bitmap name="h3/item">
+		<frame png="halo3/item_off.png" width="128" height="16"/>
+		<frame png="halo3/item_on.png" width="128" height="16"/>
+	</bitmap>
+	<bitmap name="h3/row">
+		<frame png="halo3/item_off.png" width="128" height="16"/>
+		<frame png="halo3/row_on.png" width="128" height="16"/>
+	</bitmap>
+	<bitmap name="h3/glyph_cross">
+		<frame png="halo3/glyph_cross.png" width="16" height="16"/>
+	</bitmap>
+	<bitmap name="h3/glyph_circle">
+		<frame png="halo3/glyph_circle.png" width="16" height="16"/>
+	</bitmap>
+	<bitmap name="h3/glyph_square">
+		<frame png="halo3/glyph_square.png" width="16" height="16"/>
+	</bitmap>
+	<bitmap name="h3/glyph_triangle">
+		<frame png="halo3/glyph_triangle.png" width="16" height="16"/>
+	</bitmap>
+	<bitmap name="h3/glyph_start">
+		<frame png="halo3/glyph_start.png" width="16" height="16"/>
+	</bitmap>
+	<bitmap name="h3/glyph_l">
+		<frame png="halo3/glyph_l.png" width="16" height="16"/>
+	</bitmap>
+	<bitmap name="h3/glyph_r">
+		<frame png="halo3/glyph_r.png" width="16" height="16"/>
+	</bitmap>
+	<widget name="h3/main/haze" left="0" top="0" width="640" height="480" bitmap="h3/haze"/>
+	<widget name="h3/pick/panel" left="40" top="40" width="560" height="400" bitmap="h3/panel"/>
+	<widget name="h3/pick/rule" left="40" top="72" width="560" height="2" bitmap="h3/rule"/>
+	<widget name="h3/pick/strip" left="40" top="420" width="560" height="20" bitmap="h3/strip"/>
+</menus>

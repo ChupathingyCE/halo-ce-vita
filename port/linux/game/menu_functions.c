@@ -12943,6 +12943,14 @@ static void h3_steam_update(struct widget_instance *list)
 		break;
 	case STEAM_JOB_DONE:
 		snprintf(text, sizeof(text), T("Done: %u files downloaded, %u already there. Signed out of Steam."), view.files_done, view.files_already);
+		/* (1.1.3-insider.4: the game reads MCC's files as it starts - the Halo content folder, the sound banks, the
+		new menus an Xbox-only install now gets from them -, so new files take at the next start: said) */
+		if (view.files_done)
+		{
+			strncat(text, "\n\n", sizeof(text) - strlen(text) - 1);
+			strncat(text, T("Restart the game to use them."),
+				sizeof(text) - strlen(text) - 1);
+		}
 		break;
 	case STEAM_JOB_FAILED:
 	case STEAM_JOB_CANCELLED:
@@ -13044,6 +13052,9 @@ static boolean h3_steam_back(void)
 		steam_job_cancel();
 		return FALSE;
 	}
+	/* (the end's restart line, h3_steam_update: in the log too) */
+	if (view.phase == STEAM_JOB_DONE && view.files_done)
+		platform_log("menus: steam: left after the download (%u files new: a restart said)", view.files_done);
 	steam_job_forget();
 #endif
 	h3_steam.message[0] = 0;
@@ -14341,6 +14352,29 @@ int menu_functions_workshop_open(void)
 		return 0;
 	}
 	platform_log("menus: workshop: the screen opened (the settings panel's Steam Workshop)");
+	return 1;
+#else
+	return 0;
+#endif
+}
+
+/* (system_link_shortcut.c: the settings panel's Download from Steam row, for every Menu style - an Xbox-only
+install too, whose ui.map gets the Steam screens alone, menu_tags.c) DOWNLOAD FROM STEAM opened over the active
+screen (the main menu), as GAME MANAGER's row opens it: 1 if it opened */
+int menu_functions_steam_open(void)
+{
+#ifdef HALO_STEAM_DOWNLOAD
+	long screen = menu_tags_ingame_screen("h3/steam/screen");
+	struct widget_instance *active = ui_widget_port_active_screen(0);
+
+	if (screen == NONE || !active || !ui_widget_load_by_name_or_tag(NULL, screen, NULL, active->local_player_index,
+		active->definition_tag_index, NONE, NONE))
+	{
+		platform_log("menus: steam: the screen did not open (%s)", screen == NONE ? "no screen" : "no screen up");
+		return 0;
+	}
+	h3_steam.message[0] = 0;
+	platform_log("menus: steam: the screen opened (the settings panel's Download from Steam)");
 	return 1;
 #else
 	return 0;

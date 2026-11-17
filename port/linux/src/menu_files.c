@@ -1220,6 +1220,22 @@ struct halo_menus const *halo_menus_load_ingame(void)
 	return succeeded ? &menus : NULL;
 }
 
+struct halo_menus const *halo_menus_load_steam(void)
+{
+	static int read;
+	static struct halo_menus menus;
+	static int succeeded;
+
+	pthread_mutex_lock(&preload_lock);
+	if (!read)
+	{
+		read = 1;
+		succeeded = menus_read("steam.txt", 0, &menus);
+	}
+	pthread_mutex_unlock(&preload_lock);
+	return succeeded ? &menus : NULL;
+}
+
 /* ---------- the Halo PC pictures and text, read ahead (halo_menus.h) */
 
 enum

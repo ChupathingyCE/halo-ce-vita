@@ -206,6 +206,16 @@ configure.py refuses it with --release) adds the fake server's authority and the
 (HALO_STEAM_TEST_CM/_CDN/_ROOT): a game build never has them, and run_menus_test.sh's h3steam case checks the
 binary for the hook's name before it uses them.
 
+**Where the screens open (1.1.3-insider.4)**: GAME MANAGER's row (Halo 3, ElDewrito, Classic+), and in every Menu
+style and on every install the settings panel's Multiplayer > Modded maps > Download from Steam and Steam Workshop
+rows (SYSTEM_LINK_REQUEST_STEAM / _WORKSHOP, system_link_shortcut.c). The screens are port menus; with the Xbox
+files alone (or MCC's alone in Menu style Classic, Halo PC's own menus) ui.map gets them alone - menus/steam.txt:
+halo3/steam_alone.xml (the port's own fonts and PNGs, nothing of Halo PC's), steam.xml, workshop.xml -, built
+by menu_tags.c as the whole set is but replacing none of the game's screens (menu_tags.alone): opened by name over
+the main menu, Circle back to it. That is how an Xbox-only player gets MCC's files. New files take at the next
+start (the content folder, the sound banks and the new menus are read as the game starts): the end says "Restart
+the game to use them." (run_menus_test.sh steampanel, steampanelget)
+
 **Credentials and tokens**: never persisted. The only file the sign-in writes besides the game's files is the
 no-secret marker steam-session.txt (a date and the device name). The journal (`.part.journal`) holds depot id,
 gid, size and chunk SHA-1s. The fake-server flows grep every file written and the log for the fake tokens

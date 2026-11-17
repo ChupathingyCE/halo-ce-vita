@@ -1,0 +1,8 @@
+# The Steam screens alone (port/linux/src/menu_files.c halo_menus_load_steam, built into ui.map's tags by
+# port/linux/game/menu_tags.c): what ui.map gets when the Halo PC files are not there - an Xbox-only
+# install keeps the Xbox's own menus, and the settings panel's Download from Steam and Steam Workshop rows
+# open these over them (the download is how such a player gets MCC's files). Their look is the Halo 3
+# set's blue one, every Menu style; nothing in them is Halo PC's (the port's own PNGs and fonts)
+halo3/steam_alone.xml
+halo3/steam.xml
+halo3/workshop.xml

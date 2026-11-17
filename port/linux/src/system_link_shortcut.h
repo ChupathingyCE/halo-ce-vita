@@ -33,6 +33,12 @@ enum
 	FROM STEAM's) opened over the main menu, in any Menu style: the settings
 	panel's Steam Workshop row, for the original menus too */
 	SYSTEM_LINK_REQUEST_WORKSHOP,
+	/* (a build with the Steam download, configure.py --steam-download or
+	--steam-workshop) DOWNLOAD FROM STEAM (menus/halo3/steam.xml, GAME
+	MANAGER's) opened over the main menu, in any Menu style - an Xbox-only
+	install's too (the Steam screens alone, menu_tags.c): the settings
+	panel's Download from Steam row (1.1.3-insider.4) */
+	SYSTEM_LINK_REQUEST_STEAM,
 };
 
 /* (SYSTEM_LINK_REQUEST_FORGE, halo_forge_request_mode) the game the panel's

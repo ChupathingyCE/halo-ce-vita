@@ -3599,7 +3599,8 @@
 # ---------- DOWNLOAD FROM STEAM: STEAM WORKSHOP (halo3/workshop.xml, menu_functions.c h3_workshop_*)
 "STEAM WORKSHOP" = "STEAM WORKSHOP"
 "STEAM WORKSHOP: MCC MODS AND MAPS" = "STEAM WORKSHOP: MODS Y MAPAS DE MCC"
-"The Steam Workshop needs your MCC or Halo PC files: its screen is one of the new menus, which are built from them. With the Xbox files alone it can't open." = "El Steam Workshop necesita tus archivos de MCC o de Halo PC: su pantalla es uno de los menús nuevos, que se hacen con ellos. Solo con los archivos de Xbox no se puede abrir."
+"Its screen could not be opened: the game's menus folder is incomplete. Install the VPK again." = "Su pantalla no se pudo abrir: a la carpeta de menús del juego le faltan archivos. Instala el VPK de nuevo."
+"Restart the game to use them." = "Reinicia el juego para usarlos."
 "Search" = "Buscar"
 "not in the game's folder" = "no está en la carpeta del juego"
 "Not installed (%llu): %s\n" = "No instalado (%llu): %s\n"
@@ -3694,6 +3695,8 @@
 "The host is playing %s, a map from the Steam Workshop (item %s).\n\n%s" = "El anfitrión juega %s, un mapa del Steam Workshop (elemento %s).\n\n%s"
 "The host's game started before the Steam download ended: join again once the item is installed." = "La partida del anfitrión empezó antes de que terminara la descarga de Steam: vuelve a unirte cuando el elemento esté instalado."
 "MCC's Halo CE mods and maps, from your own Steam" = "Mods y mapas de Halo CE de MCC, desde tu propio Steam"
+"Download from Steam" = "Descargar desde Steam"
+"Halo CE's MCC files from your own Steam" = "Los archivos de Halo CE de MCC, desde tu propio Steam"
 "The host is playing %s, a map from the Steam Workshop, which you don't have. You answered no to downloading it." = "El anfitrión juega %s, un mapa del Steam Workshop, que no tienes. Respondiste que no a descargarlo."
 
 # ---------- 1.1.5: FIREFIGHT (forge.c's forge_modes.inc: its HUD, banners and carnage report; the Firefight lobby and

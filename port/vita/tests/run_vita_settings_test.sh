@@ -37,9 +37,10 @@ build "$out/release/vita_settings_test" '-DHALO_VITA_VERSION="1.1.0"'
 ln -s "$root/port/vita/app0/lang" "$out/release/app0:lang"
 echo "--- as a release build (1.1.0)"
 (cd "$out/release" && ./vita_settings_test) || status=$?
-# (again as a Steam Workshop build, configure.py --steam-workshop: Modded maps' Steam Workshop row)
+# (again as a Steam Workshop build, configure.py --steam-workshop - which implies the Steam download -: Modded
+# maps' Download from Steam and Steam Workshop rows)
 mkdir -p "$out/workshop"
-build "$out/workshop/vita_settings_test" -DHALO_STEAM_WORKSHOP=1
+build "$out/workshop/vita_settings_test" -DHALO_STEAM_DOWNLOAD=1 -DHALO_STEAM_WORKSHOP=1
 ln -s "$root/port/vita/app0/lang" "$out/workshop/app0:lang"
 echo "--- as a Steam Workshop build"
 (cd "$out/workshop" && ./vita_settings_test) || status=$?

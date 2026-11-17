@@ -47,7 +47,8 @@ place takes test_card_delay_us, as ux0's file calls took 27-137 ms a save
 on the testers' Vitas; the saves put in place counted) */
 static volatile unsigned long test_card_delay_us;
 static volatile int test_settings_renames;
-/* (the Modded maps page: 1 when a Workshop build adds its Steam Workshop row, the later lines a line down) */
+/* (the Modded maps page: the rows a Steam build adds under Mod manager - Download from Steam, and the Steam
+Workshop row in a Workshop build -, the later lines that many down) */
 static int ws;
 static int test_rename(const char *from, const char *to);
 /* (the Vita's rule for the threads vita_host_thread_start_* makes: theirs
@@ -6265,12 +6266,17 @@ int main(void)
 	check(to_tab("Multiplayer") && strstr(menu, "\nModded maps\x02  4 maps  >"), "Multiplayer: Modded maps says how many");
 	check(open_page("Modded maps") && strstr(menu, "\n\x03Multiplayer > Modded maps\n"), "the Modded maps page");
 	printf("%s\n--\n", menu);
-	/* (a build with the Steam Workshop: its row under Mod manager, the rest a line down) */
-#ifdef HALO_STEAM_WORKSHOP
-	ws = 1;
-	check(!strcmp(menu_line(3, line, sizeof(line)), "Steam Workshop\x02  >"), "Modded maps: the Steam Workshop row (a Workshop build)");
-#else
+	/* (a build with the Steam download: its row under Mod manager, then (the Steam Workshop) the Workshop's, the
+	rest that many lines down) */
 	ws = 0;
+#ifdef HALO_STEAM_DOWNLOAD
+	check(!strcmp(menu_line(3, line, sizeof(line)), "Download from Steam\x02  >"),
+		"Modded maps: the Download from Steam row (a Steam build: every Menu style, an Xbox-only install too)");
+	ws++;
+#endif
+#ifdef HALO_STEAM_WORKSHOP
+	check(!strcmp(menu_line(3 + ws, line, sizeof(line)), "Steam Workshop\x02  >"), "Modded maps: the Steam Workshop row (a Workshop build)");
+	ws++;
 #endif
 	check(!strcmp(menu_line(2, line, sizeof(line)), "Mod manager\x02  >") &&
 		!strncmp(menu_line(3 + ws, line, sizeof(line)), "PC maps\x02", 8) &&
@@ -6288,6 +6294,31 @@ int main(void)
 		!strncmp(menu_line(15 + ws, line, sizeof(line)), "inplay\x02", 7) &&
 		!strncmp(menu_line(16 + ws, line, sizeof(line)), "mygulch\x02", 8) && menu_line(17 + ws, line, sizeof(line))[0] == '\x05',
 		"the custom maps listed in order, not the Xbox's or CE resource maps");
+#ifdef HALO_STEAM_DOWNLOAD
+	/* (1.1.3-insider.4) Download from Steam: Cross asks the game for DOWNLOAD FROM STEAM over the main menu
+	(SYSTEM_LINK_REQUEST_STEAM; an Xbox-only install's too) and closes the panel; (a Workshop build) Steam
+	Workshop the same for STEAM WORKSHOP */
+	to_line("Download from Steam");
+	check(strstr(menu, "\n\x05" "Halo CE's MCC files from your own Steam\n") && menu_fits(),
+		"Download from Steam's help: Halo CE's MCC files from the player's own Steam; it fits");
+	press(VITA_BUTTON_CROSS);
+	check(!menu_visible && halo_system_link_request == SYSTEM_LINK_REQUEST_STEAM,
+		"Download from Steam: DOWNLOAD FROM STEAM asked for; the panel closed");
+	halo_system_link_request = SYSTEM_LINK_REQUEST_NONE;
+	frame(0);
+#ifdef HALO_STEAM_WORKSHOP
+	open_panel();
+	check(to_tab("Multiplayer") && open_page("Modded maps"), "the Modded maps page again");
+	to_line("Steam Workshop");
+	press(VITA_BUTTON_CROSS);
+	check(!menu_visible && halo_system_link_request == SYSTEM_LINK_REQUEST_WORKSHOP,
+		"Steam Workshop: STEAM WORKSHOP asked for; the panel closed");
+	halo_system_link_request = SYSTEM_LINK_REQUEST_NONE;
+	frame(0);
+#endif
+	open_panel();
+	check(to_tab("Multiplayer") && open_page("Modded maps"), "the Modded maps page again");
+#endif
 	/* the Halo content folder (port/linux/game/mcc_content.c): found by
 	itself, or one of the memory cards' data/mcc; in the environment the game
 	reads, saved; no switch, the page says where the content is read from */
