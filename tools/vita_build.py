@@ -381,7 +381,14 @@ def generate_vita_build(n: Writer, sln: Any) -> None:
                             # (--vita-version reaches the host side too: the
                             # updater, the settings panel and halo.log say
                             # the version the game says, not vita_version.h's)
-                            version_defines(sln))
+                            version_defines(sln) +
+                            # (--steam-download / --steam-workshop reach it too: vita_main.c's
+                            # vita_steam_init - the download's card folder, its log lines in
+                            # halo.log, the battery, the PS button and the screen kept awake -
+                            # and the settings panel's Download from Steam and Steam Workshop
+                            # rows. Without them, 1.1.3-insider.3: none of it was built in)
+                            (["-DHALO_STEAM_DOWNLOAD=1"] if steam_download(sln) else []) +
+                            (["-DHALO_STEAM_WORKSHOP=1"] if steam_workshop(sln) else []))
     # (the updater's checks: Monocypher's Ed25519 and SHA-512, built above)
     updater_cflags = " ".join([host_cflags, f"-I{MONOCYPHER_DIR}"])
     for source in sorted((VITA_DIR / "host").glob("*.c")):
