@@ -2448,10 +2448,14 @@ static byte *png_decode(byte const *data, unsigned long size, long width, long h
 		}
 	}
 	free(idat);
-	free(raw);
-	if (!height)
+	/* (either one not had - a large atlas under the Vita's heap limit on the harness: NULL, and no free of NULL,
+	which the debug allocator's free asserts on and then faults) */
+	if (raw)
+		free(raw);
+	if (!height || !raw || !pixels)
 	{
-		free(pixels);
+		if (pixels)
+			free(pixels);
 		return NULL;
 	}
 	return pixels;
