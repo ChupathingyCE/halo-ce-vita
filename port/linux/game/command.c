@@ -11419,6 +11419,11 @@ static void command_hud_hq(
 		boolean chosen = row == command_globals.hq_row;
 		unsigned long color = chosen ? COMMAND_HUD_LIGHT : blocked && !built ? COMMAND_HUD_GREY : COMMAND_HUD_ITEM;
 
+		/* (where the row's name ends: a long one - Spanish's "Depósito de
+		suministros" - leaves no room for the word on its right, the insider.4
+		smoke) */
+		real name_end = x + 10.f + command_hud_text_width(command_hud.font_item, T(buy->name));
+
 		if (chosen)
 			command_hud_art(_command_art_item_on, x + 4.f, y, right - 4.f, y + row_height - 1.f, 1.f);
 		command_hud_text(command_hud.font_item, x + 10.f, y + 1.f, right, 0, color, T(buy->name));
@@ -11429,12 +11434,21 @@ static void command_hud_hq(
 			real bar_x0 = right - 74.f, bar_x1 = right - 10.f;
 
 			snprintf(text, sizeof(text), "%ld s", (done - game_time_get()) / TICKS_PER_SECOND + 1);
-			command_hud_text(command_hud.font_small, x, y + 2.f, bar_x0 - 4.f, 1, COMMAND_HUD_ORANGE, text);
-			command_hud_fill(bar_x0, y + 5.f, bar_x1, y + 11.f, 0x80202838UL);
-			command_hud_fill(bar_x0, y + 5.f, bar_x0 + (bar_x1 - bar_x0) * PIN(share, 0.f, 1.f), y + 11.f, 0xFFF0B070UL);
+			/* (the seconds only where they fit: the bar says it too) */
+			if (name_end + 6.f <= bar_x0 - 4.f - command_hud_text_width(command_hud.font_small, text))
+				command_hud_text(command_hud.font_small, x, y + 2.f, bar_x0 - 4.f, 1, COMMAND_HUD_ORANGE, text);
+			command_hud_fill(MAX(bar_x0, name_end + 4.f), y + 5.f, bar_x1, y + 11.f, 0x80202838UL);
+			command_hud_fill(MAX(bar_x0, name_end + 4.f), y + 5.f, MAX(bar_x0, name_end + 4.f) +
+				(bar_x1 - MAX(bar_x0, name_end + 4.f)) * PIN(share, 0.f, 1.f), y + 11.f, 0xFFF0B070UL);
 		}
-		else if (built)
+		else if (built && name_end + 6.f <= right - 10.f - command_hud_text_width(command_hud.font_small, T("BUILT")))
 			command_hud_text(command_hud.font_small, x, y + 2.f, right - 10.f, 1, COMMAND_HUD_DIM, T("BUILT"));
+		else if (built)
+		{
+			/* (no room for the word: a lit pip, as a squad card's living
+			member) */
+			command_hud_fill(right - 18.f, y + 5.f, right - 10.f, y + 11.f, 0xFFA8E07CUL);
+		}
 		else if (buy->cost > 0)
 		{
 			snprintf(text, sizeof(text), "%d", buy->cost);
