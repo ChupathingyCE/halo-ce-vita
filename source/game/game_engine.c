@@ -603,6 +603,7 @@ real_argb_color *hud_get_text_color(real_argb_color *color);
 #include "latency_meter.h"
 #include "infection.h" /* port: port/linux/game/infection.c */
 #include "player_cosmetics.h" /* port: port/linux/game/player_cosmetics.c */
+#include "carnage_report.h" /* port: port/linux/game/carnage_report.c */
 #endif
 #include "../../port/linux/src/lang.h" /* port: port/linux/src/lang.c */
 
@@ -1955,6 +1956,132 @@ static void drawline(
 	return;
 }
 
+#ifdef HALO_LINUX
+/* port: a Command game's report in the game's own (the Xbox's files: no Halo 3
+report, Menu style Classic or Classic+): the game's ranking has its one player
+alone, unnamed (a local game's player has no name of the game's), no team -
+the variant has none - and none of Command's score, so its sides are drawn
+from carnage_report.c's report as command.c has it (command_carnage_report:
+the winner first, each side's score, the commander by his profile's name and
+the other side's AI commander), in the rows, columns and colours the game
+draws a team game's with; and its result over them (the insider.4 smoke) */
+static struct carnage_report postgame_port_report;
+
+long halo_menus_utf16(char const *utf8, unsigned short *out, long capacity); /* port/linux/src/menu_files.c */
+
+static boolean postgame_port_report_read(
+	void)
+{
+	return carnage_report_read(&postgame_port_report) && postgame_port_report.type == CARNAGE_REPORT_TYPE_COMMAND &&
+		postgame_port_report.team_count == 2;
+}
+
+static void postgame_port_text(
+	wchar_t *wide,
+	long capacity,
+	char const *text)
+{
+	halo_menus_utf16(text, (unsigned short *)wide, capacity);
+	wide[capacity - 1] = 0;
+}
+
+static real_argb_color const *postgame_port_team_color(
+	short team)
+{
+	static real_argb_color colors[2];
+
+	/* (the game's team colours for the names, as its own rows draw them) */
+	colors[0].alpha = colors[1].alpha = 1.f;
+	colors[0].red = 0.8f;
+	colors[0].green = 0.4f;
+	colors[0].blue = 0.4f;
+	colors[1].red = 0.4f;
+	colors[1].green = 0.4f;
+	colors[1].blue = 0.8f;
+	return &colors[PIN(team, 0, 1)];
+}
+
+/* the result's line (in the local player's colour) and the sides' rows
+(rows 4 to 6), as the team game's */
+static void postgame_port_teams(
+	real_argb_color const *winner_color,
+	real_argb_color const *normal_color)
+{
+	short team_tab_stops[6] = { 50, 200, 300, 350, 410, 500 };
+	short result_tab_stops[1] = { 50 };
+	struct carnage_report const *report = &postgame_port_report;
+	wchar_t name[64], score[32], row_string[256];
+	long index, team_row = 0;
+
+	/* (one stop: the line whole, Spanish's "GANA EL EQUIPO AZUL" too) */
+	draw_string_set_tab_stops(result_tab_stops, NUMBEROF(result_tab_stops));
+	draw_string_set_color(normal_color);
+	usnprintf(row_string, NUMBEROF(row_string), L"\t%s", report->winning_team == 0 ? TW(L"RED TEAM WINS") :
+		report->winning_team == 1 ? TW(L"BLUE TEAM WINS") : TW(L"DRAW"));
+	row_string[NUMBEROF(row_string) - 1] = 0;
+	drawline(row_string, 4, 0);
+	draw_string_set_tab_stops(team_tab_stops, NUMBEROF(team_tab_stops));
+	for (index = 0; index < report->row_count && team_row < 2; index++)
+	{
+		struct carnage_report_row const *row = &report->rows[index];
+
+		if (!row->team_row)
+			continue;
+		postgame_port_text(name, NUMBEROF(name), row->name);
+		postgame_port_text(score, NUMBEROF(score), row->score);
+		draw_string_set_color(postgame_port_team_color(row->team));
+		usnprintf(row_string, NUMBEROF(row_string), L"\t%s\t%s", name, score);
+		row_string[NUMBEROF(row_string) - 1] = 0;
+		drawline(row_string, 5 + team_row++, 0);
+	}
+	/* (the columns' names after them in the game's own colour) */
+	draw_string_set_color(winner_color);
+}
+
+/* each player's row (the commander, the AI commander) from row 8, the
+columns the game's: place, name, score, kills, assists, deaths */
+static void postgame_port_players(
+	short const *tab_stops,
+	short tab_stop_count,
+	real_argb_color const *winner_color,
+	real_argb_color const *normal_color)
+{
+	struct carnage_report const *report = &postgame_port_report;
+	wchar_t name[64], score[32], row_string[256];
+	long index, draw_row = 8;
+
+	for (index = 0; index < report->row_count && draw_row < 8 + 12; index++)
+	{
+		struct carnage_report_row const *row = &report->rows[index];
+		struct statistic_buffer entry;
+
+		if (row->team_row)
+			continue;
+		memset(&entry, 0, sizeof(entry));
+		entry.player_index = row->player_index;
+		entry.place = row->place;
+		draw_string_set_tab_stops(tab_stops, tab_stop_count);
+		draw_string_set_color(row->local ? normal_color : winner_color);
+		usnprintf(row_string, NUMBEROF(row_string), L" \t%s", get_place_string(&entry));
+		row_string[NUMBEROF(row_string) - 1] = 0;
+		drawline(row_string, draw_row, 0);
+		postgame_port_text(name, NUMBEROF(name), row->name);
+		draw_string_set_color(postgame_port_team_color(row->team));
+		usnprintf(row_string, NUMBEROF(row_string), L" \t \t%s", name);
+		row_string[NUMBEROF(row_string) - 1] = 0;
+		drawline(row_string, draw_row, 0);
+		postgame_port_text(score, NUMBEROF(score), row->score);
+		draw_string_set_color(winner_color);
+		usnprintf(row_string, NUMBEROF(row_string), L" \t \t \t%s\t%d\t%d\t%d", score, row->kills, row->assists,
+			row->deaths);
+		row_string[NUMBEROF(row_string) - 1] = 0;
+		drawline(row_string, draw_row, 0);
+		draw_row++;
+	}
+	draw_string_set_tab_stops(tab_stops, tab_stop_count);
+}
+#endif
+
 void game_engine_post_rasterize_post_game(
 	void)
 {
@@ -1969,6 +2096,9 @@ void game_engine_post_rasterize_post_game(
 	long font_index;
 	long entry_count;
 	long entry_index;
+#ifdef HALO_LINUX
+	boolean port_report;
+#endif
 
 	if (!game_engine)
 		return;
@@ -2027,6 +2157,18 @@ void game_engine_post_rasterize_post_game(
 		}
 	}
 
+#ifdef HALO_LINUX
+	port_report = postgame_port_report_read();
+	if (port_report)
+	{
+		/* (the score's column further right: "AI Commander", Spanish's
+		"Comandante IA", is wider than the game's eleven letters of a
+		player's name) */
+		tab_stops[2] = 275;
+		postgame_port_teams(&winner_color, &normal_color);
+	}
+	else
+#endif
 	if (global_variant.universal_variant.teams)
 	{
 		short team_tab_stops[6] = { 50, 200, 300, 350, 410, 500 };
@@ -2129,6 +2271,13 @@ void game_engine_post_rasterize_post_game(
 	}
 
 	entry_count = select_players_to_display(_postgame_statistic_ranking, NONE, entries, 12, FALSE);
+#ifdef HALO_LINUX
+	if (port_report)
+	{
+		postgame_port_players(tab_stops, NUMBEROF(tab_stops), &winner_color, &normal_color);
+		entry_count = 0;
+	}
+#endif
 	for (entry_index = 0; entry_index < entry_count; entry_index++)
 	{
 		long player_index = entries[entry_index].player_index;
