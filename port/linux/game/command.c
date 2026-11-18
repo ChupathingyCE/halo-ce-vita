@@ -9282,6 +9282,27 @@ Legendary's), and the AI commander's level */
 			COMMAND_DRAW, "the console");
 		return TRUE;
 	}
+#ifndef HALO_RELEASE
+	/* (tests) "points red|blue <n>": that side's score raised as its
+	territory's seconds raise it, the game then ending as it ends by itself
+	(the score limit, the higher score winning) - "end" names the winner
+	whatever the scores */
+	if (!strcmp(word, "points"))
+	{
+		char side_word[16] = "";
+		long points = 0;
+		short side;
+
+		if (!command_globals.game_running || sscanf(text, "%15s %ld", side_word, &points) != 2 || points < 0)
+			return FALSE;
+		side = !strcmp(side_word, "blue") ? _command_side_blue : _command_side_red;
+		command_objectives.scores[side] += points;
+		command_objectives.territory_seconds[side] += points;
+		platform_log("command: points: %s +%ld, red %ld blue %ld", command_side_names[side], points,
+			command_objectives.scores[0], command_objectives.scores[1]);
+		return TRUE;
+	}
+#endif
 	if (!strcmp(word, "flag"))
 	{
 		short side;

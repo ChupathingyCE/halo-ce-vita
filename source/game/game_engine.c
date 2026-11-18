@@ -2039,7 +2039,11 @@ static void postgame_port_teams(
 }
 
 /* each player's row (the commander, the AI commander) from row 8, the
-columns the game's: place, name, score, kills, assists, deaths */
+columns the game's: place, name, score, kills, assists, deaths. The score
+is his side's - what decides a Command game (the score limit reached, or
+the higher score when the time is up), and what places the sides: the
+commander's own Spartan's capture points left it 0 under a side that won
+(the lead's review of the insider.4 smoke fix) */
 static void postgame_port_players(
 	short const *tab_stops,
 	short tab_stop_count,
@@ -2048,8 +2052,14 @@ static void postgame_port_players(
 {
 	struct carnage_report const *report = &postgame_port_report;
 	wchar_t name[64], score[32], row_string[256];
+	char const *side_score[2] = { "0", "0" };
 	long index, draw_row = 8;
 
+	for (index = 0; index < report->row_count; index++)
+	{
+		if (report->rows[index].team_row)
+			side_score[PIN(report->rows[index].team, 0, 1)] = report->rows[index].score;
+	}
 	for (index = 0; index < report->row_count && draw_row < 8 + 12; index++)
 	{
 		struct carnage_report_row const *row = &report->rows[index];
@@ -2070,7 +2080,7 @@ static void postgame_port_players(
 		usnprintf(row_string, NUMBEROF(row_string), L" \t \t%s", name);
 		row_string[NUMBEROF(row_string) - 1] = 0;
 		drawline(row_string, draw_row, 0);
-		postgame_port_text(score, NUMBEROF(score), row->score);
+		postgame_port_text(score, NUMBEROF(score), side_score[PIN(row->team, 0, 1)]);
 		draw_string_set_color(winner_color);
 		usnprintf(row_string, NUMBEROF(row_string), L" \t \t \t%s\t%d\t%d\t%d", score, row->kills, row->assists,
 			row->deaths);
