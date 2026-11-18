@@ -8572,7 +8572,12 @@ static boolean command_prepare_space_short(
 	{
 		platform_translate_path("t:\\", path, sizeof(path));
 		if (posix_disk_space(path, &free_low, &free_high, &total_low, &total_high) != 0)
+		{
+			/* (the room unknown - the Vita's count was never read before the insider.4 smoke, posix_files.c
+			now asks the card itself -: the build begun, a full card then a failed write, which says so) */
+			platform_log("command: prepare: the free space where the packs go could not be read (%s): built anyway", path);
 			return FALSE;
+		}
 	}
 	*free_mb = free_high ? 0x7fffffffL : (long)(free_low / (1024UL * 1024UL));
 #ifndef HALO_RELEASE
