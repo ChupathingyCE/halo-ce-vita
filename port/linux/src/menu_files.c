@@ -1039,7 +1039,8 @@ static int menus_read(char const *list_name, int need_root, struct halo_menus *m
 	free(reader.last_input);
 	free(reader.last_conditional);
 	free(reader.last_replace);
-	if (reader.failed || !reader.menus.widget_count)
+	/* (hud.txt has fonts alone) */
+	if (reader.failed || (!reader.menus.widget_count && !reader.menus.font_count))
 	{
 		if (reader.failed)
 			platform_log("menus: the files have a problem (%s); using the game's own menus", list_name);
@@ -1231,6 +1232,22 @@ struct halo_menus const *halo_menus_load_steam(void)
 	{
 		read = 1;
 		succeeded = menus_read("steam.txt", 0, &menus);
+	}
+	pthread_mutex_unlock(&preload_lock);
+	return succeeded ? &menus : NULL;
+}
+
+struct halo_menus const *halo_menus_load_hud(void)
+{
+	static int read;
+	static struct halo_menus menus;
+	static int succeeded;
+
+	pthread_mutex_lock(&preload_lock);
+	if (!read)
+	{
+		read = 1;
+		succeeded = menus_read("hud.txt", 0, &menus);
 	}
 	pthread_mutex_unlock(&preload_lock);
 	return succeeded ? &menus : NULL;

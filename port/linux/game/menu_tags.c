@@ -2887,6 +2887,12 @@ void menu_tags_loaded(
 		if (!ingame)
 			menu_tags.alone = TRUE;
 #endif
+		/* (1.1.3, the insider.4 smoke: and a level's map the HUD fonts alone, hud.txt - the port's own Halo 3 fonts, nothing
+		of Halo PC's -, which Command's and Firefight's HUD (command.c), Forge's and the text entry draw with: the
+		game's HUD font they fell back to is ~1.5x as wide, and their boxes are laid out for these - Command's
+		words ran into each other, its squad cards were cut, on every Xbox-only install) */
+		if (ingame)
+			menu_tags.alone = TRUE;
 		if (!menu_tags.alone)
 			return;
 	}
@@ -2918,7 +2924,8 @@ void menu_tags_loaded(
 #endif
 	}
 	checked = vita_host_time_us();
-	menus = ingame ? halo_menus_load_ingame() : menu_tags.alone ? halo_menus_load_steam() : halo_menus_load();
+	menus = ingame ? (menu_tags.alone ? halo_menus_load_hud() : halo_menus_load_ingame()) :
+		menu_tags.alone ? halo_menus_load_steam() : halo_menus_load();
 	if (!menus)
 		return;
 	read = vita_host_time_us();
@@ -3191,16 +3198,16 @@ void menu_tags_loaded(
 		menu_tags_art_preread();
 	platform_log("menus: %s: %ld widgets, %ld string lists and %ld bitmaps added to "
 		"%s.map's %ld tags in %lu us (the Halo PC files checked %lu, the XML read %lu, the tags %lu; the pictures "
-		"and text are read when they first open)", ingame ? "the in-game screens" : menu_tags.alone ?
-		"the Steam screens alone (the game's own menus)" : "OpenCE's multiplayer screens",
+		"and text are read when they first open)", ingame ? (menu_tags.alone ? "the HUD fonts alone" : "the in-game screens") :
+		menu_tags.alone ? "the Steam screens alone (the game's own menus)" : "OpenCE's multiplayer screens",
 		widget_count, own_lists + menus->string_list_count, menus->bitmap_count, map_name, build.first_index,
 		(unsigned long)(vita_host_time_us() - started), (unsigned long)(checked - started),
 		(unsigned long)(read - checked), (unsigned long)(vita_host_time_us() - read));
 	goto done;
 
 failed:
-	platform_log("menus: %s not added; the game's own", ingame ? "the in-game screens" : menu_tags.alone ?
-		"the Steam screens alone" : "OpenCE's multiplayer screens");
+	platform_log("menus: %s not added; the game's own", ingame ? (menu_tags.alone ? "the HUD fonts alone" :
+		"the in-game screens") : menu_tags.alone ? "the Steam screens alone" : "OpenCE's multiplayer screens");
 	menu_tags_release();
 
 done:

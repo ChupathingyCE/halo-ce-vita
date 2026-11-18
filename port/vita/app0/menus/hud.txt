@@ -1,0 +1,7 @@
+# The HUD fonts alone (port/linux/src/menu_files.c halo_menus_load_hud, built into a level map's tags by
+# port/linux/game/menu_tags.c): what a level's map gets when the Halo PC files are not there - an Xbox-only
+# install, whose in-game menus are the Xbox's own. Command's and Firefight's HUD (port/linux/game/command.c),
+# Forge's HUD and the text entry are laid out for these fonts; without them they fell back to the game's HUD
+# font, about 1.5x as wide, and their words ran into each other. Nothing in it is Halo PC's (the port's own
+# fonts, tools/halo3_menu_art.py, Saira Semi Condensed, SIL OFL)
+halo3/hud_alone.xml

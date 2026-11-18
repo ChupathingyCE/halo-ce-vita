@@ -248,6 +248,12 @@ menus are the Xbox's: the settings panel's rows open them over those, and the
 download is how such a player gets MCC's files. Read the first time; NULL
 when there are none or they have a problem */
 struct halo_menus const *halo_menus_load_steam(void);
+/* (1.1.3) the HUD fonts alone (hud.txt: the port's own Halo 3 fonts,
+h3/font_title, h3/font_item, h3/font_small, nothing of Halo PC's), which a
+level's map gets when the Halo PC files are not there - an Xbox-only install:
+Command's and Firefight's HUD, Forge's and the text entry are laid out for
+them. Read the first time; NULL when there are none or they have a problem */
+struct halo_menus const *halo_menus_load_hud(void);
 /* a file of the menus folder (a frame's PNG), read whole, NULL if it cannot
 be read; halo_menus_file_free lets it go (the platform layer's heap, not
 the game's) */
