@@ -1,5 +1,13 @@
 # Overrides of the game's files
 
+**The submodule's pin.** Until ChupathingyCE/chupathingyce#1549
+(`HALO_CONSOLE_WINDOW_LOW`, the Vita's block in `halo_console_features.h`) is
+merged, `chupathingyce` is pinned to that pull request's branch,
+`console-window-low`, which only a local clone has. Once it merges, repin to
+`main` (`git -C chupathingyce checkout <main's commit>`, then commit the new
+pin). That change is not kept here as an override: the translated layout
+needs it in every unit.
+
 Fixes the Vita needs in the game itself (the `chupathingyce` submodule), each
 kept here as a whole copy of the fixed file until upstream has it, laid out
 as the game is (the Switch port's arrangement). `port/vita/build.py`

@@ -1325,7 +1325,7 @@ static BOOL texture_decode(struct texture_build *build)
 	free(scratch);
 	{
 		/* (debug) HALO_TEX_DUMP=<width>: the n-th upload of a linear texture
-		that wide is written to ux0:data/warthog-vita/tex_dump.raw */
+		that wide is written to tex_dump.raw in the data folder */
 		static int dump_width = -2, dumps;
 
 		if (dump_width == -2)
@@ -1335,7 +1335,7 @@ static BOOL texture_decode(struct texture_build *build)
 		}
 		if (dump_width > 0 && (long)width == dump_width && ++dumps == 60)
 		{
-			FILE *file = fopen("ux0:data/warthog-vita/tex_dump.raw", "wb");
+			FILE *file = fopen(VITA_DATA_DIRECTORY "/tex_dump.raw", "wb");
 
 			if (file)
 			{

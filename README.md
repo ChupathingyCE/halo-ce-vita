@@ -70,7 +70,8 @@ build count: 0.9.2 (build 1).
 
 1. Install `warthog.vpk` with VitaShell. The bubble is **Warthog** (title ID
    `WRTV00001`). It sits next to Halo CE Vita and doesn't touch it or its
-   saves.
+   saves. Test builds are a separate app, **Warthog Dev** (`WRTD00001`), with
+   their own folder, `ux0:data/warthog-vita-dev/`.
 2. Copy your disc's `maps` folder to `ux0:data/warthog-vita/maps/`.
    If Halo CE Vita is installed, Warthog reads its maps where they are
    (`ux0:data/haloce-vita/maps/`), so you don't need a second copy.
@@ -125,7 +126,7 @@ one, change its value and save. The menus' Settings change the same file.
 1. Right after the problem, copy `logs/debug.txt` and `halo.log` from
    `ux0:data/warthog-vita/` to your computer. After a crash, also copy the
    newest `psp2core-*.psp2dmp` from `ux0:data/`.
-2. Tell us in #warthog-support on the
+2. Tell us in #bug-reports on the
    [Discord](https://discord.gg/chupathingy) what you were doing, and attach
    the files.
 
@@ -153,8 +154,10 @@ ninja vita                          # build/vita/warthog.vpk
 targets to it. The game's
 [docs/building.md](https://github.com/ChupathingyCE/chupathingyce/blob/main/docs/building.md),
 "Console ports", has the layout and the options every console takes.
-`--release` makes the release build. Without it the build stops at the first
-failed assertion and logs it.
+`--release` makes the release build (`WRTV00001`, `ux0:data/warthog-vita`).
+Without it the build is a dev build (`WRTD00001`, `ux0:data/warthog-vita-dev`),
+which stops at the first failed assertion and logs it. `--vita-title-id` and
+`--vita-data-folder` choose others.
 
 [port/vita/README.md](port/vita/README.md) has the port's own account: the
 two compilers, the memory, the renderer and the debug switches. Changes to
@@ -165,9 +168,9 @@ Until one is merged, the fixed file is kept whole in
 
 ## Generative AI
 
-The port was made with heavy use of generative AI tools, as the game is. A
-person decides what to build, reviews every change, tests it on the console
-and is responsible for it. The game's
+This port was made with heavy use of generative AI tools. A person decides
+what to build, reviews every change, tests it on the console and is
+responsible for it. The game's
 [policy](https://github.com/ChupathingyCE/chupathingyce/blob/main/CONTRIBUTING.md#using-ai-tools)
 applies to contributions here.
 
@@ -216,7 +219,7 @@ applies to it too.
 - The game: [ChupathingyCE/chupathingyce](https://github.com/ChupathingyCE/chupathingyce)
 - Games online now: [stats.chupathingy.org](https://stats.chupathingy.org)
 - Discord: [discord.gg/chupathingy](https://discord.gg/chupathingy)
-  (#warthog-support for help, #warthog-dev for development)
+  (#bug-reports for problems, #dev for development)
 
 Halo is a trademark of Microsoft, and PlayStation Vita a trademark of Sony
 Interactive Entertainment. Warthog for Vita is a fan project, not made or

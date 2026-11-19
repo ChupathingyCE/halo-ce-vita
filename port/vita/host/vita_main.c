@@ -6,7 +6,8 @@ variables, the clocks, and the game's main (the game's
 source/shell/shell_xbox.c, renamed halo_main for the Vita build), which
 runs on a thread of its own with a large stack.
 
-The dev builds keep everything in VITA_DATA_DIRECTORY (ux0:data/warthog-vita;
+Everything is kept in VITA_DATA_DIRECTORY (ux0:data/warthog-vita for a release,
+ux0:data/warthog-vita-dev for a dev build;
 port/vita/build.py), never the released Halo CE Vita's folder:
 
     maps/          the Xbox disc's maps (ui.map, bloodgulch.map, ...)
@@ -791,10 +792,11 @@ int main(int argc, char **argv)
 	if (getenv("HALO_SCREENSHOT_DIR") && *getenv("HALO_SCREENSHOT_DIR"))
 		sceIoMkdir(getenv("HALO_SCREENSHOT_DIR"), 0777);
 	{
-		/* the maps: maps/ in the data folder; else Halo CE Vita's, read where
-		they are (HALO_MAPS_ROOT, the port's xbox_files.c override): its
-		1.1.x folder or 1.2.0's */
-		static const char *const others[] = { "ux0:data/haloce-vita/maps", "ux0:data/project-ark/maps" };
+		/* the maps: maps/ in the data folder; else the release's (for a dev
+		build), else Halo CE Vita's, read where they are (HALO_MAPS_ROOT, the
+		port's xbox_files.c override): its 1.1.x folder or 1.2.0's */
+		static const char *const others[] = { "ux0:data/warthog-vita/maps", "ux0:data/haloce-vita/maps",
+			"ux0:data/project-ark/maps" };
 		SceIoStat stat;
 		unsigned int index;
 

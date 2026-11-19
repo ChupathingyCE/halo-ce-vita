@@ -53,13 +53,18 @@ ZLIB_DIR = Path("port/third_party/zlib")
 ZLIB_SOURCES = ("adler32.c", "crc32.c", "inffast.c", "inflate.c", "inftrees.c", "uncompr.c", "zutil.c")
 ZLIB_DEFINES = ("-DZ_PREFIX", "-Dz_errmsg=z_port_errmsg")
 
-# the dev builds' title (a test title of its own, never the released Halo CE
-# Vita's HCEV00001, so that a dev install leaves that one and its saves be);
-# --vita-title-id gives another
-TITLE_ID = "WRTV00001"
+# The app's title ID and data folder. A release build (configure.py
+# --release) is the release's: WRTV00001 and ux0:data/warthog-vita. Any other
+# build is a dev build, WRTD00001 and ux0:data/warthog-vita-dev, so a tester
+# keeps the release and its saves beside it. Neither is Halo CE Vita's
+# (HCEV00001, ux0:data/haloce-vita). --vita-title-id and --vita-data-folder
+# choose others.
+RELEASE_TITLE_ID = "WRTV00001"
+RELEASE_DATA_DIRECTORY = "ux0:data/warthog-vita"
+DEV_TITLE_ID = "WRTD00001"
+DEV_DATA_DIRECTORY = "ux0:data/warthog-vita-dev"
 TITLE = "Warthog"
-# where the dev build keeps its files on the card (port/vita/host/vita_main.c)
-DATA_DIRECTORY = "ux0:data/warthog-vita"
+DEV_TITLE = "Warthog Dev"
 
 # the CPU and the game's MSVC ABI on 32-bit ARM (clang)
 TARGET_FLAGS = [
@@ -221,8 +226,11 @@ def add_arguments(parser: Any) -> None:
                         help="VitaSDK for `ninja vita` (default: VITASDK or ~/vitasdk)")
     parser.add_argument("--vita-cc", metavar="BINARY", default="clang",
                         help="the clang that compiles the game for the Vita (default: clang)")
-    parser.add_argument("--vita-title-id", metavar="ID", default=TITLE_ID,
-                        help=f"the VPK's title ID (default {TITLE_ID}, the dev builds' own)")
+    parser.add_argument("--vita-title-id", metavar="ID",
+                        help=f"the VPK's title ID (default {RELEASE_TITLE_ID} with --release, else {DEV_TITLE_ID})")
+    parser.add_argument("--vita-data-folder", metavar="PATH",
+                        help=f"the app's data folder on the card (default {RELEASE_DATA_DIRECTORY} with --release, "
+                             f"else {DEV_DATA_DIRECTORY})")
     parser.add_argument("--vita-build-number", metavar="N", type=int, default=1,
                         help="the Vita's build count after the game's version, \"0.9.2 (build N)\" (default 1)")
 
@@ -269,9 +277,16 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     prefix_header = port_dir / "include" / "halo_vita_prefix.h"
     semantics_header = gen_dir / "halo_msvc_semantics.h"
     platform_semantics_header = gen_dir / "platform_msvc_semantics.h"
-    title_id = getattr(sln.args, "vita_title_id", TITLE_ID)
+    release = bool(getattr(sln, "port_release", False))
+    title_id = getattr(sln.args, "vita_title_id", None) or (RELEASE_TITLE_ID if release else DEV_TITLE_ID)
     if not re.fullmatch(r"[A-Z]{4}\d{5}", title_id):
         raise SystemExit(f"--vita-title-id {title_id!r}: four capital letters and five digits")
+    data_directory = getattr(sln.args, "vita_data_folder", None) or (
+        RELEASE_DATA_DIRECTORY if release else DEV_DATA_DIRECTORY)
+    if not re.fullmatch(r"ux0:data/[A-Za-z0-9_.-]{1,48}", data_directory):
+        raise SystemExit(f"--vita-data-folder {data_directory!r}: a folder in ux0:data")
+    title = TITLE if release else DEV_TITLE
+    n.comment(f"Vita app: {title_id} ({title}), data in {data_directory}")
 
     n.comment("PlayStation Vita build (ninja vita); see port/vita/README.md")
     n.variable("vita_cc", getattr(sln.args, "vita_cc", "clang"))
@@ -385,6 +400,7 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
         sdk_flags,
         f"-idirafter {_quote(port_dir / 'include' / 'posix')}",
     ])
+    platform_cflags += f" '-DVITA_DATA_DIRECTORY=\"{data_directory}\"'"
     https_defines = " ".join(["-DHALO_CONSOLE_HTTPS", *console_https_flags(game)])
     posix_cflags = " ".join(HOST_FLAGS + [
         *defines, "-std=gnu11", "-D_GNU_SOURCE", "-fsigned-char", "-ffp-contract=off", version_define,
@@ -438,7 +454,7 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     host_cflags = " ".join(HOST_FLAGS + [
         version_define,
         f"'-DVITA_TITLE_ID=\"{title_id}\"'",
-        f"'-DVITA_DATA_DIRECTORY=\"{DATA_DIRECTORY}\"'",
+        f"'-DVITA_DATA_DIRECTORY=\"{data_directory}\"'",
         f"-I{_quote(port_dir / 'include')}",
         f"-I{_quote(port_dir / 'host')}",
         f"-I{_quote(game / LINUX_SRC)}",
@@ -478,7 +494,7 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     app_version = "00.92"
     n.rule(name="vita_sfo",
            command=(f"$vita_sdk_bin/vita-mksfoex -s TITLE_ID={title_id} -s APP_VER={app_version} "
-                    f"-d ATTRIBUTE2=12 {shlex.quote(TITLE)} $out"),
+                    f"-d ATTRIBUTE2=12 {shlex.quote(title)} $out"),
            description="VITA SFO $out")
     n.rule(name="vita_vpk", command="$vita_sdk_bin/vita-pack-vpk -s $sfo -b $eboot $assets $out",
            description="VITA VPK $out")

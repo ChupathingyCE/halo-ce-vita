@@ -235,7 +235,7 @@ void vita_net_selftest(void);
 
 /* (Warthog) where the Xbox window went (vita_memory.c), for the log */
 const char *vita_host_window_report(void);
-/* (Warthog) the data folder (VITA_DATA_DIRECTORY: ux0:data/warthog-vita for
+/* (Warthog) the data folder (VITA_DATA_DIRECTORY: ux0:data/warthog-vita for a release, -dev for
 the dev builds) */
 const char *vita_host_data_directory(void);
 
