@@ -745,8 +745,8 @@ static int custom_edition_cache_name_stem(
 
 /* (port) whether `map_name` (a name or a level name) is a Steam Workshop
 multiplayer map's, ws<id>_<map> (workshop_maps.h): a name only ever looked
-for in the mods folder's item mods/<id>, never in the maps folder, in a
-build with the Workshop (configure.py --steam-workshop); none in another */
+for in the mods folder's item mods/<id>, never in the maps folder, in every
+build (downloading items is configure.py --steam-workshop's alone) */
 static boolean custom_edition_cache_workshop_name(
 	char const *map_name)
 {
@@ -1036,7 +1036,7 @@ static boolean custom_edition_map_path(
 	network game's players each with their own copy, the host's identity
 	compared: network_client_manager.c), its resource maps and sound cache
 	the item's folder's as a mod map's; never a file of the maps folder
-	(where map sharing writes). None without the Workshop. */
+	(where map sharing writes). */
 	if (custom_edition_cache_workshop_name(map_name))
 	{
 		if (!custom_edition_mods_multiplayer_path(name, path, MAP_PATH_SIZE))

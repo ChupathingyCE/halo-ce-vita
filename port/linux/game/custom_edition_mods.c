@@ -97,13 +97,13 @@ struct custom_edition_mod
 	/* (port) the Halo content folder's campaign (mcc_content.h), not a
 	folder of the mods folder */
 	boolean mcc;
-	/* (port, --steam-workshop) its folder is a Steam Workshop item's number
+	/* (port) its folder is a Steam Workshop item's number
 	(the Workshop installs mods/<id>): its multiplayer maps are played as
 	ws<id>_<map> (workshop_maps.h); 0 for any other folder */
 	uint64_t workshop_id;
 };
 
-/* (port, --steam-workshop) a Steam Workshop item's multiplayer map: a
+/* (port) a Steam Workshop item's multiplayer map: a
 multiplayer map of the multiplayer level list (custom_edition_maps.c), not
 the campaign's */
 struct custom_edition_mod_multiplayer_map
@@ -144,7 +144,7 @@ struct custom_edition_mods_globals
 	struct custom_edition_mod mods[CUSTOM_EDITION_MODS_MAXIMUM];
 	short map_count;
 	struct custom_edition_mod_map maps[CUSTOM_EDITION_MODS_MAXIMUM_MAPS];
-	/* (port, --steam-workshop) the Workshop items' multiplayer maps, and
+	/* (port) the Workshop items' multiplayer maps, and
 	whether the campaign's maps are looked for at all (MCC mods off: the
 	Workshop items' folders alone, for their multiplayer maps) */
 	short multiplayer_count;
@@ -472,8 +472,7 @@ static void mod_campaign_read(
 	return;
 }
 
-#ifdef HALO_STEAM_WORKSHOP
-/* (port, --steam-workshop) Adds the Steam Workshop item `mod_index`'s
+/* (port) Adds the Steam Workshop item `mod_index`'s
 multiplayer map `stem` (its file at `path`, a Halo: CE Anniversary cache of
 a multiplayer scenario): FALSE when it cannot be named (workshop_maps.h) or
 there is no room. Two of an item named alike are both left out
@@ -546,7 +545,6 @@ static int multiplayer_map_compare(
 
 	return (int)csstrcmp(first_map->stem, second_map->stem);
 }
-#endif
 
 /* Adds the mod of the mods folder's folder `folder`, and its maps; the
 survey's alone also a folder of a name this unit does not take (`valid`
@@ -565,15 +563,13 @@ static void mod_add(
 	short index;
 	uint64_t workshop_id = 0;
 
-	/* (port, --steam-workshop: a Steam Workshop item's folder, mods/<id>;
+	/* (port: a Steam Workshop item's folder, mods/<id>;
 	with MCC mods off, the only folders looked in, for their multiplayer
 	maps) */
-#ifdef HALO_STEAM_WORKSHOP
 	if (valid && !workshop_map_id_parse(folder, &workshop_id))
 	{
 		workshop_id = 0;
 	}
-#endif
 	if (globals->campaign_off && !workshop_id)
 	{
 		return;
@@ -700,8 +696,7 @@ static void mod_add(
 		mod->map_files++;
 		snprintf(map_path, sizeof(map_path), "%s%s\\maps\\%s", CUSTOM_EDITION_MODS_DIRECTORY, folder, data.cFileName);
 		kind = NONE - 1;
-#ifdef HALO_STEAM_WORKSHOP
-		/* (port, --steam-workshop: a Steam Workshop item's multiplayer map,
+		/* (port: a Steam Workshop item's multiplayer map,
 		ws<id>_<map>: the multiplayer level list's, workshop_maps.h) */
 		if (mod->workshop_id && map_stem_valid(stem))
 		{
@@ -719,7 +714,6 @@ static void mod_add(
 				continue;
 			}
 		}
-#endif
 		if (globals->campaign_off)
 		{
 			continue;
@@ -947,16 +941,13 @@ static short custom_edition_mods_find(
 		mcc_mod_add();
 	}
 	/* (experimental and off unless chosen: game.mcc_mods, with PC maps on;
-	off, the mods folder is not looked at, but by the survey) */
+	off, the mods folder is looked at for the Steam Workshop items alone,
+	but by the survey) */
 	if (!survey && !halo_mcc_mods_enabled())
 	{
-#ifdef HALO_STEAM_WORKSHOP
-		/* (port, --steam-workshop: the Steam Workshop items' multiplayer
-		maps all the same - the multiplayer level list's, not MCC mods') */
+		/* (port: the Steam Workshop items' multiplayer maps all the same -
+		the multiplayer level list's, not MCC mods' - in every build) */
 		globals->campaign_off = TRUE;
-#else
-		return globals->map_count;
-#endif
 	}
 #endif
 	find = FindFirstFileA(CUSTOM_EDITION_MODS_DIRECTORY "*", &data);
@@ -1001,7 +992,6 @@ static short custom_edition_mods_find(
 		mod_add(folders[folder_index].name, folders[folder_index].valid);
 	}
 	qsort(globals->maps, (size_t)globals->map_count, sizeof(globals->maps[0]), mod_map_compare);
-#ifdef HALO_STEAM_WORKSHOP
 	{
 		short kept = 0;
 		short index;
@@ -1018,7 +1008,6 @@ static short custom_edition_mods_find(
 			multiplayer_map_compare);
 		error(_error_silent, "mods: %d Steam Workshop multiplayer maps", globals->multiplayer_count);
 	}
-#endif
 	error(_error_silent, "mods: %d maps of %d mods %s", globals->map_count, globals->mod_count,
 		globals->campaign_off ? "(MCC mods off: the Steam Workshop items' multiplayer maps alone)" :
 		survey ? "found by the mod manager's survey" : "for the campaign's level list");
@@ -1226,22 +1215,18 @@ boolean custom_edition_mods_map_path(
 	return TRUE;
 }
 
-/* ---------- (port, --steam-workshop) the Steam Workshop items' multiplayer
+/* ---------- (port) the Steam Workshop items' multiplayer
 maps */
 
 short custom_edition_mods_multiplayer_count(
 	void)
 {
-#ifdef HALO_STEAM_WORKSHOP
 	if (!custom_edition_mods_globals.looked_for)
 	{
 		custom_edition_mods_look_for();
 	}
 
 	return custom_edition_mods_globals.multiplayer_count;
-#else
-	return 0;
-#endif
 }
 
 char const *custom_edition_mods_multiplayer_name(
@@ -1283,7 +1268,6 @@ boolean custom_edition_mods_multiplayer_path(
 	char *path,
 	long path_size)
 {
-#ifdef HALO_STEAM_WORKSHOP
 	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
 	short index;
 
@@ -1310,11 +1294,6 @@ boolean custom_edition_mods_multiplayer_path(
 				globals->mods[map->mod_index].folder, map->stem) < path_size;
 		}
 	}
-#else
-	(void)name;
-	(void)path;
-	(void)path_size;
-#endif
 
 	return FALSE;
 }

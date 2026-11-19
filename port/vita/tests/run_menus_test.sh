@@ -2693,10 +2693,10 @@ for case in $cases; do
 		grep -aq "menus: h3 mods: Deleted TestMod" "$log" || fail h3mods "the screen did not say the mod was deleted" ;;
 	h3workshoppicker)
 		ws_mp_map=${HALO_TEST_WORKSHOP_MP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/bloodgulch.map}
-		# (menu_tags.c names "port h3 workshop ..." in every build; the level list's Workshop log line is only a
-		# Workshop build's - custom_edition_maps.c, HALO_STEAM_WORKSHOP)
+		# (every build plays the Workshop items already in the mods folder - 1.1.3-insider.6, built without
+		# --steam-workshop, too; an older binary without the level list's Workshop log line is skipped)
 		if ! grep -aq "Steam Workshop multiplayer maps for the level list" "$binary"; then
-			echo "--- h3workshoppicker"; echo "SKIP (h3workshoppicker): not a Steam Workshop build (configure.py --steam-workshop)"
+			echo "--- h3workshoppicker"; echo "SKIP (h3workshoppicker): this build has no Steam Workshop maps"
 			continue
 		fi
 		if [ ! -f "$ws_mp_map" ]; then

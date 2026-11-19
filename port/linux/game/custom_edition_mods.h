@@ -118,7 +118,7 @@ char const *custom_edition_mods_mod_map_name(
 	short mod_index,
 	short which);
 
-/* (port, configure.py --steam-workshop) The Steam Workshop items'
+/* (port) The Steam Workshop items'
 multiplayer maps (workshop_maps.h): the Halo: CE Anniversary caches of
 multiplayer scenarios in the maps folder of a mods folder's folder named by
 an item's number (mods/<id>, as the Workshop installs it), named
@@ -127,7 +127,9 @@ manager is left out). They are the multiplayer level list's
 (custom_edition_maps.c), played offline and online, never shared. The
 mods are looked for when they have not been. The map at `index`: its name,
 its file's name without ".map", its item's folder, its picture (<map>.bmp
-beside it, or NULL); NULL past them. Without the switch there are none. */
+beside it, or NULL); NULL past them. Every build plays the items already
+in the mods folder; only a build with configure.py --steam-workshop
+downloads them (1.1.3-insider.6: none does, the items kept working). */
 #define CUSTOM_EDITION_MODS_MAXIMUM_MULTIPLAYER_MAPS 32
 short custom_edition_mods_multiplayer_count(
 	void);

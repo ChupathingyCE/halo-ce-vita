@@ -175,7 +175,7 @@ struct custom_edition_map
 	frame, -1 for none */
 	boolean mcc;
 	short mcc_frame;
-	/* (port, --steam-workshop) a Steam Workshop item's multiplayer map
+	/* (port) a Steam Workshop item's multiplayer map
 	(workshop_maps.h; `mod` too: never shared, a PNG picture taken) */
 	boolean workshop;
 };
@@ -937,8 +937,7 @@ static void mcc_multiplayer_maps_add(
 	return;
 }
 
-#ifdef HALO_STEAM_WORKSHOP
-/* (port, --steam-workshop) Adds the Steam Workshop items' multiplayer maps
+/* (port) Adds the Steam Workshop items' multiplayer maps
 (custom_edition_mods.c, workshop_maps.h), each not turned off
 (HALO_MAPS_DISABLED), after the maps folder's: named by its file's name,
 described as its item's ("Steam Workshop item 2915693904"), its picture
@@ -1004,7 +1003,6 @@ static void workshop_multiplayer_maps_add(
 
 	return;
 }
-#endif
 
 /* (port) Says what the Halo content folder holds, game by game (mcc_content.h's
 table): each game folder with maps, how many map files, and whether this
@@ -1129,11 +1127,9 @@ static void custom_edition_maps_look_for(
 	{
 		custom_edition_mods_maps_add();
 	}
-#ifdef HALO_STEAM_WORKSHOP
 	/* (port: the Steam Workshop items' multiplayer maps, whatever PC maps,
 	MCC mods and the Halo content folder are) */
 	workshop_multiplayer_maps_add();
-#endif
 	qsort(globals->maps, globals->map_count, sizeof(globals->maps[0]), custom_edition_map_compare);
 	for (globals->multiplayer_count = 0;
 		globals->multiplayer_count < globals->map_count && !globals->maps[globals->multiplayer_count].campaign;
