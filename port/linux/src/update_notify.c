@@ -161,7 +161,7 @@ static const char *request_url(int channel, int *loopback)
 	*loopback = 0;
 	/* port: on the Vita only a test build (HALO_UPDATE_TEST_SOURCES,
 	tools/release/README.md) takes another URL; a release build asks
-	BirchWoodGod/halo-ce-vita's releases alone */
+	the repository's releases (UPDATE_REPOSITORY_ID) alone */
 #if defined(__vita__) && !defined(HALO_UPDATE_TEST_SOURCES)
 	if (test && *test)
 	{

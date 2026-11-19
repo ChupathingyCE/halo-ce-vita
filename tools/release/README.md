@@ -175,9 +175,16 @@ two signature files the owner made locally, never a key.
 ## What the Vita checks (port/vita/host/vita_update_verify.c, vita_update_download.c)
 
 - A release build downloads only from
-  `https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v<version>/`
+  `https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v<version>/`
   (a fixed URL, the version a release tag's) and asks only that
-  repository's releases API; it follows GitHub's redirect only to
+  repository's releases API, by its number
+  (`https://api.github.com/repositories/1400014879/releases...`, which the
+  move from BirchWoodGod/halo-ce-vita and the coming rename to
+  ChupathingyCE/warthog-vita do not change); it follows GitHub's redirect
+  only to the same `<tag>/<file>` under another of the project's homes
+  (`GITHUB_RELEASE_HOMES`, `port/linux/src/github_release_move.h`:
+  BirchWoodGod/halo-ce-vita, ChupathingyCE/halo-ce-vita,
+  ChupathingyCE/warthog-vita), or to
   `release-assets.githubusercontent.com` or `objects.githubusercontent.com`,
   over TLS checked against the authorities built into the game
   (`port/linux/src/update_roots.h`).
@@ -261,7 +268,7 @@ python3 configure.py --lto off --pgo off --portable --release   # back to a rele
 | 7 | install that VPK with VitaShell, start the game | General shows 1.1.0-beta.4; at start `halo-1.1.0-beta.4.vpk is no newer than this build (installed): removed`; `update/` empty; saves, settings, maps as before |
 | 8 | reinstall A; in the test release replace `halo.vpk` with another file (do not sign again); download | "refused or failed: the download is not the file the manifest signs. Nothing was kept." |
 | 9 | reinstall A, download B again; with VitaShell append a byte to the kept VPK; restart | at start `failed its check ... removed`; no "To install" line |
-| 10 | a release build (no test options) with the two `env.txt` lines | `update: HALO_UPDATE_URL is for test builds: GitHub's is asked`; it looks at BirchWoodGod/halo-ce-vita only |
+| 10 | a release build (no test options) with the two `env.txt` lines | `update: HALO_UPDATE_URL is for test builds: GitHub's is asked`; it looks at ChupathingyCE/halo-ce-vita only |
 | 11 | a build with the placeholder key | the download refused: "This build cannot check updates (it has no update key)..." |
 
 What these settle, which the Linux tests cannot: the Vita's TLS to
@@ -370,10 +377,10 @@ The file's form is `port/linux/src/netversion_table.h`; the game's side is
 It is signed with the release key above (the same private key file, the
 same `HALO_RELEASE_PUBLIC_KEY`). The game fetches two files from a GitHub
 release of their own, tag `crossplay-table`, in this repository's releases
-(`BirchWoodGod/halo-ce-vita`):
+(`ChupathingyCE/halo-ce-vita`):
 
-    https://github.com/BirchWoodGod/halo-ce-vita/releases/download/crossplay-table/netversions.txt
-    https://github.com/BirchWoodGod/halo-ce-vita/releases/download/crossplay-table/netversions.txt.sig
+    https://github.com/ChupathingyCE/halo-ce-vita/releases/download/crossplay-table/netversions.txt
+    https://github.com/ChupathingyCE/halo-ce-vita/releases/download/crossplay-table/netversions.txt.sig
 
 at start and once a day while internet play is on (Settings: Vita and PC,
 PC versions list Auto; `network.crossplay_updates`; a PC's `update.auto`
@@ -395,7 +402,7 @@ holding nothing, so an older signed table cannot be played back at that release.
 ### Once: make the release
 
 ```
-gh release create crossplay-table --repo BirchWoodGod/halo-ce-vita --prerelease --latest=false \
+gh release create crossplay-table --repo ChupathingyCE/halo-ce-vita --prerelease --latest=false \
     --title "Crossplay version table" \
     --notes "Data for the game's crossplay browser (signed). Not a game release: nothing to install."
 ```
@@ -413,7 +420,7 @@ on the release):
 
 ```
 # the current one, to change it (skip for the first table)
-gh release download crossplay-table --repo BirchWoodGod/halo-ce-vita --dir ~/netversions --clobber \
+gh release download crossplay-table --repo ChupathingyCE/halo-ce-vita --dir ~/netversions --clobber \
     --pattern 'netversions.txt*'
 
 # show it, checked with the release key
@@ -433,7 +440,7 @@ python3 tools/release/sign_netversions.py --key ~/halo-update-key/halo-update.ke
     --table ~/netversions/netversions.txt --remove 41
 
 # upload both, replacing the old ones
-gh release upload crossplay-table --repo BirchWoodGod/halo-ce-vita --clobber \
+gh release upload crossplay-table --repo ChupathingyCE/halo-ce-vita --clobber \
     ~/netversions/netversions.txt ~/netversions/netversions.txt.sig
 ```
 

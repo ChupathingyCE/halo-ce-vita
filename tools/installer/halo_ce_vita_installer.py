@@ -93,7 +93,7 @@ if not getattr(sys, "frozen", False):
 import ed25519_rfc8032 as ed25519  # noqa: E402
 
 VERSION = "1.1.2"
-RELEASES_URL = "https://github.com/BirchWoodGod/halo-ce-vita/releases/latest"
+RELEASES_URL = "https://github.com/ChupathingyCE/halo-ce-vita/releases/latest"
 CE_INSTALLER_URL = "https://www.halomaps.org/hce/detail.cfm?fid=410"
 
 # where the game looks for its files on the Vita (README.md, Install)
@@ -2613,7 +2613,7 @@ def copy_to_pc_build(staging: str, build: str, replace: bool = False, progress: 
 
 APP_NAME = "Halo CE"
 PUBLISHER = "Halo CE for PS Vita (fan project)"
-PROJECT_URL = "https://github.com/BirchWoodGod/halo-ce-vita"
+PROJECT_URL = "https://github.com/ChupathingyCE/halo-ce-vita"
 INSTALL_RECORD = "halo-ce-install.json"
 INSTALL_RECORD_MAXIMUM = 8 << 20
 UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\HaloCE"

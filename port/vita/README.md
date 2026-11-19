@@ -330,11 +330,12 @@ Graphics, **Performance**:
 **Check for updates** (General's first row, the build's version on the line
 under it, then a gap and the controls' rows): the game asks the network for
 nothing until this is pressed. A press asks GitHub's public API
-(api.github.com, the releases of BirchWoodGod/halo-ce-vita) on a thread of
+(api.github.com, the releases of ChupathingyCE/halo-ce-vita, asked by the
+repository's number so the move and rename of the repository do not matter) on a thread of
 its own and shows the answer beside the version, "Version 1.1.0-beta.3 -
 Checking...", then "- Up to date", or on lines of their own when too long
 for one: in amber "Update available: 1.1.0-beta.4" with
-github.com/BirchWoodGod/halo-ce-vita/releases under it (always that
+github.com/ChupathingyCE/halo-ce-vita/releases under it (always that
 address, never one from the answer), "Couldn't check: no connection" (ad
 hoc play, no network, or GitHub unreachable) or "Couldn't check right now". A found update also shows in the main menu's
 corner until the game restarts, and halo.log has a line. With an update

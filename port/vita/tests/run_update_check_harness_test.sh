@@ -96,7 +96,7 @@ for case in $cases; do
 		run newer 40 "300:@update;450:@update" "HALO_UPDATE_URL=$base/releases/v9.9.9-beta.1/1"
 		common newer
 		log=$out/newer/run.log
-		grep -aq "update: 9.9.9-beta.1 is available (this is $version (PC); Update channel experimental): halo-ce-vita-9.9.9-beta.1-pc-linux.tar.gz from github.com/BirchWoodGod/halo-ce-vita/releases" "$log" ||
+		grep -aq "update: 9.9.9-beta.1 is available (this is $version (PC); Update channel experimental): halo-ce-vita-9.9.9-beta.1-pc-linux.tar.gz from github.com/ChupathingyCE/halo-ce-vita/releases" "$log" ||
 			fail newer "halo.log does not say 9.9.9-beta.1 is available"
 		grep -aq 'update: the main menu shows "Update: 9.9.9-beta.1"' "$log" ||
 			fail newer "the main menu does not show it"

@@ -6,7 +6,9 @@ What decides whether a downloaded update is kept for the player to install
 in it, so the tests and the fuzzer build it alone.
 
 A release that the game may download carries three assets beside each other
-(https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v<version>/):
+(https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v<version>/,
+UPDATE_DOWNLOAD_BASE; GitHub's 301 to the repository's later home is
+followed: github_release_move.h):
 
   halo.vpk             the game, as VitaShell installs it
   halo-update.txt      the manifest: which version, which file, its size and
@@ -47,7 +49,7 @@ ask for alone (tools/release/README.md) */
 #define UPDATE_ASSET_VPK_SUFFIX "-vita.vpk"
 #define UPDATE_ASSET_MANIFEST "halo-update.txt"
 #define UPDATE_ASSET_SIGNATURE "halo-update.txt.sig"
-#define UPDATE_DOWNLOAD_BASE "https://github.com/BirchWoodGod/halo-ce-vita/releases/download"
+#define UPDATE_DOWNLOAD_BASE "https://github.com/ChupathingyCE/halo-ce-vita/releases/download"
 /* the manifest's first line */
 #define UPDATE_MANIFEST_MAGIC "halo-ce-vita-update 1"
 /* the manifest and the signature file, at most */
@@ -126,7 +128,9 @@ int update_asset_url(char *url, int size, const char *base, const char *version,
 
 /* whether a download that asked from_url may follow a redirect to to_url:
 https:// to GitHub's release-asset hosts (release-assets.githubusercontent.com,
-objects.githubusercontent.com) on the default port, nothing else; or, for the
+objects.githubusercontent.com) on the default port; GitHub's 301 of a
+release file from one of this project's homes to the same file under another
+(github_release_moved, github_release_move.h); nothing else; or, for the
 tests, from a loopback http://127.x.x.x URL to another one */
 int update_redirect_allowed(const char *from_url, const char *to_url);
 

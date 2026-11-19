@@ -331,7 +331,7 @@ Mesa. To stop this, set the environment variable `mesa_glthread=false`.
 
 ## Updates
 
-This project's releases (`github.com/BirchWoodGod/halo-ce-vita/releases`,
+This project's releases (`github.com/ChupathingyCE/halo-ce-vita/releases`,
 tagged `v<version>`) carry the PC build as `halo-ce-vita-<version>-pc-linux.tar.gz`
 and `halo-ce-vita-<version>-pc-windows.zip` (made by `tools/package_pc.py`),
 beside the Vita's `halo-ce-vita-<version>-vita.vpk`. To update, download the

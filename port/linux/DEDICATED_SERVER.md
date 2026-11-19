@@ -43,7 +43,7 @@ What it does not do:
 ## Download a release build
 
 Each release from 1.1.0-beta.2 has the server ready to run, on its
-[releases page](https://github.com/BirchWoodGod/halo-ce-vita/releases), as
+[releases page](https://github.com/ChupathingyCE/halo-ce-vita/releases), as
 two downloads:
 
 | Download | For |

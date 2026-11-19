@@ -32,13 +32,20 @@ starts on Stable.
 
 #include <stddef.h>
 
-/* the project whose releases are looked at, and where the player gets them */
-#define UPDATE_REPOSITORY "BirchWoodGod/halo-ce-vita"
+/* the project whose releases are looked at, and where the player gets them.
+The repository moved (BirchWoodGod/halo-ce-vita, then ChupathingyCE/
+halo-ce-vita, to be renamed ChupathingyCE/warthog-vita): GitHub's API is
+asked by the repository's number, UPDATE_REPOSITORY_ID, which no move or
+rename changes (the check follows no redirect); the files are downloaded
+from UPDATE_REPOSITORY, whose GitHub 301 to a later home of
+GITHUB_RELEASE_HOMES the downloads follow (github_release_move.h) */
+#define UPDATE_REPOSITORY "ChupathingyCE/halo-ce-vita"
+#define UPDATE_REPOSITORY_ID "1400014879"
 #define UPDATE_RELEASES_PAGE "github.com/" UPDATE_REPOSITORY "/releases"
 /* the newest few releases (pre-releases among them), and the newest release
 that is not one */
-#define UPDATE_URL_ALL "https://api.github.com/repos/" UPDATE_REPOSITORY "/releases?per_page=6"
-#define UPDATE_URL_STABLE "https://api.github.com/repos/" UPDATE_REPOSITORY "/releases/latest"
+#define UPDATE_URL_ALL "https://api.github.com/repositories/" UPDATE_REPOSITORY_ID "/releases?per_page=6"
+#define UPDATE_URL_STABLE "https://api.github.com/repositories/" UPDATE_REPOSITORY_ID "/releases/latest"
 /* a release's files: halo-ce-vita-<version>-vita.vpk (the Vita's updater
 downloads it: vita_update_verify.h), and the PC builds',
 halo-ce-vita-<version> UPDATE_ASSET_PC_SUFFIX (tools/package_pc.py), which a

@@ -83,7 +83,7 @@ cd /d "%~dp0"
 """
 
 README = """Halo CE Vita {version} - PC build ({system})
-https://github.com/BirchWoodGod/halo-ce-vita
+https://github.com/ChupathingyCE/halo-ce-vita
 
 The PC build of the Vita port. It plays online with the Vitas: your games
 show as VITA (PC) in their browsers.

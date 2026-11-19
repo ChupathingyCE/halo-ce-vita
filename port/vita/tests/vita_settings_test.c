@@ -5113,7 +5113,7 @@ static void test_updates(void)
 	redraw();
 	printf("%s\n--\n", menu);
 	check(strstr(menu, "\nCheck for updates\x02  >\n\x04" "Version " HALO_VITA_VERSION "\n"
-		"!Update available: 1.1.0-beta.4\n!github.com/BirchWoodGod/halo-ce-vita/releases\nUpdate channel\x02") &&
+		"!Update available: 1.1.0-beta.4\n!github.com/ChupathingyCE/halo-ce-vita/releases\nUpdate channel\x02") &&
 		menu_fits() && menu_height_fits() && menu_rows() == 11,
 		"an update: under the version, in amber, the new version and where to get it; all of the tab still fits (eleven "
 		"rows on the classic panel: Forge and File Share's too)");

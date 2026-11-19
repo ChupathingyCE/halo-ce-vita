@@ -17,6 +17,7 @@ alone (under AddressSanitizer and UBSan).
 #include "vita_update_verify.h"
 #include "vita_update_key.h"
 #include "update_check.h"
+#include "github_release_move.h"
 
 #include "monocypher-ed25519.h"
 
@@ -427,6 +428,11 @@ int update_redirect_allowed(const char *from_url, const char *to_url)
 
 	if (!from_url || !to_url)
 		return 0;
+	/* (GitHub's 301 of a release file from one of this project's homes to
+	another, the same tag and file: github_release_move.h; the file is
+	still checked against the signed manifest) */
+	if (github_release_moved(from_url, to_url))
+		return 1;
 	if (!strncmp(to_url, "https://", 8))
 	{
 		for (index = 0; index < sizeof(hosts) / sizeof(*hosts); index++)

@@ -18,6 +18,7 @@ placeholder: HALO_TEST_PLACEHOLDER):
 
 #include "vita_update_verify.h"
 #include "update_check.h"
+#include "github_release_move.h"
 
 #include "monocypher-ed25519.h"
 
@@ -310,10 +311,10 @@ static void urls(void)
 	char url[600];
 
 	check(update_asset_url(url, sizeof(url), UPDATE_DOWNLOAD_BASE, "1.1.0-beta.4", "halo.vpk") &&
-		!strcmp(url, "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.0-beta.4/halo.vpk"),
+		!strcmp(url, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.0-beta.4/halo.vpk"),
 		"the VPK's URL");
 	check(update_asset_url(url, sizeof(url), UPDATE_DOWNLOAD_BASE, "1.1.0", "halo-update.txt.sig") &&
-		!strcmp(url, "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.0/halo-update.txt.sig"),
+		!strcmp(url, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.0/halo-update.txt.sig"),
 		"the signature's URL");
 	check(update_asset_url(url, sizeof(url), "http://127.0.0.1:8080/dl", "1.1.0", "halo-update.txt") &&
 		!strcmp(url, "http://127.0.0.1:8080/dl/v1.1.0/halo-update.txt"), "the tests' server");
@@ -322,7 +323,7 @@ static void urls(void)
 	check(!update_asset_url(url, sizeof(url), UPDATE_DOWNLOAD_BASE, "1.1.0/../../x", "halo.vpk"), "a path: no URL");
 	check(!update_asset_url(url, sizeof(url), UPDATE_DOWNLOAD_BASE, "1.1.0", "eboot.bin"), "another asset: no URL");
 	check(update_asset_url(url, sizeof(url), UPDATE_DOWNLOAD_BASE, "1.1.1-beta.1", "halo-ce-vita-1.1.1-beta.1-vita.vpk") &&
-		!strcmp(url, "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.1-beta.1/"
+		!strcmp(url, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.1-beta.1/"
 		"halo-ce-vita-1.1.1-beta.1-vita.vpk"), "the release's VPK name's URL");
 	check(!update_asset_url(url, sizeof(url), UPDATE_DOWNLOAD_BASE, "1.1.1-beta.1", "halo-ce-vita-1.1.1-beta.2-vita.vpk"),
 		"another version's VPK name: no URL");
@@ -359,7 +360,7 @@ static void urls(void)
 
 static void redirects(void)
 {
-	static const char *const from = "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.0/halo.vpk";
+	static const char *const from = "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.0/halo.vpk";
 	static const char *const allowed[] =
 	{
 		"https://release-assets.githubusercontent.com/github-production-release-asset/1/2?sp=r&sig=a%2Bb&jwt=x.y.z",
@@ -380,7 +381,9 @@ static void redirects(void)
 		"https://release-assets.githubusercontent.com/x\r\nHost: evil",
 		"https://githubusercontent.com/x",
 		"https://raw.githubusercontent.com/x",
-		"https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.0/halo.vpk",
+		"https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.0/halo.vpk",
+		"https://github.com/someone/halo-ce-vita/releases/download/v1.1.0/halo.vpk",
+		"https://github.com/ChupathingyCE/other/releases/download/v1.1.0/halo.vpk",
 		"https://api.github.com/x",
 		"http://127.0.0.1/x",
 		"file:///ux0:/app",
@@ -402,6 +405,130 @@ static void redirects(void)
 	check(!update_redirect_allowed("http://127.0.0.1:5000/x", "http://127.0.0.1:99999/x"), "a bad port refused");
 	check(!update_redirect_allowed("http://127.0.0.1:5000/x", "http://127.1/x"), "a short loopback refused");
 	check(!update_redirect_allowed(NULL, allowed[0]) && !update_redirect_allowed(from, NULL), "NULLs refused");
+}
+
+/* GitHub's 301 of a release file after the repository moved
+(github_release_move.h): from one of the project's homes to the same
+<tag>/<file> under another, nothing else */
+static void moves(void)
+{
+	static const char *const old_vpk = "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.3/halo-update.txt";
+	static const char *const new_vpk = "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt";
+	static const char *const renamed = "https://github.com/ChupathingyCE/warthog-vita/releases/download/v1.1.3/halo-update.txt";
+	static const char *const refused[][2] =
+	{
+		/* (the same home: no move) */
+		{ new_vpk, new_vpk },
+		/* (another tag or file) */
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.2/halo-update.txt" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo.vpk" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt.sig" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt/x" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt?x=1" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt#x" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3" },
+		/* (another owner or repository: not one of the homes) */
+		{ old_vpk, "https://github.com/evil/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita2/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com/ChupathingyCE/warthog-vita-x/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com/chupathingyce/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com/ChupathingyCEx/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com/xChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/../evil/releases/download/v1.1.3/halo-update.txt" },
+		{ "https://github.com/evil/halo-ce-vita/releases/download/v1.1.3/halo-update.txt", new_vpk },
+		{ "https://github.com/someone/halo-update-test/releases/download/v1.1.3/halo-update.txt", new_vpk },
+		/* (not a release download, of a home or not) */
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/archive/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/raw/v1.1.3/halo-update.txt" },
+		{ "https://github.com/BirchWoodGod/halo-ce-vita/archive/v1.1.3/halo-update.txt",
+			"https://github.com/ChupathingyCE/halo-ce-vita/archive/v1.1.3/halo-update.txt" },
+		/* (dot parts, odd characters) */
+		{ "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/../halo-update.txt",
+			"https://github.com/ChupathingyCE/halo-ce-vita/releases/download/../halo-update.txt" },
+		{ "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.3/..",
+			"https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/.." },
+		{ "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.3/a%2Fb",
+			"https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/a%2Fb" },
+		{ "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.3/a b",
+			"https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/a b" },
+		{ "https://github.com/BirchWoodGod/halo-ce-vita/releases/download//halo-update.txt",
+			"https://github.com/ChupathingyCE/halo-ce-vita/releases/download//halo-update.txt" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt\r\nHost: x" },
+		{ old_vpk, "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt\r\n" },
+		/* (another host, scheme, port or user) */
+		{ old_vpk, "http://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com:443/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com@evil.example/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://github.com.evil.example/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://www.github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://GITHUB.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://api.github.com/repos/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "https://evil.example/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ old_vpk, "/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt" },
+		{ "http://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.3/halo-update.txt", new_vpk },
+		{ "https://evil.example/BirchWoodGod/halo-ce-vita/releases/download/v1.1.3/halo-update.txt", new_vpk },
+		{ old_vpk, "" },
+	};
+	size_t index;
+	char long_from[400], long_to[400];
+
+	check(update_redirect_allowed(old_vpk, new_vpk), "the moved repository: BirchWoodGod to ChupathingyCE");
+	check(update_redirect_allowed(new_vpk, renamed), "the renamed repository: halo-ce-vita to warthog-vita");
+	check(update_redirect_allowed(old_vpk, renamed), "the old home straight to the renamed one");
+	check(update_redirect_allowed(renamed, new_vpk), "the homes either way");
+	check(update_redirect_allowed("https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1.1.3/"
+		"halo-ce-vita-1.1.3-vita.vpk", "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/"
+		"halo-ce-vita-1.1.3-vita.vpk"), "the release's VPK moved");
+	check(update_redirect_allowed("https://github.com/BirchWoodGod/halo-ce-vita/releases/download/crossplay-table/"
+		"netversions.txt.sig", "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/crossplay-table/"
+		"netversions.txt.sig"), "the crossplay table's release moved");
+	check(update_redirect_allowed(new_vpk, "https://release-assets.githubusercontent.com/github-production-release-asset/"
+		"1400014879/x?sp=r"), "then GitHub's storage, as before");
+	for (index = 0; index < sizeof(refused) / sizeof(*refused); index++)
+	{
+		char what[300];
+
+		snprintf(what, sizeof(what), "move refused: %.120s -> %.140s", refused[index][0], refused[index][1]);
+		check(!update_redirect_allowed(refused[index][0], refused[index][1]), what);
+	}
+	{
+		/* (control characters anywhere in it) */
+		static const char *const control[] =
+		{
+			"https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt\t",
+			"https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt\n",
+			"https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.txt\x7f",
+			"https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1.1.3/halo-update.\x80txt",
+		};
+
+		for (index = 0; index < sizeof(control) / sizeof(*control); index++)
+			check(!update_redirect_allowed(old_vpk, control[index]), "move refused: a control character");
+	}
+	/* (a <tag>/<file> over 200 characters, the same on both sides) */
+	memset(long_from, 0, sizeof(long_from));
+	memset(long_to, 0, sizeof(long_to));
+	snprintf(long_from, sizeof(long_from), "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/v1/");
+	snprintf(long_to, sizeof(long_to), "https://github.com/ChupathingyCE/halo-ce-vita/releases/download/v1/");
+	memset(long_from + strlen(long_from), 'a', 210);
+	memset(long_to + strlen(long_to), 'a', 210);
+	check(!update_redirect_allowed(long_from, long_to), "move refused: too long");
+	check(!github_release_moved(NULL, new_vpk) && !github_release_moved(old_vpk, NULL), "move: NULLs refused");
+	/* (the Vita's base and the update check's repository agree) */
+	check(!strcmp(UPDATE_DOWNLOAD_BASE, "https://github.com/" UPDATE_REPOSITORY "/releases/download"),
+		"UPDATE_DOWNLOAD_BASE is UPDATE_REPOSITORY's");
+	check(!strcmp(UPDATE_URL_STABLE, "https://api.github.com/repositories/1400014879/releases/latest") &&
+		!strcmp(UPDATE_URL_ALL, "https://api.github.com/repositories/1400014879/releases?per_page=6"),
+		"the API asked by the repository's number");
+	{
+		static const char *const homes[] = GITHUB_RELEASE_HOMES;
+		int current = 0;
+
+		for (index = 0; index < sizeof(homes) / sizeof(*homes); index++)
+			current |= !strcmp(homes[index], UPDATE_REPOSITORY);
+		check(current, "UPDATE_REPOSITORY is one of GITHUB_RELEASE_HOMES");
+	}
 }
 
 int main(void)
@@ -433,6 +560,7 @@ int main(void)
 #endif
 	urls();
 	redirects();
+	moves();
 	printf("%d checks, %d failed\n", checks, failures);
 	return failures ? 1 : 0;
 }

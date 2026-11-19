@@ -11,9 +11,10 @@ that reached GitHub, RETRY_SECONDS since one that did not) and allowed
 (netversion_fetch.h), and runs each fetch on a thread of its own, with the
 update check's stack: the signature file and the table downloaded
 (posix_https_download: GitHub's authorities, no redirect but to GitHub's
-release storage, NETVERSION_TABLE_MAXIMUM_SIZE bytes at most), checked, and
-put in effect and kept only when newer than the table in effect. Kept as one
-file written whole (NETVERSION_TABLE_KEPT_FILE). The downloads go to .new
+release storage or to the same file of the moved repository,
+NETVERSION_TABLE_MAXIMUM_SIZE bytes at most), checked, and put in effect
+and kept only when newer than the table in effect. Kept as one file written
+whole (NETVERSION_TABLE_KEPT_FILE). The downloads go to .new
 files beside it, removed after.
 
 Release builds ask FETCH_BASE alone. (tests only, never a release build)
@@ -32,6 +33,8 @@ HALO_TEST_NETVERSIONS_INTERVAL seconds in place of a day.
 #include "platform.h"
 #include "port_config.h"
 #include "posix.h"
+#include "github_release_move.h"
+#include "update_check.h"
 #include "../../vita/include/vita_version.h"
 
 #include <pthread.h>
@@ -42,7 +45,7 @@ HALO_TEST_NETVERSIONS_INTERVAL seconds in place of a day.
 
 /* a release of its own, "crossplay-table", whose assets the owner replaces
 (tools/release/README.md, "Crossplay version table") */
-#define FETCH_BASE "https://github.com/BirchWoodGod/halo-ce-vita/releases/download/crossplay-table"
+#define FETCH_BASE "https://github.com/" UPDATE_REPOSITORY "/releases/download/crossplay-table"
 #define USER_AGENT "HaloCEVita/" HALO_VITA_VERSION
 #define FETCH_STACK_SIZE (256 * 1024)
 #define SCHEDULER_STACK_SIZE (64 * 1024)
@@ -135,7 +138,9 @@ static int path_clean(const char *path)
 }
 
 /* GitHub's redirect of a release's asset to its storage (exactly those
-hosts, https, no port or user), or the tests' loopback to loopback */
+hosts, https, no port or user), or of a release file to the same file of
+the project's moved repository (github_release_move.h), or the tests'
+loopback to loopback */
 static int redirect_allowed(const char *from_url, const char *to_url)
 {
 	static const char *const hosts[] = { "release-assets.githubusercontent.com", "objects.githubusercontent.com" };
@@ -143,6 +148,11 @@ static int redirect_allowed(const char *from_url, const char *to_url)
 
 	if (!from_url || !to_url)
 		return 0;
+	/* (GitHub's 301 of a release file from one of this project's homes to
+	another, the same tag and file: github_release_move.h; the table is
+	still taken only if its signature checks) */
+	if (github_release_moved(from_url, to_url))
+		return 1;
 	if (!strncmp(to_url, "https://", 8))
 	{
 		for (index = 0; index < sizeof(hosts) / sizeof(hosts[0]); index++)

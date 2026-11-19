@@ -176,7 +176,7 @@ parser.add_argument(
     action="store_true",
     help="TEST builds only, never a release: the Vita build takes HALO_UPDATE_URL and HALO_UPDATE_DOWNLOAD_BASE "
     "from env.txt (HALO_UPDATE_TEST_SOURCES), so its updater can look at a test repository "
-    "(tools/release/README.md); a build without it asks BirchWoodGod/halo-ce-vita alone",
+    "(tools/release/README.md); a build without it asks ChupathingyCE/halo-ce-vita alone",
 )
 parser.add_argument(
     "--vita-update-key",
