@@ -8572,7 +8572,12 @@ static boolean command_prepare_space_short(
 	{
 		platform_translate_path("t:\\", path, sizeof(path));
 		if (posix_disk_space(path, &free_low, &free_high, &total_low, &total_high) != 0)
+		{
+			/* (the room unknown - the Vita's count was never read before the insider.4 smoke, posix_files.c
+			now asks the card itself -: the build begun, a full card then a failed write, which says so) */
+			platform_log("command: prepare: the free space where the packs go could not be read (%s): built anyway", path);
 			return FALSE;
+		}
 	}
 	*free_mb = free_high ? 0x7fffffffL : (long)(free_low / (1024UL * 1024UL));
 #ifndef HALO_RELEASE
@@ -9277,6 +9282,27 @@ Legendary's), and the AI commander's level */
 			COMMAND_DRAW, "the console");
 		return TRUE;
 	}
+#ifndef HALO_RELEASE
+	/* (tests) "points red|blue <n>": that side's score raised as its
+	territory's seconds raise it, the game then ending as it ends by itself
+	(the score limit, the higher score winning) - "end" names the winner
+	whatever the scores */
+	if (!strcmp(word, "points"))
+	{
+		char side_word[16] = "";
+		long points = 0;
+		short side;
+
+		if (!command_globals.game_running || sscanf(text, "%15s %ld", side_word, &points) != 2 || points < 0)
+			return FALSE;
+		side = !strcmp(side_word, "blue") ? _command_side_blue : _command_side_red;
+		command_objectives.scores[side] += points;
+		command_objectives.territory_seconds[side] += points;
+		platform_log("command: points: %s +%ld, red %ld blue %ld", command_side_names[side], points,
+			command_objectives.scores[0], command_objectives.scores[1]);
+		return TRUE;
+	}
+#endif
 	if (!strcmp(word, "flag"))
 	{
 		short side;
@@ -11414,6 +11440,11 @@ static void command_hud_hq(
 		boolean chosen = row == command_globals.hq_row;
 		unsigned long color = chosen ? COMMAND_HUD_LIGHT : blocked && !built ? COMMAND_HUD_GREY : COMMAND_HUD_ITEM;
 
+		/* (where the row's name ends: a long one - Spanish's "Depósito de
+		suministros" - leaves no room for the word on its right, the insider.4
+		smoke) */
+		real name_end = x + 10.f + command_hud_text_width(command_hud.font_item, T(buy->name));
+
 		if (chosen)
 			command_hud_art(_command_art_item_on, x + 4.f, y, right - 4.f, y + row_height - 1.f, 1.f);
 		command_hud_text(command_hud.font_item, x + 10.f, y + 1.f, right, 0, color, T(buy->name));
@@ -11424,12 +11455,21 @@ static void command_hud_hq(
 			real bar_x0 = right - 74.f, bar_x1 = right - 10.f;
 
 			snprintf(text, sizeof(text), "%ld s", (done - game_time_get()) / TICKS_PER_SECOND + 1);
-			command_hud_text(command_hud.font_small, x, y + 2.f, bar_x0 - 4.f, 1, COMMAND_HUD_ORANGE, text);
-			command_hud_fill(bar_x0, y + 5.f, bar_x1, y + 11.f, 0x80202838UL);
-			command_hud_fill(bar_x0, y + 5.f, bar_x0 + (bar_x1 - bar_x0) * PIN(share, 0.f, 1.f), y + 11.f, 0xFFF0B070UL);
+			/* (the seconds only where they fit: the bar says it too) */
+			if (name_end + 6.f <= bar_x0 - 4.f - command_hud_text_width(command_hud.font_small, text))
+				command_hud_text(command_hud.font_small, x, y + 2.f, bar_x0 - 4.f, 1, COMMAND_HUD_ORANGE, text);
+			command_hud_fill(MAX(bar_x0, name_end + 4.f), y + 5.f, bar_x1, y + 11.f, 0x80202838UL);
+			command_hud_fill(MAX(bar_x0, name_end + 4.f), y + 5.f, MAX(bar_x0, name_end + 4.f) +
+				(bar_x1 - MAX(bar_x0, name_end + 4.f)) * PIN(share, 0.f, 1.f), y + 11.f, 0xFFF0B070UL);
 		}
-		else if (built)
+		else if (built && name_end + 6.f <= right - 10.f - command_hud_text_width(command_hud.font_small, T("BUILT")))
 			command_hud_text(command_hud.font_small, x, y + 2.f, right - 10.f, 1, COMMAND_HUD_DIM, T("BUILT"));
+		else if (built)
+		{
+			/* (no room for the word: a lit pip, as a squad card's living
+			member) */
+			command_hud_fill(right - 18.f, y + 5.f, right - 10.f, y + 11.f, 0xFFA8E07CUL);
+		}
 		else if (buy->cost > 0)
 		{
 			snprintf(text, sizeof(text), "%d", buy->cost);

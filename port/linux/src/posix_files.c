@@ -9,7 +9,11 @@ the host ABI and _FILE_OFFSET_BITS=64.
 /* (first: the C library's headers make st_ctime and the like macros, and
 SceIoStat has members of those names) */
 #include <psp2/io/stat.h>
+#include <psp2/io/devctl.h>
+#include <psp2/appmgr.h>
 #include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
 #endif
 #include <dirent.h>
 #include <fcntl.h>
@@ -179,6 +183,37 @@ int posix_disk_space(const char *path,
 	posix_ulong *free_low, posix_ulong *free_high,
 	posix_ulong *total_low, posix_ulong *total_high)
 {
+#ifdef __vita__
+	/* (statvfs is not the Vita's: newlib's fails, and every caller read the card as full - GAME MANAGER's
+	"0 KB free" - or, Command's packs, as having room. The device's own count, as vita_main.c's startup
+	check reads it: the devctl, which an app is refused on some firmware - the dev Vita's -, then the app
+	manager's, which is not. The 1.1.3-insider.4 smoke) */
+	struct { unsigned long long maximum, free; unsigned int cluster; unsigned int unknown; } space;
+	uint64_t maximum = 0, free_bytes = 0;
+	char device[16];
+	const char *colon = path ? strchr(path, ':') : NULL;
+
+	/* (the device of path, "ux0:"; ux0: when it names none) */
+	if (colon && colon - path < (long)sizeof(device) - 1 && colon > path)
+		snprintf(device, sizeof(device), "%.*s", (int)(colon - path + 1), path);
+	else
+		snprintf(device, sizeof(device), "ux0:");
+	memset(&space, 0, sizeof(space));
+	if (sceIoDevctl(device, 0x3001, NULL, 0, &space, sizeof(space)) >= 0 && space.maximum)
+	{
+		split64(space.free, free_low, free_high);
+		split64(space.maximum, total_low, total_high);
+		return 0;
+	}
+	if (sceAppMgrGetDevInfo(device, &maximum, &free_bytes) >= 0 && maximum)
+	{
+		split64((unsigned long long)free_bytes, free_low, free_high);
+		split64((unsigned long long)maximum, total_low, total_high);
+		return 0;
+	}
+	errno = EIO;
+	return -1;
+#else
 	struct statvfs st;
 
 	if (statvfs(path, &st) != 0)
@@ -186,6 +221,7 @@ int posix_disk_space(const char *path,
 	split64((unsigned long long)st.f_bavail * st.f_frsize, free_low, free_high);
 	split64((unsigned long long)st.f_blocks * st.f_frsize, total_low, total_high);
 	return 0;
+#endif
 }
 
 /* SetFileAttributesA's read-only bit (xbox_files.c), which the game clears

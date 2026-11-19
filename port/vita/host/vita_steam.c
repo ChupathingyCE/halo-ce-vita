@@ -23,6 +23,7 @@ takes the files (a scratch folder, never the game's own), and
 HALO_STEAM_TEST_CM / HALO_STEAM_TEST_CDN the fake server (steam_job.c).
 */
 
+#include <psp2/appmgr.h>
 #include <psp2/io/devctl.h>
 #include <psp2/io/stat.h>
 #include <psp2/kernel/processmgr.h>
@@ -55,6 +56,14 @@ static int64_t free_space(const char *root)
 	memset(&space, 0, sizeof(space));
 	if (sceIoDevctl(device, 0x3001, NULL, 0, &space, sizeof(space)) >= 0)
 		return (int64_t)space.free;
+	/* (the devctl is refused an app on some firmware - the dev Vita's, the 1.1.3-insider.4 smoke -: the app
+	manager's count, as vita_main.c's startup check and vita_update.c read it) */
+	{
+		uint64_t maximum = 0, free_bytes = 0;
+
+		if (sceAppMgrGetDevInfo(device, &maximum, &free_bytes) >= 0 && maximum)
+			return (int64_t)free_bytes;
+	}
 	return -1;
 }
 
