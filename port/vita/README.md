@@ -47,6 +47,14 @@ for a dump), `HALO_NO_GAME`, `HALO_NO_NET`, and the game's own
 `HALO_FRAME_TIMES`). `init.txt` in the data folder runs console commands at
 the start (`map_name levels\test\bloodgulch\bloodgulch`).
 
+A test build made with `--vita-frame-split` (configure.py) times the game
+thread's frame from outside the game: `HALO_FRAME_TIMING=n` writes, every n
+frames, the main loop's steps (tick, sound, render, present), the tick's
+updates per tick, the render's passes, every thread's run time a frame, and
+with `--vita-frame-split device` (the default) the Vita's Direct3D device's
+part of each step (its timing slows the device: compare frame rates with
+`steps`). `platform/vita_frame_split.c` says how.
+
 ## Memory
 
 The layout is the Xbox 360's, translated (`HALO_64BIT` with

@@ -633,6 +633,50 @@ static void thread_sample(void)
 	vita_host_udp_line(line);
 }
 
+/* (debug: a --vita-frame-split build's HALO_FRAME_TIMING lines) every
+thread's run time a frame since the last report, the busiest first */
+void vita_host_threads_report(unsigned long frames)
+{
+	static unsigned long long previous[TRACKED_THREADS];
+	struct thread_run { char name[16]; unsigned long long run; } busy[TRACKED_THREADS];
+	char line[1400];
+	int index, count = tracked_count < TRACKED_THREADS ? tracked_count : TRACKED_THREADS, found = 0, used, i, j;
+
+	if (!frames)
+		return;
+	for (index = 0; index < count; index++)
+	{
+		SceKernelThreadInfo info;
+		unsigned long long run;
+
+		memset(&info, 0, sizeof(info));
+		info.size = sizeof(info);
+		if (sceKernelGetThreadInfo(tracked_threads[index], &info) < 0)
+			continue;
+		run = info.runClocks >= previous[index] ? info.runClocks - previous[index] : 0;
+		previous[index] = info.runClocks;
+		snprintf(busy[found].name, sizeof(busy[found].name), "%s", info.name);
+		busy[found++].run = run;
+	}
+	for (i = 1; i < found; i++)
+		for (j = i; j > 0 && busy[j].run > busy[j - 1].run; j--)
+		{
+			struct thread_run swap = busy[j];
+
+			busy[j] = busy[j - 1];
+			busy[j - 1] = swap;
+		}
+	used = snprintf(line, sizeof(line), "threads (ms/frame, %lu frames):", frames);
+	for (i = 0; i < found && used < (int)sizeof(line) - 40; i++)
+	{
+		if ((double)busy[i].run / 1000.0 / (double)frames < 0.05)
+			break;
+		used += snprintf(line + used, sizeof(line) - used, " %s %.2f%s", busy[i].name,
+			(double)busy[i].run / 1000.0 / (double)frames, i + 1 < found ? "," : "");
+	}
+	vita_host_log(line);
+}
+
 static void sampler_thread(void *unused)
 {
 	(void)unused;

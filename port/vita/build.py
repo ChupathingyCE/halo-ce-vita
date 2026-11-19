@@ -200,6 +200,30 @@ REPLACED_PLATFORM_SOURCES = {
     "posix_upnp.c", "posix_browser.c",
 }
 
+# --vita-frame-split: the game's functions timed from outside it
+# (platform/vita_frame_split.c), and the Direct3D device's units whose time on
+# the game thread it counts
+FRAME_SPLIT_WRAPPED = (
+    "input_update", "process_ui_widgets", "player_control_update", "game_time_update", "director_update",
+    "observer_update", "sound_render", "render_frame", "render_frame_present",
+    "game_tick", "units_update", "ai_update", "effects_update", "objects_update", "players_update_before_game",
+    "players_update_after_game", "hud_update", "hs_update", "game_engine_update", "first_person_weapons_update",
+    "antennas_update", "player_effect_update", "recorded_animations_update", "scenario_tick_update",
+    "lua_scripting_tick", "game_allegiance_update",
+    "structure_visibility_compute", "render_sky", "lights_preprocess_scene", "structure_render_preprocess",
+    "structure_render_lightmaps", "structure_render_diffuse_texture", "lights_render_diffuse",
+    "structure_render_specular_lightmaps", "lights_render_specular", "structure_render_reflections",
+    "structure_render_transparent_geometry", "structure_render_fog", "render_objects", "render_object_shadows",
+    "render_particles", "particle_systems_render", "weather_particle_systems_render", "render_contrails_normal",
+    "rasterizer_transparent_geometry_draw", "rasterizer_decals_draw", "structure_render_detail_objects",
+    "rasterizer_lens_flares_draw", "interface_draw_screen", "render_ui_widgets", "rasterizer_frame_begin",
+    "rasterizer_frame_end",
+)
+DEVICE_SOURCES = {
+    "d3d8_gxm.c", "vita_textures.c", "nv2a_psh_cg.c", "nv2a_vsh_cg.c", "blend_constant.c", "dynamic_resolution.c",
+    "fill_stats.c",
+}
+
 VITA_LIBRARIES = [
     "SDL3", "SceGxm_stub", "SceDisplay_stub", "SceCtrl_stub", "SceAudio_stub", "SceAudioIn_stub",
     "SceSysmodule_stub", "SceShellSvc_stub", "SceHid_stub", "SceTouch_stub", "SceMotion_stub", "ScePower_stub",
@@ -231,6 +255,10 @@ def add_arguments(parser: Any) -> None:
     parser.add_argument("--vita-data-folder", metavar="PATH",
                         help=f"the app's data folder on the card (default {RELEASE_DATA_DIRECTORY} with --release, "
                              f"else {DEV_DATA_DIRECTORY})")
+    parser.add_argument("--vita-frame-split", nargs="?", const="device", choices=["steps", "device"],
+                        help="a test build that times the game thread's steps (steps), and the Direct3D device's "
+                             "part of them (device, the default; its timing slows the device) "
+                             "(platform/vita_frame_split.c; HALO_FRAME_TIMING=n in env.txt)")
     parser.add_argument("--vita-build-number", metavar="N", type=int, default=1,
                         help="the Vita's build count after the game's version, \"0.9.2 (build N)\" (default 1)")
 
@@ -424,10 +452,15 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     # the port's units in the platform layer's terms: the Vita's Direct3D
     # device on GXM and its Cg translators, which read the game's xgpu.h
     # with the Vita's own pixel shader key (include/vita_xgpu_game.h)
+    frame_split = bool(getattr(sln.args, "vita_frame_split", False))
     for source in sorted((port_dir / "platform").glob("*.c")):
+        if source.name == "vita_frame_split.c" and not frame_split:
+            continue
+        instrument = (" -finstrument-functions-after-inlining"
+                      if getattr(sln.args, "vita_frame_split", None) == "device" and source.name in DEVICE_SOURCES else "")
         add(source, "vita_cc", f"{platform_cflags} -I{_quote(port_dir / 'host')} "
                                f"-include {_quote(port_dir / 'include' / 'vita_xgpu_game.h')} "
-                               f"-include {_quote(port_dir / 'include' / 'vita_glue.h')}")
+                               f"-include {_quote(port_dir / 'include' / 'vita_glue.h')}{instrument}")
 
     # ---------- third-party libraries, with the platform layer's ABI
     third_party = " ".join([abi, "-std=gnu11", "-w"])
@@ -486,7 +519,7 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     vpk = build_dir / "warthog.vpk"
     n.rule(name="vita_link",
            command=("$vita_sdk_bin/arm-vita-eabi-gcc -Wl,-q,--defsym=__sce_headroom=0x1000 "
-                    "-Wl,--no-enum-size-warning -Wl,--no-wchar-size-warning -Wl,--gc-sections -Wl,--wrap=exit,--wrap=abort,--wrap=_exit,--wrap=fork,--wrap=fopen,--wrap=open,--wrap=opendir,--wrap=stat,--wrap=sceKernelCreateThread,--wrap=sceKernelExitProcess,--wrap=D3DTexture_LockRect "
+                    "-Wl,--no-enum-size-warning -Wl,--no-wchar-size-warning -Wl,--gc-sections -Wl,--wrap=exit,--wrap=abort,--wrap=_exit,--wrap=fork,--wrap=fopen,--wrap=open,--wrap=opendir,--wrap=stat,--wrap=sceKernelCreateThread,--wrap=sceKernelExitProcess,--wrap=D3DTexture_LockRect $wraps "
                     f"-Wl,-Map,{_quote(build_dir / 'warthog.map')} -o $out @$out.rsp $libs"),
            description="VITA LINK $out", rspfile="$out.rsp", rspfile_content="$in_newline")
     n.rule(name="vita_velf", command="$vita_sdk_bin/vita-elf-create $in $out", description="VITA VELF $out")
@@ -499,7 +532,9 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     n.rule(name="vita_vpk", command="$vita_sdk_bin/vita-pack-vpk -s $sfo -b $eboot $assets $out",
            description="VITA VPK $out")
     n.build(outputs=elf, rule="vita_link", inputs=objects, implicit_outputs=[build_dir / "warthog.map"],
-            variables={"libs": " ".join(f"-l{lib}" for lib in VITA_LIBRARIES)})
+            variables={"libs": " ".join(f"-l{lib}" for lib in VITA_LIBRARIES),
+                       "wraps": "-Wl," + ",".join(f"--wrap={name}" for name in FRAME_SPLIT_WRAPPED)
+                       if frame_split else ""})
     n.build(outputs=velf, rule="vita_velf", inputs=elf)
     n.build(outputs=eboot, rule="vita_eboot", inputs=velf)
     n.build(outputs=sfo, rule="vita_sfo", implicit=[port_dir / "build.py"])
