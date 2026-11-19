@@ -93,10 +93,15 @@ application on the dev Vita 14 s after it started.
 
 ## Known problems
 
-- Slow: b30 about 9 frames a second where Halo CE Vita 1.1.3 runs 28; Blood
-  Gulch alone 33. None of Halo CE Vita's game-side performance work is in
-  the game (PLAN.md has the list). The Xbox's settings (particles 1024, no
-  anti-aliasing, 128 shadows) change nothing measurable: it is the CPU.
+- Slow: b30 about 13 frames a second (worst 9) where Halo CE Vita 1.1.3
+  runs 28; Blood Gulch alone 33. The game thread is busy the whole frame
+  (`--vita-frame-split`): the drawing takes as long as Halo CE Vita's (about
+  38 ms in the beach fight), but the game's two ticks a frame (about 18 ms
+  each) run on the same thread, where Halo CE Vita ran its tick on a thread
+  of its own; at two ticks a frame the game runs slower than real time.
+  The tick thread is upstream's ChupathingyCE/chupathingyce#1548. The Xbox's
+  settings (particles 1024, no anti-aliasing, 128 shadows) change nothing
+  measurable.
 - Not yet: Link Profile and the Online Games screen (the Delta Guide is not
   built for consoles), the system keyboard for text boxes, movies, the
   high-resolution text and HUD (`HALO_CONSOLE_HOST_ART`'s text atlas and HUD

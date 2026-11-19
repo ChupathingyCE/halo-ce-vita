@@ -42,9 +42,10 @@ build count: 0.9.2 (build 1).
   second.
 - Plays the Xbox maps. Measured on a PS Vita 2000:
   - Blood Gulch, alone: 33 frames a second, steady.
-  - The Silent Cartographer (b30), the beach: 9 frames a second on average,
-    7 at the worst moment, when the Covenant engage on the beach. Halo CE
-    Vita 1.1.3 runs the same beach at 28.
+  - The Silent Cartographer (b30), the beach: 13 frames a second on average,
+    9 at the worst moment, when the Covenant engage on the beach. Halo CE
+    Vita 1.1.3 runs the same beach at 28: its game tick runs beside the
+    drawing, on a core of its own.
 - **Not yet:**
   - Online play through Delta: Online Games, Link Profile, friends and
     parties.
