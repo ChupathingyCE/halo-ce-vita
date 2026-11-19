@@ -1753,7 +1753,7 @@ without a game update. Design agreed with the owner:
   older table is refused (its version is not higher than the one in effect
   and kept). Test builds alone can take another key
   (`configure.py --netversions-test-key`, refused with `--release`).
-- **Where.** A pre-release (never Latest) of BirchWoodGod/halo-ce-vita
+- **Where.** A pre-release (never Latest) of ChupathingyCE/halo-ce-vita
   tagged `crossplay-table`; the game asks
   `github.com/.../releases/download/crossplay-table/netversions.txt` and
   `.sig` with `posix_https_download`: the updater's TLS, GitHub's pinned

@@ -6,14 +6,14 @@
 
 **A native PlayStation Vita port of Halo: Combat Evolved, built from the decompilation of the Xbox game.**
 
-[![Latest release](https://img.shields.io/github/v/release/BirchWoodGod/halo-ce-vita?label=latest&color=2ea44f)](https://github.com/BirchWoodGod/halo-ce-vita/releases/latest)
-[![Beta](https://img.shields.io/github/v/release/BirchWoodGod/halo-ce-vita?include_prereleases&label=beta&color=d29922)](https://github.com/BirchWoodGod/halo-ce-vita/releases)
-[![Downloads](https://img.shields.io/github/downloads/BirchWoodGod/halo-ce-vita/total?color=blue)](https://github.com/BirchWoodGod/halo-ce-vita/releases)
+[![Latest release](https://img.shields.io/github/v/release/ChupathingyCE/halo-ce-vita?label=latest&color=2ea44f)](https://github.com/ChupathingyCE/halo-ce-vita/releases/latest)
+[![Beta](https://img.shields.io/github/v/release/ChupathingyCE/halo-ce-vita?include_prereleases&label=beta&color=d29922)](https://github.com/ChupathingyCE/halo-ce-vita/releases)
+[![Downloads](https://img.shields.io/github/downloads/ChupathingyCE/halo-ce-vita/total?color=blue)](https://github.com/ChupathingyCE/halo-ce-vita/releases)
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-orange)](LICENSE)
 [![Platform: PS Vita](https://img.shields.io/badge/platform-PS%20Vita%20%2F%20PS%20TV-003791)](#requirements)
 [![Discord](https://img.shields.io/badge/Discord-join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/Ed7sbCgAF5)
 
-[**Download**](https://github.com/BirchWoodGod/halo-ce-vita/releases) ·
+[**Download**](https://github.com/ChupathingyCE/halo-ce-vita/releases) ·
 [Install](#install) ·
 [PC version](#pc-version) ·
 [Online play](#multiplayer) ·
@@ -41,7 +41,7 @@ It is not an emulator: the game's own code is compiled for the Vita's ARM
 processor, and its Direct3D rendering is translated to the Vita's GPU.
 
 > [!NOTE]
-> **[1.1.2](https://github.com/BirchWoodGod/halo-ce-vita/releases/latest) is the current release**, and this README describes it.
+> **[1.1.2](https://github.com/ChupathingyCE/halo-ce-vita/releases/latest) is the current release**, and this README describes it.
 > Install it over 1.0.3 or any 1.1.0 beta: maps, saves and settings carry over.
 
 > [!IMPORTANT]
@@ -52,8 +52,9 @@ processor, and its Direct3D rendering is translated to the Vita's GPU.
 
 > [!WARNING]
 > **Official sources.** The only official downloads are the
-> [releases on this GitHub repository](https://github.com/BirchWoodGod/halo-ce-vita/releases),
-> published by **BirchWoodGod**. VPKs, "updates", mods or donation requests
+> [releases on this GitHub repository](https://github.com/ChupathingyCE/halo-ce-vita/releases)
+> (ChupathingyCE/halo-ce-vita, formerly BirchWoodGod/halo-ce-vita; old links
+> redirect here). VPKs, "updates", mods or donation requests
 > offered anywhere else under this project's or the developer's name are not
 > from me. If in doubt, check that a build is listed on the releases page.
 
@@ -115,10 +116,10 @@ processor, and its Direct3D rendering is translated to the Vita's GPU.
   slows down with three or four players: co-op takes two by default, and
   three or four are experimental.
 - Master Chief's body can be missing in The Pillar of Autumn's cryo tube
-  ([#29](https://github.com/BirchWoodGod/halo-ce-vita/issues/29)).
+  ([#29](https://github.com/ChupathingyCE/halo-ce-vita/issues/29)).
 
 The current list is in the [roadmap](ROADMAP.md) and the
-[issues](https://github.com/BirchWoodGod/halo-ce-vita/issues).
+[issues](https://github.com/ChupathingyCE/halo-ce-vita/issues).
 
 ## Install
 
@@ -126,7 +127,7 @@ Prefer a video? The [install tutorial](https://youtu.be/x46zLnwlRUU) walks throu
 
 **Quick answers** (which folder is which, no PC, where to update, common problems):
 [Install help](docs/INSTALL-HELP.md). Get the game only from this page's
-[releases](https://github.com/BirchWoodGod/halo-ce-vita/releases): mirrors such as
+[releases](https://github.com/ChupathingyCE/halo-ce-vita/releases): mirrors such as
 PSVitaAlive or VitaDB are often versions behind.
 
 ### Requirements
@@ -181,7 +182,7 @@ so and where to move them (1.1.2 showed a black screen with no sound).
 ### Easy install (Windows tool)
 
 Download **`HaloCEVitaInstaller.exe`** from the
-[releases](https://github.com/BirchWoodGod/halo-ce-vita/releases) and run it.
+[releases](https://github.com/ChupathingyCE/halo-ce-vita/releases) and run it.
 
 It's a normal Setup wizard: Next, Next, Finish.
 
@@ -205,7 +206,7 @@ The tool isn't signed: if Windows says "Windows protected your PC", click
 
 1. **Install the VPK** (`halo-ce-vita-<version>-vita.vpk`; `halo.vpk` up to
    1.1.0) from the
-   [releases](https://github.com/BirchWoodGod/halo-ce-vita/releases) with
+   [releases](https://github.com/ChupathingyCE/halo-ce-vita/releases) with
    VitaShell. The bubble is called **Halo CE**.
 2. **Extract the game files** from your Xbox disc image with
    [extract-xiso](https://github.com/XboxDev/extract-xiso):
@@ -341,7 +342,7 @@ Vitas: your games show up in their browsers as **VITA (PC)**.
 
 ### PC downloads
 
-From the [releases](https://github.com/BirchWoodGod/halo-ce-vita/releases),
+From the [releases](https://github.com/ChupathingyCE/halo-ce-vita/releases),
 take the file for your system:
 
 | File | For |
@@ -822,7 +823,7 @@ Questions and finding people to play with: the
 
 ### Reporting a crash or a problem
 
-Open an [issue](https://github.com/BirchWoodGod/halo-ce-vita/issues) with
+Open an [issue](https://github.com/ChupathingyCE/halo-ce-vita/issues) with
 the version (the first line of `halo.log`, or the settings panel's Controls,
 Advanced), what you were doing (level, place, weapon, vehicle; for
 multiplayer the mode: Online, Same Wi-Fi, Ad hoc or Co-op), and these files
@@ -866,7 +867,7 @@ git clone https://github.com/vitasdk/vdpm && cd vdpm
 ### Build
 
 ```
-git clone https://github.com/BirchWoodGod/halo-ce-vita
+git clone https://github.com/ChupathingyCE/halo-ce-vita
 cd halo-ce-vita
 python3 configure.py --lto off --pgo off --portable --release
 ninja vita

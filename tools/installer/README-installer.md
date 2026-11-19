@@ -13,7 +13,7 @@ files.
 ## Running it
 
 - **Windows:** download `HaloCEVitaInstaller.exe` from the
-  [releases](https://github.com/BirchWoodGod/halo-ce-vita/releases/latest)
+  [releases](https://github.com/ChupathingyCE/halo-ce-vita/releases/latest)
   (it is attached next to the VPK, `halo-ce-vita-<version>-vita.vpk`) and double-click it. It is one
   program of about 48 MB that unpacks itself to a temporary folder at each
   start, so it takes a few seconds to open. It is not signed: Windows
@@ -236,7 +236,7 @@ Files page; on the command line, the commands below.
    Every file is checked by its size on the Vita after copying. The command
    line's `upload --replace` copies files already there again.
 5. **The VPK (Vita).** Download `halo-ce-vita-<version>-vita.vpk` from the
-   [releases](https://github.com/BirchWoodGod/halo-ce-vita/releases/latest)
+   [releases](https://github.com/ChupathingyCE/halo-ce-vita/releases/latest)
    (Setup downloads and signature-checks it by itself; a VPK of your own is only
    sent if you untick that and choose it). The tool copies it to
    `ux0:data/`. Then, on the Vita, leave FTP mode, open `ux0:data/` in

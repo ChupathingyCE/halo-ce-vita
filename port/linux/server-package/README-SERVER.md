@@ -13,7 +13,7 @@ its LAN. It runs on Linux:
 
 The server needs nothing but glibc: SDL3 is inside the program. The full
 guide is `DEDICATED_SERVER.md`, next to this file, also at
-<https://github.com/BirchWoodGod/halo-ce-vita/blob/main/port/linux/DEDICATED_SERVER.md>.
+<https://github.com/ChupathingyCE/halo-ce-vita/blob/main/port/linux/DEDICATED_SERVER.md>.
 
 **No game data is included.** Copy the `maps` folder of your own Xbox copy
 of Halo: Combat Evolved (`ui.map`, `bloodgulch.map` and the rest).
@@ -165,6 +165,6 @@ traffic.
 
 Halo CE for PS Vita's code is free software under the GNU General Public
 License version 3 only (`LICENSE`); its source is at
-<https://github.com/BirchWoodGod/halo-ce-vita>. `licenses/` holds the notices
+<https://github.com/ChupathingyCE/halo-ce-vita>. `licenses/` holds the notices
 of the libraries built into the server. Halo and its data are Microsoft's;
 nothing of the game's data is in this package.

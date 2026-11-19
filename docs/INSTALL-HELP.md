@@ -6,7 +6,7 @@ The short answers to what people ask most. The full guide is the README's
 ## Where do I get the game?
 
 Only from this project's GitHub releases:
-**https://github.com/BirchWoodGod/halo-ce-vita/releases**
+**https://github.com/ChupathingyCE/halo-ce-vita/releases**
 
 Mirrors and stores such as PSVitaAlive or VitaDB are not run by us and are
 often several versions behind (1.1.2 can't start from MCC's files alone, for

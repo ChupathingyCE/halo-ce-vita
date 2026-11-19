@@ -17,7 +17,8 @@ the kept file again: vita_update_scan_at_start).
 Builds holding the placeholder key (vita_update_key.h) refuse at once and
 point to the releases page. Only a test build (HALO_UPDATE_TEST_SOURCES,
 tools/release/README.md) takes HALO_UPDATE_DOWNLOAD_BASE from env.txt; a
-release build downloads from BirchWoodGod/halo-ce-vita alone.
+release build downloads from UPDATE_DOWNLOAD_BASE alone (and the
+repository's later home GitHub redirects it to: github_release_move.h).
 */
 
 #include <psp2/appmgr.h>
