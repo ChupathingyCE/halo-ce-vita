@@ -131,6 +131,15 @@ int pause(void)
 	return -1;
 }
 
+/* the game's stack walk for a failed assertion (stack_walk_windows.c, a dev
+build's display_assert): newlib has no execinfo, so no frames; the crash
+dump has the stack */
+int backtrace(void **buffer, int size)
+{
+	(void)buffer; (void)size;
+	return 0;
+}
+
 /* ---------- generic atomics (libatomic)
 
 clang, told nothing is aligned (-fmax-type-align=1), turns an atomic on any
