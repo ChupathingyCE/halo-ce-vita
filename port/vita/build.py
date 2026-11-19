@@ -140,6 +140,15 @@ CONSOLE_FEATURES = [
     "'-DHALO_CONSOLE_MENU_PLATFORM=\"vita\"'",
     # config.toml in the data folder (HALO_DATA_ROOT, host/vita_main.c)
     "-DHALO_CONSOLE_CONFIG_IN_DATA_ROOT",
+    # the frames between ticks move the view only, as on the original Xbox:
+    # no snapshot of every object's nodes after each tick nor blend of them
+    # each frame (render_interpolation.c), 9-10 ms of a b30 frame's 100 on
+    # the Vita, where the frames seldom outnumber the ticks
+    "-DHALO_CONSOLE_VIEW_INTERPOLATION",
+    # the level's surfaces walked as the original game walks them by default:
+    # the culling's tests cost the Vita's processor more than the GPU work
+    # they save (overrides/port/linux/src/port_config.c until upstream has it)
+    "-DHALO_CONSOLE_NO_STRUCTURE_CULLING",
 ]
 
 # the game's C89, as MSVC took it

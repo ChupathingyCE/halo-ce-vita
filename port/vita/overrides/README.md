@@ -33,3 +33,14 @@ Halo CE Vita's own copy (`ux0:data/haloce-vita/maps`, or 1.2.0's
 again. `#ifdef HALO_VITA_CONSOLE` only. Upstream PR candidate: a
 `paths.maps` setting every build could use (a maps folder apart from the
 data root).
+
+## port/linux/src/port_config.c
+
+`debug.structure_culling` defaults to false on a console that defines
+`HALO_CONSOLE_NO_STRUCTURE_CULLING` (the Vita does, in `build.py`): the
+culling's per-surface and per-triangle tests cost the Vita's processor more
+than the GPU work they save (b30's visibility walk 9 ms a frame with them,
+4.7 without). The player can still turn it on in config.toml. Upstream PR
+candidate: "Consoles: structure culling off by default where the processor
+is the limit" (the same change, with the capability documented in
+`halo_console_features.h`).

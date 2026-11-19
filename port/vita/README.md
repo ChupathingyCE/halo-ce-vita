@@ -24,12 +24,20 @@ game's `--lto`, on by default: `ld.lld -r` makes one object of it for GCC's
 link; `--lto off` builds without). A `--release` build also compiles the
 debug decomp's asserts out (the game's `--console-no-debug-asserts`; a dev
 build keeps them). Measured on b30 (dev builds, 120 s of the beach): 8.8
-frames a second as before, 10.1 with LTO, 10.5 without the asserts, 11.2
-with both. Two options stay off:
+frames a second as before, 10.1 with LTO, 10.5 without the asserts, 12.4
+with both and the view-only interpolation below, 12.8 with the original
+structure walk too. Two options stay off:
 `--vita-aligned hot` (the hot directories without `-fmax-type-align=1`)
 faulted in the b30 fight (an unaligned load in the rasterizer's environment
 draw), and `--pgo-profile` with the game's Linux profile gave nothing
 measurable (9.0).
+
+The Vita sets two of the game's console capabilities for its speed:
+`HALO_CONSOLE_VIEW_INTERPOLATION` (frames between ticks move the view only:
+no snapshot of every object after each tick, 9-10 ms of a b30 frame) and
+`HALO_CONSOLE_NO_STRUCTURE_CULLING` (the level's surfaces walked as the
+original game walks them: the culling's tests cost the A9 more than they
+spare the GPU; `overrides/` until upstream has it).
 
 ## What is the Vita's own
 
