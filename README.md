@@ -35,9 +35,10 @@ build count after it, as the other Warthog ports say theirs:
 **0.9.2 (build 1)**.
 
 - Builds a VPK with VitaSDK (`ninja vita`).
-- On the dev Vita it starts, brings up the GPU and the menus' map, and draws
-  the main menu at the display's rate; it stops some seconds in (being
-  worked on: [port/vita/README.md](port/vita/README.md), "Known problems").
+- On a Vita it starts, brings up the GPU and loads the menus' map, then
+  stops before the main menu: the Xbox window's layout does not suit the
+  Vita's memory yet ([port/vita/README.md](port/vita/README.md), "Known
+  problems").
 - Not yet: Link Profile, the Online Games screen, the movies, the menus'
   high-resolution art, Custom Edition maps.
 
