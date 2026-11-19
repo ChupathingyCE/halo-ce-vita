@@ -67,7 +67,8 @@ application on the dev Vita 14 s after it started.
 
 - Slow: b30 about 9 frames a second where Halo CE Vita 1.1.3 runs 28; Blood
   Gulch alone 33. None of Halo CE Vita's game-side performance work is in
-  the game (PLAN.md has the list).
+  the game (PLAN.md has the list). The Xbox's settings (particles 1024, no
+  anti-aliasing, 128 shadows) change nothing measurable: it is the CPU.
 - Not yet: Link Profile and the Online Games screen (the Delta Guide is not
   built for consoles), the system keyboard for text boxes, movies, the
   high-resolution text and HUD (`HALO_CONSOLE_HOST_ART`'s text atlas and HUD
