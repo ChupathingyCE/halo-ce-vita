@@ -200,6 +200,32 @@ REPLACED_PLATFORM_SOURCES = {
     "posix_upnp.c", "posix_browser.c",
 }
 
+# a profile that does not quite match the Vita's units (another platform's,
+# or older code): the functions it does not fit go without
+PROFILE_USE_FLAGS = [
+    "-Wno-profile-instr-unprofiled", "-Wno-profile-instr-out-of-date", "-Wno-profile-instr-missing",
+    "-Wno-backend-plugin",
+]
+
+# --vita-aligned hot: the game's directories compiled without
+# -fmax-type-align=1, which makes clang take every pointer as unaligned, so
+# each float the game loads or stores through one goes through an integer
+# register and a transfer (a stall on the Cortex-A9), and its atomics become
+# library calls. The flag is needed where the game reads floats from 2-byte
+# aligned data (the script engine, hs/) or keeps a structure as a byte array:
+# Halo CE Vita's UBSan sweep of every campaign level saw misaligned accesses
+# only in hs/, cseries/debug_memory.c and the files excepted below.
+# actions.c keeps a struct path_collision_result as a byte array on the
+# stack and reads its floats through a pointer (actor_move_try_evasion_vector):
+# a fault in the b30 fight on Halo CE Vita, whose copy aligned the array;
+# Chupathingy's does not
+VITA_ALIGNED_DIRS = (
+    "source/objects/", "source/physics/", "source/ai/", "source/render/", "source/rasterizer/",
+    "source/math/", "source/structures/", "source/models/", "source/units/", "source/items/",
+    "source/effects/", "source/camera/", "source/game/", "source/memory/",
+)
+VITA_ALIGNED_EXCEPTIONS = {"source/physics/breakable_surfaces.c", "source/ai/actions.c"}
+
 # --vita-frame-split: the game's functions timed from outside it
 # (platform/vita_frame_split.c), and the Direct3D device's units whose time on
 # the game thread it counts
@@ -256,6 +282,9 @@ def add_arguments(parser: Any) -> None:
     parser.add_argument("--vita-data-folder", metavar="PATH",
                         help=f"the app's data folder on the card (default {RELEASE_DATA_DIRECTORY} with --release, "
                              f"else {DEV_DATA_DIRECTORY})")
+    parser.add_argument("--vita-aligned", choices=["none", "hot"], default="none",
+                        help="hot: the game's hot directories compiled without -fmax-type-align=1 (VITA_ALIGNED_DIRS); "
+                             "none (the default): every game unit assumes nothing aligned")
     parser.add_argument("--vita-frame-split", nargs="?", const="device", choices=["steps", "device"],
                         help="a test build that times the game thread's steps (steps), and the Direct3D device's "
                              "part of them (device, the default; its timing slows the device) "
@@ -362,18 +391,42 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
             return overrides_dir / name
         return source
 
+    # link-time optimisation of the clang side (configure.py --lto full or
+    # thin, Halo CE Vita's way): the game and platform objects are bitcode,
+    # partially linked into one relocatable object by lld and optimised as
+    # one module at -O2, then linked with the Vita side by VitaSDK's GCC.
+    # lld -r leaves the game's common symbols (-fcommon) common for the final
+    # link, but also writes a COMMON section of their size that no symbol is
+    # in, which the final link would place in .bss besides them: removed.
+    # The wrapped functions that the clang side defines are wrapped inside
+    # the module too, before its calls to them are resolved
+    lto = getattr(sln, "port_lto", "off") != "off"
+    lto_wraps = ["D3DTexture_LockRect", *(FRAME_SPLIT_WRAPPED if getattr(sln.args, "vita_frame_split", False) else ())]
+    n.rule(name="vita_lto",
+           command=("ld.lld -r -m armelf_linux_eabi --lto-O2 -mllvm -mcpu=cortex-a9 -mllvm -float-abi=hard "
+                    "-mllvm -emulated-tls " + " ".join(f"--wrap={name}" for name in lto_wraps) +
+                    " -o $out @$out.rsp && $vita_sdk_bin/arm-vita-eabi-objcopy --remove-section=COMMON $out"),
+           description="VITA LTO $out", rspfile="$out.rsp", rspfile_content="$in_newline")
     objects: List[Path] = []
+    clang_objects: List[Path] = []
     clang_implicit = [prefix_header, semantics_header, platform_semantics_header, *xdk_headers]
 
     def add(source: Path, rule: str, cflags: str, implicit: List[Path] = ()) -> None:
         obj = (obj_dir / source.relative_to(build_dir) if build_dir in source.parents
                else port.output_path(obj_dir, source)).with_suffix(".o")
-        objects.append(obj)
+        (clang_objects if rule == "vita_cc" and lto else objects).append(obj)
         n.build(outputs=obj, rule=rule, inputs=source,
                 implicit=(clang_implicit if rule == "vita_cc" else []) + list(implicit),
-                variables={"cflags": cflags})
+                variables={"cflags": cflags + (" -flto" if rule == "vita_cc" and lto else "")})
 
     defines = [*console_defines(sln), *CONSOLE_FEATURES]
+    # a release build is the release-style build too: the debug decomp's
+    # asserts compiled out as retail compiled them out, but for the memory
+    # checks (configure.py --console-no-debug-asserts), and the busiest
+    # units' accessors inline (b30 on the Vita: 8.8 -> 10.5 frames a second).
+    # A dev build keeps them, to stop at the first that fails
+    if release and "-DHALO_CONSOLE_NO_DEBUG_ASSERTS" not in defines:
+        defines.append("-DHALO_CONSOLE_NO_DEBUG_ASSERTS")
     sysroot_flags = [f"--sysroot={_quote(sysroot)}", f"-isystem {_quote(sysroot / 'include')}"]
     abi = " ".join([*TARGET_FLAGS, *ABI_FLAGS, *sysroot_flags, *defines])
     # (the game's own version, which its network and Delta read, and the
@@ -397,11 +450,24 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
         port.game_defines_and_includes(config, _quote),
         sdk_flags,
     ])
+    # profile-guided optimisation of the game's units, only from a profile
+    # named with configure.py --pgo-profile (none is recorded on the Vita,
+    # which cannot write one; the game's pgo/ profiles are the desktops')
+    profile = getattr(sln, "port_pgo_profile", None)
+    if profile and getattr(sln, "port_pgo", "use") != "off":
+        profile = Path(profile).resolve()
+        n.comment(f"profile-guided optimisation of the game from {profile}")
+        game_cflags += f" -fprofile-use={_quote(profile)} " + " ".join(PROFILE_USE_FLAGS)
+        clang_implicit.append(profile)
     for source, flags in port.game_units(sln, config):
         cflags = " ".join([game_cflags, *flags])
         # the process's main is the host's (port/vita/host/vita_main.c)
-        if port.game_relative(source) == "source/shell/shell_xbox.c":
+        name = port.game_relative(source)
+        if name == "source/shell/shell_xbox.c":
             cflags += " -Dmain=halo_main"
+        if (getattr(sln.args, "vita_aligned", "none") == "hot" and name.startswith(VITA_ALIGNED_DIRS) and
+                name not in VITA_ALIGNED_EXCEPTIONS):
+            cflags = cflags.replace(" -fmax-type-align=1 ", " ")
         add(override_of(source), "vita_cc", cflags)
     for source in sorted((game / LINUX_GAME).glob("*.c")):
         add(override_of(source), "vita_cc", game_cflags)
@@ -532,6 +598,10 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
            description="VITA SFO $out")
     n.rule(name="vita_vpk", command="$vita_sdk_bin/vita-pack-vpk -s $sfo -b $eboot $assets $out",
            description="VITA VPK $out")
+    if lto:
+        lto_object = obj_dir / "warthog_lto.o"
+        n.build(outputs=lto_object, rule="vita_lto", inputs=clang_objects)
+        objects.insert(0, lto_object)
     n.build(outputs=elf, rule="vita_link", inputs=objects, implicit_outputs=[build_dir / "warthog.map"],
             variables={"libs": " ".join(f"-l{lib}" for lib in VITA_LIBRARIES),
                        "wraps": "-Wl," + ",".join(f"--wrap={name}" for name in FRAME_SPLIT_WRAPPED)

@@ -19,6 +19,18 @@ this folder holds the Vita's own code and `build.py`, which the game's
   halves meet only through `include/vita_host.h`, whose parameters are 32-bit
   scalars and pointers.
 
+The clang side is optimized as one module (link-time optimization, the
+game's `--lto`, on by default: `ld.lld -r` makes one object of it for GCC's
+link; `--lto off` builds without). A `--release` build also compiles the
+debug decomp's asserts out (the game's `--console-no-debug-asserts`; a dev
+build keeps them). Measured on b30 (dev builds, 120 s of the beach): 8.8
+frames a second as before, 10.1 with LTO, 10.5 without the asserts, 11.2
+with both. Two options stay off:
+`--vita-aligned hot` (the hot directories without `-fmax-type-align=1`)
+faulted in the b30 fight (an unaligned load in the rasterizer's environment
+draw), and `--pgo-profile` with the game's Linux profile gave nothing
+measurable (9.0).
+
 ## What is the Vita's own
 
 | Folder | What |
