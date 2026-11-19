@@ -210,6 +210,7 @@ FRAME_SPLIT_WRAPPED = (
     "players_update_after_game", "hud_update", "hs_update", "game_engine_update", "first_person_weapons_update",
     "antennas_update", "player_effect_update", "recorded_animations_update", "scenario_tick_update",
     "lua_scripting_tick", "game_allegiance_update",
+    "render_interpolation_tick", "game_frame", "particles_update", "game_sound_update",
     "structure_visibility_compute", "render_sky", "lights_preprocess_scene", "structure_render_preprocess",
     "structure_render_lightmaps", "structure_render_diffuse_texture", "lights_render_diffuse",
     "structure_render_specular_lightmaps", "lights_render_specular", "structure_render_reflections",

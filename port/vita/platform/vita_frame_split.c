@@ -55,6 +55,11 @@ enum
 	_split_scenario,
 	_split_lua,
 	_split_allegiance,
+	/* the time update's work outside the ticks (game_time.c) */
+	_split_interpolation_tick,
+	_split_game_frame,
+	_split_particles_update,
+	_split_game_sound,
 	/* the render's passes (render_frame) */
 	_split_visibility,
 	_split_sky,
@@ -89,6 +94,7 @@ static const char *const split_names[NUMBER_OF_SPLITS] = {
 	"input", "ui", "player_control", "tick", "director", "observer", "sound", "render", "present",
 	"game_tick", "units", "ai", "effects", "objects", "players_before", "players_after", "hud", "hs", "engine",
 	"first_person", "antennas", "player_effect", "recorded_animations", "scenario", "lua", "allegiance",
+	"interpolation_tick", "game_frame", "particles_update", "game_sound",
 	"visibility", "sky", "lights_preprocess", "structure_preprocess", "lightmaps", "diffuse", "lights_diffuse",
 	"specular_lightmaps", "lights_specular", "reflections", "structure_transparent", "fog", "objects", "shadows",
 	"particles", "particle_systems", "weather", "contrails", "transparent", "decals", "detail_objects", "flares",
@@ -189,6 +195,12 @@ WRAP_VOID(scenario_tick_update, _split_scenario, (void), ())
 WRAP_VOID(lua_scripting_tick, _split_lua, (void), ())
 WRAP_VOID(game_allegiance_update, _split_allegiance, (void), ())
 
+/* the time update's other work (game_time.c, game.c) */
+WRAP_VOID(render_interpolation_tick, _split_interpolation_tick, (void), ())
+WRAP_VOID(game_frame, _split_game_frame, (real seconds), (seconds))
+WRAP_VOID(particles_update, _split_particles_update, (real seconds), (seconds))
+WRAP_VOID(game_sound_update, _split_game_sound, (real seconds), (seconds))
+
 /* the render's passes (render.c) */
 WRAP_VOID(structure_visibility_compute, _split_visibility, (void), ())
 WRAP_VOID(render_sky, _split_sky, (void), ())
@@ -258,6 +270,10 @@ static void split_report(void)
 			split_us[_split_game_tick] > marked ? (double)(split_us[_split_game_tick] - marked) * per_tick : 0.0,
 			split_us[_split_tick] > split_us[_split_game_tick] ?
 				(double)(split_us[_split_tick] - split_us[_split_game_tick]) * per : 0.0);
+		vita_host_log(line);
+		n = snprintf(line, sizeof(line), "frame-split time update (ms/frame, outside the ticks):");
+		for (index = _split_interpolation_tick; index <= _split_game_sound; index++)
+			n += snprintf(line + n, sizeof(line) - n, " | %s %.2f", split_names[index], (double)split_us[index] * per);
 		vita_host_log(line);
 	}
 
