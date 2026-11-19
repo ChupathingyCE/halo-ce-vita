@@ -212,3 +212,30 @@ static void no_texture_deletion(int count, const unsigned int *textures)
 }
 
 void (*halo_glDeleteTextures)(int count, const unsigned int *textures) = no_texture_deletion;
+
+/* ---------- (debug) HALO_LOCK_TRACE=n: the first n texture locks, to the
+UDP log: which resource, its data, the bits the lock gave */
+void vita_host_udp_line(const char *text);
+void __real_D3DTexture_LockRect(D3DTexture *texture, UINT level, D3DLOCKED_RECT *locked, CONST RECT *rectangle,
+	DWORD flags);
+
+void __wrap_D3DTexture_LockRect(D3DTexture *texture, UINT level, D3DLOCKED_RECT *locked, CONST RECT *rectangle,
+	DWORD flags)
+{
+	static int left = -1;
+
+	__real_D3DTexture_LockRect(texture, level, locked, rectangle, flags);
+	if (left < 0)
+		left = getenv("HALO_LOCK_TRACE") ? atoi(getenv("HALO_LOCK_TRACE")) : 0;
+	if (left > 0)
+	{
+		const DWORD *words = (const DWORD *)texture;
+		char line[200];
+
+		left--;
+		snprintf(line, sizeof(line), "lock %p level %u: common %08lx data %08lx format %08lx size %08lx -> bits %p pitch %d",
+			(void *)texture, level, (unsigned long)words[0], (unsigned long)words[1], (unsigned long)words[3],
+			(unsigned long)words[4], locked->pBits, locked->Pitch);
+		vita_host_udp_line(line);
+	}
+}

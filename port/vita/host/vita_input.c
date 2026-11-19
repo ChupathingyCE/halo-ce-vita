@@ -569,6 +569,7 @@ void vita_host_pad_read(struct vita_host_pad *pad)
 	unsigned long long now;
 	int touches_started = 0;
 
+
 	if (!started)
 	{
 		started = 1;

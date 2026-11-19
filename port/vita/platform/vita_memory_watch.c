@@ -28,14 +28,21 @@ void memory_watch_protect(unsigned long address, unsigned long size)
 	(void)size;
 }
 
+/* a host address of the contiguous memory, as its offset in it (the window's
+Xbox address less its base: the layout is translated, xbox_address.h) */
+static unsigned long window_offset(unsigned long address)
+{
+	return PLATFORM_WINDOW_ADDRESS((void *)address) - PLATFORM_CONTIGUOUS_BASE;
+}
+
 static void mark_written(unsigned long address, unsigned long size)
 {
 	unsigned long first, last, page, serial;
 
 	if (!size || !platform_is_contiguous((void *)address))
 		return;
-	first = (address - PLATFORM_CONTIGUOUS_BASE) / WATCH_PAGE_SIZE;
-	last = (address - PLATFORM_CONTIGUOUS_BASE + size - 1) / WATCH_PAGE_SIZE;
+	first = window_offset(address) / WATCH_PAGE_SIZE;
+	last = (window_offset(address) + size - 1) / WATCH_PAGE_SIZE;
 	if (last >= WATCH_PAGE_COUNT)
 		last = WATCH_PAGE_COUNT - 1;
 	serial = __atomic_add_fetch(&watch_serial, 1, __ATOMIC_RELAXED);
@@ -49,8 +56,8 @@ unsigned long memory_watch_generation(unsigned long address, unsigned long size)
 
 	if (!size || !platform_is_contiguous((void *)address))
 		return 0;
-	first = (address - PLATFORM_CONTIGUOUS_BASE) / WATCH_PAGE_SIZE;
-	last = (address - PLATFORM_CONTIGUOUS_BASE + size - 1) / WATCH_PAGE_SIZE;
+	first = window_offset(address) / WATCH_PAGE_SIZE;
+	last = (window_offset(address) + size - 1) / WATCH_PAGE_SIZE;
 	if (last >= WATCH_PAGE_COUNT)
 		last = WATCH_PAGE_COUNT - 1;
 	for (page = first; page <= last; page++)

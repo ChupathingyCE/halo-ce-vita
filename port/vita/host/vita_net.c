@@ -104,6 +104,12 @@ static int net_ready(void)
 		int result;
 
 		net_state = -1;
+		/* (debug) HALO_NO_NET=1: no network at all */
+		if (getenv("HALO_NO_NET") && atoi(getenv("HALO_NO_NET")))
+		{
+			vita_host_log("net: off (HALO_NO_NET)");
+			return 0;
+		}
 		if (sceSysmoduleLoadModule(SCE_SYSMODULE_NET) < 0)
 		{
 			vita_host_log("net: the network module does not load");
@@ -124,6 +130,36 @@ static int net_ready(void)
 		vita_host_log("net: up");
 	}
 	return net_state > 0;
+}
+
+/* (debug) HALO_UDP_LOG=a.b.c.d:port: a line sent as one datagram to a
+listener on the network, for a run whose memory card writes stop */
+void vita_host_udp_line(const char *text)
+{
+	static int socket_id = -2;
+	static SceNetSockaddrIn to;
+
+	if (socket_id == -2)
+	{
+		const char *setting = getenv("HALO_UDP_LOG");
+		char host[32];
+		const char *colon;
+
+		socket_id = -1;
+		if (!setting || !(colon = strchr(setting, ':')) || colon - setting >= (int)sizeof(host) || !net_ready())
+			return;
+		memcpy(host, setting, colon - setting);
+		host[colon - setting] = 0;
+		memset(&to, 0, sizeof(to));
+		to.sin_len = sizeof(to);
+		to.sin_family = SCE_NET_AF_INET;
+		to.sin_port = sceNetHtons((unsigned short)atoi(colon + 1));
+		if (sceNetInetPton(SCE_NET_AF_INET, host, &to.sin_addr) <= 0)
+			return;
+		socket_id = sceNetSocket("halo udp log", SCE_NET_AF_INET, SCE_NET_SOCK_DGRAM, 0);
+	}
+	if (socket_id >= 0)
+		sceNetSendto(socket_id, text, strlen(text), 0, (SceNetSockaddr *)&to, sizeof(to));
 }
 
 /* a library error (0x80410100 | the BSD errno) as Winsock's: Winsock's

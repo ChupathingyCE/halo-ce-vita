@@ -1,4 +1,4 @@
-<p align="center"><img src="port/vita/art/icon-160.png" width="120" alt=""></p>
+<p align="center"><img src="port/vita/sce_sys/icon0.png" width="120" alt=""></p>
 
 <h1 align="center">Warthog for Vita</h1>
 
@@ -35,10 +35,9 @@ build count after it, as the other Warthog ports say theirs:
 **0.9.2 (build 1)**.
 
 - Builds a VPK with VitaSDK (`ninja vita`).
-- On a Vita it starts, brings up the GPU and loads the menus' map, then
-  stops before the main menu: the Xbox window's layout does not suit the
-  Vita's memory yet ([port/vita/README.md](port/vita/README.md), "Known
-  problems").
+- On a Vita it starts to Chupathingy's main menu and plays Blood Gulch and
+  the campaign, slowly for now ([port/vita/README.md](port/vita/README.md),
+  "Known problems").
 - Not yet: Link Profile, the Online Games screen, the movies, the menus'
   high-resolution art, Custom Edition maps.
 
@@ -112,7 +111,7 @@ later version (`GPL-3.0-or-later`). It comes with no warranty.
   the system's stub libraries from your VitaSDK install; none is included.
 - **No console SDK.** Nothing from Sony's SDK is in this repository, and
   none of it may be committed.
-- **The icon** is the Warthog ports' own (`port/vita/art/icon-160.png`).
+- **The icon** is Chupathingy's own (the game's `port/art/icon.svg`, made into the LiveArea's pictures by `tools/vita_livearea.py`); the LiveArea background and start picture are plain placeholders.
 - **Halo itself is not covered.** The license gives no rights in Halo, its
   maps or anything else Microsoft owns.
 

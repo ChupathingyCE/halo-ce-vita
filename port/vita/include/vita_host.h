@@ -239,4 +239,7 @@ const char *vita_host_window_report(void);
 the dev builds) */
 const char *vita_host_data_directory(void);
 
+/* (debug) a line to the UDP log, HALO_UDP_LOG (vita_net.c) */
+void vita_host_udp_line(const char *text);
+
 #endif

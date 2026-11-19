@@ -7,9 +7,10 @@ Vita's clang side shares with the Linux build: the game and the platform
 layer are compiled by clang for the Cortex-A9 (ARMv7, 32-bit, little-endian)
 with the game's MSVC ABI, against VitaSDK's newlib headers.
 
-Pointers are 32 bits, as the Xbox's. The Xbox's memory window is wherever the
-Vita's kernel puts the block the host allocates for it (HALO_WINDOW_REBASE,
-source/cseries/xbox_address.h; port/vita/host/vita_memory.c).
+Pointers are 32 bits, as the Xbox's, but the Vita's own memory is where the
+Xbox's window was linked: the layout is the Xbox 360's, translated
+(HALO_64BIT with HALO_WINDOW_TRANSLATED, source/cseries/xbox_address.h;
+port/vita/host/vita_memory.c).
 */
 
 #ifndef __HALO_VITA_PREFIX_H
@@ -64,11 +65,32 @@ the Xbox window, and the rest: include/posix) */
 #include "posix/vita_posix.h"
 #endif
 
-/* the Xbox window, wherever the host put it */
-#ifndef HALO_WINDOW_REBASE
-#define HALO_WINDOW_REBASE 1
-#endif
+/* the console's capabilities, read ahead of xbox_address.h (which
+halo_linux_prefix.h reads): HALO_CONSOLE_WINDOW_LOW sizes the Xbox window
+of the translated layout (HALO_64BIT with HALO_WINDOW_TRANSLATED, on the
+compile line: port/vita/build.py) */
+#include "halo_console_features.h"
 
 #include "halo_linux_prefix.h"
+
+/* the classification functions as functions: the game declares them itself
+(hs.c), which newlib's macros would expand (its headers are read first in
+the translated layout, halo_linux_prefix.h) */
+#undef isalnum
+#undef isalpha
+#undef iscntrl
+#undef isdigit
+#undef isgraph
+#undef islower
+#undef isprint
+#undef ispunct
+#undef isspace
+#undef isupper
+#undef isxdigit
+#undef isblank
+#undef isascii
+#undef toascii
+#undef tolower
+#undef toupper
 
 #endif /* __HALO_VITA_PREFIX_H */

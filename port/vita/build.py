@@ -111,9 +111,12 @@ CONSOLE_FEATURES = [
     # (the Vita side's own switch, as Halo CE Vita's code has it: the game
     # does not test it)
     "-DHALO_VITA=1",
-    # the window wherever the Vita's kernel puts it, 128 MB
-    "-DHALO_WINDOW_REBASE",
-    "-DHALO_CONSOLE_WINDOW_MAXIMUM=0x08000000UL",
+    # the Xbox 360's layout: Xbox addresses translated into a window wherever
+    # the kernel puts it (the Vita's program and heap are where the Xbox's
+    # window was linked); the game's halo_console_features.h sizes it for
+    # the Vita (HALO_CONSOLE_WINDOW_LOW)
+    "-DHALO_64BIT",
+    "-DHALO_WINDOW_TRANSLATED",
     # Delta Peer as a client, the Vita's platform number (11, the registry's)
     "-DHALO_CONSOLE_DELTA",
     "-DHALO_DELTA_PLATFORM=_delta_platform_vita",
@@ -127,6 +130,9 @@ CONSOLE_FEATURES = [
     # a Direct3D device of its own (platform/d3d8_gxm.c): the menus' art and the
     # high-res HUD read by it, not uploaded through OpenGL
     "-DHALO_CONSOLE_HOST_ART",
+    # the Chupathingy menus' rows marked for a console (no QUIT, no duct
+    # tape), and the Vita's own where a menu file names it
+    "'-DHALO_CONSOLE_MENU_PLATFORM=\"vita\"'",
     # config.toml in the data folder (HALO_DATA_ROOT, host/vita_main.c)
     "-DHALO_CONSOLE_CONFIG_IN_DATA_ROOT",
 ]
@@ -464,7 +470,7 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     vpk = build_dir / "warthog.vpk"
     n.rule(name="vita_link",
            command=("$vita_sdk_bin/arm-vita-eabi-gcc -Wl,-q,--defsym=__sce_headroom=0x1000 "
-                    "-Wl,--no-enum-size-warning -Wl,--no-wchar-size-warning -Wl,--gc-sections -Wl,--wrap=exit,--wrap=abort,--wrap=_exit,--wrap=fork "
+                    "-Wl,--no-enum-size-warning -Wl,--no-wchar-size-warning -Wl,--gc-sections -Wl,--wrap=exit,--wrap=abort,--wrap=_exit,--wrap=fork,--wrap=fopen,--wrap=open,--wrap=opendir,--wrap=stat,--wrap=sceKernelCreateThread,--wrap=sceKernelExitProcess,--wrap=D3DTexture_LockRect "
                     f"-Wl,-Map,{_quote(build_dir / 'warthog.map')} -o $out @$out.rsp $libs"),
            description="VITA LINK $out", rspfile="$out.rsp", rspfile_content="$in_newline")
     n.rule(name="vita_velf", command="$vita_sdk_bin/vita-elf-create $in $out", description="VITA VELF $out")

@@ -35,20 +35,41 @@ this folder holds the Vita's own code and `build.py`, which the game's
 
 ## Debug switches (`env.txt`)
 
-`HALO_MAPS_ROOT` (a maps folder elsewhere), `HALO_HEARTBEAT_S`, `HALO_EVENTS`
-(lines written at once to `events.txt`), `HALO_HANG_CRASH`, `HALO_CRASH_AT`,
-`HALO_CRASH_AT_FRAME` (a deliberate crash for a dump), and the game's own
-(`HALO_SCREENSHOT_DIR`, `HALO_SCREENSHOT_EVERY`, ...).
+`HALO_MAPS_ROOT` (a maps folder elsewhere), `HALO_HEARTBEAT_S` (a line every
+n seconds: frames presented, free memory, the game's heap), `HALO_EVENTS`
+(those lines written at once to `events.txt`), `HALO_UDP_LOG=a.b.c.d:port`
+(the same as datagrams to a listener, with the file calls, for a run whose
+card writes stop), `HALO_THREAD_SAMPLE` (every thread's state twice a second
+to the UDP log), `HALO_LOCK_TRACE=n` (the first n texture locks),
+`HALO_HANG_CRASH`, `HALO_CRASH_AT`, `HALO_CRASH_AT_FRAME` (a deliberate crash
+for a dump), `HALO_NO_GAME`, `HALO_NO_NET`, and the game's own
+(`HALO_SCREENSHOT_DIR`, `HALO_SCREENSHOT_EVERY`, `HALO_NULL_RENDERER`,
+`HALO_FRAME_TIMES`). `init.txt` in the data folder runs console commands at
+the start (`map_name levels\test\bloodgulch\bloodgulch`).
+
+## Memory
+
+The layout is the Xbox 360's, translated (`HALO_64BIT` with
+`HALO_WINDOW_TRANSLATED`): one 176 MB block for the Xbox window, the game's
+48 MB heap (`HALO_CONSOLE_WINDOW_LOW`, the game's
+`halo_console_features.h`) and the 128 MB of contiguous memory, wherever the
+kernel puts it; newlib's heap is 40 MB. The rebased layout (`HALO_WINDOW_REBASE`)
+cannot work on the Vita: it moves values in 0x80000000-0x88000000, which is
+the Vita's own memory (the program at 0x81000000, the C heap above it).
+Measured at the main menu: the game's heap 39 MB, the C heap 11 MB, 27 MB of
+user memory free; on b30, 44 MB of the heap and 21 MB free.
+
+The program keeps the system from suspending it (`sceKernelPowerTick`, once
+a second on a thread of its own): without it the system suspended any
+application on the dev Vita 14 s after it started.
 
 ## Known problems
 
-- **The game stops before the main menu.** `HALO_WINDOW_REBASE` moves any value
-  in 0x80000000-0x88000000, the window's linked range, and on the Vita that
-  range is the application's own memory (the eboot at 0x81000000, the C heap
-  above it): host pointers the game keeps in its Xbox-address fields come back
-  moved. The Xbox 360, whose executable is up there too, uses `HALO_64BIT` with
-  `HALO_WINDOW_TRANSLATED`; the Vita needs the same, with a window small enough
-  for its memory.
-- Not yet: Link Profile, the Online Games screen, the system keyboard, movies,
-  the menus' art and the high-resolution HUD (`HALO_CONSOLE_HOST_ART`), Custom
-  Edition maps, an updater.
+- Slow: b30 about 9 frames a second where Halo CE Vita 1.1.3 runs 28; Blood
+  Gulch alone 33. None of Halo CE Vita's game-side performance work is in
+  the game (PLAN.md has the list).
+- Not yet: Link Profile and the Online Games screen (the Delta Guide is not
+  built for consoles), the system keyboard for text boxes, movies, the
+  high-resolution text and HUD (`HALO_CONSOLE_HOST_ART`'s text atlas and HUD
+  sheets; the game's own fonts are used), Custom Edition maps, an updater.
+- "failed to change bitmap hardware format" lines in debug.txt at start.

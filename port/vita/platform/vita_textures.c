@@ -691,6 +691,10 @@ struct texture_entry
 	/* (the decoder, below) its decode in the background, while a lower
 	level of it is drawn (texture holds that level meanwhile) */
 	struct decode_job *job;
+	/* (Warthog, HALO_CONSOLE_HOST_ART) the menu art serial its art was
+	looked up at, and whether it is a menu art's PNG */
+	unsigned long art_serial;
+	int art;
 };
 
 #define TEXTURE_BUCKET_COUNT 4096
@@ -2140,6 +2144,109 @@ static BOOL decode_submit(struct texture_entry *entry, unsigned long drop)
 	return TRUE;
 }
 
+/* ---------- the menus' art (Warthog: HALO_CONSOLE_HOST_ART)
+
+The Chupathingy menus' rows and titles are bitmaps whose pixels are PNGs
+(the game's menu_files.c registers each for the D3D texture's data): the
+bitmap's own texels are a stand-in. Such a texture is built from its PNG,
+decoded here (hud_hires_png_pixels), resampled to powers of two and laid out
+as A8R8G8B8 swizzled, as the stand-in is, so the game's texture coordinates
+(0 to 1) read the whole PNG. */
+#ifdef HALO_CONSOLE_HOST_ART
+#include "menu_files.h"
+#include "hud_hires.h"
+
+/* the Xbox's swizzled offset of texel (x, y) in a width x height texture
+(powers of two): the coordinates' bits interleaved while both have bits */
+static unsigned long art_swizzle(unsigned long x, unsigned long y, unsigned long width, unsigned long height)
+{
+	unsigned long offset = 0, bit = 1, x_mask = 1, y_mask = 1;
+
+	while (x_mask < width || y_mask < height)
+	{
+		if (x_mask < width)
+		{
+			if (x & x_mask)
+				offset |= bit;
+			bit <<= 1;
+			x_mask <<= 1;
+		}
+		if (y_mask < height)
+		{
+			if (y & y_mask)
+				offset |= bit;
+			bit <<= 1;
+			y_mask <<= 1;
+		}
+	}
+	return offset;
+}
+
+/* the art's texels in A8R8G8B8 for the entry's layout (malloc'd),
+and the entry's description changed to say so; NULL when it has none */
+static unsigned char *art_texels(struct texture_entry *entry)
+{
+	const char *name = menu_art_name(entry->data);
+	const unsigned char *png;
+	unsigned char *rgba, *texels;
+	unsigned long size = 0, png_width = 0, png_height = 0, width, height, x, y;
+	BOOL linear = entry->description.linear;
+
+	if (!name || !(png = menu_art_png(name, &size)) || !size)
+		return NULL;
+	rgba = hud_hires_png_pixels(png, size, &png_width, &png_height);
+	if (!rgba || !png_width || !png_height)
+	{
+		free(rgba);
+		return NULL;
+	}
+	/* (the bitmap's own texture is a small stand-in, read with texture
+	coordinates of 0 to 1: the PNG at its own size, to powers of two) */
+	if (!linear)
+	{
+		for (width = 1; width < png_width && width < 2048; width <<= 1)
+			;
+		for (height = 1; height < png_height && height < 2048; height <<= 1)
+			;
+	}
+	else
+	{
+		width = entry->description.width;
+		height = entry->description.height;
+	}
+	texels = malloc(width * height * 4);
+	if (!texels)
+	{
+		free(rgba);
+		return NULL;
+	}
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			const unsigned char *from = rgba + ((y * png_height / height) * png_width + x * png_width / width) * 4;
+			unsigned long at = linear ? y * width + x : art_swizzle(x, y, width, height);
+			unsigned char *to = texels + at * 4;
+
+			/* (B, G, R, A in memory: the Xbox's A8R8G8B8) */
+			to[0] = from[2];
+			to[1] = from[1];
+			to[2] = from[0];
+			to[3] = from[3];
+		}
+	}
+	free(rgba);
+	entry->description.format = linear ? D3DFMT_LIN_A8R8G8B8 : D3DFMT_A8R8G8B8;
+	entry->description.width = width;
+	entry->description.height = height;
+	entry->description.levels = 1;
+	entry->description.compressed = FALSE;
+	entry->description.pitch = width * 4;
+	entry->art = 1;
+	return texels;
+}
+#endif
+
 const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLOR *palette,
 	struct xgpu_texture_description *description, int streamed)
 {
@@ -2213,7 +2320,11 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 	for a draw that wants it whole) */
 	if (entry->job)
 		decode_job_poll(entry, !streamed);
-	if (entry->valid && entry->generation && entry->pool_serial == pool_serial && entry->checked_serial == memory_watch_serial())
+	if (entry->valid && entry->generation && entry->pool_serial == pool_serial && entry->checked_serial == memory_watch_serial()
+#ifdef HALO_CONSOLE_HOST_ART
+		&& entry->art_serial == menu_art_serial()
+#endif
+		)
 	{
 		entry->last_used_frame = texture_frame;
 		*description = entry->description;
@@ -2229,6 +2340,20 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 	}
 	entry->checked_serial = memory_watch_serial();
 	generation = memory_watch_generation(entry->address, entry->size);
+#ifdef HALO_CONSOLE_HOST_ART
+	/* (the menus' art registered changed: built again from its PNG, or
+	from its texels if it has none now) */
+	if (entry->art_serial != menu_art_serial())
+	{
+		entry->art_serial = menu_art_serial();
+		entry->generation = 0;
+		if (entry->art)
+		{
+			entry->art = 0;
+			xgpu_texture_describe(entry->format_word, entry->size_word, &entry->description);
+		}
+	}
+#endif
 	if (!entry->generation || generation > entry->generation || entry->pool_serial != pool_serial)
 	{
 		entry->generation = generation ? generation : 1;
@@ -2238,7 +2363,26 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 			decode_job_cancel(entry);
 		pool_pressure_note(entry);
 		drop = pressure_drop(entry, streamed);
+#ifdef HALO_CONSOLE_HOST_ART
+		{
+			unsigned char *texels = menu_art_name(entry->data) ? art_texels(entry) : NULL;
+
+			if (texels)
+			{
+				pool_reuse = NULL;
+				pool_last = NULL;
+				entry->valid = texture_build(entry, texels, palette, 0);
+				entry->memory = pool_last;
+				entry->memory_size = pool_last ? pool_last_size : 0;
+				entry->segment = pool_segment_mark(pool_last);
+				entry->pool_serial = pool_serial;
+				free(texels);
+			}
+		}
+		if (!entry->valid && !entry->art && platform_is_contiguous((void *)entry->address) &&
+#else
 		if (platform_is_contiguous((void *)entry->address) &&
+#endif
 			platform_is_contiguous((void *)(entry->address + entry->size - 1)) && streamed && decode_in_background(entry))
 		{
 			unsigned long long before = vita_host_time_us();
@@ -2248,7 +2392,7 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 			vita_texture_build_us += vita_host_time_us() - before;
 			frame_decode_us += vita_host_time_us() - before;
 		}
-		if (!entry->valid && platform_is_contiguous((void *)entry->address) &&
+		if (!entry->valid && !entry->art && platform_is_contiguous((void *)entry->address) &&
 			platform_is_contiguous((void *)(entry->address + entry->size - 1)))
 		{
 			{

@@ -27,6 +27,8 @@ port/vita/build.py), never the released Halo CE Vita's folder:
 #include <psp2/apputil.h>
 #include <psp2/power.h>
 
+#include <pthread.h>
+#include <stdint.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,9 +45,10 @@ port/vita/build.py), never the released Halo CE Vita's folder:
 #define HALO_VERSION "unknown"
 #endif
 
-/* newlib's heap (malloc): the platform layer's and the libraries'. Halo CE Vita's
-48 MB was 47 MB full at Chupathingy's main menu (Nov 19, the dev Vita) */
-unsigned int _newlib_heap_size_user = 80 * 1024 * 1024;
+/* newlib's heap (malloc): the platform layer's and the libraries'. The game's
+own allocations are in the Xbox window's heap (the translated layout's
+xbox_heap.c), so this is smaller than Halo CE Vita's 48 MB, which held both */
+unsigned int _newlib_heap_size_user = 40 * 1024 * 1024;
 
 /* the game's frames are large (the AI's firing position search overflowed
 the main thread's default stack on hardware; Linux gives 8 MB) */
@@ -146,18 +149,18 @@ void vita_host_pin_current_thread(int core)
 }
 
 /* the Xbox window (vita_memory.c), which the renderer maps for the GPU */
-extern unsigned long platform_contiguous_base;
-extern unsigned long platform_contiguous_size;
+void *vita_host_window(unsigned long *size);
 
 void *vita_host_arena(unsigned long *size)
 {
-	*size = platform_contiguous_base != 0x80000000UL ? platform_contiguous_size : 0;
-	return *size ? (void *)platform_contiguous_base : NULL;
+	return vita_host_window(size);
 }
 
 int vita_host_memory_window_made(void)
 {
-	return platform_contiguous_base != 0x80000000UL;
+	unsigned long size;
+
+	return vita_host_window(&size) != NULL;
 }
 
 int vita_host_thread_start(const char *name, void (*function)(void *), void *argument, int core)
@@ -263,7 +266,19 @@ static void log_drain(void)
 		if (!length)
 			break;
 		if (log_file >= 0)
+		{
+			unsigned long long before = sceKernelGetProcessTimeWide();
+
 			sceIoWrite(log_file, chunk, length);
+			if (sceKernelGetProcessTimeWide() - before > 500000ULL)
+			{
+				char note[96];
+
+				snprintf(note, sizeof(note), "log: a write of %lu bytes took %llu ms", length,
+					(sceKernelGetProcessTimeWide() - before) / 1000ULL);
+				vita_host_udp_line(note);
+			}
+		}
 	}
 	__atomic_store_n(&draining, 0, __ATOMIC_RELEASE);
 }
@@ -352,6 +367,88 @@ static void event_line(const char *text)
 	}
 }
 
+/* ---------- (debug) the file calls, to the UDP log (HALO_UDP_LOG): which
+call a stall is in */
+void vita_host_udp_line(const char *text);
+static int udp_trace = -1;
+
+static void file_trace(const char *call, const char *path, int result, unsigned long long started)
+{
+	char line[400];
+	unsigned long long now = sceKernelGetProcessTimeWide();
+
+	if (udp_trace < 0)
+		udp_trace = getenv("HALO_UDP_LOG") != NULL;
+	if (!udp_trace)
+		return;
+	snprintf(line, sizeof(line), "%llu.%03llu t%x %s %s -> %d (%llu us)", now / 1000000ULL, now / 1000ULL % 1000ULL,
+		(unsigned)sceKernelGetThreadId(), call, path ? path : "", result, now - started);
+	vita_host_udp_line(line);
+}
+
+static void file_trace_begin(const char *call, const char *path)
+{
+	char line[400];
+	unsigned long long now = sceKernelGetProcessTimeWide();
+
+	if (udp_trace < 0)
+		udp_trace = getenv("HALO_UDP_LOG") != NULL;
+	if (!udp_trace)
+		return;
+	snprintf(line, sizeof(line), "%llu.%03llu t%x %s %s ...", now / 1000000ULL, now / 1000ULL % 1000ULL,
+		(unsigned)sceKernelGetThreadId(), call, path ? path : "");
+	vita_host_udp_line(line);
+}
+
+#include <dirent.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+FILE *__real_fopen(const char *path, const char *mode);
+FILE *__wrap_fopen(const char *path, const char *mode)
+{
+	unsigned long long started = sceKernelGetProcessTimeWide();
+	FILE *file;
+
+	file_trace_begin("fopen", path);
+	file = __real_fopen(path, mode);
+	file_trace("fopen", path, file != NULL, started);
+	return file;
+}
+
+int __real_open(const char *path, int flags, int mode);
+int __wrap_open(const char *path, int flags, int mode)
+{
+	unsigned long long started = sceKernelGetProcessTimeWide();
+	int result;
+
+	file_trace_begin("open", path);
+	result = __real_open(path, flags, mode);
+	file_trace("open", path, result, started);
+	return result;
+}
+
+DIR *__real_opendir(const char *path);
+DIR *__wrap_opendir(const char *path)
+{
+	unsigned long long started = sceKernelGetProcessTimeWide();
+	DIR *result;
+
+	file_trace_begin("opendir", path);
+	result = __real_opendir(path);
+	file_trace("opendir", path, result != NULL, started);
+	return result;
+}
+
+int __real_stat(const char *path, struct stat *information);
+int __wrap_stat(const char *path, struct stat *information)
+{
+	unsigned long long started = sceKernelGetProcessTimeWide();
+	int result = __real_stat(path, information);
+
+	file_trace("stat", path, result, started);
+	return result;
+}
+
 /* exit and abort, wrapped (port/vita/build.py -Wl,--wrap): who ended the
 process, in the log, before newlib's own end */
 void __real_exit(int status) __attribute__((noreturn));
@@ -378,6 +475,19 @@ void __wrap__exit(int status)
 	vita_host_log(message);
 	log_drain();
 	__real__exit(status);
+}
+
+/* (debug) the process ended by the kernel's call: who called it */
+int __real_sceKernelExitProcess(int status);
+int __wrap_sceKernelExitProcess(int status)
+{
+	char message[128];
+
+	snprintf(message, sizeof(message), "vita: sceKernelExitProcess(%d) called from %p", status,
+		__builtin_return_address(0));
+	vita_host_udp_line(message);
+	event_line(message);
+	return __real_sceKernelExitProcess(status);
 }
 
 /* no processes of its own on the Vita: a fork is refused (the game's Steam
@@ -435,6 +545,11 @@ static void read_environment_file(void)
 	fclose(file);
 }
 
+/* the game's heap in the Xbox window, carved so far (xbox_heap.c) */
+size_t xbox_heap_used(void);
+
+void vita_host_udp_line(const char *text);
+
 /* the presents so far (d3d8_gxm.c sets it) */
 volatile unsigned long vita_presented_frames;
 
@@ -475,6 +590,73 @@ static void tripwire_thread(void *argument)
 	*(volatile int *)0 = (int)vita_presented_frames;
 }
 
+/* (debug) every thread made, for the thread sampler (HALO_THREAD_SAMPLE):
+sceKernelCreateThread wrapped (port/vita/build.py), pthread's too */
+#define TRACKED_THREADS 96
+static SceUID tracked_threads[TRACKED_THREADS];
+static volatile int tracked_count;
+
+SceUID __real_sceKernelCreateThread(const char *name, SceKernelThreadEntry entry, int priority, SceSize stack,
+	SceUInt attributes, int affinity, const SceKernelThreadOptParam *options);
+SceUID __wrap_sceKernelCreateThread(const char *name, SceKernelThreadEntry entry, int priority, SceSize stack,
+	SceUInt attributes, int affinity, const SceKernelThreadOptParam *options)
+{
+	SceUID thread = __real_sceKernelCreateThread(name, entry, priority, stack, attributes, affinity, options);
+	int index;
+
+	if (thread >= 0 && (index = __atomic_fetch_add(&tracked_count, 1, __ATOMIC_RELAXED)) < TRACKED_THREADS)
+		tracked_threads[index] = thread;
+	return thread;
+}
+
+/* each thread's state, run time and priority, as UDP lines (HALO_UDP_LOG) */
+static void thread_sample(void)
+{
+	char line[1400];
+	int index, used = 0, count = tracked_count < TRACKED_THREADS ? tracked_count : TRACKED_THREADS;
+	unsigned long long now = sceKernelGetProcessTimeWide();
+
+	used = snprintf(line, sizeof(line), "%llu.%03llu threads:", now / 1000000ULL, now / 1000ULL % 1000ULL);
+	for (index = 0; index < count && used < (int)sizeof(line) - 64; index++)
+	{
+		SceKernelThreadInfo info;
+
+		memset(&info, 0, sizeof(info));
+		info.size = sizeof(info);
+		if (sceKernelGetThreadInfo(tracked_threads[index], &info) < 0)
+			continue;
+		used += snprintf(line + used, sizeof(line) - used, " [%.12s s%x p%d w%x r%llu]", info.name,
+			(unsigned)info.status, info.currentPriority, (unsigned)info.waitType,
+			(unsigned long long)info.runClocks / 1000ULL);
+	}
+	vita_host_udp_line(line);
+}
+
+static void sampler_thread(void *unused)
+{
+	(void)unused;
+	for (;;)
+	{
+		sceKernelDelayThread(500000);
+		thread_sample();
+	}
+}
+
+/* The system's auto-suspend held off, once a second, for as long as the game
+runs: an application that does not tick is suspended with the screen after
+the system's standby time (on the dev Vita 14 s after it started, a map's
+load included, Nov 19). Halo CE Vita got this from SDL's gamepad subsystem;
+Warthog starts SDL for its sound only. */
+static void awake_thread(void *unused)
+{
+	(void)unused;
+	for (;;)
+	{
+		sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
+		sceKernelDelayThread(1000000);
+	}
+}
+
 static void heartbeat_thread(void *unused)
 {
 	(void)unused;
@@ -494,25 +676,69 @@ static void heartbeat_thread(void *unused)
 		memset(&info, 0, sizeof(info));
 		info.size = sizeof(info);
 		sceKernelGetFreeMemorySize(&info);
-		snprintf(message, sizeof(message), "heartbeat: %lu frames presented; free user %d KB, cdram %d KB",
-			vita_presented_frames, info.size_user / 1024, info.size_cdram / 1024);
+		snprintf(message, sizeof(message), "heartbeat: %lu frames presented; free user %d KB, cdram %d KB; "
+			"the game's heap %u KB", vita_presented_frames, info.size_user / 1024, info.size_cdram / 1024,
+			(unsigned int)(xbox_heap_used() >> 10));
+		vita_host_udp_line(message);
 		if (getenv("HALO_EVENTS"))
 			event_line(message);
 		vita_host_log(message);
 	}
 }
 
-static int game_thread(SceSize arguments_size, void *arguments_data)
+static void *game_pthread(void *unused)
 {
 	static char *arguments[] = { "halo", NULL };
 
-	(void)arguments_size;
-	(void)arguments_data;
+	(void)unused;
+	vita_host_thread_start_stack("awake", awake_thread, NULL, -1, 64, 16 * 1024);
 	if (vita_host_thread_start_priority("watchdog", watchdog_thread, NULL, -1, 64) < 0)
 		vita_host_log("watchdog: could not start");
 	vita_host_thread_start_priority("heartbeat", heartbeat_thread, NULL, -1, 96);
-	sceKernelExitThread(halo_main(1, arguments));
-	return 0;
+	if (getenv("HALO_THREAD_SAMPLE"))
+		vita_host_thread_start_priority("sampler", sampler_thread, NULL, -1, 64);
+	/* (debug) HALO_NO_GAME=1: the host alone, the game never started */
+	if (getenv("HALO_NO_GAME") && atoi(getenv("HALO_NO_GAME")))
+	{
+		/* (HALO_NO_GAME=2: and the Xbox window given back) */
+		if (atoi(getenv("HALO_NO_GAME")) == 2)
+		{
+			void vita_host_window_free(void);
+
+			vita_host_window_free();
+			vita_host_log_memory("with the window given back");
+		}
+		for (;;)
+			sceKernelDelayThread(1000000);
+	}
+	return (void *)(intptr_t)halo_main(1, arguments);
+}
+
+/* stderr (the platform layer's log before its own is open) to stderr.txt,
+before the platform layer's constructors (101 and up: the Xbox window's
+reservation logs from there) */
+void vita_host_stderr_open(void)
+{
+	static int opened;
+
+	if (opened)
+		return;
+	opened = 1;
+	sceIoMkdir(VITA_DATA_DIRECTORY, 0777);
+	sceIoMkdir(VITA_DATA_DIRECTORY "/logs", 0777);
+	if (freopen(VITA_DATA_DIRECTORY "/stderr.txt", "w", stderr))
+		setvbuf(stderr, NULL, _IONBF, 0);
+	/* (the platform layer's log, debug.txt in the logs folder, from its
+	first line: the Xbox window's, which a constructor logs before main) */
+	setenv("HALO_LOG_ROOT", VITA_DATA_DIRECTORY "/logs", 0);
+}
+
+/* (the link does not sort the constructors by priority: the Xbox window's
+reservation opens it too, vita_memory.c) */
+__attribute__((constructor(100)))
+static void stderr_early(void)
+{
+	vita_host_stderr_open();
 }
 
 int main(int argc, char **argv)
@@ -530,8 +756,6 @@ int main(int argc, char **argv)
 	sceIoRemove(VITA_DATA_DIRECTORY "/halo-prev.log");
 	sceIoRemove(VITA_DATA_DIRECTORY "/events.txt");
 	sceIoRename(VITA_DATA_DIRECTORY "/halo.log", VITA_DATA_DIRECTORY "/halo-prev.log");
-	if (freopen(VITA_DATA_DIRECTORY "/stderr.txt", "w", stderr))
-		setvbuf(stderr, NULL, _IONBF, 0);
 	atexit(log_flush_at_exit);
 	snprintf(message, sizeof(message), "vita: Warthog for Vita %s (game %s) starting, realtime %ld", HALO_VITA_VERSION, HALO_VERSION,
 		(long)time(NULL));
@@ -557,6 +781,11 @@ int main(int argc, char **argv)
 	setenv("HALO_LOG_ROOT", VITA_DATA_DIRECTORY "/logs", 0);
 	/* the Vita's 16:9 screen: 480 lines of 848 columns */
 	setenv("HALO_DISPLAY_WIDTH", "848", 0);
+	/* the game's own fonts and HUD, not the high-resolution ones: the Vita's
+	renderer does not draw those yet (HALO_CONSOLE_HOST_ART's text atlas and
+	HUD sheets, port/vita/README.md) */
+	setenv("HALO_HIGH_RES_TEXT", "0", 0);
+	setenv("HALO_HIGH_RES_HUD", "0", 0);
 	read_environment_file();
 	/* (debug) the folder a test's screenshots go to (debug.screenshot_directory) */
 	if (getenv("HALO_SCREENSHOT_DIR") && *getenv("HALO_SCREENSHOT_DIR"))
@@ -592,11 +821,17 @@ int main(int argc, char **argv)
 		scePowerGetGpuXbarClockFrequency());
 	vita_host_log(message);
 	{
-		SceUID thread = sceKernelCreateThread("halo", game_thread, 0x10000100, GAME_THREAD_STACK_SIZE, 0,
-			0x10000 /* core 0 */, NULL);
+		/* (a pthread: the game's waits are pthread condition variables,
+		which a thread the kernel made without pthread's own data does not
+		take - halo_cond.h) */
+		pthread_t thread;
+		pthread_attr_t attributes;
+		void *result = NULL;
 		int status = 0;
 
-		if (thread < 0)
+		pthread_attr_init(&attributes);
+		pthread_attr_setstacksize(&attributes, GAME_THREAD_STACK_SIZE);
+		if (pthread_create(&thread, &attributes, game_pthread, NULL) != 0)
 		{
 			static char *arguments[] = { "halo", NULL };
 
@@ -605,8 +840,8 @@ int main(int argc, char **argv)
 		}
 		else
 		{
-			sceKernelStartThread(thread, 0, NULL);
-			sceKernelWaitThreadEnd(thread, &status, NULL);
+			pthread_join(thread, &result);
+			status = (int)(intptr_t)result;
 		}
 		snprintf(message, sizeof(message), "vita: the game ended (%d)", status);
 		vita_host_log(message);
