@@ -329,7 +329,12 @@ echo "--- the job (steam_job.c: the worker thread, the QR, the snapshot, a lost 
 sub=job
 flow job-ce normal 1 ok
 grep -q "qr=2[59] serials=2 attempts=1" "$out/flow-job-ce/line" || { echo "FAIL job-ce: QR or attempts"; status=1; }
+# (a cancel cuts the CM's connection: the token revoked on a new one, no log-off on the cut one - Steam ends it)
+signin_flow=1
 flow job-cancel slow 1 cancel 3
+signin_flow=
+[ "$(grep -E "cm: (revoke|logoff)" "$out/flow-job-cancel/transcript.txt" | tr '\n' ' ')" = "cm: revoke ok " ] ||
+	{ echo "FAIL job-cancel: not revoked after the cancel"; status=1; }
 flow job-lost losesession 1 ok
 grep -q "attempts=2" "$out/flow-job-lost/line" || { echo "FAIL job-lost: not signed in again"; status=1; }
 grep -q "resumed\|already there" "$out/flow-job-lost/log.txt" || { echo "FAIL job-lost: nothing kept"; status=1; }

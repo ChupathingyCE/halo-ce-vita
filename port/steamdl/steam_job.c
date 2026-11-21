@@ -267,15 +267,7 @@ static void busy_take(void)
 	if (!busy_held)
 	{
 		busy_held = 1;
-		/* (connections allowed again - a cancel of an earlier job had stopped them - and the device held; not if this
-	job's cancel came first: job.lock orders the two) */
-	pthread_mutex_lock(&job.lock);
-	if (!job.cancel)
-	{
-		steam_net_abort(0);
-		busy_take();
-	}
-	pthread_mutex_unlock(&job.lock);
+		platform.busy(1);
 	}
 	pthread_mutex_unlock(&busy_lock);
 }
@@ -1208,7 +1200,15 @@ static void *worker(void *unused)
 	size_t secret_size;
 
 	(void)unused;
-	platform.busy(1);
+	/* (connections allowed again - a cancel of an earlier job had stopped them - and the device held; not if this
+	job's cancel came first: job.lock orders the two) */
+	pthread_mutex_lock(&job.lock);
+	if (!job.cancel)
+	{
+		steam_net_abort(0);
+		busy_take();
+	}
+	pthread_mutex_unlock(&job.lock);
 	memset(&options, 0, sizeof(options));
 	options.games = (uint32_t)job.options.games;
 	options.ce_root = job.options.ce_root;
