@@ -41,6 +41,7 @@ enum
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
 
 #ifndef GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
 #define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83f1
@@ -2321,51 +2322,22 @@ static unsigned long log2_of(unsigned long value)
 
 /* the sheet's texels for the entry (malloc'd), its description changed to
 say so; NULL when none stands for it */
-static unsigned char *hud_texels(struct texture_entry *entry)
+/* the sheet's texels brought down to width by height (powers of two, the
+PNG's size or less: malloc'd, swizzled A8R8G8B8), each texel the average of
+the PNG's it covers, a threshold sheet's red its block's middle texel's; NULL
+if the PNG could not be decoded */
+static unsigned char *hud_sheet_texels(long asset, unsigned long width, unsigned long height)
 {
-	static int scale = -1;
-	struct xgpu_texture_description *description = &entry->description;
-	const struct hud_hires_embedded *embedded;
-	unsigned char *rgba, *texels;
-	unsigned long png_width = 0, png_height = 0, width, height, x, y, step_x, step_y, level0;
-	long asset;
-	int threshold;
+	const struct hud_hires_embedded *embedded = &hud_hires_embedded[asset];
+	unsigned long png_width = 0, png_height = 0, x, y, step_x, step_y;
+	unsigned char *rgba = hud_hires_png_pixels(embedded->png, embedded->png_size, &png_width, &png_height), *texels;
+	int threshold = embedded->point_threshold;
 
-	if (scale < 0)
-	{
-		const char *setting = getenv("HALO_HUD_SCALE");
-
-		scale = setting ? atoi(setting) : HUD_SCALE_DEFAULT;
-		if (scale < 1)
-			scale = 1;
-		if (scale > 8)
-			scale = 8;
-	}
-	if (description->linear || description->cube_map || description->depth != 1 || description->format == D3DFMT_P8 ||
-		!description->width || !description->height)
-	{
-		return NULL;
-	}
-	level0 = description->levels > 1 ? xgpu_texture_level_offset(description, 1) : xgpu_texture_face_size(description);
-	if (!level0 || level0 > entry->size)
-		return NULL;
-	asset = hud_hires_override_find((unsigned long)(entry->data | PLATFORM_CONTIGUOUS_BASE), description->width,
-		description->height, level0);
-	if (asset < 0)
-		return NULL;
-	embedded = &hud_hires_embedded[asset];
-	rgba = hud_hires_png_pixels(embedded->png, embedded->png_size, &png_width, &png_height);
-	if (!rgba || png_width < description->width || png_height < description->height)
+	if (!rgba || !width || !height || png_width < width || png_height < height)
 	{
 		free(rgba);
 		return NULL;
 	}
-	width = description->width * (unsigned long)scale;
-	height = description->height * (unsigned long)scale;
-	if (width > png_width)
-		width = png_width;
-	if (height > png_height)
-		height = png_height;
 	step_x = png_width / width;
 	step_y = png_height / height;
 	texels = malloc(width * height * 4);
@@ -2374,7 +2346,6 @@ static unsigned char *hud_texels(struct texture_entry *entry)
 		free(rgba);
 		return NULL;
 	}
-	threshold = embedded->point_threshold;
 	for (y = 0; y < height; y++)
 	{
 		for (x = 0; x < width; x++)
@@ -2403,6 +2374,230 @@ static unsigned char *hud_texels(struct texture_entry *entry)
 		}
 	}
 	free(rgba);
+	return texels;
+}
+
+/* ---------- the map's sheets decoded ahead (dk_hud_prepare)
+
+Decoding a map's sheets when the HUD first draws held the render worker
+for 1.6 s on b30 (69 sheets). As the map loads (hud_hires.c's
+hud_hires_map_loaded, on the game's thread) a thread of their own decodes
+the map's sheets, each brought down to twice its bitmap (HUD_SCALE_DEFAULT:
+the PNG over the sheet's own scale, 8 or 4, which tools/vita_embed_assets.py
+lists in the table's order), and keeps them
+until the texture cache builds the bitmap (hud_texels takes one of the size
+it wants, waits for one being decoded, and decodes any other itself). What
+is not taken is let go when the map is (dk_hud_forget). */
+enum
+{
+	_ahead_none,
+	_ahead_queued,
+	_ahead_decoding,
+	_ahead_done,
+};
+
+/* each sheet's scale over its bitmap (tools/vita_embed_assets.py) */
+extern const unsigned char vita_hud_embedded_scale[];
+
+static struct
+{
+	pthread_mutex_t lock;
+	pthread_cond_t changed;
+	int lock_made, running, stopping;
+	long count;
+	struct
+	{
+		long asset;
+		int state;
+		unsigned long width, height;
+		unsigned char *texels;
+	} sheets[256];
+} hud_ahead;
+
+static void *hud_ahead_main(void *unused)
+{
+	long index;
+
+	(void)unused;
+	for (index = 0; index < hud_ahead.count; index++)
+	{
+		const struct hud_hires_embedded *embedded;
+		unsigned long width, height;
+		unsigned char *texels;
+
+		pthread_mutex_lock(&hud_ahead.lock);
+		if (hud_ahead.stopping)
+		{
+			pthread_mutex_unlock(&hud_ahead.lock);
+			break;
+		}
+		hud_ahead.sheets[index].state = _ahead_decoding;
+		pthread_mutex_unlock(&hud_ahead.lock);
+		embedded = &hud_hires_embedded[hud_ahead.sheets[index].asset];
+		/* (twice the bitmap, as hud_texels wants it: the PNG over its
+		scale, vita_hud_embedded_scale, times HUD_SCALE_DEFAULT) */
+		{
+			unsigned long sheet_scale = vita_hud_embedded_scale[hud_ahead.sheets[index].asset];
+
+			if (sheet_scale < HUD_SCALE_DEFAULT)
+				sheet_scale = HUD_SCALE_DEFAULT;
+			width = embedded->width * HUD_SCALE_DEFAULT / sheet_scale;
+			height = embedded->height * HUD_SCALE_DEFAULT / sheet_scale;
+		}
+		texels = hud_sheet_texels(hud_ahead.sheets[index].asset, width, height);
+		pthread_mutex_lock(&hud_ahead.lock);
+		hud_ahead.sheets[index].width = width;
+		hud_ahead.sheets[index].height = height;
+		hud_ahead.sheets[index].texels = texels;
+		hud_ahead.sheets[index].state = _ahead_done;
+		pthread_cond_broadcast(&hud_ahead.changed);
+		pthread_mutex_unlock(&hud_ahead.lock);
+	}
+	pthread_mutex_lock(&hud_ahead.lock);
+	hud_ahead.running = 0;
+	pthread_cond_broadcast(&hud_ahead.changed);
+	pthread_mutex_unlock(&hud_ahead.lock);
+	return NULL;
+}
+
+void vita_hud_ahead_forget(void)
+{
+	long index;
+
+	if (!hud_ahead.lock_made)
+		return;
+	pthread_mutex_lock(&hud_ahead.lock);
+	hud_ahead.stopping = 1;
+	while (hud_ahead.running)
+		pthread_cond_wait(&hud_ahead.changed, &hud_ahead.lock);
+	for (index = 0; index < hud_ahead.count; index++)
+	{
+		free(hud_ahead.sheets[index].texels);
+		hud_ahead.sheets[index].texels = NULL;
+		hud_ahead.sheets[index].state = _ahead_none;
+	}
+	hud_ahead.count = 0;
+	pthread_mutex_unlock(&hud_ahead.lock);
+}
+
+void vita_hud_ahead_start(const long *assets, long count)
+{
+	pthread_t thread;
+	pthread_attr_t attributes;
+	long index;
+
+	if (!hud_ahead.lock_made)
+	{
+		pthread_mutex_init(&hud_ahead.lock, NULL);
+		pthread_cond_init(&hud_ahead.changed, NULL);
+		hud_ahead.lock_made = 1;
+	}
+	vita_hud_ahead_forget();
+	pthread_mutex_lock(&hud_ahead.lock);
+	hud_ahead.stopping = 0;
+	for (index = 0; index < count && hud_ahead.count < (long)(sizeof(hud_ahead.sheets) / sizeof(hud_ahead.sheets[0]));
+		index++)
+	{
+		if (assets[index] < 0 || assets[index] >= (long)hud_hires_embedded_count)
+			continue;
+		hud_ahead.sheets[hud_ahead.count].asset = assets[index];
+		hud_ahead.sheets[hud_ahead.count].state = _ahead_queued;
+		hud_ahead.sheets[hud_ahead.count].texels = NULL;
+		hud_ahead.count++;
+	}
+	hud_ahead.running = hud_ahead.count > 0;
+	pthread_mutex_unlock(&hud_ahead.lock);
+	if (!hud_ahead.running)
+		return;
+	pthread_attr_init(&attributes);
+	pthread_attr_setstacksize(&attributes, 64 * 1024);
+	if (pthread_create(&thread, &attributes, hud_ahead_main, NULL) != 0)
+	{
+		pthread_mutex_lock(&hud_ahead.lock);
+		hud_ahead.running = 0;
+		pthread_mutex_unlock(&hud_ahead.lock);
+	}
+	else
+		pthread_detach(thread);
+	pthread_attr_destroy(&attributes);
+}
+
+/* a sheet decoded ahead at this size (taken: the caller frees it), waited
+for while it is being decoded; NULL for one not decoded ahead or at
+another size */
+static unsigned char *hud_ahead_take(long asset, unsigned long width, unsigned long height)
+{
+	unsigned char *texels = NULL;
+	long index;
+
+	if (!hud_ahead.lock_made)
+		return NULL;
+	pthread_mutex_lock(&hud_ahead.lock);
+	for (index = 0; index < hud_ahead.count; index++)
+	{
+		if (hud_ahead.sheets[index].asset != asset)
+			continue;
+		while (hud_ahead.sheets[index].state == _ahead_decoding)
+			pthread_cond_wait(&hud_ahead.changed, &hud_ahead.lock);
+		if (hud_ahead.sheets[index].state == _ahead_done && hud_ahead.sheets[index].texels &&
+			hud_ahead.sheets[index].width == width && hud_ahead.sheets[index].height == height)
+		{
+			texels = hud_ahead.sheets[index].texels;
+			hud_ahead.sheets[index].texels = NULL;
+		}
+		break;
+	}
+	pthread_mutex_unlock(&hud_ahead.lock);
+	return texels;
+}
+
+static unsigned char *hud_texels(struct texture_entry *entry)
+{
+	static int scale = -1;
+	struct xgpu_texture_description *description = &entry->description;
+	const struct hud_hires_embedded *embedded;
+	unsigned char *texels;
+	unsigned long width, height, level0;
+	long asset;
+	int threshold;
+
+	if (scale < 0)
+	{
+		const char *setting = getenv("HALO_HUD_SCALE");
+
+		scale = setting ? atoi(setting) : HUD_SCALE_DEFAULT;
+		if (scale < 1)
+			scale = 1;
+		if (scale > 8)
+			scale = 8;
+	}
+	if (description->linear || description->cube_map || description->depth != 1 || description->format == D3DFMT_P8 ||
+		!description->width || !description->height)
+	{
+		return NULL;
+	}
+	level0 = description->levels > 1 ? xgpu_texture_level_offset(description, 1) : xgpu_texture_face_size(description);
+	if (!level0 || level0 > entry->size)
+		return NULL;
+	asset = hud_hires_override_find((unsigned long)(entry->data | PLATFORM_CONTIGUOUS_BASE), description->width,
+		description->height, level0);
+	if (asset < 0)
+		return NULL;
+	embedded = &hud_hires_embedded[asset];
+	if (embedded->width < description->width || embedded->height < description->height)
+		return NULL;
+	width = description->width * (unsigned long)scale;
+	height = description->height * (unsigned long)scale;
+	if (width > embedded->width)
+		width = embedded->width;
+	if (height > embedded->height)
+		height = embedded->height;
+	texels = hud_ahead_take(asset, width, height);
+	if (!texels)
+		texels = hud_sheet_texels(asset, width, height);
+	if (!texels)
+		return NULL;
+	threshold = embedded->point_threshold;
 	description->format = D3DFMT_A8R8G8B8;
 	description->width = width;
 	description->height = height;

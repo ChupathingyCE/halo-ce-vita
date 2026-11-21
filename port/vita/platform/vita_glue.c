@@ -171,17 +171,20 @@ void halo_draw_picture(const unsigned char *rgba, long width, long height)
 }
 
 /* the high-res HUD's sheets, decoded by a console's own renderer
-(HALO_CONSOLE_HOST_ART) as the map loads: the Vita's texture cache decodes
-each when its bitmap is first drawn instead (vita_textures.c hud_texels),
-brought down to the size its screen shows, so nothing is held ahead */
+(HALO_CONSOLE_HOST_ART) as the map loads: brought down to the size the
+Vita's screen shows on a thread of their own, and kept until the texture
+cache builds their bitmaps (vita_textures.c hud_ahead) */
+void vita_hud_ahead_start(const long *assets, long count);
+void vita_hud_ahead_forget(void);
+
 void dk_hud_prepare(const long *assets, long count)
 {
-	(void)assets;
-	(void)count;
+	vita_hud_ahead_start(assets, count);
 }
 
 void dk_hud_forget(void)
 {
+	vita_hud_ahead_forget();
 }
 
 /* ---------- the console's developer tools and Link Profile */

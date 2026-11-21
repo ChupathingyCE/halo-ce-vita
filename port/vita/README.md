@@ -111,8 +111,6 @@ application on the dev Vita 14 s after it started.
   each) run on the same thread, where Halo CE Vita ran its tick on a thread
   of its own; at two ticks a frame the game runs slower than real time.
   The tick thread is upstream's ChupathingyCE/chupathingyce#1548.
-- The high-res HUD's sheets are decoded when the HUD is first drawn on a
-  map: about 1.6 s once at the start of play (b30), on the render worker.
 - Each checkpoint stops the picture for about 1.3 s: the game state the
   Vita builds with is the desktop's 20 MB, and the game writes all of it to
   the memory card at once (the Xbox wrote 3.3 MB).

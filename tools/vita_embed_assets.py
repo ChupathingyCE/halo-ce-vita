@@ -46,6 +46,19 @@ def main() -> None:
     embed_assets.MENU_ASSETS = merged.resolve()
     embed_assets.MENU_LIST = embed_assets.MENU_ASSETS / "menus.json"
     embed_assets.main()
+    # each HUD sheet's scale over its bitmap (8 or 4, the sheet's own), in
+    # the embedded table's order and with its guards, which the table does
+    # not keep: the Vita decodes a map's sheets ahead at the size it will
+    # want, twice the bitmap (platform/vita_textures.c's hud_ahead)
+    lines = ["", "/* (tools/vita_embed_assets.py) each sheet's scale over its bitmap */",
+             "const unsigned char vita_hud_embedded_scale[] =", "{"]
+    for folder, asset, title in embed_assets.textures():
+        mcc = int(folder == embed_assets.MCC_HUD_ASSETS)
+        choice = ["#ifdef HALO_TITLE_CHOICE"] if title == 2 else ["#if HALO_MCC"] if mcc else []
+        lines += [*choice, f"\t{int(asset['scale'])},", *(["#endif"] if choice else [])]
+    lines += ["\t0,", "};", ""]
+    with open(output, "a") as file:
+        file.write("\n".join(lines))
 
 
 if __name__ == "__main__":
