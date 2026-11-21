@@ -533,7 +533,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -2410,6 +2410,41 @@ for case in $cases; do
 			fail h3steam "not the 23 made-up Halo CE files"
 		grep -aqF "$fake_token" "$log" && fail h3steam "the token is in the log"
 		grep -raqF "$fake_token" "$out/h3steam/card" && fail h3steam "the token is in a file written"
+		;;
+	h3steamcancel)
+		# (1.1.3-insider.8 on the owner's Vita: a cancel kept the job - and the PS button's lock - for minutes. Here: the
+		# download stalls mid-chunk (the fake's stall_chunk), Circle cancels: the job ends within seconds, its screen
+		# says it is stopping or stopped, Circle again goes back to GAME MANAGER; no frame of the game waits on it)
+		if ! grep -aq "posix_https_test_roots_pem\|HALO_STEAM_TEST_CM" "$binary"; then
+			echo "--- h3steamcancel"; echo "SKIP (h3steamcancel): not a Steam test build (configure.py --steam-test-ca)"
+			continue
+		fi
+		mkdir -p "$out/h3steamcancel-fake"
+		rm -f "$out/h3steamcancel-fake/stdin"; mkfifo "$out/h3steamcancel-fake/stdin"
+		python3 -I "$here/steam_fake_server.py" --work "$out/h3steamcancel-fake" --mode stall_chunk \
+			< "$out/h3steamcancel-fake/stdin" > "$out/h3steamcancel-fake/server.json" &
+		fake_pid=$!
+		exec 7> "$out/h3steamcancel-fake/stdin"
+		for i in $(seq 50); do [ -s "$out/h3steamcancel-fake/server.json" ] && break; sleep 0.1; done
+		fake_cm=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cm"])' "$out/h3steamcancel-fake/server.json")
+		fake_cdn=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cdn"])' "$out/h3steamcancel-fake/server.json")
+		mods_data "$out/h3mods-data"
+		run h3steamcancel "$out/h3mods-data" 60 "$h3gmpad down:150:500 a wait:150:3000 down:150:500 a wait:150:12000 @steam_stalled b wait:150:400 @steam_stopping wait:150:3000 @steam_stopped b wait:150:3000 @steam_left" \
+			HALO_MENU_STYLE=halo3 HALO_STEAM_TEST_CM="ws://127.0.0.1:$fake_cm/cmsocket/" \
+			HALO_STEAM_TEST_CDN="http://127.0.0.1:$fake_cdn" HALO_STEAM_TEST_ROOT="$out/h3steamcancel/card"
+		exec 7>&-
+		kill "$fake_pid" 2>/dev/null || true
+		wait "$fake_pid" 2>/dev/null || true
+		check_h3 h3steamcancel halo3
+		log=$out/h3steamcancel/run.log
+		grep -aq "cdn: stalled mid-chunk" "$out/h3steamcancel-fake/transcript.txt" || fail h3steamcancel "the download did not stall"
+		grep -aq "steam job: cancelled by the player" "$log" || fail h3steamcancel "no cancel"
+		grep -aq "steam job: sign-in 1 ended: cancelled" "$log" || fail h3steamcancel "the job did not end cancelled"
+		# (the cancel's line and the end's: under 5 s apart)
+		awk '/steam job: cancelled by the player/ { c = NR } /steam job: sign-in 1 ended: cancelled/ && c { e = NR }
+			END { exit !(c && e) }' "$log" || fail h3steamcancel "the end did not follow the cancel"
+		grep -aq "ui: screen pc.h3.mods.screen" <(sed -n '/steam job: cancelled by the player/,$p' "$log") ||
+			fail h3steamcancel "Circle did not go back to GAME MANAGER after the cancel"
 		;;
 	steampanel)
 		if ! grep -aq "menus: steam: the screen opened" "$binary"; then
