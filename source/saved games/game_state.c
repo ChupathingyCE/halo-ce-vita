@@ -260,6 +260,11 @@ static void game_state_call_before_load_procs(
 	game_state_before_load_proc *proc = before_load_procs;
 	long i;
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: the game state is about to be replaced: the tick overlap's marks
+	refer to what goes (port/linux/include/tick_overlap.h) */
+	halo_epoch_discard();
+#endif
 	for (i =NUMBEROF(before_load_procs); i>0; i--, proc++)
 	{
 		(*proc)();
@@ -318,6 +323,10 @@ void game_state_initialize_for_new_map(
 
 	/* port: (the objects are put back: object_bounds_cache.c) */
 	object_bounds_cache_invalidate();
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (as before a load) */
+	halo_epoch_discard();
+#endif
 	game_state_note_event("map start");
 	game_state_data_arrays_new_map();
 

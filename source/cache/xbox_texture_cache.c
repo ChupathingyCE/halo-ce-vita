@@ -398,9 +398,24 @@ void texture_cache_open(
 	return;
 }
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+static void texture_cache_overlap_lock(void);
+static void texture_cache_overlap_unlock(void);
+#endif
+
 void texture_cache_idle(
 	void)
 {
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (the render's, held while a tick runs: above) */
+	if (halo_epoch_active)
+	{
+		texture_cache_overlap_lock();
+		lruv_idle(xbox_texture_cache_globals.cache);
+		texture_cache_overlap_unlock();
+		return;
+	}
+#endif
 	lruv_idle(xbox_texture_cache_globals.cache);
 
 	return;
@@ -1208,7 +1223,125 @@ void texture_cache_debug_render(
 }
 #endif
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the texture cache with a tick beside the render
+(port/linux/include/tick_overlap.h). The cache is the render's; the tick
+asks it for a bitmap now and then. A request that only asks for a bitmap to
+be loaded (a decal's, an object's predicted resources: what it is answered
+is not used) waits for the join and is asked then. One whose answer the tick
+uses (a lightmap a unit's illumination samples) is asked at once, the cache
+held by one thread at a time: the render's calls take the same lock while a
+tick runs, and a wait for the loading thread lets it go */
+#define TEXTURE_CACHE_TICK_REQUESTS 256
+static struct bitmap_data *texture_cache_tick_requests[TEXTURE_CACHE_TICK_REQUESTS];
+static long texture_cache_tick_request_count;
+static volatile int texture_cache_lock_owner;
+static int texture_cache_lock_depth;
+
+static void texture_cache_overlap_lock(
+	void)
+{
+	int self = 1 + halo_epoch_on_mutator();
+	unsigned long spins = 0;
+
+	if (__atomic_load_n(&texture_cache_lock_owner, __ATOMIC_ACQUIRE) == self)
+	{
+		texture_cache_lock_depth++;
+		return;
+	}
+	for (;;)
+	{
+		int expected = 0;
+
+		if (!__atomic_load_n(&texture_cache_lock_owner, __ATOMIC_RELAXED) &&
+			__atomic_compare_exchange_n(&texture_cache_lock_owner, &expected, self, FALSE, __ATOMIC_ACQUIRE,
+				__ATOMIC_RELAXED))
+		{
+			break;
+		}
+		if (++spins > 64)
+			SwitchToThread();
+	}
+	texture_cache_lock_depth = 1;
+}
+
+static void texture_cache_overlap_unlock(
+	void)
+{
+	if (--texture_cache_lock_depth == 0)
+		__atomic_store_n(&texture_cache_lock_owner, 0, __ATOMIC_RELEASE);
+}
+
+/* (around a wait for the loading thread: the lock let go, then taken back) */
+static int texture_cache_overlap_suspend(
+	void)
+{
+	int depth = texture_cache_lock_depth;
+
+	if (__atomic_load_n(&texture_cache_lock_owner, __ATOMIC_ACQUIRE) != 1 + halo_epoch_on_mutator())
+		return 0;
+	texture_cache_lock_depth = 0;
+	__atomic_store_n(&texture_cache_lock_owner, 0, __ATOMIC_RELEASE);
+	return depth;
+}
+
+static void texture_cache_overlap_resume(
+	int depth)
+{
+	if (!depth)
+		return;
+	texture_cache_overlap_lock();
+	texture_cache_lock_depth = depth;
+}
+
+void texture_cache_port_overlap_requests(
+	void)
+{
+	long index;
+	long count = texture_cache_tick_request_count;
+
+	texture_cache_tick_request_count = 0;
+	for (index = 0; index < count; index++)
+		_texture_cache_bitmap_get_hardware_format(texture_cache_tick_requests[index], FALSE, TRUE);
+}
+
+static void *texture_cache_bitmap_get_hardware_format_held(
+	struct bitmap_data *bitmap,
+	boolean block,
+	boolean load);
+
 void *_texture_cache_bitmap_get_hardware_format(
+	struct bitmap_data *bitmap,
+	boolean block,
+	boolean load)
+{
+	void *hardware_format;
+
+	if (!halo_epoch_active)
+		return texture_cache_bitmap_get_hardware_format_held(bitmap, block, load);
+	if (halo_epoch_on_mutator() && load && !block)
+	{
+		long index;
+
+		for (index = 0; index < texture_cache_tick_request_count; index++)
+		{
+			if (texture_cache_tick_requests[index] == bitmap)
+				return NULL;
+		}
+		if (texture_cache_tick_request_count < TEXTURE_CACHE_TICK_REQUESTS)
+			texture_cache_tick_requests[texture_cache_tick_request_count++] = bitmap;
+		return NULL;
+	}
+	texture_cache_overlap_lock();
+	hardware_format = texture_cache_bitmap_get_hardware_format_held(bitmap, block, load);
+	texture_cache_overlap_unlock();
+	return hardware_format;
+}
+
+static void *texture_cache_bitmap_get_hardware_format_held(
+#else
+void *_texture_cache_bitmap_get_hardware_format(
+#endif
 	struct bitmap_data *bitmap,
 	boolean block,
 	boolean load)
@@ -1314,7 +1447,18 @@ void *_texture_cache_bitmap_get_hardware_format(
 						xbox_main_stage = waiting;
 					}
 #endif
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+					{
+						/* port: (the cache let go while the loading thread
+						works: the render may need it meanwhile) */
+						int lock_depth = texture_cache_overlap_suspend();
+
+						SwitchToThread();
+						texture_cache_overlap_resume(lock_depth);
+					}
+#else
 					SwitchToThread();
+#endif
 				}
 			}
 			while (!hardware_format && block);

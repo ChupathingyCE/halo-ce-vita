@@ -105,8 +105,17 @@ it. The users' stack (global_current_collision_users) stays as it is. */
 
 /* ---------- globals */
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the render's users' stack and the tick's, apart, with the tick beside
+the render (port/linux/include/tick_overlap.h): each pushes and pops its own */
+extern short global_current_collision_user_depth_by_thread[2];
+extern short global_current_collision_users_by_thread[2][MAXIMUM_COLLISION_USER_STACK_DEPTH];
+#define global_current_collision_user_depth global_current_collision_user_depth_by_thread[halo_epoch_on_mutator()]
+#define global_current_collision_users global_current_collision_users_by_thread[halo_epoch_on_mutator()]
+#else
 extern short global_current_collision_user_depth;
 extern short global_current_collision_users[MAXIMUM_COLLISION_USER_STACK_DEPTH];
+#endif
 
 /* ---------- public code */
 

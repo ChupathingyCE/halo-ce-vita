@@ -2315,7 +2315,13 @@ void _rasterizer_frame_begin(
 		global_d3d_device,
 		D3DRS_DXT1NOISEENABLE,
 		rasterizer_debug_options.DXTC_noise_enabled);
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (by the tick after its update, while a tick runs beside the
+	render: rasterizer_decals_port_overlap_upkeep) */
+	if (rasterizer_debug_options.draw_environment_decals && !halo_epoch_render_overlapped())
+#else
 	if (rasterizer_debug_options.draw_environment_decals)
+#endif
 	{
 		rasterizer_decal_vertices_begin_update();
 		decals_update();
@@ -2323,6 +2329,23 @@ void _rasterizer_frame_begin(
 	}
 	return;
 }
+
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the decals' upkeep (their fades and ends, their vertices), done by
+the tick thread after its update while a tick runs beside the render: where
+it ran without the thread, before the frame of that update is drawn, and by
+the thread that makes and deletes the decals (tick_overlap.c) */
+void rasterizer_decals_port_overlap_upkeep(
+	void)
+{
+	if (rasterizer_debug_options.draw_environment_decals)
+	{
+		rasterizer_decal_vertices_begin_update();
+		decals_update();
+		rasterizer_decal_vertices_end_update();
+	}
+}
+#endif
 
 void rasterizer_secondary_render_target_debug(
 	rectangle2d *bounds)

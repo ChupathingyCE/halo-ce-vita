@@ -448,16 +448,52 @@ static boolean object_is_first_person_camera(
 		scripted_camera_object_is_first_person_camera(object_index);
 }
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the clusters' objects as the last update left them, for the render
+while a tick runs beside it (port/linux/include/tick_overlap.h): the tick
+takes a moving object out of its clusters and puts it back every tick, and
+a walk of the live lists then missed it (the object flickered) */
+static long render_cluster_get_first_collideable_object(long *iterator, short cluster_index)
+{
+	return halo_tick_overlap_list_first(_tick_overlap_list_collideable, iterator, cluster_index);
+}
+
+static long render_cluster_get_next_collideable_object(long *iterator)
+{
+	return halo_tick_overlap_list_next(_tick_overlap_list_collideable, iterator);
+}
+
+static long render_cluster_get_first_noncollideable_object(long *iterator, short cluster_index)
+{
+	return halo_tick_overlap_list_first(_tick_overlap_list_noncollideable, iterator, cluster_index);
+}
+
+static long render_cluster_get_next_noncollideable_object(long *iterator)
+{
+	return halo_tick_overlap_list_next(_tick_overlap_list_noncollideable, iterator);
+}
+#endif
+
 static void find_rendered_objects(
 	void)
 {
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	boolean lists = halo_tick_overlap_lists_active(_tick_overlap_list_collideable) &&
+		halo_tick_overlap_lists_active(_tick_overlap_list_noncollideable);
+#endif
+
 	object_marker_begin();
 
 	render_object_globals.rendered_object_count = structure_visibility_find_objects(
 		render_object_globals.rendered_object_indices,
 		MAXIMUM_RENDERED_OBJECTS,
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+		lists ? render_cluster_get_first_collideable_object : cluster_get_first_collideable_object,
+		lists ? render_cluster_get_next_collideable_object : cluster_get_next_collideable_object,
+#else
 		cluster_get_first_collideable_object,
 		cluster_get_next_collideable_object,
+#endif
 		object_get_render_bounding_sphere,
 		object_unmarked_function,
 		object_mark_function);
@@ -466,8 +502,13 @@ static void find_rendered_objects(
 		&render_object_globals.rendered_object_indices[
 			render_object_globals.rendered_object_count],
 		MAXIMUM_RENDERED_OBJECTS - render_object_globals.rendered_object_count,
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+		lists ? render_cluster_get_first_noncollideable_object : cluster_get_first_noncollideable_object,
+		lists ? render_cluster_get_next_noncollideable_object : cluster_get_next_noncollideable_object,
+#else
 		cluster_get_first_noncollideable_object,
 		cluster_get_next_noncollideable_object,
+#endif
 		object_get_render_bounding_sphere,
 		object_unmarked_function,
 		object_mark_function);

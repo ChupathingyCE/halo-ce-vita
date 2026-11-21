@@ -3931,6 +3931,13 @@ static void prioritize_sounds(
 void sound_idle(
 	void)
 {
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: not by the render while a tick runs beside it: the tick thread
+	has the sound manager then (its frame, sound_render, is the tick's:
+	port/linux/include/tick_overlap.h) */
+	if (halo_epoch_render_overlapped())
+		return;
+#endif
 	sound_manager_globals.idling = TRUE;
 
 	if (sound_manager_globals.initialized && sound_manager_globals.enabled)

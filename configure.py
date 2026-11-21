@@ -84,6 +84,13 @@ parser.add_argument(
     "cross-play against the PC builds on one computer; never a build to ship",
 )
 parser.add_argument(
+    "--console-tick-overlap",
+    action="store_true",
+    help="native ports (Linux): a console's game tick on a thread of its own beside the render "
+    "(HALO_CONSOLE_TICK_OVERLAP: port/linux/include/tick_overlap.h), to test it and its determinism "
+    "(tools/test_determinism.py --tick-overlap) on the desktop; never a build to ship",
+)
+parser.add_argument(
     "--window-rebase",
     action="store_true",
     help="the 32-bit Linux build (ninja linux) with its Xbox memory window wherever HALO_WINDOW_BASE puts it "
@@ -187,6 +194,7 @@ sln = SimpleNamespace(
     port_release=args.release,
     game_browser=args.game_browser,
     console_limits=args.console_limits,
+    console_tick_overlap=args.console_tick_overlap,
     window_rebase=args.window_rebase,
     packaged=args.packaged,
     port_lto=args.lto,

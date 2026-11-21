@@ -1093,6 +1093,12 @@ boolean scenario_switch_structure_bsp(
 		had_old_structure_bsp = FALSE;
 
 		match_assert("c:\\halo\\SOURCE\\scenario\\scenario.c", 0x2B7, global_scenario);
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+		/* port: a script's switch, on the tick thread beside the render,
+		waits until the frame drawn from the bsp being unloaded is presented
+		(port/linux/include/tick_overlap.h) */
+		halo_tick_overlap_wait_for_render();
+#endif
 #ifdef HALO_CONSOLE_BRINGUP_LOG
 		/* port: bring-up (the console developer tools), which bsp is loaded when */
 		error(_error_silent, "structure bsp switch: %d -> %d", global_structure_bsp_index, structure_bsp_index);

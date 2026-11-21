@@ -28,6 +28,14 @@ knobs change only what is drawn, so the hashes must still agree. A replay
 counts as a local game for them (render.c's render_tuning), so every one
 goes as far as it can.
 
+With --tick-overlap (a build made with configure.py --console-tick-overlap)
+the recording is made with the tick on the game's thread and both replays
+with it on a thread of its own beside the render (HALO_TICK_OVERLAP, a
+console's: port/linux/include/tick_overlap.h): the simulation must not
+change. --drawn draws every run with the OpenGL renderer offscreen (SDL's
+offscreen video driver) rather than SDL's dummy driver, so that the render
+runs beside the tick.
+
 Needs a Linux (or macOS) build and the stock Xbox maps (NTSC). CI has no
 maps, so under pytest the check is skipped unless HALO_DETERMINISM_BINARY
 and HALO_DETERMINISM_MAPS name a build and a maps folder. Nothing reaches
@@ -83,6 +91,14 @@ TUNING_MOST = {
 
 def log(text):
     print(f"determinism: {text}", flush=True)
+
+
+# (--drawn) the OpenGL renderer offscreen: the render runs every frame
+DRAWN = {
+    "SDL_VIDEO_DRIVER": "offscreen",
+    "SDL_VIDEODRIVER": "offscreen",
+    "SDL_HINT_EGL_DEVICE": "1",
+}
 
 
 def copy_environment(folder, maps, address):
@@ -279,7 +295,7 @@ def compare(first_name, first, second_name, second):
 
 
 def run_check(binary, maps, work, game_map=DEFAULT_MAP, ticks=DEFAULT_TICKS, seed=DEFAULT_SEED, local_players=1,
-              air_turn_aim=False, tuning_most=False, safe_zones=False):
+              air_turn_aim=False, tuning_most=False, safe_zones=False, tick_overlap=False, drawn=False):
     """Records a game and replays it twice. Returns (problems, ticks compared).
     With air_turn_aim the recording is made with the host's 180 glitch fix on
     (network.air_turn_aim) and the replays are run with it off in their own
@@ -288,7 +304,9 @@ def run_check(binary, maps, work, game_map=DEFAULT_MAP, ticks=DEFAULT_TICKS, see
     (TUNING_MOST), the recording as retail. With safe_zones the recording
     lays split screen out as the Xbox does (display.hud_safe_zone "xbox")
     and the replays with each view's window in its middle ("pc"): only the
-    drawing moves, so the hashes must agree."""
+    drawing moves, so the hashes must agree. With tick_overlap the recording
+    runs the tick on the game's thread and the replays beside the render
+    (HALO_TICK_OVERLAP); with drawn every run draws offscreen with OpenGL."""
     os.makedirs(work, exist_ok=True)
     inputs = os.path.join(os.path.abspath(work), "inputs.bin")
     started = time.time()
@@ -299,6 +317,14 @@ def run_check(binary, maps, work, game_map=DEFAULT_MAP, ticks=DEFAULT_TICKS, see
     if safe_zones:
         record_env = dict(record_env or {}, HALO_HUD_SAFE_ZONE="xbox")
         replay_env = dict(replay_env or {}, HALO_HUD_SAFE_ZONE="pc")
+    if tick_overlap:
+        record_env = dict(record_env or {}, HALO_TICK_OVERLAP="0")
+        replay_env = dict(replay_env or {}, HALO_TICK_OVERLAP="1")
+    if drawn:
+        # (a machine's choice of GPU, passed on)
+        gpu = {key: os.environ[key] for key in ("DRI_PRIME",) if key in os.environ}
+        record_env = dict(record_env or {}, **DRAWN, **gpu)
+        replay_env = dict(replay_env or {}, **DRAWN, **gpu)
     record = play(binary, maps, work, "record", "record", inputs, game_map, ticks, seed, local_players,
         extra_env=record_env)
     replay_a = play(binary, maps, work, "replay-a", "replay", inputs, game_map, ticks, seed, local_players,
@@ -316,6 +342,11 @@ def run_check(binary, maps, work, game_map=DEFAULT_MAP, ticks=DEFAULT_TICKS, see
                 text = output.read()
             if b"thinning=4(hand)" not in text or b"effects=minimal(hand)" not in text:
                 raise RuntimeError(f"{name}: didn't draw with the tuning at its most")
+    if tick_overlap:
+        for name in ("replay-a", "replay-b"):
+            with open(os.path.join(work, name, "out.log"), "rb") as output:
+                if b"tick overlap: the tick thread runs" not in output.read():
+                    raise RuntimeError(f"{name}: didn't run the tick beside the render")
     runs = {name: read_hashes(path) for name, path in
         (("record", record), ("replay-a", replay_a), ("replay-b", replay_b))}
     problems = []
@@ -395,13 +426,18 @@ def main():
     parser.add_argument("--safe-zones", action="store_true",
         help="record with display.hud_safe_zone \"xbox\", replay with \"pc\" (split screen windows centered): "
         "they must agree")
+    parser.add_argument("--tick-overlap", action="store_true",
+        help="(a configure.py --console-tick-overlap build) record with the tick on the game's thread, replay with "
+        "it beside the render: they must agree")
+    parser.add_argument("--drawn", action="store_true",
+        help="draw every run offscreen with OpenGL (the render runs beside the tick)")
     args = parser.parse_args()
     if not os.path.exists(os.path.join(args.maps, f"{args.map}.map")):
         log(f"no {args.map}.map in {args.maps}: skipped")
         return 0
     try:
         problems, count = run_check(args.binary, args.maps, args.work, args.map, args.ticks, args.seed,
-            args.local_players, args.air_turn_aim, args.tuning_most, args.safe_zones)
+            args.local_players, args.air_turn_aim, args.tuning_most, args.safe_zones, args.tick_overlap, args.drawn)
     except RuntimeError as error:
         log(str(error))
         return 1

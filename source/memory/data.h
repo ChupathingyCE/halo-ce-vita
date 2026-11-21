@@ -112,6 +112,11 @@ static __inline__ void *datum_get_checked(
 		struct datum_header *header = (struct datum_header *)((byte *)xbox_pointer(data->data)+data->size*absolute_index);
 
 		if (header->identifier && (!identifier || identifier==header->identifier))
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+		/* (an array the tick marked this epoch, asked by the render: the
+		function says whether the datum is whole; tick_overlap.h) */
+		if (!data->name[TAG_STRING_LENGTH] || halo_epoch_slot_unmarked(data, absolute_index))
+#endif
 			return header;
 	}
 

@@ -136,6 +136,15 @@ void *datum_try_and_get(
 			{
 				header = NULL;
 			}
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+			/* port: the render's view while a tick runs beside it: a datum
+			the tick deleted is still found, one it is making is not
+			(port/linux/include/tick_overlap.h) */
+			if (halo_epoch_active)
+			{
+				header = halo_epoch_render_lookup(data, index, header);
+			}
+#endif
 		}
 	}
 
@@ -168,6 +177,19 @@ void *(datum_get)(
 			return header;
 		}
 	}
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (the render, while a tick runs beside it, still finds a datum
+	the tick deleted: tick_overlap.h) */
+	if (halo_epoch_active)
+	{
+		void *kept = halo_epoch_render_lookup(data, index, NULL);
+
+		if (kept)
+		{
+			return kept;
+		}
+	}
+#endif
 
 #ifdef HALO_RELEASE
 	/* port: a release build's message too, and where it was asked from
@@ -255,6 +277,10 @@ void data_dispose(
 void data_make_invalid(
 	struct data_array *data)
 {
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (the whole array: once the render is done, tick_overlap.h) */
+	halo_tick_overlap_wait_for_render();
+#endif
 	data_verify(data);
 	data->valid = FALSE;
 
@@ -286,6 +312,11 @@ long datum_new_at_index(
 				data->count = absolute_index+1;
 			}
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+			/* port: (marked before it is cleared: tick_overlap.h) */
+			halo_epoch_check_reader_mutation(data, absolute_index, "new");
+			halo_epoch_datum_created(data, absolute_index);
+#endif
 			datum_initialize(data, header);
 			header->identifier = identifier;
 			result = identifier<<16 | absolute_index;
@@ -315,6 +346,11 @@ long datum_new(
 	{
 		if (!header->identifier)
 		{
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+			/* port: (marked before it is cleared: tick_overlap.h) */
+			halo_epoch_check_reader_mutation(data, absolute_index, "new");
+			halo_epoch_datum_created(data, absolute_index);
+#endif
 			datum_initialize(data, header);
 			data->actual_count++;
 			data->first_free_absolute_index = absolute_index+1;
@@ -355,6 +391,11 @@ void datum_delete(
 	long index)
 {
 	struct datum_header *header = (struct datum_header *)datum_get(data, index);
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: the render still finds it until the join (tick_overlap.h) */
+	halo_epoch_check_reader_mutation(data, (short)index, "delete");
+	halo_epoch_datum_delete(data, (short)index);
+#endif
 	header->identifier = 0;
 
 	if (((short)index)<data->first_free_absolute_index)
@@ -381,6 +422,10 @@ void data_delete_all(
 {
 	short absolute_index;
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (the whole array: once the render is done, tick_overlap.h) */
+	halo_tick_overlap_wait_for_render();
+#endif
 	data_verify(data);
 	match_assert("c:\\halo\\SOURCE\\memory\\data.c", 226, data->valid);
 
@@ -437,7 +482,12 @@ void *data_iterator_next(
 	{
 		datum_index = header->identifier<<16 | absolute_index;
 		absolute_index++;
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+		/* port: (not a datum the tick is making, to the render: tick_overlap.h) */
+		if (header->identifier && halo_epoch_datum_visible(iterator->data, absolute_index-1))
+#else
 		if (header->identifier)
+#endif
 		{
 			iterator->datum_index = datum_index;
 			result = header;
@@ -467,7 +517,11 @@ long data_next_index(
 		header = (struct datum_header *)((byte *)xbox_pointer(data->data)+data->size*absolute_index);
 		while (absolute_index<data->count)
 		{
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+			if (header->identifier && halo_epoch_datum_visible(data, absolute_index))
+#else
 			if (header->identifier)
+#endif
 			{
 				result = header->identifier<<16 | absolute_index;
 				break;
@@ -498,7 +552,11 @@ long data_prev_index(
 		header = (struct datum_header *)((byte *)xbox_pointer(data->data)+data->size*absolute_index);
 		do
 		{
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+			if (header->identifier && halo_epoch_datum_visible(data, absolute_index))
+#else
 			if (header->identifier)
+#endif
 			{
 				result = header->identifier<<16 | absolute_index;
 				break;
@@ -522,6 +580,10 @@ void data_compact(
 	short compacted_count;
 	short absolute_index;
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (the whole array: once the render is done, tick_overlap.h) */
+	halo_tick_overlap_wait_for_render();
+#endif
 	compacted_data = match_malloc(
 		"c:\\halo\\SOURCE\\memory\\data.c",
 		421,

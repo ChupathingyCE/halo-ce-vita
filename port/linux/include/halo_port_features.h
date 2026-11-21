@@ -331,8 +331,10 @@ pose drawn from a rigid body ragdoll on Jolt Physics. The builds that
 compile Jolt (HALO_JOLT: the desktop build scripts set it), and on no
 console (any console's build, whichever switches it sets on its own) nor a
 dedicated server, which draws nothing. A console's build may also set
-HALO_CONSOLE_NO_RAGDOLLS */
+HALO_CONSOLE_NO_RAGDOLLS. Nor a build with a console's tick beside its render
+(HALO_CONSOLE_TICK_OVERLAP: the ragdolls step with the render) */
 #if defined(HALO_JOLT) && !defined(HALO_SERVER) && !defined(HALO_CONSOLE_NO_RAGDOLLS) && \
+	!defined(HALO_CONSOLE_TICK_OVERLAP) && \
 	!(defined(HALO_CONSOLE) || defined(HALO_SWITCH_CONSOLE) || defined(HALO_WIIU_CONSOLE) || \
 	defined(HALO_XBOX_CONSOLE) || defined(HALO_XBOX360_CONSOLE) || defined(HALO_CONSOLE_GL_LAYER))
 #define HALO_PORT_RAGDOLLS

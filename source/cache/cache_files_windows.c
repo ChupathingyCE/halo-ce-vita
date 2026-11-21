@@ -1281,7 +1281,47 @@ boolean cache_file_open(
 	return TRUE;
 }
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: one request at a time, with a tick beside the render
+(port/linux/include/tick_overlap.h): the tick's sounds' reads and the
+render's textures' share the requests */
+static short cache_file_read_one(
+	long tag_index,
+	long offset,
+	long size,
+	void *buffer,
+	boolean *completion_flag_reference,
+	boolean blocking);
+
 short cache_file_read(
+	long tag_index,
+	long offset,
+	long size,
+	void *buffer,
+	boolean *completion_flag_reference,
+	boolean blocking)
+{
+	static RTL_CRITICAL_SECTION lock;
+	static boolean lock_made;
+	short result;
+
+	/* (made at the first read, the first map's loading, before the tick
+	thread runs beside anything) */
+	if (!lock_made)
+	{
+		InitializeCriticalSection(&lock);
+		lock_made = TRUE;
+	}
+	EnterCriticalSection(&lock);
+	result = cache_file_read_one(tag_index, offset, size, buffer, completion_flag_reference, blocking);
+	LeaveCriticalSection(&lock);
+	return result;
+}
+
+static short cache_file_read_one(
+#else
+short cache_file_read(
+#endif
 	long tag_index,
 	long offset,
 	long size,
