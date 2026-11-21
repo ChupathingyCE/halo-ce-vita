@@ -58,7 +58,7 @@
 #      b30        mods\mcc_b30 started by the console from that menu, played
 #      campaign   CAMPAIGN, a new profile, the difficulty, with no Xbox map:
 #                 MCC's a10 starts (mods\mcc_a10)
-#      mccgames   (1.1.3) no Xbox file, Classic+: MEDIA > GAME MANAGER's GAMES
+#      mccgames   (1.1.3) no Xbox file, Classic+: SETTINGS > GAME MANAGER's GAMES
 #                 tab says Halo CE installed from MCC's files alone (its maps
 #                 counted, its PC files the custom_edition ones), nothing wrong
 #      bothgames  (1.1.3) the Xbox's maps and MCC's, Halo 3: START > MEDIA >
@@ -446,13 +446,13 @@ PY
 		fi
 
 		# mccgames / bothgames (1.1.3): GAME MANAGER's GAMES tab - where Halo CE was installed from, its
-		# maps counted and checked (game_manager.c), Triangle its details. Classic+: down three to MEDIA,
-		# down two to GAME MANAGER; Halo 3: Select (START), down three to GAME MANAGER
+		# maps counted and checked (game_manager.c), Triangle its details. Classic+: down three to SETTINGS
+		# (1.1.3's main menu), its first row on a PC GAME MANAGER; Halo 3: Select (START), down three to GAME MANAGER
 		mrun mccgames 32 no HALO_MENU_STYLE=classic \
-			"HALO_TEST_PAD=wait:150:5000 down:150:600 down:150:600 down:150:600 a wait:150:2500 down:150:600 down:150:600 a wait:150:5000 y wait:150:2500 b wait:150:2000"
+			"HALO_TEST_PAD=wait:150:5000 down:150:600 down:150:600 down:150:600 a wait:150:2500 a wait:150:5000 y wait:150:2500 b wait:150:2000"
 		log=$(menu_log mccgames)
 		if ! grep -aq "ui: screen pc.ce.mods.screen" "$log"; then
-			fail "mccgames: Classic+'s MEDIA > GAME MANAGER did not open ($out/mccgames)"
+			fail "mccgames: Classic+'s SETTINGS > GAME MANAGER did not open ($out/mccgames)"
 		elif ! grep -aqE "game manager: checked: Halo CE [1-9][0-9]* maps \(Xbox 0, MCC [1-9][0-9]*\), sources 2, 0 issues, PC files 7" "$log"; then
 			fail "mccgames: GAMES did not say Halo CE from MCC's files alone, all good ($out/mccgames)"
 		elif ! grep -aq "ui: screen pc.ce.mods.details" "$log"; then
