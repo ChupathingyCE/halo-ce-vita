@@ -253,7 +253,7 @@ static int manifest_is_asked(const struct steam_download_callbacks *callbacks, c
 	*why = metadata->depot_id != depot ? "it is another depot's" : metadata->gid != gid ? "it is another version's" :
 		!crc_ok ? "its checksum is wrong" : NULL;
 	say(callbacks, "steam: %s manifest (app %u): asked depot %u gid %llu, got depot %u gid %llu; names %s; %u bytes zipped, "
-		"%u unzipped, %u files' worth %llu bytes; payload crc %08x, crc_encrypted %08x, crc_clear %08x: %s", what,
+		"%u unzipped, %u unique chunks, %llu bytes on disk; payload crc %08x, crc_encrypted %08x, crc_clear %08x: %s", what,
 		(unsigned int)app, (unsigned int)depot, (unsigned long long)gid, (unsigned int)metadata->depot_id,
 		(unsigned long long)metadata->gid, metadata->filenames_encrypted ? "encrypted" : "clear",
 		(unsigned int)zipped_size, (unsigned int)manifest_size, (unsigned int)metadata->unique_chunks,
