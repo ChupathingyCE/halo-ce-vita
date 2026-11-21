@@ -43,6 +43,10 @@ void *physical_memory_get_tag_cache_base_address(void);
 
 #define TAG_CACHE_SIZE 0x01600000UL
 
+/* the high-res HUD's pixel program bits for a texture (vita_textures.c) */
+unsigned char vita_hud_flags(unsigned long data, unsigned long format_word, unsigned long size_word,
+	unsigned char *size_log2);
+
 /* ---------- the screen
 
 The Xbox screen is 640x480; a wider one (display.screen_width, or
@@ -3681,6 +3685,11 @@ static int worker_texture_bits(struct render_command *command, const struct reco
 	key->raw_coordinates = 0;
 	key->projective_coordinates = 0;
 	key->wrapped_coordinates = 0;
+	/* (stage 0 a high-res HUD sheet: vita_textures.c) */
+	key->hud_flags = state->texture[0] && (rs[D3DRS_PSTEXTUREMODES] & 0x1f) == 1 ?
+		vita_hud_flags(state->texture[0]->data, state->texture[0]->format, state->texture[0]->size, &key->hud_size_log2) : 0;
+	if (!key->hud_flags)
+		key->hud_size_log2 = 0;
 	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 	{
 		unsigned long mode = (rs[D3DRS_PSTEXTUREMODES] >> (5 * stage)) & 0x1f;
@@ -7909,6 +7918,12 @@ static struct render_record *record_draw(BOOL immediate)
 		command->sampler_state[stage][5] = state[D3DTSS_MIPMAPLODBIAS];
 	}
 	DRAW_FINE_ADD(2, profile_from);
+	/* (stage 0 a high-res HUD sheet: vita_textures.c) */
+	if (device.textures[0] && (D3D__RenderState[D3DRS_PSTEXTUREMODES] & 0x1f) == 1)
+		key->hud_flags = vita_hud_flags(device.textures[0]->Data, device.textures[0]->Format, device.textures[0]->Size,
+			&key->hud_size_log2);
+	if (!key->hud_flags)
+		key->hud_size_log2 = 0;
 	key->alpha_test_function = rs[D3DRS_ALPHATESTENABLE] ? rs[D3DRS_ALPHAFUNC] : 0;
 	{
 		/* HALO_SIMPLE_FRAG_MODE=1 (a constant) or 2 (textures, no combiners)

@@ -171,7 +171,9 @@ void halo_draw_picture(const unsigned char *rgba, long width, long height)
 }
 
 /* the high-res HUD's sheets, decoded by a console's own renderer
-(HALO_CONSOLE_HOST_ART): the Vita draws the map's own HUD */
+(HALO_CONSOLE_HOST_ART) as the map loads: the Vita's texture cache decodes
+each when its bitmap is first drawn instead (vita_textures.c hud_texels),
+brought down to the size its screen shows, so nothing is held ahead */
 void dk_hud_prepare(const long *assets, long count)
 {
 	(void)assets;

@@ -56,7 +56,14 @@ struct nv2a_pixel_shader_key
 	1 zero (ONE or INVSRCALPHA or INVSRCCOLOR destination factor),
 	2 one (a plain multiply) - d3d8_gxm.c alpha_test_neutral; 0 discard */
 	unsigned char alpha_test_neutral;
-	unsigned char border_pad[2];
+	/* (Vita) stage 0 is a high-res HUD sheet (hud_hires.h, vita_textures.c
+	vita_hud_flags): bit 0 its green is its coverage (a meter's: the
+	fragment's alpha mixed with it), bit 1 its red holds exact segment
+	thresholds, read from the texel's centre; 0 for every other draw */
+	unsigned char hud_flags;
+	/* (Vita) with hud_flags bit 1: log2 of stage 0's width (low nibble)
+	and height (high nibble) */
+	unsigned char hud_size_log2;
 	DWORD border_color[4];
 };
 

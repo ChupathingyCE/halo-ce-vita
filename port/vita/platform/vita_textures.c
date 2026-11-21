@@ -695,6 +695,9 @@ struct texture_entry
 	looked up at, and whether it is a menu art's PNG */
 	unsigned long art_serial;
 	int art;
+	/* (Warthog) hud_hires_settings() when it was last built: the high-res
+	HUD's settings changed since, it is looked up again */
+	unsigned long hud_settings;
 };
 
 #define TEXTURE_BUCKET_COUNT 4096
@@ -2155,6 +2158,7 @@ as A8R8G8B8 swizzled, as the stand-in is, so the game's texture coordinates
 #ifdef HALO_CONSOLE_HOST_ART
 #include "menu_files.h"
 #include "hud_hires.h"
+#include "platform.h"
 
 /* the Xbox's swizzled offset of texel (x, y) in a width x height texture
 (powers of two): the coordinates' bits interleaved while both have bits */
@@ -2245,6 +2249,176 @@ static unsigned char *art_texels(struct texture_entry *entry)
 	entry->art = 1;
 	return texels;
 }
+
+/* ---------- the high-res HUD (Warthog: display.high_res_hud, and the menus'
+titles with display.high_res_text)
+
+A bitmap the game's high-res HUD has a sheet for (hud_hires_override_find:
+the loaded map's bitmap at that address and size, with the English maps'
+pixels) is built from the sheet's PNG instead: 8 times the bitmap's size (4
+for the largest), brought down to HUD_SCALE times it, which is all the
+Vita's 960x544 shows of it (the Xbox's 640x480 HUD drawn at 1.5 times),
+each texel the average of the PNG's that it covers. A sheet whose red holds
+segment thresholds keeps the red of each block's middle texel, never an
+average (the pixel program reads it from the texel's centre). Laid out as
+the menus' art is (A8R8G8B8, swizzled, one level); the game still sizes
+and places the bitmap by its tag. The decision is kept by the texture's
+data (hud_decisions) for the pixel programs' keys (vita_hud_flags). */
+#define HUD_SCALE_DEFAULT 2
+#define HUD_DECISIONS 256
+
+static struct
+{
+	unsigned long data, format_word, size_word, settings;
+	unsigned char flags, size_log2;
+} hud_decisions[HUD_DECISIONS];
+unsigned long vita_hud_textures, vita_hud_texture_bytes;
+
+static unsigned long hud_decision_slot(unsigned long data, unsigned long format_word, unsigned long size_word)
+{
+	return ((data >> 6) ^ (format_word * 31) ^ (size_word * 17)) % HUD_DECISIONS;
+}
+
+static void hud_decide(const struct texture_entry *entry, unsigned char flags, unsigned char size_log2)
+{
+	unsigned long slot = hud_decision_slot(entry->data, entry->format_word, entry->size_word);
+
+	/* (written by the render worker, read by the key builders: the data
+	last, so that a reader seeing it sees the rest) */
+	__atomic_store_n(&hud_decisions[slot].data, 0, __ATOMIC_RELEASE);
+	hud_decisions[slot].format_word = entry->format_word;
+	hud_decisions[slot].size_word = entry->size_word;
+	hud_decisions[slot].settings = entry->hud_settings;
+	hud_decisions[slot].flags = flags;
+	hud_decisions[slot].size_log2 = size_log2;
+	__atomic_store_n(&hud_decisions[slot].data, entry->data, __ATOMIC_RELEASE);
+}
+
+unsigned char vita_hud_flags(unsigned long data, unsigned long format_word, unsigned long size_word,
+	unsigned char *size_log2)
+{
+	unsigned long slot = hud_decision_slot(data, format_word, size_word);
+
+	*size_log2 = 0;
+	if (!data || __atomic_load_n(&hud_decisions[slot].data, __ATOMIC_ACQUIRE) != data ||
+		hud_decisions[slot].format_word != format_word || hud_decisions[slot].size_word != size_word ||
+		hud_decisions[slot].settings != hud_hires_settings())
+	{
+		return 0;
+	}
+	*size_log2 = hud_decisions[slot].size_log2;
+	return hud_decisions[slot].flags;
+}
+
+static unsigned long log2_of(unsigned long value)
+{
+	unsigned long result = 0;
+
+	while ((1UL << result) < value)
+		result++;
+	return result;
+}
+
+/* the sheet's texels for the entry (malloc'd), its description changed to
+say so; NULL when none stands for it */
+static unsigned char *hud_texels(struct texture_entry *entry)
+{
+	static int scale = -1;
+	struct xgpu_texture_description *description = &entry->description;
+	const struct hud_hires_embedded *embedded;
+	unsigned char *rgba, *texels;
+	unsigned long png_width = 0, png_height = 0, width, height, x, y, step_x, step_y, level0;
+	long asset;
+	int threshold;
+
+	if (scale < 0)
+	{
+		const char *setting = getenv("HALO_HUD_SCALE");
+
+		scale = setting ? atoi(setting) : HUD_SCALE_DEFAULT;
+		if (scale < 1)
+			scale = 1;
+		if (scale > 8)
+			scale = 8;
+	}
+	if (description->linear || description->cube_map || description->depth != 1 || description->format == D3DFMT_P8 ||
+		!description->width || !description->height)
+	{
+		return NULL;
+	}
+	level0 = description->levels > 1 ? xgpu_texture_level_offset(description, 1) : xgpu_texture_face_size(description);
+	if (!level0 || level0 > entry->size)
+		return NULL;
+	asset = hud_hires_override_find((unsigned long)(entry->data | PLATFORM_CONTIGUOUS_BASE), description->width,
+		description->height, level0);
+	if (asset < 0)
+		return NULL;
+	embedded = &hud_hires_embedded[asset];
+	rgba = hud_hires_png_pixels(embedded->png, embedded->png_size, &png_width, &png_height);
+	if (!rgba || png_width < description->width || png_height < description->height)
+	{
+		free(rgba);
+		return NULL;
+	}
+	width = description->width * (unsigned long)scale;
+	height = description->height * (unsigned long)scale;
+	if (width > png_width)
+		width = png_width;
+	if (height > png_height)
+		height = png_height;
+	step_x = png_width / width;
+	step_y = png_height / height;
+	texels = malloc(width * height * 4);
+	if (!texels)
+	{
+		free(rgba);
+		return NULL;
+	}
+	threshold = embedded->point_threshold;
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			unsigned long sum[4] = { 0, 0, 0, 0 }, u, v, count = step_x * step_y;
+			unsigned char *to = texels + art_swizzle(x, y, width, height) * 4;
+			const unsigned char *middle = rgba + ((y * step_y + step_y / 2) * png_width + x * step_x + step_x / 2) * 4;
+
+			for (v = 0; v < step_y; v++)
+			{
+				const unsigned char *from = rgba + ((y * step_y + v) * png_width + x * step_x) * 4;
+
+				for (u = 0; u < step_x; u++, from += 4)
+				{
+					sum[0] += from[0];
+					sum[1] += from[1];
+					sum[2] += from[2];
+					sum[3] += from[3];
+				}
+			}
+			/* (B, G, R, A in memory: the Xbox's A8R8G8B8) */
+			to[0] = (unsigned char)((sum[2] + count / 2) / count);
+			to[1] = (unsigned char)((sum[1] + count / 2) / count);
+			to[2] = threshold ? middle[0] : (unsigned char)((sum[0] + count / 2) / count);
+			to[3] = (unsigned char)((sum[3] + count / 2) / count);
+		}
+	}
+	free(rgba);
+	description->format = D3DFMT_A8R8G8B8;
+	description->width = width;
+	description->height = height;
+	description->levels = 1;
+	description->compressed = FALSE;
+	description->pitch = width * 4;
+	description->hires = TRUE;
+	description->hires_coverage = embedded->coverage != 0;
+	description->hires_point_threshold = threshold != 0;
+	entry->art = 1;
+	hud_decide(entry, (unsigned char)((embedded->coverage ? 1 : 0) | (threshold ? 2 : 0)),
+		(unsigned char)(log2_of(width) | (log2_of(height) << 4)));
+	vita_hud_textures++;
+	vita_hud_texture_bytes += width * height * 4;
+	return texels;
+}
 #endif
 
 const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLOR *palette,
@@ -2322,7 +2496,7 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 		decode_job_poll(entry, !streamed);
 	if (entry->valid && entry->generation && entry->pool_serial == pool_serial && entry->checked_serial == memory_watch_serial()
 #ifdef HALO_CONSOLE_HOST_ART
-		&& entry->art_serial == menu_art_serial()
+		&& entry->art_serial == menu_art_serial() && entry->hud_settings == hud_hires_settings()
 #endif
 		)
 	{
@@ -2343,7 +2517,7 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 #ifdef HALO_CONSOLE_HOST_ART
 	/* (the menus' art registered changed: built again from its PNG, or
 	from its texels if it has none now) */
-	if (entry->art_serial != menu_art_serial())
+	if (entry->art_serial != menu_art_serial() || entry->hud_settings != hud_hires_settings())
 	{
 		entry->art_serial = menu_art_serial();
 		entry->generation = 0;
@@ -2366,6 +2540,11 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 #ifdef HALO_CONSOLE_HOST_ART
 		{
 			unsigned char *texels = menu_art_name(entry->data) ? art_texels(entry) : NULL;
+
+			/* (the high-res HUD's sheet for it, if it has one) */
+			entry->hud_settings = hud_hires_settings();
+			if (!texels)
+				texels = hud_texels(entry);
 
 			if (texels)
 			{

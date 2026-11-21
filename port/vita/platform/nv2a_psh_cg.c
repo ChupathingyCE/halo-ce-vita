@@ -456,6 +456,20 @@ static void texture_stage(struct xgpu_text *text, const struct nv2a_pixel_shader
 		xgpu_text_append(text, "\tt%d = ", stage);
 		sample(text, key, stage, coordinates);
 		xgpu_text_append(text, ";\n");
+		if (stage == 0 && (key->hud_flags & 2) && key->sampler_type[0] == _xgpu_sampler_2d)
+		{
+			/* (a high-res HUD sheet's segment thresholds: the texel's own,
+			never averaged with a neighbour's - bilinear at its centre;
+			zero marks the continuous meters, which keep the filtered read) */
+			xgpu_text_append(text,
+				"\t{\n\t\tfloat2 size = float2(%.1f, %.1f);\n"
+				"\t\tfloat2 pixel = clamp(floor((%s) * size), float2(0.0), size - 1.0);\n"
+				"\t\tfloat threshold = tex2D(tex0, (pixel + 0.5) / size).r;\n"
+				"\t\tif (threshold > 0.0) t0.rb = float2(threshold, threshold);\n\t}\n",
+				(double)(1UL << (key->hud_size_log2 & 15)), (double)(1UL << (key->hud_size_log2 >> 4)),
+				(key->pad == 3 || (key->raw_coordinates & 1)) ? "xT0.xy" :
+				(key->projective_coordinates & 1) ? "xT0.xy / xT0.w" : "xT0.xy / (xT0.w != 0.0 ? xT0.w : 1.0)");
+		}
 		break;
 	case _mode_cubemap:
 		snprintf(coordinates, sizeof(coordinates), "xT%d", stage);
@@ -758,6 +772,9 @@ char *nv2a_pixel_shader_to_cg(const struct nv2a_pixel_shader_key *key)
 		xgpu_text_append(&text, ";\n\t%s result = %s(fA * fB + (1.0h - fA) * fC + fD, fG);\n", H4, H4);
 	}
 
+	/* (a high-res HUD meter's coverage, its sheet's green: hud_hires.h) */
+	if (key->hud_flags & 1)
+		xgpu_text_append(&text, "\tresult.a = lerp(1.0h, result.a, (half)t0.g);\n");
 	if (key->alpha_test_function)
 	{
 		const char *comparison = comparison_operator(key->alpha_test_function);
