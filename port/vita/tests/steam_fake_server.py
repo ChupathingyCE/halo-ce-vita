@@ -23,7 +23,7 @@ Every event goes to <work>/transcript.txt (the tests read the order of revoke
 and log-off). --mode picks a failure to act out:
   normal, corrupt_once (one chunk damaged the first time it is sent),
   drop_once (the connection cut mid-body once), logon_refuse, qr_refuse,
-  not_owned (no key for 976734), kick (the server logs the client off during
+  logon_busy (ServiceUnavailable, 20, at the logon), not_owned (no key for 976734), kick (the server logs the client off during
   PICS), badmulti (a malformed Multi first), slow (each CDN answer 0.25 s late:
   the client's heartbeats must go on during the download), losesession (the CM
   connection cut 1.5 s after the first logon (outage: the CDN gone for 8 s mid-download: the client waits
@@ -772,6 +772,9 @@ def cm_client(state, conn):
             eresult = 1 if ok else 5
             if state.mode == "logon_refuse":
                 ok, eresult = False, 5
+            elif state.mode == "logon_busy":
+                # (ServiceUnavailable: Steam's side, not the token's - a kept sign-in stays)
+                ok, eresult = False, 20
             elif first(body, 108, b"").decode() in state.revoked_tokens:
                 ok, eresult = False, 26
             state.log("cm: logon %s" % ("ok" if ok else "refused %d" % eresult))

@@ -247,7 +247,23 @@ head -c 300 /dev/urandom > "$out/flow-keep-bad-base/card/haloce-vita/steam-signi
 flow keep-bad normal 1 ok "" keep-bad-base
 signin_check keep-bad "cm: logoff " 1 1
 grep -q "found=3 kept=1" "$out/flow-keep-bad/line" || { echo "FAIL keep-bad: state"; status=1; }
-# (Steam not answering the logon: kept for the next try, not wiped)
+# (Steam busy at the logon - ServiceUnavailable -: kept for the next try, neither wiped nor revoked)
+flow keep-busy logon_busy 1 fail "" keep-bad
+signin_check keep-busy "" 1 0
+grep -q "found=1 kept=1" "$out/flow-keep-busy/line" || { echo "FAIL keep-busy: state"; status=1; }
+# (SIGN OUT with nothing kept, or a file that does not open: wiped, and no connection at all)
+client_env="env STEAM_TEST_SIGNIN=1 STEAM_TEST_SIGN_OUT=1"
+mkdir -p "$out/flow-keep-none-base/card/haloce-vita"
+flow keep-out-none normal 1 ok "" keep-none-base
+mkdir -p "$out/flow-keep-out-bad-base/card/haloce-vita"
+head -c 200 /dev/urandom > "$out/flow-keep-out-bad-base/card/haloce-vita/steam-signin.bin"
+flow keep-out-bad normal 1 ok "" keep-out-bad-base
+for n in keep-out-none keep-out-bad; do
+	[ ! -e "$out/flow-$n/card/haloce-vita/steam-signin.bin" ] || { echo "FAIL $n: file left"; status=1; }
+	! grep -q "cm: connected" "$out/flow-$n/transcript.txt" 2>/dev/null || { echo "FAIL $n: it connected"; status=1; }
+	grep -q "no sign-in was kept on this device (nothing to revoke, no connection made)" "$out/flow-$n/log.txt" ||
+		{ echo "FAIL $n: log"; status=1; }
+done
 signin_flow= client_env= server_extra=
 
 echo "--- the Steam Workshop (the list, the chosen items into workshop/<id>, installed into mods/<id> after the session)"

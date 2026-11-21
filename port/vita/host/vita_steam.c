@@ -200,6 +200,28 @@ void vita_steam_init(void)
 	SceUID thread;
 
 	steam_job_set_platform(&platform);
+	/* (whether this console gives the kept sign-in's secret - its size alone is said, never its bytes) */
+	{
+		uint8_t secret[32];
+		size_t size = device_secret(secret, sizeof(secret));
+		int days = 0, state = steam_job_signin_state(&days);
+
+		char line[160];
+
+		memset(secret, 0, sizeof(secret));
+		if (size)
+			snprintf(line, sizeof(line), "steam: this console can keep a Steam sign-in (sealed to its %u-byte console id)",
+				(unsigned int)size);
+		else
+			snprintf(line, sizeof(line), "steam: this console gives no console id: a Steam sign-in is never kept");
+		vita_host_log(line);
+		if (state)
+		{
+			snprintf(line, sizeof(line), "steam: a kept Steam sign-in: %s", state == 1 ? "here" : state == 2 ? "expired" :
+				"unreadable");
+			vita_host_log(line);
+		}
+	}
 	thread = sceKernelCreateThread("halo steam power", power_thread, 0x10000100, 0x4000, 0, 0, NULL);
 	if (thread >= 0)
 		sceKernelStartThread(thread, 0, NULL);
