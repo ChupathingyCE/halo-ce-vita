@@ -36,6 +36,8 @@ Vita lying on a table drifts).
 #include <stdlib.h>
 #include <string.h>
 
+const char *config_string(const char *name);
+
 #include "vita_controls.h"
 #include "vita_ctrl_ports.h"
 #include "lang.h"
@@ -270,7 +272,7 @@ static unsigned int touch_read(unsigned long long now, int *started)
 	struct vita_touch_contact contacts[2 * SCE_TOUCH_MAX_REPORT + VITA_ZONE_COUNT];
 	int count = 0, panel, index;
 	static unsigned long settings_seen;
-	static int settings_read;
+	static int settings_read, touch_buttons = 1;
 
 	/* the rear pad's guard (the panel's Rear touch guard; read again
 	after a change in the settings panel) */
@@ -278,7 +280,11 @@ static unsigned int touch_read(unsigned long long now, int *started)
 	{
 		settings_read = 1;
 		settings_seen = halo_settings_generation;
-		touch_tracker.rear_guard = vita_rear_guard_named(getenv("HALO_TOUCH_REAR_GUARD"));
+		/* (input.rear_touch_guard and input.touch_controls, the game's
+		settings for the Vita: port_config.c; their rows are the controller's
+		TOUCH AND GYRO page, tools/vita_menus.py) */
+		touch_tracker.rear_guard = vita_rear_guard_named(config_string("input.rear_touch_guard"));
+		touch_buttons = strcmp(config_string("input.touch_controls"), "off") != 0;
 	}
 
 	for (panel = 0; panel < 2; panel++)
@@ -303,6 +309,10 @@ static unsigned int touch_read(unsigned long long now, int *started)
 	for (index = 0; index < count && front_touch_count < SCE_TOUCH_MAX_REPORT; index++)
 		if (contacts[index].panel == VITA_TOUCH_FRONT)
 			front_touches[front_touch_count++] = contacts[index];
+	/* (the touch buttons off: no finger presses one; the menus' pointer
+	still follows the front screen) */
+	if (!touch_buttons)
+		count = 0;
 	for (index = 0; index < VITA_ZONE_COUNT; index++)
 		if (pad_script_touch & (1u << index))
 		{

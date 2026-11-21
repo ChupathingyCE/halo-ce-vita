@@ -122,6 +122,9 @@ void vgxm_target_release(unsigned long id);
 /* the render scale of the screen-sized targets (480 lines, 640 columns
 and more: HALO_RENDER_SCALE), and a new one for the targets made from now
 on (the settings panel's change, between frames: d3d8_gxm.c) */
+/* the largest render scale: the Vita's 544 lines over the game's 480
+(display.resolution_limit "544") */
+#define VGXM_RENDER_SCALE_MAXIMUM (544.0f / 480.0f)
 float vgxm_render_scale(void);
 void vgxm_render_scale_set(float scale);
 /* the dynamic resolution (d3d8_gxm.c, on the worker between two frames, or

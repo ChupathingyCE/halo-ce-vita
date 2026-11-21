@@ -385,7 +385,11 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     n.rule(name="vita_msvc_semantics",
            command=f"$python {_quote(game / 'tools' / 'linux_msvc_semantics.py')} --output $out $scan",
            description="VITA MSVC SEMANTICS $out", restat=True)
-    n.rule(name="vita_embed_assets", command=f"$python {_quote(game / 'tools' / 'embed_assets.py')} $out",
+    # (the game's assets with the Vita's own menu files in the game's place:
+    # tools/vita_menus.py, tools/vita_embed_assets.py)
+    embed_tool = port_dir.parent.parent / "tools" / "vita_embed_assets.py"
+    menus_tool = port_dir.parent.parent / "tools" / "vita_menus.py"
+    n.rule(name="vita_embed_assets", command=f"$python {_quote(embed_tool)} $out",
            description="VITA EMBED $out")
 
     game_headers = port.game_headers()
@@ -398,7 +402,8 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
             implicit=[game / "tools" / "linux_msvc_semantics.py", *xdk_headers],
             variables={"scan": f"--inlines {_quote(game / XDK_INCLUDE)}"})
     hud_assets = gen_dir / "hud_hires_assets.c"
-    n.build(outputs=hud_assets, rule="vita_embed_assets", implicit=[game / "tools" / "embed_assets.py"])
+    n.build(outputs=hud_assets, rule="vita_embed_assets",
+            implicit=[game / "tools" / "embed_assets.py", game / "tools" / "port_settings.py", embed_tool, menus_tool])
 
     # The port's overrides of the game's files (port/vita/overrides, laid out
     # as the game is), compiled in the game file's place with its flags, so

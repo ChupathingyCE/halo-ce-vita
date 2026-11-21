@@ -260,8 +260,22 @@ long halo_screen_commit(void)
 	/* (a width that could not be made is not asked for again at every frame) */
 	static long width_tried;
 	long wanted;
-	unsigned long generation = __atomic_load_n(&halo_settings_generation, __ATOMIC_ACQUIRE);
+	unsigned long generation;
 
+	/* (the game's settings changed - a row of the settings screens, or
+	config.toml read again: everything of the Vita's that reads them reads
+	them again, halo_settings_generation's readers) */
+	{
+		static unsigned long config_seen;
+		unsigned long changes = config_changes();
+
+		if (changes != config_seen)
+		{
+			config_seen = changes;
+			__atomic_add_fetch(&halo_settings_generation, 1, __ATOMIC_ACQ_REL);
+		}
+	}
+	generation = __atomic_load_n(&halo_settings_generation, __ATOMIC_ACQUIRE);
 	if (!screen_width)
 		return halo_screen_width();
 	if (!dynres_configured)
@@ -6101,20 +6115,35 @@ static float screen_targets_make_scaled(float from, float to, long old_width, lo
 	return 0.0f;
 }
 
-static void screen_settings_apply(void)
+/* the render scale the settings ask for: display.resolution_limit's lines
+over the game's 480 ("544": the Vita's screen, 544/480), or HALO_RENDER_SCALE
+(a test's: a number, or "dynamic", the targets at the full size) */
+static float screen_scale_setting(int *dynamic)
 {
 	const char *setting = getenv("HALO_RENDER_SCALE");
+
+	if (setting)
+	{
+		*dynamic = !strcmp(setting, "dynamic");
+		return *dynamic ? 1.0f : (float)atof(setting);
+	}
+	*dynamic = config_boolean("display.dynamic_resolution") != 0;
+	return !strcmp(config_string("display.resolution_limit"), "544") ? VGXM_RENDER_SCALE_MAXIMUM : 1.0f;
+}
+
+static void screen_settings_apply(void)
+{
 	/* (dynamic: the targets at the full size, drawn into a part of them -
 	the dynamic resolution) */
-	int dynamic = setting && !strcmp(setting, "dynamic"), retry = screen_scale_retry;
-	float scale = setting && !dynamic ? (float)atof(setting) : 1.0f, old_scale = vgxm_render_scale(), drawn;
+	int dynamic, retry = screen_scale_retry;
+	float scale = screen_scale_setting(&dynamic), old_scale = vgxm_render_scale(), drawn;
 	long width = screen_width_wanted(), old_width = screen_width;
 	unsigned long long started;
 	unsigned long made = 0, targets, cdram, cached, cdram_free, freed = 0, dozed = 0, moved, pool_parts = 0, wanted;
 	int restored = TRUE, made_new, lowered_old = FALSE;
 
 	screen_scale_retry = FALSE;
-	if (!(scale >= 0.5f && scale <= 1.0f))
+	if (!(scale >= 0.5f && scale <= VGXM_RENDER_SCALE_MAXIMUM))
 		scale = 1.0f;
 	if (!device.created || !device.gpu_ready)
 		return;
@@ -6333,10 +6362,12 @@ static int dynres_level_of(float scale)
 static void dynres_configure(void)
 {
 	const char *scale = getenv("HALO_RENDER_SCALE"), *minimum = getenv("HALO_DYNAMIC_RES_MIN");
+	int dynamic_setting;
 	const char *force = getenv("HALO_DYNRES_FORCE"), *cycle = getenv("HALO_DYNRES_CYCLE");
 	const char *sim = getenv("HALO_DYNRES_SIM"), *budget = getenv("HALO_DYNRES_BUDGET");
 	const char *cap = getenv("HALO_FRAME_CAP"), *timing = getenv("HALO_FRAME_TIMING");
-	int floor = minimum ? dynres_level_of((float)atof(minimum)) : DYNRES_UNITS / 2, fight_floor;
+	/* (the floor: Halo CE Vita's Balanced, 62.5%, unless a test names one) */
+	int floor = minimum ? dynres_level_of((float)atof(minimum)) : DYNRES_UNITS * 5 / 8, fight_floor;
 	int enabled, forced = force && atoi(force) > 0 ? dynres_level_of(atoi(force) / 100.0f) : 0;
 	float budget_ms = cap && atoi(cap) > 0 ? 1000.0f / (float)atoi(cap) : 1000.0f / 30.0f;
 
@@ -6371,7 +6402,8 @@ static void dynres_configure(void)
 		forced = DYNRES_UNITS / 2;
 	if (budget && atof(budget) > 1.0)
 		budget_ms = (float)atof(budget);
-	enabled = (scale && !strcmp(scale, "dynamic")) || forced || (cycle && atoi(cycle) > 0);
+	screen_scale_setting(&dynamic_setting);
+	enabled = dynamic_setting || forced || (cycle && atoi(cycle) > 0);
 	if (enabled != dynres_config.enabled || floor != dynres_config.floor || forced != dynres_config.force ||
 		fight_floor != dynres_config.fight_floor || (enabled && budget_ms != dynres_config.budget_ms))
 		platform_log("dynamic resolution: %s%s (floor %d%%, fights %d%%, budget %.1f ms%s%s)", enabled ? "on" : "off",

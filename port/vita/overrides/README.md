@@ -52,3 +52,13 @@ by cluster), both `HALO_CONSOLE_COLLISION_CACHES`, on in `build.py`; #1626 (a
 unit's illumination refreshed only for its debug line); #1583 (the structure
 render's surface lists sorted inline, the visible bits walked by set bit).
 Each file goes when its pull request is merged.
+
+## port/linux/src/port_config.c
+
+The Vita's own settings (a `HALO_VITA_CONSOLE` block: the lines drawn,
+dynamic resolution, the touch buttons, the rear touch guard, gyro aim) and
+its default for `tuning.object_cull_pixels` (8, Halo CE Vita's). Its rows are
+the port's (`tools/vita_menus.py`). Upstream PR candidate, prepared:
+"Settings: the Vita's own, for its port's rows" (branch
+`birchwood-vita-settings-rows`). The structure culling default this file
+held before is upstream now (#1572).

@@ -39,8 +39,14 @@ button (Black) with the old 0.1 s and no border.
 #include "vita_host.h"
 #include "lang.h" /* (N_: the button names, translated where shown) */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* the game's settings (port_config.c) */
+const char *config_string(const char *name);
+int config_boolean(const char *name);
+double config_real(const char *name);
 
 const struct vita_touch_zone vita_touch_zones[VITA_ZONE_COUNT] = {
 	{ VITA_TOUCH_FRONT, 0, 0, 160, 120, "tl" },
@@ -422,9 +428,15 @@ static const char *const gyro_mode_values[VITA_GYRO_MODES] = { "off", "on", "zoo
 
 void vita_gyro_config_load(struct vita_gyro_config *config)
 {
-	const char *mode = getenv("HALO_GYRO");
+	/* (the game's settings for the Vita, input.gyro_*: port_config.c; the
+	older names, HALO_GYRO's, still win for a test's env.txt) */
+	const char *aim = config_string("input.gyro_aim");
+	const char *mode = getenv("HALO_GYRO") ? getenv("HALO_GYRO") :
+		!strcmp(aim, "true") ? "on" : !strcmp(aim, "zoom") ? "zoomed" : "off";
+	char sensitivity_text[16];
 	const char *sensitivity = getenv("HALO_GYRO_SENS");
-	const char *invert = getenv("HALO_GYRO_INVERT_Y");
+	const char *invert = getenv("HALO_GYRO_INVERT_Y") ? getenv("HALO_GYRO_INVERT_Y") :
+		config_boolean("input.gyro_invert_vertical") ? "1" : "0";
 	const char *turn = getenv("HALO_GYRO_TURN");
 	const char *assist = getenv("HALO_GYRO_ASSIST");
 	int index, percent;
@@ -434,6 +446,13 @@ void vita_gyro_config_load(struct vita_gyro_config *config)
 		if (strcmp(mode, gyro_mode_values[index]) == 0)
 			config->mode = index;
 	config->button = vita_button_named(getenv("HALO_GYRO_BUTTON"), VITA_BUTTON_L);
+	if (!sensitivity)
+	{
+		/* (input.gyro_sensitivity_horizontal: 1 is the Vita's own turn,
+		100 percent) */
+		snprintf(sensitivity_text, sizeof(sensitivity_text), "%d", (int)(config_real("input.gyro_sensitivity_horizontal") * 100.0 + 0.5));
+		sensitivity = sensitivity_text;
+	}
 	percent = sensitivity ? atoi(sensitivity) : VITA_GYRO_DEFAULT_SENS;
 	if (percent <= 0 || percent > 1000)
 		percent = VITA_GYRO_DEFAULT_SENS;

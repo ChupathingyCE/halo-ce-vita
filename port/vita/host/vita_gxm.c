@@ -2425,7 +2425,7 @@ float vgxm_render_scale(void)
 
 void vgxm_render_scale_set(float scale)
 {
-	if (!(scale >= 0.5f && scale <= 1.0f))
+	if (!(scale >= 0.5f && scale <= VGXM_RENDER_SCALE_MAXIMUM))
 		scale = 1.0f;
 	render_scale = scale;
 }
@@ -2623,7 +2623,7 @@ static int target_make(struct target *target, unsigned long width, unsigned long
 		/* (a screen-sized target at the render scale: render_scale) */
 		float scale = render_scale_get();
 
-		if (scale < 1.0f && height == 480 && width >= 640)
+		if (scale != 1.0f && height == 480 && width >= 640)
 		{
 			width = (unsigned long)(width * scale + 0.5f) & ~1UL;
 			height = (unsigned long)(height * scale + 0.5f) & ~1UL;
