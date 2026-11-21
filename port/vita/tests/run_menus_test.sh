@@ -457,16 +457,18 @@
 #            RESTART MISSION's (Circle: not restarted), SAVE AND QUIT's "Saving" boxes and
 #            the main menu; and Menu style Halo CE's pause: the Xbox's question
 #            (HALO_TEST_SHOTS: each dialog's picture)
-#   ceplusmain  Menu style Halo CE's main menu (menus/classic/main.xml: the Xbox's list with the
-#           port's rows, classic_patch): FORGE, FRIENDS, FILE SHARE and MOD MANAGER under SETTINGS,
-#           each opens its screen (the Halo 3 Forge lobby, FRIENDS, FILE SHARE, MOD MANAGER) and B
-#           comes back to the Xbox's main menu; Menu style Halo 3: the map's own list, its main menu
-#           the Halo 3 one
-#   ceplusmp  Menu style Halo CE's Multiplayer (OpenCE's): GAMETYPES PLUS, the ninth row,
-#           opens the Halo 3 GAME TYPES (Infection's rules too), B back; Create Game Internet's
-#           Server Setup (internet play on, TEST-NET brokers) has BOTS: right on it, START GAME:
-#           Bots online set as chosen
-#   ceplusprofile  Menu style Halo CE's SETTINGS (HALO_TEST_PROFILE; skipped without): the
+#   ceplusmain  Menu style Classic+'s main menu (menus/classic/main.xml: the Xbox's list with Halo PC's
+#           five rows, classic_patch; 1.1.3): SETTINGS' GAME MANAGER, FILE SHARE and FRIENDS (on a PC
+#           those alone: no settings panel), MULTIPLAYER > GAME MODES' FORGE, COMMAND, FIREFIGHT and
+#           GAMETYPES PLUS, and PROFILES each open their screen and B comes back to the Xbox's main
+#           menu; PROFILES and QUIT made of the game's own letters; QUIT asks, B keeps the game, A
+#           closes it; Start asks for the settings panel; Menu style Halo 3: the map's own list, its
+#           main menu the Halo 3 one
+#   ceplusmp  Menu style Classic+'s Multiplayer (OpenCE's): GAME MODES, the ninth row, its
+#           GAMETYPES PLUS opens the Halo 3 GAME TYPES (Infection's rules too), B back to GAME
+#           MODES; Create Game Internet's Server Setup (internet play on, TEST-NET brokers) has BOTS:
+#           right on it, START GAME: Bots online set as chosen
+#   ceplusprofile  Menu style Classic+'s PROFILES (HALO_TEST_PROFILE; skipped without): the
 #           profile, the Xbox's profile settings' MORE OPTIONS (menus/classic/profile.xml) opens the
 #           Halo 3 editor on that profile (model, flaming helmet...), B saves and is back on the
 #           Xbox's profile settings, still editing it; B, B: the main menu
@@ -484,7 +486,7 @@
 #   ceoriginal  Menu style Classic (HALO_MENU_STYLE=original): the Xbox's main menu as it
 #           shipped (no row of the port's: the map's own list), MULTIPLAYER the Xbox's own screen
 #           (not OpenCE's), B back
-#   ceplusforge  FORGE on Menu style Halo CE's main menu (HALO_TEST_PROFILE; skipped without): the
+#   ceplusforge  MULTIPLAYER > GAME MODES > FORGE in Menu style Classic+ (HALO_TEST_PROFILE; skipped without): the
 #           Forge lobby's NETWORK on SYSTEM LINK, START FORGE: the profile, the network Forge game
 #           hosted and the Xbox's pregame (no live lobby with the Xbox's menus)
 #   pause   Campaign from the main menu (a new profile, Normal), the level's
@@ -3823,32 +3825,56 @@ PY
 		grep -aq "h3 dialog\|pc.h3.dlg" "$log" && fail msgboxes "campaign, Halo CE: a Halo 3 dialog opened"
 		grep -aq "pause menu: restart at checkpoint" "$log" && fail msgboxes "campaign, Halo CE: Circle reverted" ;;
 	ceplusmain)
-		# (the main menu's rows under SETTINGS, 1.1.3's: down three to MEDIA - its FILE SHARE, FRIENDS
-		# and MOD MANAGER, rows of the main menu until 1.1.3 -, four to EXTRAS - FORGE, COMMAND and
-		# FIREFIGHT, classic/modes.xml: FORGE its first; each in the original look; A, then B back - B
-		# twice from MEDIA's and EXTRAS' rows)
+		# (1.1.3, owner Nov 21: the main menu is Halo PC's five - CAMPAIGN, MULTIPLAYER, PROFILES, SETTINGS,
+		# QUIT -, as ChupathingyCE's. SETTINGS, the fourth row: on a PC GAME MANAGER, FILE SHARE and FRIENDS -
+		# 1.1.3's MEDIA -, the settings panel's rows not there (no panel); MULTIPLAYER's ninth row GAME MODES:
+		# FORGE, COMMAND, FIREFIGHT and GAMETYPES PLUS - 1.1.3's EXTRAS and the Multiplayer screen's ninth
+		# row -; PROFILES, the third: the Xbox's SELECT PROFILE TO EDIT. Each in the original look; A, then
+		# B back to the main menu)
 		d="down:150:500"
-		for row in "4:0 forge pc.cp.forge.lobby" "3:1 friends pc.classic.friends.screen" "3:0 fileshare pc.ce.fileshare.screen" \
-			"3:2 mods pc.ce.mods.screen"; do
-			set -- $row
-			downs="" media=""
-			for i in $(seq "${1%%:*}"); do downs="$downs $d"; done
-			if [ "${1%%:*}" -ge 3 ]; then
-				media=" a:150:3000"
-				for i in $(seq 0 "$((${1##*:} - 1))"); do [ "${1##*:}" -gt 0 ] && media="$media $d"; done
-			fi
-			run "ceplusmain_$2" "$menus_data" 24 "wait:150:3000$downs$media a:150:4000 b:150:3000${media:+ b:150:3000}" HALO_SCENE_PACKS=0
-			log=$out/ceplusmain_$2/run.log
-			echo "--- ceplusmain ($2)"
-			grep -aE "ui: screen|menus: Menu style" "$log" | head -6
-			[ "$(cat "$out/ceplusmain_$2/exit")" = 0 ] || fail ceplusmain "$2: exit $(cat "$out/ceplusmain_$2/exit")"
-			grep -aqiE "assert|exception|halt_and_catch_fire" "$log" && fail ceplusmain "$2: an assertion, exception or halt"
+		modes="$d a:150:3000 $d $d $d $d $d $d $d $d a:150:3000"
+		for row in "mods|$d $d $d a:150:3000|pc.ce.mods.screen|2" "fileshare|$d $d $d a:150:3000 $d|pc.ce.fileshare.screen|2" \
+			"friends|$d $d $d a:150:3000 $d $d|pc.classic.friends.screen|2" "forge|$modes|pc.cp.forge.lobby|3" \
+			"command|$modes $d|pc.cp.command.lobby|3" "firefight|$modes $d $d|pc.cp.firefight.lobby|3" \
+			"gametypes|$modes $d $d $d|pc.cp.gametypes.screen|3" \
+			"profiles|$d $d|ui.shell.main_menu.settings_select.player_setup.player_profile_select_screen|1"; do
+			IFS='|' read -r name presses screen backs <<< "$row"
+			bs=""
+			for i in $(seq "$backs"); do bs="$bs b:150:3000"; done
+			run "ceplusmain_$name" "$menus_data" 44 "wait:150:3000 $presses a:150:4000$bs" HALO_SCENE_PACKS=0
+			log=$out/ceplusmain_$name/run.log
+			echo "--- ceplusmain ($name)"
+			grep -aE "ui: screen|menus: Menu style" "$log" | head -7
+			[ "$(cat "$out/ceplusmain_$name/exit")" = 0 ] || fail ceplusmain "$name: exit $(cat "$out/ceplusmain_$name/exit")"
+			grep -aqiE "assert|exception|halt_and_catch_fire" "$log" && fail ceplusmain "$name: an assertion, exception or halt"
 			grep -aqE "menus: Menu style Halo CE: the Xbox screens' [0-9]+ widgets with the port's rows" "$log" ||
-				fail ceplusmain "$2: the Xbox screens were not given the port's rows"
-			grep -aq "ui: screen $3" "$log" || fail ceplusmain "$2: the row did not open its screen ($3)"
-			sed -n "/ui: screen $3/,\$p" "$log" | grep -aq "ui: screen ui.shell.main_menu.main_menu" ||
-				fail ceplusmain "$2: B did not go back to the Xbox's main menu"
+				fail ceplusmain "$name: the Xbox screens were not given the port's rows"
+			grep -aq "ui: screen $screen" "$log" || fail ceplusmain "$name: the row did not open its screen ($screen)"
+			sed -n "/ui: screen $screen/,\$p" "$log" | grep -aq "ui: screen ui.shell.main_menu.main_menu" ||
+				fail ceplusmain "$name: B did not go back to the Xbox's main menu"
 		done
+		# (SETTINGS on a PC: its three rows, none of the panel's)
+		grep -a "menus: ce settings:" "$out/ceplusmain_friends/run.log" | grep -aqvE "ce settings: (games|fileshare|friends)$" &&
+			fail ceplusmain "SETTINGS showed a settings panel's row on a PC"
+		grep -aq "menus: ce settings: friends" "$out/ceplusmain_friends/run.log" ||
+			fail ceplusmain "SETTINGS' third row on a PC was not FRIENDS"
+		# (the main menu's PROFILES and QUIT words made of the game's own letters - Q of O and E's foot -)
+		grep -aq "menu words: PROFILES (focused) made of the game's letters" "$out/ceplusmain_profiles/run.log" ||
+			fail ceplusmain "PROFILES was not made of the game's letters"
+		grep -aq "menu words: QUIT (not focused) made of the game's letters" "$out/ceplusmain_profiles/run.log" ||
+			fail ceplusmain "QUIT was not made of the game's letters"
+		# (QUIT, the fifth row: the question; B keeps the game, back on the main menu; A again, then A: the game
+		# closes by itself, long before HALO_EXIT_AFTER)
+		run ceplusmain_quit "$menus_data" 40 "wait:150:3000 $d $d $d $d a:150:2500 b:150:2500 a:150:2500 a:150:3000" HALO_SCENE_PACKS=0
+		log=$out/ceplusmain_quit/run.log
+		echo "--- ceplusmain (QUIT)"
+		grep -aE "ui: screen|online EXIT" "$log" | head -6
+		[ "$(cat "$out/ceplusmain_quit/exit")" = 0 ] || fail ceplusmain "quit: exit $(cat "$out/ceplusmain_quit/exit")"
+		[ "$(grep -ac "ui: screen pc.ce.quit.screen" "$log")" = 2 ] || fail ceplusmain "quit: QUIT did not ask twice"
+		sed -n '/ui: screen pc.ce.quit.screen/,/ui: screen pc.ce.quit.screen/p' "$log" | grep -aq "ui: screen ui.shell.main_menu.main_menu" ||
+			fail ceplusmain "quit: B did not go back to the main menu"
+		grep -aq "menus: online EXIT: the game closes" "$log" || fail ceplusmain "quit: A did not close the game"
+		grep -aq "exiting after debug.exit_after" "$log" && fail ceplusmain "quit: the game ran on to HALO_EXIT_AFTER"
 		# (Start on the main menu, on CAMPAIGN and on a row of the port's: the settings panel asked for,
 		# as Halo 3's main menu does - on a build with one -, no screen opened)
 		run ceplusmain_start "$menus_data" 15 "wait:150:3000 start:150:1500 down:150:500 down:150:500 down:150:500 start:150:1500" HALO_SCENE_PACKS=0
@@ -3890,16 +3916,18 @@ PY
 			fail ceoriginal "MULTIPLAYER did not open the Xbox's Multiplayer screen" ;;
 	ceplusmp)
 		d="down:150:500"
-		run ceplusmp_gametypes "$menus_data" 22 "wait:150:3000 down:150:800 a:150:3000 $d $d $d $d $d $d $d $d a:150:4000 b:150:3000" \
+		# (GAME MODES, the ninth row since 1.1.3's main menu; its fourth GAMETYPES PLUS)
+		run ceplusmp_gametypes "$menus_data" 30 "wait:150:3000 down:150:800 a:150:3000 $d $d $d $d $d $d $d $d a:150:3000 $d $d $d a:150:4000 b:150:3000" \
 			HALO_SCENE_PACKS=0
 		log=$out/ceplusmp_gametypes/run.log
-		echo "--- ceplusmp (GAMETYPES PLUS)"
+		echo "--- ceplusmp (GAME MODES > GAMETYPES PLUS)"
 		grep -aE "ui: screen|menus: h3 gametypes" "$log" | head -8
 		[ "$(cat "$out/ceplusmp_gametypes/exit")" = 0 ] || fail ceplusmp "gametypes: exit $(cat "$out/ceplusmp_gametypes/exit")"
 		grep -aqiE "assert|exception|halt_and_catch_fire" "$log" && fail ceplusmp "gametypes: an assertion, exception or halt"
 		grep -aq "ui: screen pc.cp.gametypes.screen" "$log" || fail ceplusmp "GAMETYPES PLUS did not open GAME TYPES (Classic+'s: classic/standins.xml)"
-		sed -n '/ui: screen pc.cp.gametypes.screen/,$p' "$log" | grep -aq "ui: screen pc.mp.screen" ||
-			fail ceplusmp "B did not go back to the Multiplayer screen"
+		grep -aq "ui: screen pc.ce.modes.screen" "$log" || fail ceplusmp "GAME MODES did not open its screen"
+		sed -n '/ui: screen pc.cp.gametypes.screen/,$p' "$log" | grep -aq "ui: screen pc.ce.modes.screen" ||
+			fail ceplusmp "B did not go back to GAME MODES"
 		# (Create Game Internet, the fourth row: Server Setup; down five to BOTS - OFF, the tests' -,
 		# right: 1; down, START GAME)
 		run ceplusmp_bots "$menus_data" 26 "wait:150:3000 down:150:800 a:150:3000 $d $d $d a:150:3000 $d $d $d $d $d right:150:800 $d a:150:4000" \
@@ -3915,8 +3943,8 @@ PY
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- ceplusprofile"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
-		# (SETTINGS, the third row; A on the profile: its settings; down four to MORE OPTIONS, A; B
-		# saves; B, B: the main menu)
+		# (PROFILES, the third row - 1.1.3's main menu; the Xbox's SETTINGS before -; A on the profile: its
+		# settings; down four to MORE OPTIONS, A; B saves; B, B: the main menu)
 		d="down:150:500"
 		profile_from=$HALO_TEST_PROFILE run ceplusprofile "$menus_data" 30 "wait:150:3000 $d $d a:150:3000 a:150:3000 $d $d $d $d a:150:4000 b:150:3000 b:150:2500 b:150:2500" \
 			HALO_SCENE_PACKS=0
@@ -4014,11 +4042,11 @@ PY
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- ceplusforge"; echo "SKIP: no HALO_TEST_PROFILE"; continue
 		fi
-		# (EXTRAS, the fifth row since 1.1.3's MEDIA, A: FORGE, its first row, A; up to NETWORK, A, down
-		# past LOCAL - the picker goes round - to ONLINE, down to SYSTEM LINK, A; down three to START
-		# FORGE, A: the profile, A, A)
+		# (MULTIPLAYER, A, down eight to GAME MODES - its ninth row since 1.1.3's main menu -, A: FORGE, its
+		# first row, A; up to NETWORK, A, down past LOCAL - the picker goes round - to ONLINE, down to SYSTEM
+		# LINK, A; down three to START FORGE, A: the profile, A, A)
 		d="down:150:600"
-		profile_from=$HALO_TEST_PROFILE run ceplusforge "$menus_data" 48 "wait:150:3000 $d $d $d $d a:150:3000 a:150:4000 up:150:600 a:150:2500 $d $d a:150:3000 $d $d $d a:150:4000 a:150:2500 a:150:2500 a:150:6000" \
+		profile_from=$HALO_TEST_PROFILE run ceplusforge "$menus_data" 60 "wait:150:3000 $d a:150:3000 $d $d $d $d $d $d $d $d a:150:3000 a:150:4000 up:150:600 a:150:2500 $d $d a:150:3000 $d $d $d a:150:4000 a:150:2500 a:150:2500 a:150:6000" \
 			HALO_NET_ONLINE=false
 		log=$out/ceplusforge/run.log
 		echo "--- ceplusforge"

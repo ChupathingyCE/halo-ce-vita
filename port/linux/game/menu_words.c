@@ -1,24 +1,29 @@
 /*
 MENU_WORDS.C
 
-Menu style Halo CE's main menu rows (menus/classic/main.xml: MEDIA,
-EXTRAS) as words in the very letters of the game's own
-CAMPAIGN, MULTIPLAYER, SETTINGS and GAME DEMOS - the player's ui.map's word
-pictures (ui\shell\main_menu\menu_*), read and cut into letters on the
-player's machine as the menus load, never shipped. Each of those is two
-256 x 64 pictures, the word not focused and focused (frames 0 and 1: the
-game's column list shows the one by focus); each letter is the columns
-between the gaps of its word, half way to its neighbours (the same columns
-in both; letters that touch, CA, LT, LAYE..., split at their faintest
-column), set one after the other the originals' mean gap apart. F, H and X,
-which those words have not, are made of the font's own strokes, copied
-pixel for pixel: F is E down to its middle arm, E's straight stem row on
-to the bottom, I's square end and side glow, the top arm's glow under the
-middle arm; H is two I stems N's width apart and E's middle arm between
-them; X is Y's arms over the row they meet at and the same mirrored under it
-(letter_f, letter_h, letter_x). The words are kept in the game's data folder
-(t:\menu_words_<row>_<frame>.rgba, with the pictures' checksum: made again
-when the map's pictures change).
+Menu style Classic+'s main menu rows (menus/classic/main.xml: PROFILES and
+QUIT, beside the map's own CAMPAIGN, MULTIPLAYER and SETTINGS - Halo PC's
+five, as ChupathingyCE's main menu has them) as words in the very letters of
+the game's own CAMPAIGN, MULTIPLAYER, SETTINGS and GAME DEMOS - the player's
+ui.map's word pictures (ui\shell\main_menu\menu_*), read and cut into
+letters on the player's machine as the menus load, never shipped. Each of
+those is two 256 x 64 pictures, the word not focused and focused (frames 0
+and 1: the game's column list shows the one by focus); each letter is the
+columns between the gaps of its word, half way to its neighbours (the same
+columns in both; letters that touch, CA, LT, LAYE..., split at their
+faintest column), set one after the other the originals' mean gap apart. F,
+H, Q and X, which those words have not, are made of the font's own strokes,
+copied pixel for pixel: F is E down to its middle arm, E's straight stem
+row on to the bottom, I's square end and side glow, the top arm's glow
+under the middle arm; H is two I stems N's width apart and E's middle arm
+between them; Q is O with its bottom stroke run on past its right side, as
+Halo PC's own QUIT draws it - E's bottom arm's bar, square end and glow; X
+is Y's arms over the row they meet at and the same mirrored under it
+(letter_f, letter_h, letter_q, letter_x). The words are kept in the game's
+data folder (t:\menu_words_<row>_<frame>.rgba, with the pictures' checksum:
+made again when the map's pictures change). An MCC-only install's ui.map
+(Halo PC's) has PROFILES and QUIT of its own: main.xml's halo_pc= rows show
+those, and nothing here is asked for.
 
 English only (lang_current "en"): another language, a word with a letter
 none of those words gives, or a map without the pictures - a Custom
@@ -78,9 +83,10 @@ static struct
 	char const *word;
 } const rows[] =
 {
-	{ "media", "MEDIA" },
-	/* (its X made of Y's arms: letter_x) */
-	{ "modes", "EXTRAS" },
+	/* (its F made of E's and I's strokes: letter_f) */
+	{ "profiles", "PROFILES" },
+	/* (its Q made of O and E's bottom arm: letter_q) */
+	{ "quit", "QUIT" },
 };
 
 /* ---------- types */
@@ -856,7 +862,53 @@ static boolean letter_x(struct letter const *y_letter, long frame, byte *word, l
 	return TRUE;
 }
 
-/* a letter of the pictures, or made of the font's strokes (F, H): its
+/* Q: O with its bottom stroke run on past its right side - Halo PC's own
+QUIT (MCC's ui.map's menu_quit) draws its Q so: a square tail at the foot
+about a fifth of O's width -, of the font's own strokes: O as it is, and on
+its bottom stroke E's bottom arm from O's middle on - its straight bar, its
+square end and the glow round them -, its end the tail past O's ink. Its
+cell O's, wider by the tail. -1: E's bottom arm or O's foot not found */
+static long q_tail(struct letter const *o)
+{
+	return MAX(2, (o->ink1 - o->ink0 + 1 + 2) / 5);
+}
+
+static long letter_q(struct strokes const *strokes, struct letter const *o, long frame, byte *word, long at_x)
+{
+	struct letter const *e = strokes->e;
+	long middle = (o->ink0 + o->ink1) / 2, foot = -1, bar_row = (strokes->arm[2][0] + strokes->arm[2][1]) / 2;
+	long end, x, y, shift_x, shift_y, from_x, top;
+
+	/* (O's foot: its bottom stroke's last row at its middle column) */
+	for (y = WORD_HEIGHT - 1; y >= 0 && foot < 0; y--)
+	{
+		if (inked(o->source, middle, y))
+			foot = y;
+	}
+	/* (E's bottom arm's last inked column) */
+	for (end = e->ink1; end > strokes->stem1 && !inked(e->source, end, bar_row); end--)
+		;
+	if (foot < 0 || end <= strokes->stem1 + 2)
+		return -1;
+	if (word)
+	{
+		blit(word, at_x, o->source, frame, o->x0, o->x1, 0, WORD_HEIGHT - 1);
+		/* (E's columns to the word's: its arm's end the tail past O's ink; its rows to O's: the arm's
+		last row on O's foot; the arm's rows and its glow only - none of the middle arm's) */
+		shift_x = at_x + (o->ink1 - o->x0) + q_tail(o) - end;
+		shift_y = foot - strokes->arm[2][1];
+		from_x = MAX(strokes->stem1 + 2, at_x + (middle - o->x0) - shift_x);
+		top = MAX(strokes->arm[2][0] - STROKE_GLOW, (strokes->arm[1][1] + strokes->arm[2][0]) / 2 + 1);
+		for (y = top; y <= strokes->arm[2][1] + STROKE_GLOW && y < WORD_HEIGHT; y++)
+		{
+			for (x = from_x; x <= e->x1; x++)
+				put(word, x + shift_x, y + shift_y, cell_pixel(e, frame, x, y));
+		}
+	}
+	return o->x1 - o->x0 + 1 + q_tail(o);
+}
+
+/* a letter of the pictures, or made of the font's strokes (F, H, Q, X): its
 cell's width (-1: none), and, with word, it drawn with its cell at at_x */
 static long glyph(char character, long frame, byte *word, long at_x)
 {
@@ -884,8 +936,15 @@ static long glyph(char character, long frame, byte *word, long at_x)
 			letter_x(y_letter, frame, word, at_x);
 		return y_letter->x1 - y_letter->x0 + 1;
 	}
-	if ((character != 'F' && character != 'H') || !strokes_find(&strokes))
+	if ((character != 'F' && character != 'H' && character != 'Q') || !strokes_find(&strokes))
 		return -1;
+	/* (Q: of O and E's bottom arm, letter_q) */
+	if (character == 'Q')
+	{
+		struct letter const *o = letter_find('O');
+
+		return o ? letter_q(&strokes, o, frame, word, at_x) : -1;
+	}
 	if (character == 'F')
 	{
 		if (word)
@@ -906,6 +965,9 @@ static void glyph_margins(char character, long *left, long *right)
 		letter = letter_find('I');
 	if (!letter && character == 'X')
 		letter = letter_find('Y');
+	/* (Q: O's margins, its cell wider by the tail on the ink's side) */
+	if (!letter && character == 'Q')
+		letter = letter_find('O');
 	*left = letter ? letter->ink0 - letter->x0 : 0;
 	*right = letter ? letter->x1 - letter->ink1 : 0;
 }

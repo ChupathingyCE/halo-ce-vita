@@ -2,7 +2,7 @@
 MENU_TITLES.C
 
 Menu style Classic+'s headings for the port's own screens (menus/classic:
-LOBBY OPTIONS, FILE SHARE, FRIENDS, MEDIA, ...: classic/{lang}/header_*.png)
+LOBBY OPTIONS, FILE SHARE, FRIENDS, SETTINGS, ...: classic/{lang}/header_*.png)
 in Halo CE's own heading lettering, made on the player's machine from the
 player's ui.map as the menus load, never shipped: the game's screen
 headings (CHOOSE DIFFICULTY, SELECT GAMETYPE, ...) are read out of it, their
@@ -157,8 +157,8 @@ static struct
 	{ "header_edit_game_type", "EDIT GAME TYPE", HEADING_LEFT },
 	{ "header_sharing", "SHARING", HEADING_LEFT },
 	{ "header_send_to_a_friend", "SEND TO A FRIEND", HEADING_LEFT },
-	{ "header_media", "MEDIA", HEADING_LEFT },
-	{ "header_modes", "EXTRAS", HEADING_LEFT },
+	{ "header_settings", "SETTINGS", HEADING_LEFT },
+	{ "header_game_modes", "GAME MODES", HEADING_LEFT },
 	{ "header_command", "COMMAND", HEADING_LEFT },
 	{ "header_select_profile_to_edit", "SELECT PROFILE TO EDIT", HEADING_LEFT - 6 },
 	{ "header_advanced_controls", "ADVANCED CONTROLS", HEADING_LEFT - 6 },

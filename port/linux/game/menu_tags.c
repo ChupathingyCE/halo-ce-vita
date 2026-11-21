@@ -539,6 +539,8 @@ static char const *const port_game_data_input_names[] =
 	/* (1.1.4) */
 	"port command prepare",
 	"port forge leave text",
+	/* (1.1.3: Menu style Classic+'s SETTINGS) */
+	"port ce settings",
 };
 
 static struct

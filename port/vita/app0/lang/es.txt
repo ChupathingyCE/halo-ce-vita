@@ -2776,7 +2776,6 @@
 # ---------- Menu style Halo CE's additions (menus/classic: the Xbox screens with the port's rows)
 "No network: wait for it, or choose\nNETWORK: LOCAL." = "Sin red: espérala, o elige\nRED: LOCAL."
 "GAMETYPES PLUS" = "TIPOS DE JUEGO+"
-"Every gametype, Infection's too:\nmake new ones from any base and\nset all of their rules." = "Todos los tipos de juego, también\nInfección: crea nuevos desde cualquier\nbase y ajusta todas sus reglas."
 "MORE OPTIONS" = "MÁS OPCIONES"
 "LOBBY OPTIONS" = "OPCIONES DEL LOBBY"
 "%y-button PLAYERS   %right-trigger LOBBY OPTIONS" = "%y-button JUGADORES   %right-trigger OPCIONES DEL LOBBY"
@@ -3778,3 +3777,13 @@
 "LEAVE FIREFIGHT?" = "¿SALIR DE FIREFIGHT?"
 "Your Firefight ends here: its score is not kept." = "Tu Firefight termina aquí: la puntuación no se guarda."
 "Survive the Covenant's waves. Lives are shared: a\nround cleared gives some back. Each round's last\nwave is the heavy wave; after a set, a bonus round -\nbig points a kill, no lives lost." = "Resiste las oleadas del Covenant. Las vidas son\ncompartidas: una ronda superada devuelve algunas.\nLa última oleada de cada ronda es la pesada; tras\nuna serie, una ronda de bonificación: muchos puntos\npor baja, sin perder vidas."
+
+# ---------- 1.1.3: Menu style Classic+'s main menu as Halo PC's (classic/main.xml, modes.xml): the Multiplayer
+# screen's GAME MODES (Forge, Command, Firefight, GAMETYPES PLUS) and QUIT's question
+"GAME MODES" = "MODOS DE JUEGO"
+"Forge, Command and Firefight;\nGAMETYPES PLUS: every gametype,\nInfection's too, and all its rules." = "Forja, Mando y Firefight;\nTIPOS DE JUEGO+: todos los tipos\nde juego, Infección también, y sus reglas."
+"Are you sure you want to quit Halo?" = "¿Seguro que quieres salir de Halo?"
+"%a-button =QUIT   %b-button =CANCEL" = "%a-button =SALIR   %b-button =CANCELAR"
+# (the main menu's PROFILES row's picture in Spanish: tools/classic_menu_art.py reads it here; on the
+# Xbox's ui.map in English the game's own letters, on MCC's Halo PC's own picture)
+"PROFILES" = "PERFILES"

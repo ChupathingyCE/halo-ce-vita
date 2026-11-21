@@ -28,11 +28,12 @@
 	<widget name="mp/item_gametypes" type="text" left="51" width="232" height="32" bitmap="list_item_bkd" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5" string_list="mp_options" string_index="5">
 		<on event="a start" open="ui\shell\main_menu\settings_select\multiplayer_setup\playlist_select\gametype_select_screen"/>
 	</widget>
-	<!-- (the port's: the Halo 3 GAME TYPES editor, halo3/gametypes.xml - every game type,
-	     Infection's too, its rules - beside the Xbox's EDIT GAMETYPES; the rows 30 pixels apart, not
-	     OpenCE's 33, for the ninth above the button key) -->
-	<widget name="mp/item_gametypes_new" type="text" left="51" width="232" height="32" bitmap="list_item_bkd" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5" string_list="mp_labels" string_index="3">
-		<on event="a start" open="h3/gametypes/screen"/>
+	<!-- (the port's: GAME MODES - Forge, Command, Firefight and GAMETYPES PLUS, the Halo 3 GAME TYPES
+	     editor beside the Xbox's EDIT GAMETYPES: classic/modes.xml -, ChupathingyCE's Multiplayer
+	     screen's FORGE so, 1.1.3: the main menu's EXTRAS until then, GAMETYPES PLUS this row; the rows
+	     30 pixels apart, not OpenCE's 33, for the ninth above the button key) -->
+	<widget name="mp/item_modes" type="text" left="51" width="232" height="32" bitmap="list_item_bkd" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5" string_list="mp_labels" string_index="3">
+		<on event="a start" open="ce/modes/screen"/>
 	</widget>
 	<widget name="mp/label_join" top="72" string_index="0" type="text" left="19" width="232" height="32" string_list="mp_options" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5"/>
 	<widget name="mp/label_create" top="192" string_index="1" type="text" left="19" width="232" height="32" string_list="mp_options" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5"/>
@@ -53,7 +54,7 @@
 		<child widget="mp/item_coop" y="284"/>
 		<child widget="mp/item_split" y="314"/>
 		<child widget="mp/item_gametypes" y="344"/>
-		<child widget="mp/item_gametypes_new" y="374"/>
+		<child widget="mp/item_modes" y="374"/>
 	</widget>
 	<widget name="mp/screen" flags="pass_unhandled_to_focused_child" bitmap="gradient">
 		<on event="created" run="mp type menu initialize"/>
