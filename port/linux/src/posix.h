@@ -185,6 +185,11 @@ or on an error */
 int posix_https_stream_read(void *stream, void *buffer, int size, int timeout_ms);
 /* closed (TLS close_notify) and freed */
 void posix_https_stream_close(void *stream);
+/* (another thread's) every wait on the stream's socket ended now (shutdown); its owner still closes it */
+void posix_https_stream_shutdown(void *stream);
+/* the flag every stream opened after this looks at: set, each of its waits ends within 250 ms (the Steam download's
+cancel); NULL: none */
+void posix_https_stream_abort_flag(const volatile int *flag);
 
 /* ---------- internet play's brokers over TLS (p2p_signal.c; posix_https.c,
 with port/third_party/mbedtls)

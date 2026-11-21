@@ -39,8 +39,10 @@ static uint64_t file_size_of(const char *path, int *exists)
 	return (uint64_t)size;
 }
 
-/* the SHA-1 of size bytes from offset: 1, or 0 if they cannot be read */
-static int hash_range(FILE *file, uint64_t offset, uint64_t size, uint8_t digest[20], uint8_t *block)
+/* the SHA-1 of size bytes from offset: 1, or 0 if they cannot be read or the job's checking hook stopped it
+(job->stopped) */
+static int hash_range(struct steam_file_job *job, FILE *file, uint64_t offset, uint64_t size, uint8_t digest[20],
+	uint8_t *block)
 {
 	struct steam_sha1_context sha;
 
@@ -51,6 +53,12 @@ static int hash_range(FILE *file, uint64_t offset, uint64_t size, uint8_t digest
 	{
 		size_t part = size < READ_BLOCK ? (size_t)size : READ_BLOCK;
 
+		if (job && job->checking && job->checking(job->checking_context, offset, job->size))
+		{
+			job->stopped = 1;
+			steam_sha1_finish(&sha, digest);
+			return 0;
+		}
 		if (fread(block, 1, part, file) != part)
 		{
 			steam_sha1_finish(&sha, digest);
@@ -58,6 +66,7 @@ static int hash_range(FILE *file, uint64_t offset, uint64_t size, uint8_t digest
 		}
 		steam_sha1_update(&sha, block, part);
 		size -= part;
+		offset += part;
 	}
 	steam_sha1_finish(&sha, digest);
 	return 1;
@@ -72,7 +81,7 @@ static int whole_file_ok(struct steam_file_job *job, FILE *file)
 
 	if (!block)
 		return 0;
-	ok = !job->has_sha_content || (hash_range(file, 0, job->size, digest, block) &&
+	ok = !job->has_sha_content || (hash_range(job, file, 0, job->size, digest, block) &&
 		steam_equal(digest, job->sha_content, 20));
 	free(block);
 	if (!ok || !seek_to(file, 0))
@@ -159,7 +168,9 @@ static void resume(struct steam_file_job *job)
 			{
 				uint8_t digest[20];
 
-				if (marks[index] && hash_range(job->part, job->chunks[index].offset, job->chunks[index].size, digest,
+				if (job->stopped)
+					break;
+				if (marks[index] && hash_range(job, job->part, job->chunks[index].offset, job->chunks[index].size, digest,
 					block) && steam_equal(digest, job->chunks[index].sha, 20))
 				{
 					job->done[index] = 1;
@@ -179,10 +190,19 @@ int steam_file_open(struct steam_file_job *job, const char *path, uint32_t depot
 	const struct steam_manifest_file *file, enum steam_plan_kind kind, const char *destination, char *error,
 	int error_size)
 {
+	return steam_file_open_checked(job, path, depot, gid, file, kind, destination, NULL, NULL, error, error_size);
+}
+
+int steam_file_open_checked(struct steam_file_job *job, const char *path, uint32_t depot, uint64_t gid,
+	const struct steam_manifest_file *file, enum steam_plan_kind kind, const char *destination,
+	int (*checking)(void *context, uint64_t read, uint64_t total), void *context, char *error, int error_size)
+{
 	uint32_t index;
 	int exists;
 
 	memset(job, 0, sizeof(*job));
+	job->checking = checking;
+	job->checking_context = context;
 	error[0] = 0;
 	if (!file->covered || file->size > STEAM_FILE_MAXIMUM || !file->chunk_count ||
 		file->chunk_count > STEAM_FILE_CHUNKS_MAXIMUM || strlen(path) >= sizeof(job->path))
@@ -223,6 +243,12 @@ int steam_file_open(struct steam_file_job *job, const char *path, uint32_t depot
 			steam_file_close(job);
 			return STEAM_FILE_ALREADY;
 		}
+		if (job->stopped)
+		{
+			snprintf(error, (size_t)error_size, "stopped");
+			steam_file_close(job);
+			return STEAM_FILE_STOPPED;
+		}
 	}
 	file_size_of(job->part_path, &exists);
 	job->part = fopen(job->part_path, exists ? "r+b" : "w+b");
@@ -234,6 +260,13 @@ int steam_file_open(struct steam_file_job *job, const char *path, uint32_t depot
 	}
 	if (exists)
 		resume(job);
+	if (job->stopped)
+	{
+		/* (the journal is not rewritten: the next start reads it again) */
+		snprintf(error, (size_t)error_size, "stopped");
+		steam_file_close(job);
+		return STEAM_FILE_STOPPED;
+	}
 	/* the journal afresh: its header and what was checked */
 	job->journal = fopen(job->journal_path, "wb");
 	if (!job->journal || !journal_write_header(job))
@@ -301,6 +334,13 @@ int steam_file_finish(struct steam_file_job *job, char *error, int error_size)
 	}
 	ok = whole_file_ok(job, job->part);
 	close_files(job);
+	if (!ok && job->stopped)
+	{
+		/* (stopped by the player: every chunk is in and journalled, the next start checks it again) */
+		snprintf(error, (size_t)error_size, "stopped");
+		steam_file_close(job);
+		return 0;
+	}
 	if (!ok)
 	{
 		snprintf(error, (size_t)error_size, "%s: the whole file's SHA-1 or header does not match", job->path);

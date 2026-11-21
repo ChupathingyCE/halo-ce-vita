@@ -139,8 +139,12 @@ seconds): 0 none, 1 kept with *days_left (0-14), 2 expired (revoked at the next 
 that does not read (removed at the next sign-in) */
 int steam_job_signin_state(int *days_left);
 
-/* the player's cancel (Circle): the session ends as on any path */
+/* the player's cancel (Circle): never waits - the job's connections cut, the PS button's lock and the auto-suspend
+hold let go at once; the job's thread stops at its next check (within about a quarter second) and signs out on its
+own; the screen may be left meanwhile */
 void steam_job_cancel(void);
+/* (the tests') 1 while the device's hold (platform busy) is taken */
+int steam_job_busy_held(void);
 /* a power warning or the app's exit: cancel and wait (at most timeout_ms) until the session has ended */
 void steam_job_abort(int timeout_ms);
 /* where the job is */

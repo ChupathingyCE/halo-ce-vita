@@ -168,6 +168,8 @@ int steam_session_logon_anonymous(struct steam_session *session, char *error, in
 void steam_session_use_token(struct steam_session *session, const char *refresh_token, const char *account_name);
 /* the token in the secrets revoked now (permanently; authenticated if signed in) and wiped: 1 if Steam confirmed */
 int steam_session_revoke(struct steam_session *session);
+/* the connection closed (cut under it by a cancel): nothing sent; the end opens a new one for a revoke if needed */
+void steam_session_drop(struct steam_session *session);
 /* the connection closed and opened again to the same CM (after a refused logon): 1, or 0 with a reason */
 int steam_session_reconnect(struct steam_session *session, char *error, int error_size);
 /* an EResult's name for the log ("other" for one not listed) */

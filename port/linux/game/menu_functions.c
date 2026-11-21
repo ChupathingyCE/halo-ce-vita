@@ -13025,7 +13025,7 @@ static void h3_steam_update(struct widget_instance *list)
 		widget_instance_set_visibility_recursive(found, choosing);
 	if ((found = named(screen, "select")) != NULL)
 		widget_instance_set_visibility_recursive(found, choosing);
-	text_show(named(screen, "back"), h3_steam_running(view.phase) ? T("Cancel") : T("Back"));
+	text_show(named(screen, "back"), h3_steam_running(view.phase) && view.phase != STEAM_JOB_ENDING ? T("Cancel") : T("Back"));
 #else
 	(void)list;
 #endif
@@ -13085,6 +13085,14 @@ static boolean h3_steam_back(void)
 	struct steam_job_view view;
 
 	steam_job_view(&view);
+	/* (Circle once: the cancel - it never waits; the screen says it is stopping, the PS button is free at once.
+	Circle again while it stops: the screen is left, the job ends on its own thread) */
+	if (view.phase == STEAM_JOB_ENDING)
+	{
+		platform_log("menus: steam: left while the job stops");
+		h3_steam.message[0] = 0;
+		return TRUE;
+	}
 	if (h3_steam_running(view.phase))
 	{
 		steam_job_cancel();
@@ -13969,7 +13977,8 @@ static void h3_workshop_update(struct widget_instance *widget)
 			shown[4] = TRUE;
 			/* (browsing with the sign-in kept on the Vita: Circle leaves the list and the session, the sign-in stays -
 			"Back"; SIGN OUT is DOWNLOAD FROM STEAM's row) */
-			labels[4] = details_mode || !h3_steam_running(view.phase) ? h3_workshop_footer_word("{footer}Back", "Back") :
+			labels[4] = details_mode || !h3_steam_running(view.phase) || view.phase == STEAM_JOB_ENDING ?
+				h3_workshop_footer_word("{footer}Back", "Back") :
 				browsing ? (steam_job_signin_state(NULL) == 1 ? h3_workshop_footer_word("{footer}Back", "Back") : T("Sign out")) :
 				T("Cancel");
 			for (button = 0; button < 5; button++)
@@ -14342,6 +14351,12 @@ static boolean h3_workshop_back(void)
 		/* (nothing chosen: the session just ends) */
 		steam_job_workshop_choose(NULL, 0);
 		return FALSE;
+	}
+	if (view.phase == STEAM_JOB_ENDING)
+	{
+		/* (Circle again while it stops: the screen left, the job ends on its own thread) */
+		platform_log("menus: workshop: left while the job stops");
+		return TRUE;
 	}
 	if (h3_steam_running(view.phase))
 	{

@@ -1124,6 +1124,13 @@ void steam_session_use_token(struct steam_session *session, const char *refresh_
 	snprintf(session->secrets->account_name, sizeof(session->secrets->account_name), "%s", account_name);
 }
 
+void steam_session_drop(struct steam_session *session)
+{
+	if (session->ws.stream.close || session->ws.input)
+		steam_ws_close(&session->ws);
+	session->connected = session->logged_on = 0;
+}
+
 int steam_session_reconnect(struct steam_session *session, char *error, int error_size)
 {
 	if (session->ws.stream.close || session->ws.input)

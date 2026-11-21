@@ -132,11 +132,13 @@ struct connection
 	time_t deadline;
 	int tls;
 	mbedtls_ssl_context ssl;
+	/* (a stream's: the Steam download's cancel - every wait ends within 250 ms of it set; NULL elsewhere) */
+	const volatile int *abort;
 };
 
 /* waits for the socket to be readable (or writable): 1, or 0 at the
-deadline or on an error */
-static int socket_wait(int socket, int writing, time_t deadline)
+deadline, on an error, or when *abort is set */
+static int socket_wait(int socket, int writing, time_t deadline, const volatile int *abort)
 {
 	for (;;)
 	{
@@ -144,15 +146,16 @@ static int socket_wait(int socket, int writing, time_t deadline)
 		int count = 1, error_count = 1, none = 0, result;
 		time_t now = time(NULL);
 
-		if (now >= deadline)
+		if (now >= deadline || (abort && *abort))
 			return 0;
 		list[0] = socket;
 		errors[0] = socket;
-		/* (a second at a time: the deadline is in whole seconds) */
+		/* (a second at a time: the deadline is in whole seconds; a quarter of one when it may be cancelled) */
 		if (writing)
-			result = posix_socket_select(NULL, &none, list, &count, errors, &error_count, 1, 0, 0);
+			result = posix_socket_select(NULL, &none, list, &count, errors, &error_count, abort ? 0 : 1,
+				abort ? 250000 : 0, 0);
 		else
-			result = posix_socket_select(list, &count, NULL, &none, NULL, &none, 1, 0, 0);
+			result = posix_socket_select(list, &count, NULL, &none, NULL, &none, abort ? 0 : 1, abort ? 250000 : 0, 0);
 		if (result < 0)
 			return 0;
 		/* port: a connect that failed is in the error set, as Winsock has it
@@ -175,7 +178,8 @@ static int bio_send(void *context, const unsigned char *buffer, size_t length)
 
 		if (sent >= 0)
 			return sent;
-		if (posix_socket_last_error() != WSAEWOULDBLOCK || !socket_wait(connection->socket, 1, connection->deadline))
+		if (posix_socket_last_error() != WSAEWOULDBLOCK ||
+			!socket_wait(connection->socket, 1, connection->deadline, connection->abort))
 			return MBEDTLS_ERR_NET_SEND_FAILED;
 	}
 }
@@ -193,7 +197,7 @@ static int bio_receive(void *context, unsigned char *buffer, size_t length)
 			return received;
 		if (posix_socket_last_error() != WSAEWOULDBLOCK)
 			return MBEDTLS_ERR_NET_RECV_FAILED;
-		if (!socket_wait(connection->socket, 0, connection->deadline))
+		if (!socket_wait(connection->socket, 0, connection->deadline, connection->abort))
 			return MBEDTLS_ERR_SSL_TIMEOUT;
 	}
 }
@@ -465,7 +469,8 @@ static int connection_open(const struct url *url, struct connection *connection,
 
 		if (connect_deadline > connection->deadline)
 			connect_deadline = connection->deadline;
-		if ((code != WSAEWOULDBLOCK && code != WSAEINPROGRESS) || !socket_wait(connection->socket, 1, connect_deadline))
+		if ((code != WSAEWOULDBLOCK && code != WSAEINPROGRESS) || !socket_wait(connection->socket, 1, connect_deadline,
+			connection->abort))
 		{
 			snprintf(error, (size_t)error_size, "cannot connect to %s (%d)", url->host, code);
 			return 0;
@@ -1077,6 +1082,14 @@ struct https_stream
 	mbedtls_ssl_config config;
 };
 
+/* (the Steam download's cancel: every stream's waits end within 250 ms once it is set - steam_net.c) */
+static const volatile int *stream_abort;
+
+void posix_https_stream_abort_flag(const volatile int *flag)
+{
+	stream_abort = flag;
+}
+
 void *posix_https_stream_open(const char *url_text, char *host, int host_size, char *path, int path_size, char *error,
 	int error_size)
 {
@@ -1099,6 +1112,13 @@ void *posix_https_stream_open(const char *url_text, char *host, int host_size, c
 	}
 	stream->connection.socket = -1;
 	stream->connection.deadline = time(NULL) + TIMEOUT_SECONDS;
+	stream->connection.abort = stream_abort;
+	if (stream_abort && *stream_abort)
+	{
+		snprintf(error, (size_t)error_size, "cancelled");
+		free(stream);
+		return NULL;
+	}
 	mbedtls_ssl_init(&stream->connection.ssl);
 	mbedtls_ssl_config_init(&stream->config);
 	if (!connection_open(&url, &stream->connection, &stream->config, error, error_size))
@@ -1136,18 +1156,38 @@ int posix_https_stream_read(void *opaque, void *buffer, int size, int timeout_ms
 	{
 		int list[1], count = 1, none = 0, result;
 
-		list[0] = stream->connection.socket;
-		result = posix_socket_select(list, &count, NULL, &none, NULL, &none, timeout_ms / 1000,
-			(timeout_ms % 1000) * 1000, 0);
-		if (result < 0)
-			return -1;
-		if (result == 0 || count == 0)
-			return 0;
+		/* (in steps of 250 ms at most when it may be cancelled) */
+		for (;;)
+		{
+			int step = stream->connection.abort && timeout_ms > 250 ? 250 : timeout_ms;
+
+			if (stream->connection.abort && *stream->connection.abort)
+				return -1;
+			count = 1;
+			list[0] = stream->connection.socket;
+			result = posix_socket_select(list, &count, NULL, &none, NULL, &none, step / 1000, (step % 1000) * 1000, 0);
+			if (result < 0)
+				return -1;
+			if (result > 0 && count > 0)
+				break;
+			timeout_ms -= step;
+			if (timeout_ms <= 0)
+				return 0;
+		}
 	}
 	/* (a record begun is read whole within the usual deadline) */
 	stream->connection.deadline = time(NULL) + TIMEOUT_SECONDS;
 	received = connection_read(&stream->connection, buffer, (size_t)size);
 	return received > 0 ? received : -1;
+}
+
+void posix_https_stream_shutdown(void *opaque)
+{
+	struct https_stream *stream = opaque;
+
+	/* (from another thread: the socket is left open - its owner closes it - but every wait on it ends now) */
+	if (stream && stream->connection.socket >= 0)
+		posix_socket_shutdown(stream->connection.socket, 2);
 }
 
 void posix_https_stream_close(void *opaque)

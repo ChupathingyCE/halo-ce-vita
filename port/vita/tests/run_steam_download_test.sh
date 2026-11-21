@@ -335,6 +335,46 @@ grep -q "attempts=2" "$out/flow-job-lost/line" || { echo "FAIL job-lost: not sig
 grep -q "resumed\|already there" "$out/flow-job-lost/log.txt" || { echo "FAIL job-lost: nothing kept"; status=1; }
 flow job-outage outage 1 ok
 grep -q "waits=[1-9]" "$out/flow-job-outage/line" || { echo "FAIL job-outage: no wait for the network"; status=1; }
+# (1.1.3-insider.8, the owner's daily: a cancel while the job checked gigabytes already on the card took minutes and
+# kept the PS button locked. The player's cancel at each phase, and with a CDN that stalls: the cancel call (the
+# game's thread) under 100 ms, the device's hold let go at once and at the end exactly once, every snapshot call
+# under 100 ms, the job ended within 5 s - insider.8's would wait out the 60 s chunk timeout, and more)
+cancel_check() {
+	l=$(cat "$out/flow-$1/line")
+	for want in "cancelled=1" "busy_end=0" "busy_twice=0" "busy_after_cancel=0"; do
+		echo "$l" | grep -q "$want" || { echo "FAIL $1: not $want"; status=1; }
+	done
+	call=$(echo "$l" | sed -n 's/.*cancel_call_ms=\([0-9.]*\).*/\1/p')
+	view=$(echo "$l" | sed -n 's/.*view_max_ms=\([0-9.]*\).*/\1/p')
+	end=$(echo "$l" | sed -n 's/.*end_ms=\([0-9.-]*\).*/\1/p')
+	awk -v c="$call" -v v="$view" -v e="$end" 'BEGIN { exit !(c != "" && c >= 0 && c < 100 && v < 100 && e >= 0 && e < 5000) }' ||
+		{ echo "FAIL $1: cancel call $call ms, longest snapshot $view ms, ended $end ms after the cancel"; status=1; }
+	# (signed in, no sign-in kept here: the token revoked all the same, on a new connection - the cut one is gone)
+	if grep -q "cm: logon ok" "$out/flow-$1/transcript.txt"; then
+		grep -q "cm: revoke ok" "$out/flow-$1/transcript.txt" || { echo "FAIL $1: not revoked after the cancel"; status=1; }
+	fi
+	echo "    $1: $(echo "$l" | grep -o 'busy_end.*end_ms=[0-9.-]*')"
+}
+signin_flow=1
+client_env="env STEAM_TEST_CANCEL=qr"
+flow job-cancel-qr normal 1 cancel
+cancel_check job-cancel-qr
+client_env="env STEAM_TEST_CANCEL=preparing"
+flow job-cancel-prep slow 1 cancel
+cancel_check job-cancel-prep
+client_env="env STEAM_TEST_CANCEL=downloading STEAM_TEST_CANCEL_MS=300"
+flow job-cancel-dl slow 1 cancel
+cancel_check job-cancel-dl
+client_env="env STEAM_TEST_CANCEL=downloading STEAM_TEST_CANCEL_MS=1500"
+flow job-cancel-stall stall_chunk 1 cancel
+cancel_check job-cancel-stall
+grep -q "cdn: stalled mid-chunk" "$out/flow-job-cancel-stall/transcript.txt" || { echo "FAIL job-cancel-stall: no stall"; status=1; }
+client_env="env STEAM_TEST_CANCEL=preparing STEAM_TEST_CANCEL_MS=1500"
+flow job-cancel-manifest stall_manifest 1 cancel
+cancel_check job-cancel-manifest
+grep -q "cdn: stalled before the manifest" "$out/flow-job-cancel-manifest/transcript.txt" ||
+	{ echo "FAIL job-cancel-manifest: no stall"; status=1; }
+client_env= signin_flow=
 sub=
 
 echo "--- the Workshop browser (steam_job.c: pages, tabs, SUBSCRIBED, authors, the cards' pictures, a details page;"

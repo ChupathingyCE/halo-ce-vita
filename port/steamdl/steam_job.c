@@ -9,6 +9,7 @@ steam_job.h: the download's worker thread and its snapshot.
 #include "steam_crypto.h"
 #include "steam_download.h"
 #include "steam_image.h"
+#include "steam_net.h"
 #include "steam_plan.h"
 #include "steam_session.h"
 #include "steam_signin.h"
@@ -254,6 +255,52 @@ static size_t default_device_secret(uint8_t *out, size_t capacity)
 static struct steam_job_platform platform = { default_free_space, default_battery_low, default_nothing, default_busy,
 	default_log, default_roots, default_battery_ok, default_device_secret };
 
+/* the device's hold (the PS button's lock, no auto-suspend): taken as a job begins, let go as soon as a cancel is
+asked (the job then only signs out - the player may leave at once) and at the job's end, whichever is first; never
+twice (busy_lock: the game's thread, the power callback's and the job's may each let it go) */
+static pthread_mutex_t busy_lock = PTHREAD_MUTEX_INITIALIZER;
+static int busy_held;
+
+static void busy_take(void)
+{
+	pthread_mutex_lock(&busy_lock);
+	if (!busy_held)
+	{
+		busy_held = 1;
+		/* (connections allowed again - a cancel of an earlier job had stopped them - and the device held; not if this
+	job's cancel came first: job.lock orders the two) */
+	pthread_mutex_lock(&job.lock);
+	if (!job.cancel)
+	{
+		steam_net_abort(0);
+		busy_take();
+	}
+	pthread_mutex_unlock(&job.lock);
+	}
+	pthread_mutex_unlock(&busy_lock);
+}
+
+static void busy_release(void)
+{
+	pthread_mutex_lock(&busy_lock);
+	if (busy_held)
+	{
+		busy_held = 0;
+		platform.busy(0);
+	}
+	pthread_mutex_unlock(&busy_lock);
+}
+
+int steam_job_busy_held(void)
+{
+	int held;
+
+	pthread_mutex_lock(&busy_lock);
+	held = busy_held;
+	pthread_mutex_unlock(&busy_lock);
+	return held;
+}
+
 void steam_job_set_platform(const struct steam_job_platform *given)
 {
 	if (!given)
@@ -449,7 +496,8 @@ static int show_qr(void *context, const char *url)
 static int waiting(void *context)
 {
 	(void)context;
-	platform.keep_awake();
+	if (!job.cancel)
+		platform.keep_awake();
 	return job.cancel;
 }
 
@@ -476,9 +524,10 @@ static int progress(void *context, uint64_t done, uint64_t total, const char *fi
 	double now = now_seconds();
 
 	(void)context;
-	platform.keep_awake();
+	if (!job.cancel)
+		platform.keep_awake();
 	pthread_mutex_lock(&job.lock);
-	if (file)
+	if (file && !job.cancel)
 	{
 		job.status.phase = STEAM_JOB_DOWNLOADING;
 		job.status.done = done;
@@ -1266,7 +1315,7 @@ static void *worker(void *unused)
 	job.running = 0;
 	pthread_mutex_unlock(&job.lock);
 	signin_cache_stale();
-	platform.busy(0);
+	busy_release();
 	return NULL;
 }
 
@@ -1311,10 +1360,21 @@ int steam_job_start(const struct steam_job_options *options)
 
 void steam_job_cancel(void)
 {
-	if (job.running && !job.cancel)
-	{
+	/* (never waits: the flag, every connection's waits ended - their sockets shut down -, the device's hold let go;
+	the job's thread then stops at its next check - between chunks, every 256 KB of a file's check, every 250 ms of
+	a network wait - and signs out on its own) */
+	int first;
+
+	pthread_mutex_lock(&job.lock);
+	first = job.running && !job.cancel;
+	if (first)
 		job.cancel = 1;
-		say("steam job: cancelled by the player");
+	pthread_mutex_unlock(&job.lock);
+	if (first)
+	{
+		steam_net_abort(1);
+		busy_release();
+		say("steam job: cancelled by the player (stopping; the PS button unlocked)");
 	}
 }
 
@@ -1324,7 +1384,11 @@ void steam_job_abort(int timeout_ms)
 
 	if (!job.running)
 		return;
+	pthread_mutex_lock(&job.lock);
 	job.cancel = 1;
+	pthread_mutex_unlock(&job.lock);
+	steam_net_abort(1);
+	busy_release();
 	say("steam job: aborted (a power warning or the app's exit)");
 	while (job.running && now_seconds() < until)
 	{

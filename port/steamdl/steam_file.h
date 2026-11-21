@@ -40,6 +40,11 @@ struct steam_file_job
 	const char *destination;
 	/* the bytes already in (resumed) */
 	uint64_t resumed_bytes;
+	/* (steam_file_open_checked) called every 256 KB the checks read (a file already there, a resume's chunks, the
+	finished file): bytes read of the file's size; nonzero stops the check (the player's cancel); and it was */
+	int (*checking)(void *context, uint64_t read, uint64_t total);
+	void *checking_context;
+	int stopped;
 };
 
 enum
@@ -48,6 +53,8 @@ enum
 	STEAM_FILE_STARTED = 0,
 	/* the file is there already, whole and checked */
 	STEAM_FILE_ALREADY = 1,
+	/* (steam_file_open_checked) its check was stopped: nothing changed on the card */
+	STEAM_FILE_STOPPED = 2,
 };
 
 /* starts (or resumes) file into path: STEAM_FILE_STARTED, STEAM_FILE_ALREADY,
@@ -55,11 +62,16 @@ or STEAM_FILE_FAILED with a reason */
 int steam_file_open(struct steam_file_job *job, const char *path, uint32_t depot, uint64_t gid,
 	const struct steam_manifest_file *file, enum steam_plan_kind kind, const char *destination, char *error,
 	int error_size);
+/* the same, its checks (hours of SHA-1 on a Vita for gigabytes already there) calling checking every 256 KB, which
+may stop them: STEAM_FILE_STOPPED then */
+int steam_file_open_checked(struct steam_file_job *job, const char *path, uint32_t depot, uint64_t gid,
+	const struct steam_manifest_file *file, enum steam_plan_kind kind, const char *destination,
+	int (*checking)(void *context, uint64_t read, uint64_t total), void *context, char *error, int error_size);
 /* chunk index's checked bytes (job->chunks[index].size of them) written at
 its offset, then noted in the journal: 1, or 0 */
 int steam_file_write(struct steam_file_job *job, uint32_t index, const uint8_t *data, char *error, int error_size);
 /* every chunk in: the file checked and put in place: 1, or 0 with a reason
-(the .part and journal are removed when the whole file's check fails) */
+(the .part and journal are removed when the whole file's check fails; kept when the check was stopped - job->stopped) */
 int steam_file_finish(struct steam_file_job *job, char *error, int error_size);
 /* stops, keeping the .part and journal for a resume */
 void steam_file_close(struct steam_file_job *job);

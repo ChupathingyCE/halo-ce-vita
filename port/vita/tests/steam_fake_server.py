@@ -23,7 +23,8 @@ Every event goes to <work>/transcript.txt (the tests read the order of revoke
 and log-off). --mode picks a failure to act out:
   normal, corrupt_once (one chunk damaged the first time it is sent),
   drop_once (the connection cut mid-body once), logon_refuse, qr_refuse,
-  logon_busy (ServiceUnavailable, 20, at the logon), not_owned (no key for 976734), kick (the server logs the client off during
+  logon_busy (ServiceUnavailable, 20, at the logon), stall_chunk (the third chunk's body stops a third in,
+  the connection held), stall_manifest (a manifest request never answered), not_owned (no key for 976734), kick (the server logs the client off during
   PICS), badmulti (a malformed Multi first), slow (each CDN answer 0.25 s late:
   the client's heartbeats must go on during the download), losesession (the CM
   connection cut 1.5 s after the first logon (outage: the CDN gone for 8 s mid-download: the client waits
@@ -922,6 +923,18 @@ def cdn_client(state, conn):
             conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n" % len(body) + body[:len(body) // 2])
             state.log("cdn: dropped")
             conn.close()
+            return
+        if state.mode == "stall_chunk" and status == 200 and parts[2] == "chunk" and count > 2:
+            # (a CDN that stops mid-body and holds the connection: the client's cancel must not wait for it)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: keep-alive\r\n\r\n" % len(body) +
+                         body[:len(body) // 3])
+            state.log("cdn: stalled mid-chunk")
+            time.sleep(600)
+            return
+        if state.mode == "stall_manifest" and parts[2] == "manifest":
+            # (the headers never come)
+            state.log("cdn: stalled before the manifest")
+            time.sleep(600)
             return
         if state.mode in ("slow", "losesession"):
             time.sleep(0.25)

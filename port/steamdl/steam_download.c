@@ -285,6 +285,30 @@ static int make_parents(const char *path)
 	return 1;
 }
 
+/* (a file's checks - one already there, a resume's chunks, the finished file -: the progress shown as "checking", the
+player's cancel looked at every 256 KB) */
+struct checking
+{
+	const struct steam_download_callbacks *callbacks;
+	uint64_t done, total;
+	char label[120];
+};
+
+static int checking_progress(void *context, uint64_t read, uint64_t total)
+{
+	struct checking *checking = context;
+
+	(void)total;
+	return checking->callbacks->progress && checking->callbacks->progress(checking->callbacks->context,
+		checking->done + read, checking->total, checking->label);
+}
+
+/* the player's cancel, between steps (progress with no file: the screen's numbers unchanged) */
+static int cancelled_now(const struct steam_download_callbacks *callbacks, uint64_t done, uint64_t total)
+{
+	return callbacks->progress && callbacks->progress(callbacks->context, done, total, NULL);
+}
+
 static int download_file(struct steam_session *session, struct planned *planned, uint32_t depot, uint64_t gid,
 	const uint8_t *key, struct cdn *cdn,
 	const struct steam_download_options *options, const struct steam_download_callbacks *callbacks,
@@ -304,8 +328,25 @@ static int download_file(struct steam_session *session, struct planned *planned,
 		fail(result, "path too long: %s", planned->destination);
 		return 0;
 	}
-	opened = steam_file_open(&job, path, depot, gid, planned->file, planned->kind, planned->destination, error,
-		sizeof(error));
+	{
+		struct checking checking;
+
+		checking.callbacks = callbacks;
+		checking.done = *done;
+		checking.total = total;
+		snprintf(checking.label, sizeof(checking.label), "checking %.100s", planned->destination);
+		opened = steam_file_open_checked(&job, path, depot, gid, planned->file, planned->kind, planned->destination,
+			checking_progress, &checking, error, sizeof(error));
+		/* (the finished file's own check, later, counts from here) */
+		job.checking_context = NULL;
+		job.checking = NULL;
+	}
+	if (opened == STEAM_FILE_STOPPED)
+	{
+		result->cancelled = 1;
+		fail(result, "cancelled");
+		return 0;
+	}
 	if (opened == STEAM_FILE_FAILED)
 	{
 		fail(result, "%s: %s", planned->destination, error);
@@ -371,6 +412,12 @@ static int download_file(struct steam_session *session, struct planned *planned,
 
 			if (!data)
 			{
+				if (cancelled_now(callbacks, *done, total))
+				{
+					result->cancelled = 1;
+					fail(result, "cancelled");
+					goto stop;
+				}
 				say(callbacks, "%s: chunk %u: %s", planned->destination, (unsigned int)index, error);
 				result->chunks_retried++;
 				continue;
@@ -402,10 +449,22 @@ static int download_file(struct steam_session *session, struct planned *planned,
 			goto stop;
 		}
 	}
-	if (!steam_file_finish(&job, error, sizeof(error)))
 	{
-		fail(result, "%s", error);
-		goto stopped;
+		struct checking checking;
+
+		checking.callbacks = callbacks;
+		checking.done = *done - planned->file->size;
+		checking.total = total;
+		snprintf(checking.label, sizeof(checking.label), "checking %.100s", planned->destination);
+		job.checking = checking_progress;
+		job.checking_context = &checking;
+		if (!steam_file_finish(&job, error, sizeof(error)))
+		{
+			if (job.stopped)
+				result->cancelled = 1;
+			fail(result, "%s", job.stopped ? "cancelled" : error);
+			goto stopped;
+		}
 	}
 	say(callbacks, "%s: done (%llu bytes)", planned->destination, (unsigned long long)planned->file->size);
 	result->files_done++;
@@ -1441,6 +1500,15 @@ cancelled:
 end:
 	steam_wipe(url, sizeof(url));
 	steam_kv_free(&app_info);
+	/* (a cancel cut the connections; the end's log-off - and a revoke, on a new connection if need be - may use them
+	again: each bounded by its own timeouts) */
+	if (steam_net_aborted())
+	{
+		/* (the CM's connection was cut under the session: dropped, so the end opens a new one if a token is to be
+		revoked - a kept one is not, the end is then at once) */
+		steam_session_drop(&session);
+		steam_net_abort(0);
+	}
 	steam_session_end(&session);
 	result->revoked = session.revoked;
 	result->logged_off = session.logged_off;

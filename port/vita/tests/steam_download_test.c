@@ -1197,6 +1197,14 @@ static void test_net(void)
 	CHECK(!steam_net_open(&stream, "wss://bad host/x", host, sizeof(host), path, sizeof(path), error, sizeof(error)));
 }
 
+static int checking_calls, checking_stop_after;
+
+static int checking_hook(void *context, uint64_t read, uint64_t total)
+{
+	(void)context, (void)read, (void)total;
+	return checking_calls++ >= checking_stop_after;
+}
+
 static void test_file(const char *folder)
 {
 	uint8_t data[3 * 1000];
@@ -1263,6 +1271,22 @@ static void test_file(const char *folder)
 	}
 	/* there and whole: already */
 	CHECK(steam_file_open(&job, path, 1, 2, &file, STEAM_KIND_MCC_MAP, "x.map", error, sizeof(error)) == STEAM_FILE_ALREADY);
+	/* (insider.8: the check of a file already there - a gigabyte of SHA-1 on the Vita - ignored the cancel for
+	minutes) its checking hook stops it at once: STEAM_FILE_STOPPED, the file kept as it was; and a hook that never
+	stops: already, and called as it reads */
+	checking_calls = 0, checking_stop_after = 0;
+	CHECK(steam_file_open_checked(&job, path, 1, 2, &file, STEAM_KIND_MCC_MAP, "x.map", checking_hook, NULL, error,
+		sizeof(error)) == STEAM_FILE_STOPPED && checking_calls == 1);
+	{
+		size_t size = 0;
+		uint8_t *kept = read_file(path, &size);
+
+		CHECK(kept && size == sizeof(data) && !memcmp(kept, data, sizeof(data)));
+		free(kept);
+	}
+	checking_calls = 0, checking_stop_after = 1000;
+	CHECK(steam_file_open_checked(&job, path, 1, 2, &file, STEAM_KIND_MCC_MAP, "x.map", checking_hook, NULL, error,
+		sizeof(error)) == STEAM_FILE_ALREADY && checking_calls >= 1);
 	/* a journal for another gid: ignored (nothing taken from it) */
 	{
 		uint8_t marks[3] = { 0 };
@@ -1632,6 +1656,25 @@ static void job_log(const char *line)
 	fflush(log_file);
 }
 
+/* (the job's device hold, as the Vita's PS button lock: taken and let go, never twice) */
+static volatile int test_busy_count, test_busy_twice;
+
+static void test_busy(int on)
+{
+	if (on)
+		test_busy_twice |= test_busy_count != 0, test_busy_count++;
+	else
+		test_busy_twice |= test_busy_count != 1, test_busy_count--;
+}
+
+static double test_ms(void)
+{
+	struct timespec now;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return now.tv_sec * 1000.0 + now.tv_nsec / 1e6;
+}
+
 static int job(int argc, char **argv)
 {
 	struct steam_job_options options;
@@ -1640,6 +1683,13 @@ static int job(int argc, char **argv)
 	char log_path[600];
 	unsigned int qr_serial = 0;
 	int qr_size = 0, phases = 0, last_phase = -1, polls = 0, cancel_at = argc > 6 ? atoi(argv[6]) : -1;
+	/* (STEAM_TEST_CANCEL=qr|preparing|downloading: the player's cancel at that phase's first sight - downloading
+	after STEAM_TEST_CANCEL_MS in it, default 0 -: how long the cancel call took (the game's thread), whether the
+	device's hold was let go at once, and how long until the job ended; the longest snapshot call meanwhile) */
+	const char *cancel_phase = getenv("STEAM_TEST_CANCEL");
+	double cancel_wait_ms = getenv("STEAM_TEST_CANCEL_MS") ? atof(getenv("STEAM_TEST_CANCEL_MS")) : 0;
+	double cancelled_at = -1, cancel_call_ms = -1, end_ms = -1, view_max_ms = 0, phase_seen_at = -1;
+	int busy_after_cancel = -1;
 
 	if (argc < 6)
 		return 2;
@@ -1649,6 +1699,7 @@ static int job(int argc, char **argv)
 		return 2;
 	memset(&hooks, 0, sizeof(hooks));
 	hooks.log = job_log;
+	hooks.busy = test_busy;
 	steam_job_set_platform(&hooks);
 	memset(&options, 0, sizeof(options));
 	options.games = atoi(argv[5]);
@@ -1673,8 +1724,27 @@ static int job(int argc, char **argv)
 	for (;;)
 	{
 		struct timespec step = { 0, 20 * 1000 * 1000 };
+		double before = test_ms(), took;
 
 		steam_job_get(&status);
+		took = test_ms() - before;
+		if (took > view_max_ms)
+			view_max_ms = took;
+		if (cancel_phase && cancelled_at < 0)
+		{
+			int wanted = !strcmp(cancel_phase, "qr") ? STEAM_JOB_QR : !strcmp(cancel_phase, "preparing") ?
+				STEAM_JOB_PREPARING : !strcmp(cancel_phase, "downloading") ? STEAM_JOB_DOWNLOADING : -1;
+
+			if (status.phase == wanted && phase_seen_at < 0)
+				phase_seen_at = test_ms();
+			if (phase_seen_at >= 0 && test_ms() - phase_seen_at >= cancel_wait_ms)
+			{
+				cancelled_at = test_ms();
+				steam_job_cancel();
+				cancel_call_ms = test_ms() - cancelled_at;
+				busy_after_cancel = steam_job_busy_held() + test_busy_count;
+			}
+		}
 		if (status.phase != last_phase)
 		{
 			phases++;
@@ -1694,10 +1764,25 @@ static int job(int argc, char **argv)
 			break;
 		nanosleep(&step, NULL);
 	}
+	if (cancelled_at >= 0)
+		end_ms = test_ms() - cancelled_at;
+	/* (the job's thread lets go of the hold before its phase is final: a moment for it) */
+	{
+		int wait;
+
+		for (wait = 0; wait < 50 && (test_busy_count || steam_job_busy_held()); wait++)
+		{
+			struct timespec step = { 0, 20 * 1000 * 1000 };
+
+			nanosleep(&step, NULL);
+		}
+	}
 	printf("result ok=%d cancelled=%d files=%u already=%u qr=%d serials=%u attempts=%d revoked=%d logged_off=%d "
-		"session_lost=%d waits=%u phases=%d error=%s\n", status.phase == STEAM_JOB_DONE,
+		"session_lost=%d waits=%u phases=%d busy_end=%d busy_twice=%d view_max_ms=%.1f cancel_call_ms=%.1f "
+		"busy_after_cancel=%d end_ms=%.0f error=%s\n", status.phase == STEAM_JOB_DONE,
 		status.phase == STEAM_JOB_CANCELLED, status.files_done, status.files_already, qr_size, qr_serial, status.attempts,
 		status.revoked, status.logged_off, status.session_lost, status.network_waits, phases,
+		test_busy_count + steam_job_busy_held(), test_busy_twice, view_max_ms, cancel_call_ms, busy_after_cancel, end_ms,
 		status.error[0] ? status.error : "-");
 	CHECK(steam_job_forget());
 	fclose(log_file);

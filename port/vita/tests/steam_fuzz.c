@@ -77,6 +77,16 @@ int steam_net_http_open(struct steam_http *http, const char *base_url, char *err
 	return 0;
 }
 
+void steam_net_abort(int on)
+{
+	(void)on;
+}
+
+int steam_net_aborted(void)
+{
+	return 0;
+}
+
 /* (steam_job.c's ask of Steam's directory: nothing answers) */
 int posix_https_get(const char *url, const char *user_agent, char *body, int capacity, char *error, int error_size)
 {

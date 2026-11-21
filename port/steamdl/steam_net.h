@@ -23,5 +23,10 @@ int steam_net_open(struct steam_stream *stream, const char *url, char *host, siz
 /* a CDN connection to base_url (https://host or, in the tests,
 http://127.0.0.1:port): 1, or 0 */
 int steam_net_http_open(struct steam_http *http, const char *base_url, char *error, int error_size);
+/* on: every open connection's waits end now (its socket shut down) and every wait after ends within 250 ms (the
+player's cancel, a power warning; another thread may call it); off again before the next job (and for the session's
+own end: the log-off and a revoke need the CM's connection - steam_session_end opens a new one if it was cut) */
+void steam_net_abort(int on);
+int steam_net_aborted(void);
 
 #endif
