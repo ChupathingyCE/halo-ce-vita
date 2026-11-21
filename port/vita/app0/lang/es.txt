@@ -636,6 +636,7 @@
 "hosting over ad hoc: the group's machines see the game under System Link" = "anfitrión por ad hoc: las máquinas del grupo ven la partida en System Link"
 "stopped hosting" = "dejaste de ser anfitrión"
 "hosting; others join with the code %s" = "anfitrión; los demás se unen con el código %s"
+"hosting; no code for a game with a password" = "anfitrión; sin código en una partida con contraseña"
 "not enough memory for the password: the game is not listed" = "no hay memoria para la contraseña: la partida no aparece en la lista"
 "not enough memory to try the password" = "no hay memoria para probar la contraseña"
 "the password is not that game's" = "la contraseña no es la de esa partida"
@@ -961,6 +962,7 @@
 
 # ---------- co-op and the HUD, drawn with Halo's fonts (coop_menu.c, coop_spectate.c, latency_meter.c, source/)
 "Online, code %hs" = "En línea, código %hs"
+"Online, no code (a password)" = "En línea, sin código (contraseña)"
 "System link" = "System Link"
 "=PLAY CO-OP" = "=JUGAR CO-OP"
 "This Vita: %ls" = "Esta Vita: %ls"
@@ -1885,6 +1887,8 @@
 "PUBLIC: listed in the server browser,\nwith a password." = "PÚBLICA: en el buscador de partidas,\ncon contraseña."
 "PUBLIC: listed in the server browser." = "PÚBLICA: en el buscador de partidas."
 "PRIVATE: joined by its code." = "PRIVADA: se une con su código."
+"PRIVATE: joined by invite." = "PRIVADA: se une por invitación."
+"No code for a game with a password" = "Sin código en una partida con contraseña"
 "The host chooses the map and starts." = "El anfitrión elige el mapa y empieza."
 "Listed as: %s" = "Aparece como: %s"
 "Make it private" = "Hacerla privada"

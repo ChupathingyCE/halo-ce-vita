@@ -503,6 +503,9 @@ static struct
 	/* hosting: the invite's short code (ABCD-EFGH), made with it (the
 	run's: a new invite keeps it) */
 	char code[P2P_CODE_SIZE];
+	/* hosting a game with a password, which has no code: its record not on
+	the brokers (as signalling was last told: hosting_code_published) */
+	int code_withheld;
 	/* looking up a code's eight characters, until its record arrives or
 	CODE_LOOKUP_TIMEOUT */
 	int lookup_requested;
@@ -4016,6 +4019,17 @@ static void make_invite(void)
 	snprintf(p2p.invite, sizeof(p2p.invite), "halo://join/%s", text);
 }
 
+/* the code signalling publishes a record of for the game hosted: none for
+a game with a password (the owner, Nov 21 2026: its record leads to the
+invite, which joins without the password, and a code is 40 bits; players
+join it from the server browser with the password, or by invite, a friend's
+or the party's), else the run's */
+static const char *hosting_code_published(void)
+{
+	p2p.code_withheld = p2p_lobby_password_in_force();
+	return p2p.code_withheld ? NULL : p2p.code;
+}
+
 void p2p_new_invite_if_listed(void)
 {
 	if (!p2p.has_token || !p2p.token_listed)
@@ -4028,7 +4042,7 @@ void p2p_new_invite_if_listed(void)
 	{
 		/* (the code stays: it was never listed, and now leads to the new
 		invite) */
-		p2p_signal_host(p2p.token, p2p.code, network_wire_crossplay());
+		p2p_signal_host(p2p.token, hosting_code_published(), network_wire_crossplay());
 		memcpy(p2p.clipboard, p2p.invite, sizeof(p2p.clipboard));
 		p2p.has_clipboard = 1;
 		/* (Discord is told the new one) */
@@ -4132,13 +4146,16 @@ static void update_hosting(void)
 		/* (a broker waiting after a failure tries now) */
 		p2p_signal_kick();
 		/* (on the game's wire: network_wire.h, chosen as its server was made) */
-		p2p_signal_host(p2p.token, p2p.code, network_wire_crossplay());
+		p2p_signal_host(p2p.token, hosting_code_published(), network_wire_crossplay());
 		/* (the invite is a bearer token: anyone who reads it can join, so the
 		log shows only the host's part; the link itself goes to the
 		clipboard, or on the Vita to host_invite.txt) */
 		platform_log("Internet play: hosting with the invite halo://join/%.12s... (the whole link only works while "
 			"this copy of the game runs)", p2p.invite + strlen("halo://join/"));
-		set_status(N_("hosting; others join with the code %s"), p2p.code);
+		if (p2p.code_withheld)
+			set_status(N_("hosting; no code for a game with a password"));
+		else
+			set_status(N_("hosting; others join with the code %s"), p2p.code);
 		if (!p2p.invite_copied)
 		{
 			memcpy(p2p.clipboard, p2p.invite, sizeof(p2p.clipboard));
@@ -4154,6 +4171,26 @@ static void update_hosting(void)
 		p2p_discord_set_hosting(NULL, 0, 0);
 		/* (the code is no longer shown as this machine's) */
 		set_status(N_("stopped hosting"));
+	}
+	/* (a password set or taken away while hosting: the code's record
+	withdrawn, or published again. Withdrawn, with a new invite: the one the
+	record led to, which anyone who looked the code up has, joins no more) */
+	if (p2p.hosting && p2p_lobby_password_in_force() != p2p.code_withheld)
+	{
+		if (!p2p.code_withheld)
+		{
+			make_invite();
+			platform_log("Internet play: a password set: no code, and a new invite, so that the one the code led to "
+				"lets no one in: halo://join/%.12s...", p2p.invite + strlen("halo://join/"));
+			memcpy(p2p.clipboard, p2p.invite, sizeof(p2p.clipboard));
+			p2p.has_clipboard = 1;
+			p2p.reported_player_count = -1;
+		}
+		p2p_signal_host(p2p.token, hosting_code_published(), network_wire_crossplay());
+		if (p2p.code_withheld)
+			set_status(N_("hosting; no code for a game with a password"));
+		else
+			set_status(N_("hosting; others join with the code %s"), p2p.code);
 	}
 	if (p2p.hosting)
 	{
@@ -4460,11 +4497,24 @@ int p2p_hosting_code(char *code, int size)
 	if (!p2p.running || size < P2P_CODE_SIZE)
 		return 0;
 	pthread_mutex_lock(&p2p_lock);
-	if (p2p.hosting && p2p.code[0])
+	/* (a game with a password has none) */
+	if (p2p.hosting && p2p.code[0] && !p2p.adhoc && !p2p_lobby_password_in_force())
 	{
 		memcpy(code, p2p.code, P2P_CODE_SIZE);
 		result = 1;
 	}
+	pthread_mutex_unlock(&p2p_lock);
+	return result;
+}
+
+int p2p_hosting_code_withheld(void)
+{
+	int result;
+
+	if (!p2p.running)
+		return 0;
+	pthread_mutex_lock(&p2p_lock);
+	result = p2p.hosting && p2p.code[0] && !p2p.adhoc && p2p_lobby_password_in_force();
 	pthread_mutex_unlock(&p2p_lock);
 	return result;
 }

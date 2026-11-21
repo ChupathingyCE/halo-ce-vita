@@ -329,8 +329,11 @@ enum
 int p2p_address_origin(unsigned long address);
 
 /* while this machine hosts with internet play on: copies its code (with
-the dash) and returns nonzero */
+the dash) and returns nonzero; a game with a password has none (0) */
 int p2p_hosting_code(char *code, int size);
+/* while this machine hosts a game with a password with internet play on:
+nonzero, its code withheld (the menus say so in the code's place) */
+int p2p_hosting_code_withheld(void);
 /* ... its invite link (halo://join/...; a bearer token: for the automated
 tests, network_test.c's debug.network_test_invite_file), returning nonzero */
 int p2p_hosting_invite(char *invite, int size);
@@ -359,7 +362,8 @@ int p2p_lobby_hosting_listed(int *has_password);
 the game's own) */
 void p2p_lobby_set_name(const char *name);
 /* the game's password (NULL or "": none): its listing lets only those who
-know it join from the browser (its code and invite still join it). Its key
+know it join from the browser (its invite still joins it; it has no code:
+p2p_hosting_code). Its key
 is worked out on a thread of its own (about a second on a Vita); until then
 the game is not listed. Setting or changing it makes a new invite */
 void p2p_lobby_set_password(const char *password);

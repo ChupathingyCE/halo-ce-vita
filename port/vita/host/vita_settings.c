@@ -5170,6 +5170,9 @@ static void status_line(char *text, int size)
 				break;
 			}
 		}
+		/* (a game with a password has no code: p2p.c) */
+		else if (p2p_hosting_code_withheld())
+			snprintf(text, (size_t)size, "%s", T("No code for a game with a password"));
 		else
 		{
 			p2p_status_shown(detail, sizeof(detail));

@@ -56,6 +56,7 @@ void p2p_lobby_set_coop_public(int listed);
 int p2p_lobby_coop_public(int *has_password);
 void platform_log(char const *format, ...);
 int p2p_hosting_code(char *code, int size);
+int p2p_hosting_code_withheld(void);
 
 static char const coop_menu_level_names_tag[] = "ui\\shell\\main_menu\\map_list";
 static char const coop_menu_difficulty_names_tag[] = "ui\\shell\\main_menu\\player_profiles_select\\difficulty_names";
@@ -251,6 +252,8 @@ static void coop_menu_connection(
 		usnprintf(text, count, TW(L"Ad hoc"));
 	else if (config_boolean("network.online") && p2p_running() && p2p_hosting_code(code, (int)sizeof(code)) && code[0])
 		usnprintf(text, count, TW(L"Online, code %hs"), code);
+	else if (config_boolean("network.online") && p2p_running() && p2p_hosting_code_withheld())
+		usnprintf(text, count, TW(L"Online, no code (a password)"));
 	else if (config_boolean("network.online") && p2p_running())
 		usnprintf(text, count, TW(L"Online"));
 	else

@@ -64,8 +64,9 @@ makes a new invite (p2p.c), so a listing seen before lets no one in.
 A game with a password (p2p_lobby_set_password) is listed with its token
 sealed with the password's key (Argon2id of the password, salted with the
 host's key: p2p_password_key), so that only who knows the password can join
-it from the browser (p2p_lobby_join); its code and invite link, which lead
-to the token, still join it as they do any game. Setting or changing the
+it from the browser (p2p_lobby_join); its invite link, which leads to the
+token, still joins it as it does any game, and it has no code (p2p.c: a
+code's record leads to the token, and a code is only 40 bits). Setting or changing the
 password makes a new invite, as going private does. The key takes about a
 second on a Vita, so it is worked out on a thread of its own (key_thread),
 for the host and for a joiner alike; the host's game is not listed until its
@@ -2361,11 +2362,16 @@ int p2p_lobby_hosting_has_password(void)
 	if (!config_boolean("network.online"))
 		return 0;
 	pthread_mutex_lock(&p2p_lock);
-	/* (as a friend's presence has it locked: p2p_lobby_friends_view) */
-	has_password = lobby.password_said ? lobby.has_password || lobby.password_pending || lobby.password_failed :
-		config_string("network.lobby_password")[0] != 0;
+	has_password = p2p_lobby_password_in_force();
 	pthread_mutex_unlock(&p2p_lock);
 	return has_password;
+}
+
+int p2p_lobby_password_in_force(void)
+{
+	/* (as a friend's presence has it locked: p2p_lobby_friends_view) */
+	return lobby.password_said ? lobby.has_password || lobby.password_pending || lobby.password_failed :
+		config_string("network.lobby_password")[0] != 0;
 }
 
 void p2p_lobby_set_name(const char *name)

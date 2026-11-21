@@ -224,7 +224,7 @@ These commands work in `init.txt` and on the console. The names are
 | --- | --- |
 | `sv_name <name>` | The name in the server browser (up to 32 characters; the Vitas' System Link list shows the first 16). |
 | `sv_maxplayers <2-16>` | The most players. |
-| `sv_password [password]` | A password for joining from the server browser. Without a password, there is none. The code always joins. With a password, a machine that reaches the game's ports from the internet itself (not through internet play) is refused with the password message; machines on the server's own network (private ranges, link-local, loopback, 100.64.0.0/10) join as before. |
+| `sv_password [password]` | A password for joining from the server browser. Without a password, there is none. A game with a password has no code (its record would lead past the password). With a password, a machine that reaches the game's ports from the internet itself (not through internet play) is refused with the password message; machines on the server's own network (private ranges, link-local, loopback, 100.64.0.0/10) join as before. |
 | `sv_public <0\|1>` | 1 (the default): listed in the server browser. 0: joined only by its code. |
 | `sv_mapcycle_add <map> <gametype>` | Adds a game to the cycle. The map is a file name in `maps/` without `.map`. |
 | `sv_mapcycle_del <#>` | Takes a game out of the cycle. |

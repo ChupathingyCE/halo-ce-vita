@@ -993,6 +993,11 @@ int p2p_hosting_code(char *code, int size)
 	snprintf(code, (size_t)size, "QX7K-M2PA");
 	return 1;
 }
+
+int p2p_hosting_code_withheld(void)
+{
+	return 0;
+}
 int p2p_hosting_invite(char *invite, int size)
 {
 	if (!hosting)

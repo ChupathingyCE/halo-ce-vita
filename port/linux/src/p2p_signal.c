@@ -96,7 +96,8 @@ cannot paste one (the Vita) or for strangers:
   once, and joins the invite in it. The code is only as secret as 40 bits:
   anyone who collects the sealed records and tries every code finds the
   invites, so a code is a convenience, not a lock (the invite's 128-bit
-  token is). Nothing the code leads to is more than the invite, which still
+  token is), and a game with a password has none (p2p.c): its record would
+  lead past the password. Nothing the code leads to is more than the invite, which still
   goes through JOIN/ACCEPT.
 - The server browser (p2p_lobby.c): a public game's signed listing, which
   holds its invite (sealed with a password, if the game has one), but never
@@ -3117,6 +3118,18 @@ void p2p_signal_host(const unsigned char *token, const char *code, int crossplay
 	derive(token, "seal", NULL, signalling.host_key);
 	make_topic(crossplay, token, "host", p2p_identifier(), signalling.host_topic);
 	signalling.hosting = 1;
+	/* (no code now - a game with a password has none, p2p.c - where there
+	was one: its record withdrawn from the brokers, which would otherwise
+	hold it until it expired) */
+	if (signalling.has_code && !(code && strlen(code) == P2P_CODE_SIZE - 1))
+	{
+		int index;
+
+		clear_retained(signalling.code_topic);
+		for (index = 0; index < signalling.broker_count; index++)
+			signalling.brokers[index].code_pending = 0;
+		platform_log("Internet play: the code's record withdrawn (a game with a password has no code)");
+	}
 	signalling.has_code = code && strlen(code) == P2P_CODE_SIZE - 1;
 	if (signalling.has_code)
 	{

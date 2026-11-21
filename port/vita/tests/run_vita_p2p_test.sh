@@ -10,6 +10,12 @@
 #                                 (p2p_set_game_accepts_remote 0): no code,
 #                                 the joiner dropped, nothing reaches the
 #                                 game, the kept code and invite reach nothing
+#   run_vita_p2p_test.sh password a game without a password: its code
+#                                 joins; a password set: no code, the code's
+#                                 record withdrawn from the broker, the code
+#                                 and the old invite reach nothing; a game
+#                                 with a password from the start: no code, no
+#                                 record on the broker
 #   run_vita_p2p_test.sh adhoc    in an ad hoc group: the dialog scripted,
 #                                 PDP mocked over UDP, ad hoc play's bridge Needs the Linux build configured and built in this
 # tree (build/linux: the platform layer's generated semantics header) and
@@ -71,6 +77,17 @@ else
 	export TEST_BROKER=127.0.0.1:$port VITA_NET_TEST_LOG=1 MOCK_LOCAL_ADDRESS=127.0.0.1 TEST_SYNC=$out/local
 	side=host
 	[ "$mode" = local ] && side=local-host
+	if [ "$mode" = password ]; then
+		# (first a game with a password from the start, alone)
+		TEST_PASSWORD=hunter2 timeout -k 2 60 "$out/vita_p2p_test" password-host > "$out/host_locked.log" 2>&1 || status=1
+		grep -q '^NOCODE' "$out/host_locked.log" || { echo "FAIL the locked host never said it has no code"; status=1; }
+		grep '^FAIL' "$out/host_locked.log" || true
+		records=$(grep -c '^retained .* [0-9]* B$' "$out/broker.log" || true)
+		echo "the broker's retained records from the game with a password: $records"
+		[ "$records" = 0 ] || { echo "FAIL a game with a password published a record ($records)"; status=1; }
+		mark=$(wc -l < "$out/broker.log")
+		side=password-host
+	fi
 	timeout -k 2 90 "$out/vita_p2p_test" $side > "$out/host.log" 2>&1 &
 	host=$!
 	code=
@@ -82,6 +99,19 @@ else
 	if [ -z "$code" ]; then
 		echo "FAIL the host never showed a code"
 		status=1
+	elif [ "$mode" = password ]; then
+		invite=$(sed -n 's/^INVITE //p' "$out/host.log")
+		TEST_SECOND=1 timeout -k 2 90 "$out/vita_p2p_test" password-join "$code" "$invite" > "$out/join2.log" 2>&1 &
+		second=$!
+		timeout -k 2 60 "$out/vita_p2p_test" password-join "$code" "$invite" > "$out/join.log" 2>&1 || status=1
+		wait $second || status=1
+		cat "$out/join2.log" >> "$out/join.log"
+		after=$(tail -n +$((mark + 1)) "$out/broker.log")
+		published=$(printf '%s\n' "$after" | grep -c '^retained .* [0-9]* B$' || true)
+		removed=$(printf '%s\n' "$after" | grep -c '^retained .* removed$' || true)
+		echo "the game without a password, then with one: $published records published, $removed removed"
+		[ "$published" -ge 1 ] || { echo "FAIL a game without a password published no code record"; status=1; }
+		[ "$removed" -ge 1 ] || { echo "FAIL the code record was not withdrawn when the password was set"; status=1; }
 	elif [ "$mode" = local ]; then
 		invite=$(sed -n 's/^INVITE //p' "$out/host.log")
 		timeout -k 2 90 "$out/vita_p2p_test" local-join "$code" "$invite" > "$out/join.log" 2>&1 || status=1

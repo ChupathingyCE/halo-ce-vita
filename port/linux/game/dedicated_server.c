@@ -665,7 +665,9 @@ static void command_status(
 		state == _server_postgame ? "showing the scores" : "starting");
 	say("ports: internet play UDP %s; the game's %s", getenv("HALO_NET_TUNNEL_PORT") ? getenv("HALO_NET_TUNNEL_PORT") :
 		"(any)", game_ports_text());
-	if (dedicated.code[0])
+	if (!strcmp(dedicated.code, "-"))
+		say("no code (a game with a password); %s", config_boolean("network.host_public") ? "public" : "private");
+	else if (dedicated.code[0])
 		say("code %s; %s%s", dedicated.code, config_boolean("network.host_public") ? "public" : "private (by code only)",
 			config_string("network.lobby_password")[0] ? ", with a password" : "");
 	if (game)
@@ -1224,7 +1226,7 @@ static void command(
 		config_set_override("network.lobby_password", text);
 		if (dedicated.hosting)
 			p2p_lobby_set_password(text);
-		say(text[0] ? "password set (joining from the server browser asks for it; the code still joins)" :
+		say(text[0] ? "password set (joining from the server browser asks for it; no code while it has one)" :
 			"no password");
 	}
 	else if (!csstrcmp(name, "sv_public"))
@@ -1743,6 +1745,13 @@ void dedicated_server_update(
 			csstrcpy(dedicated.code, code);
 			say("hosting; Vitas join with the code %s, or from the server browser%s", code,
 				config_boolean("network.host_public") ? "" : " (not: sv_public 0)");
+		}
+		/* (a game with a password has none: p2p.c; "-" in its place) */
+		else if (p2p_hosting_code_withheld() && strcmp(dedicated.code, "-"))
+		{
+			csstrcpy(dedicated.code, "-");
+			say("hosting with a password: no code; Vitas join from the server browser with the password%s",
+				config_boolean("network.host_public") ? "" : " (not listed: sv_public 0)");
 		}
 	}
 	note_players();

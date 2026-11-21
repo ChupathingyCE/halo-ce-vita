@@ -119,6 +119,9 @@ const char *config_string(const char *name)
 		return getenv("TEST_BROKER") ? getenv("TEST_BROKER") : "";
 	if (!strcmp(name, "network.lobby_name"))
 		return "vita test";
+	/* (password: a game with a password from the start, TEST_PASSWORD) */
+	if (!strcmp(name, "network.lobby_password"))
+		return getenv("TEST_PASSWORD") ? getenv("TEST_PASSWORD") : "";
 	return "";
 }
 
@@ -562,8 +565,95 @@ static int local_joiner(const char *code, const char *invite)
 	return failures;
 }
 
+/* ---------- password: a game with a password has no code */
+
+/* the host: a game with a password from the start (TEST_PASSWORD) shows no
+code, nor publishes its record; a game without one shows its code, a joiner
+reaches it by the code, and once a password is set the code is gone, its
+record withdrawn, and the invite a new one */
+static int password_host(void)
+{
+	unsigned long local = inet_addr("127.0.0.1");
+	int listener, datagrams, tenth;
+	char code[P2P_CODE_SIZE];
+	char invite[256], new_invite[256];
+
+	p2p_initialize(local);
+	p2p_set_game_accepts_remote(1);
+	listener = bound_socket(SOCK_STREAM, local, htons(2302));
+	datagrams = bound_socket(SOCK_DGRAM, local, htons(2302));
+	check(listener >= 0 && datagrams >= 0 && posix_socket_listen(listener, 4) == 0, "host: sockets on 2302");
+	p2p_socket_port(listener, 1, 1, htons(2302));
+	p2p_socket_port(datagrams, 0, 0, htons(2302));
+	if (getenv("TEST_PASSWORD"))
+	{
+		for (tenth = 0; tenth < 100 && !p2p_hosting_invite(invite, sizeof(invite)); tenth++)
+			usleep(100000);
+		check(p2p_hosting_invite(invite, sizeof(invite)), "host: hosting the game with a password, with an invite");
+		/* (a while for any record to go out) */
+		sleep(8);
+		check(!p2p_hosting_code(code, sizeof(code)), "host: no code for a game with a password");
+		check(p2p_hosting_code_withheld(), "host: its code said withheld");
+		printf("NOCODE\n");
+		fflush(stdout);
+		return failures;
+	}
+	for (tenth = 0; tenth < 100 && !p2p_hosting_code(code, sizeof(code)); tenth++)
+		usleep(100000);
+	check(p2p_hosting_code(code, sizeof(code)) && p2p_hosting_invite(invite, sizeof(invite)),
+		"host: a game without a password, with a code and an invite");
+	check(!p2p_hosting_code_withheld(), "host: its code not withheld");
+	printf("CODE %s\nINVITE %s\n", code, invite);
+	fflush(stdout);
+	check(wait_connected(40), "host: the joiner reached it by the code");
+	p2p_lobby_set_password("hunter2");
+	for (tenth = 0; tenth < 50 && p2p_hosting_code(code, sizeof(code)); tenth++)
+		usleep(100000);
+	check(!p2p_hosting_code(code, sizeof(code)) && p2p_hosting_code_withheld(),
+		"host: a password set: no code");
+	/* (the p2p thread's next pass: the record withdrawn, a new invite) */
+	sleep(2);
+	check(p2p_hosting_invite(new_invite, sizeof(new_invite)) && strcmp(invite, new_invite),
+		"host: a password set: a new invite");
+	printf("PASSWORD SET\n");
+	fflush(stdout);
+	local_signal();
+	/* a new joiner's attempts with the code and the old invite */
+	sleep(25);
+	check(connections == 1, "host: no one reached it by the code or the old invite");
+	return failures;
+}
+
+/* a joiner by the code of a game without a password; a second machine
+(TEST_SECOND) once the game has a password: the code and the old invite
+reach nothing */
+static int password_joiner(const char *code, const char *invite)
+{
+	unsigned long local = inet_addr(getenv("TEST_SECOND") ? "127.0.0.3" : "127.0.0.2");
+
+	p2p_initialize(local);
+	if (!getenv("TEST_SECOND"))
+	{
+		check(p2p_join_code(code), "joiner: the code is a code");
+		check(wait_connected(40), "joiner: reached the game without a password by its code");
+		/* (kept a while: the host's set password comes with it joined) */
+		sleep(20);
+		return failures;
+	}
+	check(local_wait(60), "second joiner: the host's game has a password");
+	check(p2p_join_code(code), "second joiner: the code again");
+	check(!wait_connected(10), "second joiner: the code of a game with a password reached nothing");
+	check(p2p_join_invite(invite), "second joiner: the invite from before the password");
+	check(!wait_connected(10), "second joiner: the old invite reached nothing");
+	return failures;
+}
+
 int main(int argc, char **argv)
 {
+	if (argc >= 2 && !strcmp(argv[1], "password-host"))
+		return password_host();
+	if (argc >= 4 && !strcmp(argv[1], "password-join"))
+		return password_joiner(argv[2], argv[3]);
 	if (argc >= 2 && !strcmp(argv[1], "host"))
 		return host();
 	if (argc >= 3 && !strcmp(argv[1], "join"))

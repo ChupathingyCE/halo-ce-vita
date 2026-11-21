@@ -22074,6 +22074,8 @@ static void h3_pregame_update(struct widget_instance *widget)
 	short local_machine = client ? network_game_client_get_local_machine_index() : NONE;
 	short seconds = client ? network_game_client_get_seconds_to_game_start(client) : -1;
 	int reach_state = P2P_LOBBY_BROWSE_OFF, hosting_state = P2P_LOBBY_HOSTING_NONE;
+	/* (a game with a password: no code, p2p.c) */
+	int code_withheld = 0;
 	char text[192], code[32], line[384];
 	wchar_t wide[64];
 	long index, row = 0;
@@ -22088,7 +22090,10 @@ static void h3_pregame_update(struct widget_instance *widget)
 	waiting = host && game->machine_count < 2 && network_game_server_dedicated_bot_count() == 0;
 	code[0] = 0;
 	if (host && online)
+	{
 		p2p_hosting_code(code, (int)sizeof(code));
+		code_withheld = p2p_hosting_code_withheld();
+	}
 	if (host && online)
 	{
 		char reach[160];
@@ -22224,6 +22229,12 @@ static void h3_pregame_update(struct widget_instance *widget)
 		text_show(named(screen, "code_label"), T("CODE: others join with it"));
 		text_show(named(screen, "code"), code);
 	}
+	else if (host && online && code_withheld)
+	{
+		/* (a game with a password has no code: p2p.c) */
+		text_show(named(screen, "code_label"), T("No code for a game with a password"));
+		text_show(named(screen, "code"), T("ONLINE"));
+	}
 	else if (host && online)
 	{
 		/* (its code not given out yet: the brokers not reached) */
@@ -22266,7 +22277,8 @@ static void h3_pregame_update(struct widget_instance *widget)
 		}
 		else
 			snprintf(text, sizeof(text), "%s", listed ? (password ? T("PUBLIC: listed in the server browser,\nwith a password.") :
-				T("PUBLIC: listed in the server browser.")) : T("PRIVATE: joined by its code."));
+				T("PUBLIC: listed in the server browser.")) : code_withheld ? T("PRIVATE: joined by invite.") :
+				T("PRIVATE: joined by its code."));
 		text_show(named(screen, "visibility"), text);
 		snprintf(line + strlen(line), sizeof(line) - strlen(line), "; %s", state);
 	}
@@ -22299,7 +22311,8 @@ static void h3_pregame_update(struct widget_instance *widget)
 			char invite[96];
 
 			text[0] = 0;
-			if (host && online && code[0] && network_wire_crossplay() && p2p_hosting_invite(invite, (int)sizeof(invite)) &&
+			if (host && online && (code[0] || code_withheld) && network_wire_crossplay() &&
+				p2p_hosting_invite(invite, (int)sizeof(invite)) &&
 				strlen(invite) > 38)
 			{
 				snprintf(text, sizeof(text), "%s\n%.38s\n%s", T("PC players (OpenCE) join with:"), invite, invite + 38);
@@ -26643,6 +26656,11 @@ static void ce_lobby_update(struct widget_instance *list)
 			code[0] = 0;
 		if (code[0])
 			snprintf(text, sizeof(text), "%s %s  %s", T("CODE:"), code,
+				p2p_lobby_hosting_listed(&password) ? T("PUBLIC") : T("PRIVATE"));
+		/* (a game with a password has no code: p2p.c) */
+		else if (p2p_hosting_code_withheld() &&
+			p2p_lobby_brokers_status(reach, (int)sizeof(reach)) == P2P_LOBBY_BROWSE_EMPTY)
+			snprintf(text, sizeof(text), "%s  %s", T("No code for a game with a password"),
 				p2p_lobby_hosting_listed(&password) ? T("PUBLIC") : T("PRIVATE"));
 	}
 	text_show(named(screen, "code_value"), text);

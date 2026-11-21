@@ -557,6 +557,10 @@ friends (their presence: they open it with the password), and the host's
 Ed25519 key: 0 if the game has no password, or its key is not ready (made
 for the game's wire); under p2p_lock */
 int p2p_lobby_password_seal(const unsigned char *token, unsigned char *signing_key, unsigned char *sealed);
+/* (p2p_lobby.c) whether the game this machine hosts has a password set (its
+key ready, worked out or failed; network.lobby_password until the game
+says): it then has no code (p2p.c); under p2p_lock */
+int p2p_lobby_password_in_force(void);
 /* (p2p_lobby.c) whether a host's game is locked: listed with a password, or
 joined from the browser with one; under p2p_lock */
 int p2p_lobby_host_locked(const unsigned char *key_hash);

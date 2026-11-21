@@ -55,8 +55,8 @@
 #            alone (never directly) and play; the relay's log must name no
 #            address, and its bytes per second are reported
 #   lobbypw  the same with a password (HALO_TEST_LOBBY_PASSWORD, default
-#            "hunter2"): the game is listed locked, and the joiner opens it
-#            with the password
+#            "hunter2"): the game is listed locked, has no code, and the
+#            joiner opens it with the password
 #   badmap   a public game on an Xbox level (HALO_TEST_BADMAP_GAME,
 #            host:beavercreek:rockets), its host with PC maps on (the Halo PC
 #            files from HALO_TEST_DATA_MENUS when there), joined from the
@@ -1237,6 +1237,20 @@ prefill_cache() {
 }
 host_env="HALO_NET_ONLINE=true HALO_NETWORK_TEST=${HALO_TEST_HOST_GAME:-host:bloodgulch:slayer,slayer@chillout} HALO_NETWORK_TEST_START=20
 	HALO_NETWORK_TEST_SCORE=${HALO_TEST_SCORE:-3} HALO_NETWORK_TEST_KILL=20 HALO_TEST_INPUT=bot:1"
+# wait_nocode: a game with a password hosts with no code (p2p.c, the owner Nov 21
+# 2026: its record would lead past the password): "nocode" once it says so, and
+# fail if a code was ever shown
+wait_nocode() {
+	local i
+	for i in $(seq 1 90); do
+		if grep -aq "others join with the code" "$out/host/run.log"; then
+			echo shown
+			return
+		fi
+		grep -aq "hosting; no code for a game with a password" "$out/host/run.log" && { echo nocode; return; }
+		sleep 1
+	done
+}
 wait_code() { # the host's code, once it hosts
 	local code= i
 	for i in $(seq 1 90); do
@@ -1404,9 +1418,15 @@ code|lobby|lobbytls|lobbypw|relay|latency|infection|infectionold)
 		;;
 	esac
 	run_copy host "$host_machine" "$vita" "$cpu_a" $host_env $extra ${HALO_TEST_HOST_ENV:-}; host_pid=$last_pid
-	code=$(wait_code)
-	[ -n "$code" ] || { fail "the host never showed a code"; tail -20 "$out/host/run.log"; exit 1; }
-	echo "host's code: $code"
+	if [ "$mode" = lobbypw ]; then
+		code=$(wait_nocode)
+		[ "$code" = nocode ] || { fail "the game with a password did not host with no code ($code)"; tail -20 "$out/host/run.log"; exit 1; }
+		echo "host: no code (a game with a password)"
+	else
+		code=$(wait_code)
+		[ -n "$code" ] || { fail "the host never showed a code"; tail -20 "$out/host/run.log"; exit 1; }
+		echo "host's code: $code"
+	fi
 	case $mode in
 	code|relay|latency|infection|infectionold) join_mode="join-code:$code" ;;
 	lobby|lobbytls) join_mode=join-public ;;
@@ -1576,9 +1596,15 @@ menus|menuspw|menusjoinpress)
 	[ "$mode" = menuspw ] && extra="$extra HALO_NET_LOBBY_PASSWORD=$password"
 	run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NETWORK_TEST_START=${HALO_TEST_MENUS_START:-75} \
 		HALO_NET_LOBBY_NAME=VitaHost $extra; host_pid=$last_pid
-	code=$(wait_code)
-	[ -n "$code" ] || { fail "the host never showed a code"; tail -20 "$out/host/run.log"; exit 1; }
-	echo "host's code: $code"
+	if [ "$mode" = menuspw ]; then
+		code=$(wait_nocode)
+		[ "$code" = nocode ] || { fail "the game with a password did not host with no code ($code)"; tail -20 "$out/host/run.log"; exit 1; }
+		echo "host: no code (a game with a password)"
+	else
+		code=$(wait_code)
+		[ -n "$code" ] || { fail "the host never showed a code"; tail -20 "$out/host/run.log"; exit 1; }
+		echo "host's code: $code"
+	fi
 	# (Multiplayer, INTERNET: the profile first (A joins, A picks the profile,
 	# A), then the server browser; a while for the listing, A on its row;
 	# menuspw: the password screen, A types it, down, JOIN GAME; then the
