@@ -123,6 +123,16 @@ semicolon). */
 #define match_vassert(file, line, expr, string) if (!(expr)) { release_assert_failed(RELEASE_ASSERT_MESSAGE(string), MATCH_FILE(file), MATCH_LINE(line), TRUE); }
 #define match_warn(file, line, expr) if (!(expr)) { release_assert_failed(#expr, MATCH_FILE(file), MATCH_LINE(line), FALSE); }
 #define match_vwarn(file, line, expr, string) if (!(expr)) { release_assert_failed(RELEASE_ASSERT_MESSAGE(string), MATCH_FILE(file), MATCH_LINE(line), FALSE); }
+#elif defined(HALO_CONSOLE_TICK_OVERLAP)
+/* port: a console's tick beside its render (port/linux/include/tick_overlap.h):
+the render reads state the tick is changing, and a value it asserts on may be
+torn for a frame. The render's failed assertions while an update runs are
+logged (once a site) and skipped; the tick's, and every other, stay fatal */
+void halo_assert_failed(char *information, char *file, long line);
+#define match_assert(file, line, expr) if (!(expr)) { halo_assert_failed(#expr, MATCH_FILE(file), MATCH_LINE(line)); }
+#define match_vassert(file, line, expr, string) if (!(expr)) { halo_assert_failed(string, MATCH_FILE(file), MATCH_LINE(line)); }
+#define match_warn(file, line, expr) if (!(expr)) { display_assert(#expr, MATCH_FILE(file), MATCH_LINE(line), FALSE); }
+#define match_vwarn(file, line, expr, string) if (!(expr)) { display_assert(string, MATCH_FILE(file), MATCH_LINE(line), FALSE); }
 #else
 #define match_assert(file, line, expr) if (!(expr)) { display_assert(#expr, MATCH_FILE(file), MATCH_LINE(line), TRUE); system_exit(-1); }
 #define match_vassert(file, line, expr, string) if (!(expr)) { display_assert(string, MATCH_FILE(file), MATCH_LINE(line), TRUE); system_exit(-1); }
@@ -389,5 +399,10 @@ __inline long fast_ftol(
 
 	return result;
 }
+
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: a console's tick beside its render */
+#include "tick_overlap.h"
+#endif
 
 #endif // __CSERIES_H

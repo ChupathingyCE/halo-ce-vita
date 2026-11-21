@@ -98,6 +98,22 @@ static struct memory_pool_block *memory_pool_block_get(
 
 /* ---------- globals */
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: a console's tick beside its render (port/linux/include/tick_overlap.h):
+a block the tick frees while the render may read it stays where it is,
+linked, until the join (counted free at once, as without the tick's
+thread); the pool's last block is then the last one not so kept */
+static struct memory_pool_block *memory_pool_last_kept_block(
+	struct memory_pool *pool)
+{
+	struct memory_pool_block *block = pool->last_block;
+
+	while (block && halo_epoch_pool_block_deferred(block))
+		block = block->previous_block;
+	return block;
+}
+#endif
+
 /* ---------- public code */
 
 long memory_pool_allocation_size(
@@ -161,6 +177,19 @@ boolean memory_pool_block_allocate(
 	memory_pool_verify(pool);
 	match_assert("c:\\halo\\SOURCE\\memory\\memory_pool.c", 124, size>=0);
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: room only where kept blocks are: once the render is done they
+	are freed, and the block goes where it went without the tick's thread */
+	if (pool->last_block && halo_epoch_pool_block_deferred(pool->last_block) &&
+		(byte *)pool->last_block+pool->last_block->size+actual_size > (byte *)pool->base_address+pool->size)
+	{
+		struct memory_pool_block *kept = memory_pool_last_kept_block(pool);
+		byte *end = kept ? (byte *)kept+kept->size : (byte *)pool->base_address;
+
+		if (end+actual_size <= (byte *)pool->base_address+pool->size)
+			halo_epoch_pool_needs_room();
+	}
+#endif
 	block = pool->last_block
 		? (struct memory_pool_block *)((byte *)pool->last_block+pool->last_block->size)
 		: pool->base_address;
@@ -200,6 +229,23 @@ void memory_pool_block_free(
 	block = memory_pool_block_get(pool, reference);
 	pool->free_size += block->size;
 	match_assert("c:\\halo\\SOURCE\\memory\\memory_pool.c", 230, pool->free_size<=pool->size);
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (kept until the join: tick_overlap.h) */
+	if (halo_epoch_pool_free(pool, block))
+		return;
+	memory_pool_block_release(pool, block);
+	return;
+}
+
+/* port: a block unlinked and cleared, its size already counted free (the
+join's kept blocks, tick_overlap.c) */
+void memory_pool_block_release(
+	struct memory_pool *pool,
+	void *released)
+{
+	struct memory_pool_block *block = released;
+
+#endif
 	if (block->previous_block)
 		block->previous_block->next_block = block->next_block;
 	else
@@ -219,6 +265,11 @@ void memory_pool_compact(
 	struct memory_pool_block *block;
 	struct memory_pool_block *previous_block;
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (it moves what the render reads: once the render is done,
+	tick_overlap.h) */
+	halo_epoch_compaction_defer(pool);
+#endif
 	block = pool->first_block;
 	if (block)
 	{
@@ -300,7 +351,11 @@ long memory_pool_get_free_size(
 long memory_pool_get_used_size(
 	struct memory_pool *pool)
 {
-#ifdef HALO_64BIT
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	struct memory_pool_block *kept = memory_pool_last_kept_block(pool);
+
+	return !kept ? 0 : (long)((byte *)kept + kept->size - (byte *)pool->base_address);
+#elif defined(HALO_64BIT)
 	return !pool->last_block ? 0 : (unsigned long)((byte *)pool->last_block + pool->last_block->size - (byte *)pool->base_address);
 #else
 	return !pool->last_block ? 0 : (unsigned long)pool->last_block + pool->last_block->size - (unsigned long)pool->base_address;
@@ -364,7 +419,12 @@ static void memory_pool_verify(
 	{
 		match_assert("c:\\halo\\SOURCE\\memory\\memory_pool.c", 352, block->previous_block==previous_block);
 		match_assert("c:\\halo\\SOURCE\\memory\\memory_pool.c", 353, block->next_block || pool->last_block==block);
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+		match_assert("c:\\halo\\SOURCE\\memory\\memory_pool.c", 355, block->header_signature==BLOCK_HEADER_SIGNATURE ||
+			halo_epoch_pool_block_deferred(block));
+#else
 		match_assert("c:\\halo\\SOURCE\\memory\\memory_pool.c", 355, block->header_signature==BLOCK_HEADER_SIGNATURE);
+#endif
 		match_assert("c:\\halo\\SOURCE\\memory\\memory_pool.c", 356, block->trailer_signature==BLOCK_TRAILER_SIGNATURE);
 		match_assert("c:\\halo\\SOURCE\\memory\\memory_pool.c", 358, (byte *)block>=(byte *)pool->base_address);
 		match_assert("c:\\halo\\SOURCE\\memory\\memory_pool.c", 359, (byte *)block+block->size<=(byte *)pool->base_address+pool->size);

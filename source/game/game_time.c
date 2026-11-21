@@ -217,6 +217,12 @@ long game_time_get(
 {
 	match_assert("c:\\halo\\SOURCE\\game\\game_time.c", 463, game_time_globals && game_time_globals->initialized);
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: the render's clock, while a tick runs beside it, is the one of
+	the update whose state it draws (port/linux/include/tick_overlap.h) */
+	if (halo_epoch_render_overlapped())
+		return halo_tick_overlap_game_time;
+#endif
 	return game_time_globals->local_time;
 }
 
@@ -225,6 +231,13 @@ short game_time_get_elapsed(
 {
 	match_assert("c:\\halo\\SOURCE\\game\\game_time.c", 471, game_time_globals && game_time_globals->initialized);
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: the render's once-a-frame countdowns (flashes, shakes, titles)
+	count the ticks of the update whose state it draws, while the next one
+	runs beside it and has set its own count to 0 (tick_overlap.h) */
+	if (halo_epoch_render_overlapped())
+		return halo_tick_overlap_elapsed;
+#endif
 	return game_time_globals->last_local_time_elapsed;
 }
 
@@ -241,6 +254,11 @@ short local_time_get_elapsed(
 {
 	match_assert("c:\\halo\\SOURCE\\game\\game_time.c", 487, game_time_globals && game_time_globals->initialized);
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (as game_time_get_elapsed) */
+	if (halo_epoch_render_overlapped())
+		return halo_tick_overlap_elapsed;
+#endif
 	return game_time_globals->last_local_time_elapsed;
 }
 
@@ -308,6 +326,12 @@ real game_time_get_tick_fraction(
 {
 	real fraction;
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (the render's, while a tick runs beside it: the fraction the
+	update whose state it draws left, tick_overlap.h) */
+	if (halo_epoch_render_overlapped())
+		return halo_tick_overlap_fraction;
+#endif
 	if (!game_time_globals || !game_time_globals->active || game_time_globals->paused)
 		return 1.0f;
 	/* (no tick to blend toward: the clock running on into one that never

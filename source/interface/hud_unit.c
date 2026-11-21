@@ -417,12 +417,59 @@ static boolean hud_shield_drop_is_hit(
 	return !(last_shield_vitality > 1.0f && last_shield_vitality - shield_vitality <= 0.05f);
 }
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the HUD's warning sounds, with a tick beside the render
+(port/linux/include/tick_overlap.h): the sound manager is the tick's then,
+so the render's are played at the join, each local player's as the render
+asked for them */
+static struct
+{
+	long player_index;
+	boolean show_hud;
+} hud_unit_sounds_later[MAXIMUM_LOCAL_PLAYERS];
+static short hud_unit_sounds_later_count;
+
+static void hud_play_unit_sounds_at_join(
+	void)
+{
+	short index;
+	short count = hud_unit_sounds_later_count;
+
+	hud_unit_sounds_later_count = 0;
+	for (index = 0; index < count; index++)
+	{
+		struct player_datum const *player = player_try_and_get(hud_unit_sounds_later[index].player_index);
+
+		if (player)
+			hud_play_unit_sounds(player, hud_unit_sounds_later[index].show_hud);
+	}
+}
+#endif
+
 void hud_play_unit_sounds(
 	struct player_datum const *player,
 	boolean show_hud)
 {
-	struct unit_hud_state *hud_state = get_hud_state(player->local_player_index);
-	long unit_index = player->unit_index;
+	struct unit_hud_state *hud_state;
+	long unit_index;
+
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	if (halo_epoch_render_overlapped())
+	{
+		long player_index = local_player_get_player_index(player->local_player_index);
+
+		if (player_index != NONE && hud_unit_sounds_later_count < MAXIMUM_LOCAL_PLAYERS &&
+			(hud_unit_sounds_later_count || halo_tick_overlap_defer(hud_play_unit_sounds_at_join)))
+		{
+			hud_unit_sounds_later[hud_unit_sounds_later_count].player_index = player_index;
+			hud_unit_sounds_later[hud_unit_sounds_later_count].show_hud = show_hud;
+			hud_unit_sounds_later_count++;
+		}
+		return;
+	}
+#endif
+	hud_state = get_hud_state(player->local_player_index);
+	unit_index = player->unit_index;
 
 	if (unit_index == NONE)
 		unit_index = hud_state->last_unit_index;

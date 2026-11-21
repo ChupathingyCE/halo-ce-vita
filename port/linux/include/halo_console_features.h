@@ -431,6 +431,24 @@ HALO_CONSOLE_VIEW_INTERPOLATION
 	where the tick left them, as the H1 Performance Build drew them. The
 	native builds' blend of every object between ticks (about 0.5 MB more
 	on a busy map) is not made
+HALO_CONSOLE_TICK_OVERLAP
+	the game tick on a thread of its own beside the render
+	(port/linux/include/tick_overlap.h, port/linux/game/tick_overlap.c):
+	main_loop starts the frame's update there just before it draws and joins
+	it after the present, so the render draws the state the last update left
+	while the next one runs, and a frame takes about the longer of the two
+	instead of both. Nothing is copied but each moving object's nodes and
+	the clusters' object and light lists; what the tick deletes stays
+	readable to the render until the join. The tick computes what it
+	computes without the thread (tools/test_determinism.py --tick-overlap).
+	The port may give its waits, the tick's core and its clock
+	(console_tick_overlap_port_set) and the tick's stack
+	(HALO_CONSOLE_TICK_OVERLAP_STACK_SIZE, 8 MB by default).
+	HALO_TICK_OVERLAP=0 in the environment keeps the tick on the game's
+	thread (a test). It implies HALO_CONSOLE_VIEW_INTERPOLATION and draws
+	no frames of its own between ticks' snapshots (no smooth functions,
+	shakes or particle streams). configure.py --console-tick-overlap builds
+	it on Linux, to test it there; never a build to ship
 HALO_CONSOLE_FLICKER_FILTER
 	a console on a television whose flicker filter is a setting
 	(display.flicker_filter): the port gives the level, 0 to 5
@@ -517,6 +535,23 @@ compile lines: source/cseries/xbox_address.h).
 #define HALO_CONSOLE_ANIMATION_FRAMES 1
 #define HALO_CONSOLE_FEWER_WALKS 1
 #define HALO_CONSOLE_MARKER_LOOKUPS 1
+#endif
+
+/* a tick beside the render (above): the frames keep no snapshots between
+ticks, and make nothing of their own in the game state */
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+#ifndef HALO_CONSOLE_VIEW_INTERPOLATION
+#define HALO_CONSOLE_VIEW_INTERPOLATION 1
+#endif
+#ifndef HALO_CONSOLE_NO_SMOOTH_FUNCTIONS
+#define HALO_CONSOLE_NO_SMOOTH_FUNCTIONS
+#endif
+#ifndef HALO_CONSOLE_NO_PARTICLE_STREAMS
+#define HALO_CONSOLE_NO_PARTICLE_STREAMS
+#endif
+#ifndef HALO_CONSOLE_NO_SMOOTH_SHAKE
+#define HALO_CONSOLE_NO_SMOOTH_SHAKE
+#endif
 #endif
 
 #if !defined(HALO_XBOX_CONSOLE) || defined(HALO_CONSOLE_ANAMORPHIC_SCREEN)

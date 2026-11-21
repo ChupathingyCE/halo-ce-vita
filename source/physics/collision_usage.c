@@ -205,7 +205,13 @@ char const *global_collision_user_names[] =
 };
 
 boolean global_collision_log_enable = TRUE;
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the render's period and the tick's, apart (collision_usage.h) */
+short collision_usage_current_period_by_thread[2] = { NONE, NONE };
+#define collision_usage_current_period collision_usage_current_period_by_thread[halo_epoch_on_mutator()]
+#else
 short collision_usage_current_period = NONE;
+#endif
 
 boolean collision_log_render_enable = FALSE;
 boolean collision_log_detailed = FALSE;
@@ -213,9 +219,16 @@ boolean collision_log_extended = FALSE;
 boolean collision_log_totals_only = FALSE;
 boolean collision_log_time = FALSE;
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: (each thread's own: collision_usage.h) */
+short global_current_collision_user_depth_by_thread[2];
+
+short global_current_collision_users_by_thread[2][MAXIMUM_COLLISION_USER_STACK_DEPTH];
+#else
 short global_current_collision_user_depth = 0;
 
 short global_current_collision_users[MAXIMUM_COLLISION_USER_STACK_DEPTH];
+#endif
 
 struct collision_period collision_usage_buffer[NUMBER_OF_COLLISION_TIME_PERIODS];
 struct collision_period collision_usage_current;
@@ -248,6 +261,11 @@ void collision_log_initialize(
 
 	global_current_collision_users[global_current_collision_user_depth] = 0;
 	global_current_collision_user_depth = global_current_collision_user_depth + 1;
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (the tick thread's stack starts the same way) */
+	global_current_collision_users_by_thread[1][0] = 0;
+	global_current_collision_user_depth_by_thread[1] = 1;
+#endif
 
 	return;
 }

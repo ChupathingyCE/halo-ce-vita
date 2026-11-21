@@ -1264,6 +1264,84 @@ static real light_port_transition_fraction(
 	return duration > 0.0f ? MAX(elapsed, 0.0f) / duration : 1.0f;
 }
 
+/* port: a console's tick beside its render (port/linux/include/tick_overlap.h):
+what the render keeps of the lights apart from the tick's while a tick runs
+(defined here, after the functions above, so that their lines are as they
+were in the builds without it) */
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: whether a light is the first-person weapon's, the render's own while
+a tick runs beside it (tick_overlap.h): the render sets it on every light
+every frame, and its writes to the lights' flags took the tick's changes to
+them back (a light found still connected to the map as the tick reconnected
+it) */
+static byte light_render_first_person[MAXIMUM_LIGHTS_PER_MAP];
+
+static long light_render_slot(
+	struct light_datum const *light)
+{
+	long offset = (long)((byte const *)light - (byte const *)xbox_pointer(light_data->data));
+
+	if (offset < 0 || offset % light_data->size)
+		return NONE;
+	offset /= light_data->size;
+	return offset < MAXIMUM_LIGHTS_PER_MAP ? offset : NONE;
+}
+
+static boolean light_first_person_get(
+	struct light_datum const *light)
+{
+	if (halo_epoch_render_overlapped())
+	{
+		long slot = light_render_slot(light);
+
+		return slot != NONE && light_render_first_person[slot];
+	}
+	return TEST_FLAG(light->flags, _point_light_attached_to_first_person_weapon_bit);
+}
+
+static void light_first_person_set(
+	struct light_datum *light,
+	boolean first_person)
+{
+	if (halo_epoch_render_overlapped())
+	{
+		long slot = light_render_slot(light);
+
+		if (slot != NONE)
+			light_render_first_person[slot] = (byte)first_person;
+		return;
+	}
+	SET_FLAG(light->flags, _point_light_attached_to_first_person_weapon_bit, first_person);
+}
+#define LIGHT_FIRST_PERSON(light) light_first_person_get(light)
+#define LIGHT_FIRST_PERSON_SET(light, value) light_first_person_set((light), (value))
+#else
+#define LIGHT_FIRST_PERSON(light) TEST_FLAG((light)->flags, _point_light_attached_to_first_person_weapon_bit)
+#define LIGHT_FIRST_PERSON_SET(light, value) SET_FLAG((light)->flags, _point_light_attached_to_first_person_weapon_bit, (value))
+#endif
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the render's own light marks while a tick runs beside it
+(tick_overlap.h): the tick's queries mark the lights they reach while the
+render marks those it sees */
+static long light_render_marker;
+static boolean light_render_marker_initialized;
+static long light_render_magic_numbers[MAXIMUM_LIGHTS_PER_MAP];
+#define LIGHT_MARKER_INITIALIZED (halo_epoch_render_overlapped() ? light_render_marker_initialized : lights_globals.marker_initialized)
+#endif
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* (the render's light cluster cache and the tick's, apart: the render
+lights the objects it draws while the tick lights the units it updates
+(their illumination), each from its own; the render's writes stand for both) */
+static __typeof__(lights_port) lights_port_tick;
+static __typeof__(lights_port) *const lights_port_render = &lights_port;
+#define lights_port (*(halo_epoch_on_mutator() ? &lights_port_tick : lights_port_render))
+#define LIGHTS_PORT_RADIUS_WRITES lights_port_render->radius_writes
+static long render_cluster_get_first_light(long *reference_index, short cluster_index);
+static long render_cluster_get_next_light(long *reference_index);
+#else
+#define LIGHTS_PORT_RADIUS_WRITES lights_port.radius_writes
+#endif
+
 void lights_preprocess_scene(
 	void)
 {
@@ -1277,6 +1355,11 @@ void lights_preprocess_scene(
 	debug_rasterizer_light_count = 0;
 	/* port: the lights in order before they are drawn (a frame can come
 	between ticks: lights_port_recover) */
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* (by the tick after its update, while a tick runs beside the render:
+	lights_port_overlap_upkeep) */
+	if (!halo_epoch_render_overlapped())
+#endif
 	lights_port_recover();
 	/* port: the Light effects' glows, where they are drawn this frame */
 	plasma_lighting_update();
@@ -1286,17 +1369,20 @@ void lights_preprocess_scene(
 	{
 		struct light_datum *light = light_get(light_index);
 
-		SET_FLAG(
-			light->flags,
-			_point_light_attached_to_first_person_weapon_bit,
-			FALSE);
+		LIGHT_FIRST_PERSON_SET(light, FALSE);
 		light->rasterizer_light_index = NONE;
 		lights_port.radius_writes++;
 		/* port: an attached light the Light effects light from, taken for
 		the frame (plasma_lighting.c) */
 		if (light->parent_light_index == NONE)
 			plasma_lighting_prepare(light_index, light->object_index, light->definition_index);
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+		/* (a light's end and its clusters: by the tick after its update,
+		while a tick runs beside the render, lights_port_overlap_upkeep) */
+		if (light->parent_light_index != NONE && !halo_epoch_render_overlapped())
+#else
 		if (light->parent_light_index != NONE)
+#endif
 		{
 			struct point_light_definition *definition = light_definition_get(
 				light->definition_index);
@@ -1324,8 +1410,15 @@ void lights_preprocess_scene(
 	lights_globals.scene_point_light_count = structure_visibility_find_objects(
 		lights_globals.scene_point_lights,
 		MAXIMUM_RENDERED_LIGHTS,
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+		/* port: (the clusters' lights as the last update left them, while a
+		tick runs beside the render: tick_overlap.h) */
+		halo_tick_overlap_lists_active(_tick_overlap_list_light) ? render_cluster_get_first_light : cluster_get_first_light,
+		halo_tick_overlap_lists_active(_tick_overlap_list_light) ? render_cluster_get_next_light : cluster_get_next_light,
+#else
 		cluster_get_first_light,
 		cluster_get_next_light,
+#endif
 		light_get_bounding_sphere,
 		light_unmarked,
 		light_mark);
@@ -1574,10 +1667,7 @@ void lights_preprocess_scene(
 						}
 						if (adjusted)
 						{
-							SET_FLAG(
-								light->flags,
-								_point_light_attached_to_first_person_weapon_bit,
-								TRUE);
+							LIGHT_FIRST_PERSON_SET(light, TRUE);
 						}
 					}
 
@@ -1602,7 +1692,7 @@ void lights_preprocess_scene(
 					(door_portals.c). Not a first-person weapon's supersized
 					light, which lights everything in view */
 					if (light->rasterizer_light_index != NONE &&
-						!(TEST_FLAG(light->flags, _point_light_attached_to_first_person_weapon_bit) &&
+						!(LIGHT_FIRST_PERSON(light) &&
 							TEST_FLAG(definition->flags, _light_definition_supersize_in_first_person_bit)))
 					{
 						real_point3d partition_center;
@@ -1974,6 +2064,14 @@ void lights_reconnect_to_structure_bsp(
 static void light_marker_begin(
 	void)
 {
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	if (halo_epoch_render_overlapped())
+	{
+		light_render_marker++;
+		light_render_marker_initialized = TRUE;
+		return;
+	}
+#endif
 	match_assert(
 		"c:\\halo\\SOURCE\\objects\\object_lights.c",
 		0x664,
@@ -1988,6 +2086,21 @@ static boolean light_mark(
 	long light_index)
 {
 	struct light_datum *light = light_get(light_index);
+
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	if (halo_epoch_render_overlapped())
+	{
+		long absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(light_index);
+
+		if (absolute_index < 0 || absolute_index >= MAXIMUM_LIGHTS_PER_MAP ||
+			light_render_magic_numbers[absolute_index] == light_render_marker)
+		{
+			return FALSE;
+		}
+		light_render_magic_numbers[absolute_index] = light_render_marker;
+		return TRUE;
+	}
+#endif
 
 	match_assert(
 		"c:\\halo\\SOURCE\\objects\\object_lights.c",
@@ -2007,6 +2120,16 @@ static boolean light_unmarked(
 {
 	struct light_datum *light = light_get(light_index);
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	if (halo_epoch_render_overlapped())
+	{
+		long absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(light_index);
+
+		return absolute_index < 0 || absolute_index >= MAXIMUM_LIGHTS_PER_MAP ||
+			light_render_magic_numbers[absolute_index] != light_render_marker;
+	}
+#endif
+
 	match_assert(
 		"c:\\halo\\SOURCE\\objects\\object_lights.c",
 		0x66F,
@@ -2022,6 +2145,13 @@ static boolean light_unmarked(
 static void light_marker_end(
 	void)
 {
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	if (halo_epoch_render_overlapped())
+	{
+		light_render_marker_initialized = FALSE;
+		return;
+	}
+#endif
 	match_assert(
 		"c:\\halo\\SOURCE\\objects\\object_lights.c",
 		0x68E,
@@ -2154,6 +2284,69 @@ static long cluster_get_next_light(
 		reference_index);
 }
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the clusters' lights as the last update left them, for the render
+while a tick runs beside it (tick_overlap.c): the tick takes a moving
+light (the flashlight) out of its clusters and puts it back every tick, and
+a walk of the live lists then missed it */
+static long render_cluster_get_first_light(
+	long *reference_index,
+	short cluster_index)
+{
+	return halo_tick_overlap_list_first(_tick_overlap_list_light, reference_index, cluster_index);
+}
+
+static long render_cluster_get_next_light(
+	long *reference_index)
+{
+	return halo_tick_overlap_list_next(_tick_overlap_list_light, reference_index);
+}
+
+/* port: the render's upkeep of the lights (lights_preprocess_scene's: the
+lights in order, a transition's end, a light that moves with its object put
+in its clusters again), done by the tick thread after its update while a
+tick runs beside the render: where it ran without the thread, before the
+frame of that update is drawn, and by the thread that makes and deletes the
+lights (tick_overlap.c) */
+void lights_port_overlap_upkeep(
+	void)
+{
+	long current_time = game_time_get();
+	long light_index;
+
+	if (!light_data || !light_data->valid)
+		return;
+	lights_port_recover();
+	for (light_index = data_next_index(light_data, NONE);
+		light_index != NONE;
+		light_index = data_next_index(light_data, light_index))
+	{
+		struct light_datum *light = light_get(light_index);
+
+		if (light->parent_light_index != NONE)
+		{
+			struct point_light_definition *definition = light_definition_get(
+				light->definition_index);
+			real elapsed = (real)(current_time - light->parent_light_index);
+
+			if (elapsed > definition->transition_duration)
+			{
+				cluster_partition_disconnect(
+					&light_cluster_partition,
+					light_index,
+					&light_get(light_index)->cluster_reference);
+				datum_delete(light_data, light_index);
+			}
+			else if (object_try_and_get(light->object_index))
+			{
+				light_disconnect_from_map(light_index);
+				light_reconnect_to_map(light_index);
+			}
+		}
+	}
+}
+#endif
+
 static void light_compute_bounding_sphere(
 	long light_index,
 	boolean maximum,
@@ -2273,7 +2466,7 @@ static void light_port_drawn_center(
 
 	if (light->rasterizer_light_index < 0 ||
 		light->rasterizer_light_index >= rasterizer_lights.light_count ||
-		TEST_FLAG(light->flags, _point_light_attached_to_first_person_weapon_bit))
+		LIGHT_FIRST_PERSON(light))
 	{
 		return;
 	}
@@ -2373,7 +2566,7 @@ static void port_dynamic_lights_choose(
 		if (!TEST_FLAG(light->flags, _point_light_dynamic_bit) || light->rasterizer_light_index == NONE)
 			continue;
 		/* (ranked, the first-person weapon's first) */
-		if (TEST_FLAG(light->flags, _point_light_attached_to_first_person_weapon_bit))
+		if (LIGHT_FIRST_PERSON(light))
 		{
 			sizes[light_index] = REAL_MAX;
 			frame_first_person++;
@@ -2452,8 +2645,7 @@ void lights_render_diffuse(
 				&& light->rasterizer_light_index != NONE
 				&& port_dynamic_light_kept[light_index])
 			{
-				boolean skip_clusters = TEST_FLAG(light->flags,
-						_point_light_attached_to_first_person_weapon_bit)
+				boolean skip_clusters = LIGHT_FIRST_PERSON(light)
 					&& TEST_FLAG(light_definition_get(light->definition_index)->flags,
 						_light_definition_supersize_in_first_person_bit);
 				short cluster_count = 0;
@@ -2525,8 +2717,7 @@ void lights_render_specular(
 				&& !TEST_FLAG(light_definition_get(light->definition_index)->flags,
 					_light_definition_no_specular_bit))
 			{
-				boolean skip_clusters = TEST_FLAG(light->flags,
-						_point_light_attached_to_first_person_weapon_bit)
+				boolean skip_clusters = LIGHT_FIRST_PERSON(light)
 					&& TEST_FLAG(light_definition_get(light->definition_index)->flags,
 						_light_definition_supersize_in_first_person_bit);
 				short cluster_count = 0;
@@ -2849,10 +3040,13 @@ static boolean lights_port_cluster(
 	short *first_entry,
 	short *entry_count)
 {
-	unsigned long generation = 1 + light_cluster_partition.port_modification_count + lights_port.radius_writes;
+	unsigned long generation = 1 + light_cluster_partition.port_modification_count + LIGHTS_PORT_RADIUS_WRITES;
 	long reference_index;
 	long light_index;
 	short first;
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	boolean listed;
+#endif
 
 	if (cluster_index < 0 || cluster_index >= MAXIMUM_CLUSTERS_PER_STRUCTURE)
 		return FALSE;
@@ -2864,9 +3058,21 @@ static boolean lights_port_cluster(
 	if (lights_port.cluster_generations[cluster_index] != generation)
 	{
 		first = lights_port.entry_count;
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+		/* port: (the render's walk, while a tick runs beside it, of the
+		clusters' lights as the last update left them: tick_overlap.h) */
+		listed = halo_tick_overlap_lists_active(_tick_overlap_list_light);
+
+		for (light_index = listed ? render_cluster_get_first_light(&reference_index, cluster_index) :
+				cluster_partition_get_first_datum(&light_cluster_partition, &reference_index, cluster_index);
+			light_index != NONE;
+			light_index = listed ? render_cluster_get_next_light(&reference_index) :
+				cluster_partition_get_next_datum(&light_cluster_partition, &reference_index))
+#else
 		for (light_index = cluster_partition_get_first_datum(&light_cluster_partition, &reference_index, cluster_index);
 			light_index != NONE;
 			light_index = cluster_partition_get_next_datum(&light_cluster_partition, &reference_index))
+#endif
 		{
 			struct light_datum *light = light_get(light_index);
 			struct lights_port_entry *entry;
@@ -2914,10 +3120,17 @@ static void find_point_lights_for_object_in_cluster(
 	long reference_index;
 	short first_entry, entry_count;
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	match_assert(
+		"c:\\halo\\SOURCE\\objects\\object_lights.c",
+		0x544,
+		LIGHT_MARKER_INITIALIZED);
+#else
 	match_assert(
 		"c:\\halo\\SOURCE\\objects\\object_lights.c",
 		0x544,
 		lights_globals.marker_initialized);
+#endif
 	/* port: the cluster's lights as kept (lights_port_cluster). A light too
 	far to reach the object is passed over: the Xbox's loop tested it the
 	same, on the same position and radius, and rejected it. Left unmarked, it

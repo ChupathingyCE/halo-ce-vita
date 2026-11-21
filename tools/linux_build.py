@@ -380,6 +380,11 @@ def game_browser_defines(sln: Any) -> List[str]:
     # on the desktop; never a build to ship
     if getattr(sln, "console_limits", False):
         defines.append("-DHALO_CONSOLE_LIMITS")
+    # configure.py --console-tick-overlap: a console's tick beside its render
+    # (port/linux/include/tick_overlap.h), to test it on the desktop (its
+    # determinism: tools/test_determinism.py --tick-overlap); never a build to ship
+    if getattr(sln, "console_tick_overlap", False):
+        defines.append("-DHALO_CONSOLE_TICK_OVERLAP")
     # configure.py --packaged: a package manager's build, which never
     # updates itself (port/linux/src/packaged_install.h)
     if getattr(sln, "packaged", False):
@@ -964,7 +969,8 @@ def generate_linux_build(n: Writer, sln: Any) -> None:
                          # configure.py --packaged and --console-limits (game_browser_defines),
                          # which the game's own units (source/) take too
                          + (["-DHALO_PACKAGED"] if getattr(sln, "packaged", False) else [])
-                         + (["-DHALO_CONSOLE_LIMITS"] if getattr(sln, "console_limits", False) else []))
+                         + (["-DHALO_CONSOLE_LIMITS"] if getattr(sln, "console_limits", False) else [])
+                         + (["-DHALO_CONSOLE_TICK_OVERLAP"] if getattr(sln, "console_tick_overlap", False) else []))
 
     def emit(obj_dir: Path, output: Path, extra_cflags: List[str], extra_ldflags: List[str],
              implicit_inputs: List[Path], validator: Optional[Path] = None) -> None:

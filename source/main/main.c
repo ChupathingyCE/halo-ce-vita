@@ -4254,11 +4254,18 @@ static void main_game_render(
 	MAIN_STAGE("render: collision_log_continue_period");
 	collision_log_continue_period(TRUE);
 	MAIN_STAGE("render: sound_render");
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (with a tick beside the render, the tick thread's, after its
+	update: port/linux/include/tick_overlap.h) */
+	if (!halo_epoch_render_overlapped())
+#endif
+	{
 	HALO_PERF_BEGIN(_halo_perf_sound);
 	HALO_PERF_BEGIN(_halo_perf_render_sound);
 	sound_render();
 	HALO_PERF_END(_halo_perf_render_sound);
 	HALO_PERF_END(_halo_perf_sound);
+	}
 	force_single_screen = game_engine_force_single_screen();
 	last_local_player_index = NONE;
 
@@ -4360,6 +4367,14 @@ void main_loop(
 {
 	boolean render_frame;
 	long connection;
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: this frame's update runs beside its render, on the tick thread
+	(port/linux/include/tick_overlap.h): started once the frame's other
+	updates are done, joined after the frame is presented */
+	boolean tick_overlapped = FALSE;
+	boolean tick_started = FALSE;
+	real tick_delta = 0.f;
+#endif
 
 	if (!game_in_editor())
 	{
@@ -4750,8 +4765,15 @@ void main_loop(
 					}
 					HALO_PERF_END(_halo_perf_network);
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+					tick_delta = (real)main_globals.halt_time_scale*main_globals.seconds_elapsed;
+					tick_overlapped = halo_tick_overlap_wanted();
+					if (!tick_overlapped)
+#endif
+					{
 					MAIN_STAGE("game_time_update");
 					game_time_update((real)main_globals.halt_time_scale*main_globals.seconds_elapsed);
+					}
 
 					render_frame = main_globals.main_menu_scenario_loaded ||
 						(main_globals.halt_time_scale &&
@@ -4796,11 +4818,36 @@ void main_loop(
 					game_engine_update_non_deterministic((real)main_globals.halt_time_scale*main_globals.seconds_elapsed);
 				}
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+				/* (with the update beside the render, the save comes after
+				it: below) */
+				if (main_globals.saving_map && !tick_overlapped)
+#else
 				if (main_globals.saving_map)
+#endif
 				{
 					MAIN_STAGE("main_save_map_private");
 					main_save_map_private();
 				}
+
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+				/* port: the update on the tick thread, beside the render of the
+				last update's state; a frame that draws nothing runs it here */
+				if (tick_overlapped)
+				{
+					if (render_frame && !debug_no_drawing && global_structure_bsp_try_and_get())
+					{
+						MAIN_STAGE("halo_tick_overlap_start");
+						halo_tick_overlap_start(tick_delta);
+						tick_started = TRUE;
+					}
+					else
+					{
+						MAIN_STAGE("game_time_update");
+						game_time_update(tick_delta);
+					}
+				}
+#endif
 
 				if (render_frame && !debug_no_drawing)
 				{
@@ -4852,6 +4899,22 @@ void main_loop(
 				main_present_frame();
 				HALO_PERF_END(_halo_perf_present);
 			}
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+			if (tick_started)
+			{
+				MAIN_STAGE("halo_tick_overlap_join");
+				halo_tick_overlap_join();
+				tick_started = FALSE;
+			}
+			/* (a save the update asked for: after it, as without the thread,
+			where the update ran before the save in the same frame) */
+			if (tick_overlapped && game_in_progress() && main_globals.saving_map)
+			{
+				MAIN_STAGE("main_save_map_private");
+				main_save_map_private();
+			}
+			tick_overlapped = FALSE;
+#endif
 		}
 
 		MAIN_STAGE("input_frame_end");

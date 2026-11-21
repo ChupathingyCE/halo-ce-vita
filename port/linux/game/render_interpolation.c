@@ -278,6 +278,19 @@ static struct smoothed_flashlight smoothed_flashlights[SMOOTHED_FLASHLIGHT_COUNT
 static boolean smoothed_flashlights_ready;
 #endif
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* (the render's frame and the tick's, apart, with the tick beside the
+render: game_time_update's frame effects begin a frame of their own on the
+tick's thread while the render draws one; port/linux/include/tick_overlap.h) */
+static long interpolation_frame_by_thread[2];
+static boolean interpolation_rendering_by_thread[2];
+static real interpolation_fraction_by_thread[2] = { 1.0f, 1.0f };
+static long view_between_tick_by_thread[2] = { -2, -2 };
+#define interpolation_frame interpolation_frame_by_thread[halo_epoch_on_mutator()]
+#define interpolation_rendering interpolation_rendering_by_thread[halo_epoch_on_mutator()]
+#define interpolation_fraction interpolation_fraction_by_thread[halo_epoch_on_mutator()]
+#define view_between_tick view_between_tick_by_thread[halo_epoch_on_mutator()]
+#else
 static long interpolation_frame;
 static boolean interpolation_rendering;
 #ifdef HALO_PORT_RAGDOLLS
@@ -290,6 +303,7 @@ static real interpolation_fraction = 1.0f;
 /* the last tick a frame was drawn between ticks in (the console is drawing
 at 60, not one frame a tick) */
 static long view_between_tick = -2;
+#endif
 #endif
 
 /* ---------- blending */

@@ -48,7 +48,10 @@ static const struct
 static int level_read(void)
 {
 #if defined(HALO_GL_ES) || defined(HALO_ANDROID) || defined(HALO_CONSOLE) || defined(HALO_XBOX_CONSOLE) || \
-	defined(HALO_CONSOLE_GL_LAYER) || defined(HALO_SERVER)
+	defined(HALO_CONSOLE_GL_LAYER) || defined(HALO_SERVER) || defined(HALO_CONSOLE_TICK_OVERLAP)
+	/* (and a build with a console's tick beside its render: the Light
+	effects' lights are changed by the render for the frame, which the tick
+	beside it would read) */
 	return _level_off;
 #else
 	const char *level = config_string("display.light_effects");

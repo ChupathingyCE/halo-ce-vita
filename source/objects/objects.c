@@ -835,9 +835,28 @@ void object_scripting_set_collideable(
 	return;
 }
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the render's own object marks while a tick runs beside it
+(port/linux/include/tick_overlap.h): the tick marks the objects its
+collision tests reach while the render marks those it sees, each in its own
+marks (the objects' magic numbers are the tick's) */
+static long object_render_marker;
+static boolean object_render_marker_initialized;
+static long object_render_magic_numbers[MAXIMUM_OBJECTS_PER_MAP];
+#endif
+
 void object_marker_begin(
 	void)
 {
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	if (halo_epoch_render_overlapped())
+	{
+		match_assert("c:\\halo\\SOURCE\\objects\\objects.c", 3503, !object_render_marker_initialized);
+		++object_render_marker;
+		object_render_marker_initialized = TRUE;
+		return;
+	}
+#endif
 	match_assert("c:\\halo\\SOURCE\\objects\\objects.c", 3503, !object_globals->object_marker_initialized);
 
 	++global_object_marker;
@@ -849,6 +868,13 @@ void object_marker_begin(
 void object_marker_end(
 	void)
 {
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	if (halo_epoch_render_overlapped())
+	{
+		object_render_marker_initialized = FALSE;
+		return;
+	}
+#endif
 	match_assert("c:\\halo\\SOURCE\\objects\\objects.c", 3514, object_globals->object_marker_initialized);
 
 	object_globals->object_marker_initialized = FALSE;
@@ -861,6 +887,16 @@ boolean object_unmarked_function(
 {
 	struct object_datum *object = object_get(object_index);
 	boolean result;
+
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	if (halo_epoch_render_overlapped())
+	{
+		long absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(object_index);
+
+		return absolute_index < 0 || absolute_index >= MAXIMUM_OBJECTS_PER_MAP ||
+			object_render_magic_numbers[absolute_index] != object_render_marker;
+	}
+#endif
 
 	match_assert("c:\\halo\\SOURCE\\objects\\objects.c", 3526, object_globals->object_marker_initialized);
 
@@ -875,6 +911,20 @@ boolean object_mark_function(
 	boolean result;
 	struct object_datum *object = object_get(object_index);
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	if (halo_epoch_render_overlapped())
+	{
+		long absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(object_index);
+
+		if (absolute_index < 0 || absolute_index >= MAXIMUM_OBJECTS_PER_MAP ||
+			object_render_magic_numbers[absolute_index] == object_render_marker)
+		{
+			return FALSE;
+		}
+		object_render_magic_numbers[absolute_index] = object_render_marker;
+		return TRUE;
+	}
+#endif
 	match_assert("c:\\halo\\SOURCE\\objects\\objects.c", 3543, object_globals->object_marker_initialized);
 
 	if (object->object.magic_number!=global_object_marker)
@@ -1357,6 +1407,17 @@ short object_get_first_cluster(
 real_matrix4x3 *object_get_node_matrices(
 	long object_index)
 {
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: while a tick runs beside the render, the render draws the poses
+	the last update left (port/linux/include/tick_overlap.h) */
+	if (halo_epoch_render_overlapped())
+	{
+		real_matrix4x3 *posed = halo_tick_overlap_node_matrices(object_index);
+
+		if (posed)
+			return posed;
+	}
+#endif
 #ifndef HALO_CONSOLE_VIEW_INTERPOLATION
 	/* while a frame is drawn, the pose between the last two ticks
 	(port/linux/game/render_interpolation.c; a console that moves only the
@@ -2050,6 +2111,16 @@ real_matrix4x3 *object_get_node_matrix(
 
 		if (interpolated)
 			return &interpolated[node_index];
+	}
+#endif
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: (the render's poses while a tick runs: above) */
+	if (halo_epoch_render_overlapped())
+	{
+		real_matrix4x3 *posed = halo_tick_overlap_node_matrices(object_index);
+
+		if (posed)
+			return &posed[node_index];
 	}
 #endif
 	return &((real_matrix4x3 *)object_header_block_get(object_index, &object_get(object_index)->object.node_matrices))[node_index];
@@ -3576,6 +3647,11 @@ long object_new(
 {
 	long object_index = NONE;
 	long definition_index = data->definition_index;
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	/* port: what the tick makes for the object is hidden from a render
+	beside it until the object is complete (tick_overlap.h) */
+	unsigned long epoch_scope = halo_epoch_scope_begin();
+#endif
 
 	match_assert_valid_real_point3d("c:\\halo\\SOURCE\\objects\\objects.c", 618, &data->position)
 	match_assert_valid_real_vector3d_axes2("c:\\halo\\SOURCE\\objects\\objects.c", 619, &data->forward, &data->up);
@@ -3839,6 +3915,9 @@ long object_new(
 		error(_error_log, "%s", string);
 	}
 	
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+	halo_epoch_scope_ready(epoch_scope);
+#endif
 	return object_index;
 }
 

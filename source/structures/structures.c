@@ -226,7 +226,15 @@ typedef char verify_structure_runtime_globals_size[
 
 /* ---------- globals */
 
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+/* port: the render's cluster marks and the tick's, apart, with the tick
+beside the render (port/linux/include/tick_overlap.h): the render marks the
+clusters it sees while the tick marks those a collision test reaches */
+static struct structure_runtime_globals structure_globals_by_thread[2];
+#define structure_globals structure_globals_by_thread[halo_epoch_on_mutator()]
+#else
 static struct structure_runtime_globals structure_globals;
+#endif
 /* port: whether a map's malformed cluster portal was reported (once) */
 static boolean structure_warned_about_portal_vertices;
 
