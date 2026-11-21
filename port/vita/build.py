@@ -147,8 +147,28 @@ CONSOLE_FEATURES = [
     "-DHALO_CONSOLE_VIEW_INTERPOLATION",
     # the level's surfaces walked as the original game walks them by default:
     # the culling's tests cost the Vita's processor more than the GPU work
-    # they save (overrides/port/linux/src/port_config.c until upstream has it)
+    # they save
     "-DHALO_CONSOLE_NO_STRUCTURE_CULLING",
+    # the same results with less of the processor (each from Halo CE Vita's
+    # work, merged upstream): fewer walks over whole arrays for a deleted
+    # object and an lruv cache, the last 128 marker lookups remembered, an
+    # animation's frame index without the library's floor
+    "-DHALO_CONSOLE_FEWER_WALKS",
+    "-DHALO_CONSOLE_MARKER_LOOKUPS",
+    "-DHALO_CONSOLE_ANIMATION_FRAMES",
+    # the Xbox's own maps: tables sized for them (lens flare results, the
+    # vehicles that respawn), about 135 KB less
+    "-DHALO_CONSOLE_XBOX_MAP_SIZES",
+    # a still prop's node matrices left as they are when nothing they are
+    # made from changed: the same matrices (overrides/source/objects/objects.c
+    # until upstream has it)
+    "-DHALO_CONSOLE_STATIC_SCENERY",
+    # the collision tests' caches (#1620, #1624: overrides until merged): a
+    # location's weather and water from a table by cluster, sound
+    # obstruction rays that stop at the first hit and reuse a repeated ray
+    "-DHALO_CONSOLE_COLLISION_CACHES",
+    # the Xbox's own particle limit (1024: its pool holds no more)
+    "'-DHALO_CONSOLE_PARTICLE_LIMIT=\"1024\"'",
 ]
 
 # the game's C89, as MSVC took it
@@ -387,9 +407,13 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     overrides_dir = port_dir / "overrides"
     overrides_left: Set[str] = {path.relative_to(overrides_dir).as_posix() for path in overrides_dir.rglob("*")
                                 if path.is_file() and path.suffix in (".c", ".h")} if overrides_dir.is_dir() else set()
-    override_includes = " ".join(f"-I{_quote(overrides_dir / where)}" for where in
-                                 ("source/cseries", "port/linux/src", "port/linux/include", "port/linux/game")
+    header_folders = ("source/cseries", "source/objects", "source/physics", "source/scenario", "port/linux/src",
+                      "port/linux/include", "port/linux/game")
+    # (and source itself, for the game's "scenario/scenario.h" form)
+    override_includes = " ".join(f"-I{_quote(overrides_dir / where)}" for where in ("source",) + header_folders
                                  if (overrides_dir / where).is_dir())
+    # (a header override is found first in those folders: in use)
+    overrides_left -= {name for name in overrides_left if name.endswith(".h") and name.rsplit("/", 1)[0] in header_folders}
     additions = {name for name in overrides_left if name.startswith("port/linux/game/") and name.endswith(".c")
                  and not (game / name).is_file()}
 

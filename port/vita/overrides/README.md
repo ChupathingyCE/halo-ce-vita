@@ -2,8 +2,9 @@
 
 **The submodule's pin.** Until ChupathingyCE/chupathingyce#1549
 (`HALO_CONSOLE_WINDOW_LOW`, the Vita's block in `halo_console_features.h`) is
-merged, `chupathingyce` is pinned to that pull request's branch,
-`console-window-low`, which only a local clone has. Once it merges, repin to
+merged, `chupathingyce` is pinned to a local merge of that pull request's
+branch, `console-window-low`, with `main` (branch `vita-perf2-base`: main of
+Nov 21, dd64ad420), which only a local clone has. Once it merges, repin to
 `main` (`git -C chupathingyce checkout <main's commit>`, then commit the new
 pin). That change is not kept here as an override: the translated layout
 needs it in every unit.
@@ -34,13 +35,20 @@ again. `#ifdef HALO_VITA_CONSOLE` only. Upstream PR candidate: a
 `paths.maps` setting every build could use (a maps folder apart from the
 data root).
 
-## port/linux/src/port_config.c
+## source/objects/objects.c, objects.h, source/saved games/game_state.c
 
-`debug.structure_culling` defaults to false on a console that defines
-`HALO_CONSOLE_NO_STRUCTURE_CULLING` (the Vita does, in `build.py`): the
-culling's per-surface and per-triangle tests cost the Vita's processor more
-than the GPU work they save (b30's visibility walk 9 ms a frame with them,
-4.7 without). The player can still turn it on in config.toml. Upstream PR
-candidate: "Consoles: structure culling off by default where the processor
-is the limit" (the same change, with the capability documented in
-`halo_console_features.h`).
+A still prop's node matrices left as they are when nothing they are made
+from has changed (`HALO_CONSOLE_STATIC_SCENERY`, on in `build.py`): b30's
+objects step 1-2 ms a tick less. Upstream PR candidate, prepared:
+"Consoles: a still prop's node matrices kept when nothing they are made from
+changed" (branch `birchwood-console-static-scenery`).
+
+## source/physics/collisions.c, collisions.h, source/scenario/scenario.c, scenario.h, wind.c, source/sound/game_sound.c, source/units/units.c, source/structures/structure_render.c
+
+Four pull requests open upstream, from Halo CE Vita's work, merged together
+as they will be: #1624 (sound obstruction rays stop at the first hit and
+reuse a repeated ray) and #1620 (a location's weather and water from a table
+by cluster), both `HALO_CONSOLE_COLLISION_CACHES`, on in `build.py`; #1626 (a
+unit's illumination refreshed only for its debug line); #1583 (the structure
+render's surface lists sorted inline, the visible bits walked by set bit).
+Each file goes when its pull request is merged.
