@@ -351,6 +351,48 @@ if [ -d "$depotcache" ]; then
 		grep -q "^WORKSHOP .* 0 refused" "$out/ws_$(basename "$manifest").txt" && taken=$((taken + 1)) || refused=$((refused + 1))
 	done
 	[ "$n" = 0 ] || echo "  Workshop item manifests (depot 976730): $n, $taken with no name refused, $refused refused or unreadable"
+	# (every one's CRC as steam_manifest_crc_ok checks it: the depotcache's names are clear, so crc_clear)
+	n=0 bad=0
+	for manifest in "$depotcache"/97673*_*.manifest; do
+		[ -f "$manifest" ] || continue
+		n=$((n + 1))
+		"$out/steam_manifest_dump" -c "$manifest" > "$out/crc_$(basename "$manifest").txt" 2>&1 ||
+			{ bad=$((bad + 1)); echo "FAIL crc $(basename "$manifest"): $(cat "$out/crc_$(basename "$manifest").txt")"; status=1; }
+	done
+	[ "$n" = 0 ] || echo "  CRC of the depotcache's MCC manifests (names clear, crc_clear): $n, $bad bad"
+fi
+
+# REAL manifests from Steam's CDN, names encrypted as the CDN sends them (1.1.3-insider.7 refused every one: it checked
+# crc_clear, which the CDN leaves 0). STEAM_REAL=1 first fetches fresh ones with NO account: steam_real_probe signs in
+# as an anonymous Steam user and reads free depots (app 1007 depot 1006, app 232250 depot 232256) through the
+# download's own code - the logon's Multis, app info, depot key, request code, CDN, manifest, one chunk decoded.
+# STEAM_REAL_MANIFESTS (default ~/halo-test-out/steamfix-out/real-manifests) keeps the zips; each one's CRC is checked.
+real=${STEAM_REAL_MANIFESTS:-$HOME/halo-test-out/steamfix-out/real-manifests}
+if [ "${STEAM_REAL:-0}" = 1 ]; then
+	echo "--- real (Steam's servers, anonymous, free depots)"
+	mkdir -p "$real"
+	$cc $flags -DSTEAM_SESSION_ANONYMOUS "$here/steam_real_probe.c" $steam "$root/port/steamdl/steam_net.c" \
+		"$root/port/linux/src/posix_https.c" "$root/port/linux/src/posix_net.c" "$out"/obj/*.o -lpthread \
+		-o "$out/steam_real_probe"
+	for pair in "1007 1006" "232250 232256"; do
+		# (shellcheck: word splitting wanted)
+		"$out/steam_real_probe" $pair "$real" > "$out/real_$(echo $pair | tr ' ' _).txt" 2>&1 || true
+		if grep -q "^REAL OK" "$out/real_$(echo $pair | tr ' ' _).txt"; then
+			echo "  app/depot $pair: $(grep -E '^(manifest|chunk):' "$out/real_$(echo $pair | tr ' ' _).txt" | tr '\n' ' ')"
+		else
+			echo "FAIL real $pair: $(grep -E '^REAL' "$out/real_$(echo $pair | tr ' ' _).txt")"; status=1
+		fi
+	done
+fi
+if [ -d "$real" ]; then
+	n=0
+	for manifest in "$real"/*.zip; do
+		[ -f "$manifest" ] || continue
+		n=$((n + 1))
+		line=$("$out/steam_manifest_dump" -c "$manifest" 2>&1) || { echo "FAIL real manifest $(basename "$manifest"): $line"; status=1; }
+		case "$line" in *"names encrypted"*) ;; *) echo "FAIL real manifest $(basename "$manifest") is not the CDN's form: $line"; status=1;; esac
+	done
+	[ "$n" = 0 ] || echo "  real CDN manifests (names encrypted, crc_encrypted): $n checked"
 fi
 
 seconds=${STEAM_FUZZ_SECONDS:-0}

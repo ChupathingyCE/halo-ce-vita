@@ -21,7 +21,7 @@ manifests are not encrypted.
 #include <stdlib.h>
 #include <string.h>
 
-static int plan_mode, workshop_mode;
+static int plan_mode, workshop_mode, crc_mode;
 static unsigned int workshop_counts[3];
 static unsigned long long workshop_bytes;
 static unsigned long long plan_bytes, plan_download, plan_chunks;
@@ -85,9 +85,11 @@ int main(int argc, char **argv)
 		plan_mode = 1, argi++;
 	else if (argc > 1 && !strcmp(argv[1], "-w"))
 		workshop_mode = 1, argi++;
+	else if (argc > 1 && !strcmp(argv[1], "-c"))
+		crc_mode = 1, argi++;
 	if (argi + 1 != argc)
 	{
-		fprintf(stderr, "usage: steam_manifest_dump [-p|-w] <manifest>\n");
+		fprintf(stderr, "usage: steam_manifest_dump [-p|-w|-c] <manifest>\n");
 		return 2;
 	}
 	file = fopen(argv[argi], "rb");
@@ -112,6 +114,27 @@ int main(int argc, char **argv)
 		free(data);
 		data = unzipped;
 		size = (long)entry;
+	}
+	if (crc_mode)
+	{
+		uint32_t crc = 0;
+		int parsed = steam_manifest_parse(data, (size_t)size, NULL, &metadata, NULL, NULL, error, sizeof(error)) == 0;
+		int ok;
+
+		/* (names encrypted and no key: the metadata is read all the same, the files are not) */
+		if (!parsed && !metadata.filenames_encrypted)
+		{
+			fprintf(stderr, "refused: %s\n", error);
+			return 1;
+		}
+		ok = steam_manifest_crc_ok(data, (size_t)size, &metadata);
+		steam_manifest_crc(data, (size_t)size, &crc);
+		printf("CRC %s depot %u gid %llu names %s: payload %08x, crc_encrypted %08x, crc_clear %08x\n", ok ? "ok" : "BAD",
+			(unsigned int)metadata.depot_id, (unsigned long long)metadata.gid,
+			metadata.filenames_encrypted ? "encrypted" : "clear", (unsigned int)crc, (unsigned int)metadata.crc_encrypted,
+			(unsigned int)metadata.crc_clear);
+		free(data);
+		return ok ? 0 : 1;
 	}
 	{
 		/* (the depot from the metadata, before the files) */
@@ -139,7 +162,7 @@ int main(int argc, char **argv)
 			(unsigned int)metadata.depot_id, (unsigned long long)metadata.gid, plan_files, plan_bytes / 1e6,
 			plan_download / 1e6, plan_chunks);
 	else
-		fprintf(stderr, "depot %u gid %llu encrypted %d unique_chunks %u crc_clear %s\n", (unsigned int)metadata.depot_id,
+		fprintf(stderr, "depot %u gid %llu encrypted %d unique_chunks %u crc %s\n", (unsigned int)metadata.depot_id,
 			(unsigned long long)metadata.gid, metadata.filenames_encrypted, (unsigned int)metadata.unique_chunks,
 			steam_manifest_crc_ok(data, (size_t)size, &metadata) ? "ok" : "differs");
 	free(data);

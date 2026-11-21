@@ -179,8 +179,17 @@ static int cdn_wait(struct cdn *cdn, int ms)
 	return 1;
 }
 
+/* a CDN server's name for the log (its base URL without the scheme: no path, so no request code) */
+static const char *cdn_host(const char *base)
+{
+	const char *host = strstr(base, "://");
+
+	return host ? host + 3 : base;
+}
+
+/* (what: a manifest's name for the log - its host, HTTP status and size said; NULL for a chunk: failures alone) */
 static uint8_t *cdn_get(struct cdn *cdn, const char *path, size_t maximum, size_t *size, char *error, int error_size,
-	int timeout_ms)
+	int timeout_ms, const char *what)
 {
 	/* (a round tries each server twice, at most 6 tries; between rounds the Wi-Fi may come back: waits of 2, 5, 10,
 	20, 30 and 30 s, about 1.5 minutes in all, before the download stops - resumable) */
@@ -208,7 +217,15 @@ static uint8_t *cdn_get(struct cdn *cdn, const char *path, size_t maximum, size_
 			}
 			body = steam_http_get(&cdn->http, path, maximum, size, &status, timeout_ms, error, error_size);
 			if (body)
+			{
+				if (what && cdn->callbacks)
+					say(cdn->callbacks, "steam: %s from %s: HTTP %d, %u bytes", what, cdn_host(cdn->servers[cdn->current]),
+						status, (unsigned int)*size);
 				return body;
+			}
+			if (cdn->callbacks)
+				say(cdn->callbacks, "steam: %s from %s failed: HTTP %d (%s)", what ? what : "a chunk",
+					cdn_host(cdn->servers[cdn->current]), status, error[0] ? error : "no reason");
 			/* (this server failed: the next one; a server's own refusal is no Wi-Fi loss: no more rounds) */
 			steam_http_close(&cdn->http);
 			cdn->current = (cdn->current + 1) % cdn->count;
@@ -217,6 +234,31 @@ static uint8_t *cdn_get(struct cdn *cdn, const char *path, size_t maximum, size_
 		}
 	}
 	return NULL;
+}
+
+/* ---------- a manifest is the one asked for */
+
+/* the manifest's metadata against what was asked (the depot, the gid) and its CRC (steam_manifest_crc_ok: the names'
+form picks crc_encrypted or crc_clear): 1, or 0 with why (a fixed text for the player) - the log has the facts
+either way (asked and got: depot, gid, the names' form, sizes, the CRCs; no key, no request code) */
+static int manifest_is_asked(const struct steam_download_callbacks *callbacks, const char *what, uint32_t app,
+	uint32_t depot, uint64_t gid, const uint8_t *manifest, size_t manifest_size, size_t zipped_size,
+	const struct steam_manifest_metadata *metadata, const char **why)
+{
+	uint32_t crc = 0;
+	int crc_ok = steam_manifest_crc(manifest, manifest_size, &crc) &&
+		crc == (metadata->filenames_encrypted ? metadata->crc_encrypted : metadata->crc_clear);
+
+	*why = metadata->depot_id != depot ? "it is another depot's" : metadata->gid != gid ? "it is another version's" :
+		!crc_ok ? "its checksum is wrong" : NULL;
+	say(callbacks, "steam: %s manifest (app %u): asked depot %u gid %llu, got depot %u gid %llu; names %s; %u bytes zipped, "
+		"%u unzipped, %u files' worth %llu bytes; payload crc %08x, crc_encrypted %08x, crc_clear %08x: %s", what,
+		(unsigned int)app, (unsigned int)depot, (unsigned long long)gid, (unsigned int)metadata->depot_id,
+		(unsigned long long)metadata->gid, metadata->filenames_encrypted ? "encrypted" : "clear",
+		(unsigned int)zipped_size, (unsigned int)manifest_size, (unsigned int)metadata->unique_chunks,
+		(unsigned long long)metadata->original_size, (unsigned int)crc, (unsigned int)metadata->crc_encrypted,
+		(unsigned int)metadata->crc_clear, *why ? *why : "ok");
+	return *why == NULL;
 }
 
 /* ---------- one file */
@@ -324,7 +366,7 @@ static int download_file(struct steam_session *session, struct planned *planned,
 		{
 			size_t size = 0;
 			uint8_t *data = cdn_get(cdn, chunk_path, STEAM_CHUNK_COMPRESSED_MAXIMUM, &size, error, sizeof(error),
-				CHUNK_TIMEOUT_MS);
+				CHUNK_TIMEOUT_MS, NULL);
 
 			if (!data)
 			{
@@ -439,7 +481,13 @@ int steam_download_depot(struct steam_session *session, const struct steam_kv *a
 	/* (the code is in the URL, which is never logged) */
 	snprintf(path, sizeof(path), "/depot/%u/manifest/%llu/5/%llu", (unsigned int)depot, (unsigned long long)gid,
 		(unsigned long long)code);
-	zipped = cdn_get(&cdn, path, STEAM_MANIFEST_ZIPPED_MAXIMUM, &zipped_size, error, sizeof(error), MANIFEST_TIMEOUT_MS);
+	{
+		char what[48];
+
+		snprintf(what, sizeof(what), "depot %u's manifest", (unsigned int)depot);
+		zipped = cdn_get(&cdn, path, STEAM_MANIFEST_ZIPPED_MAXIMUM, &zipped_size, error, sizeof(error), MANIFEST_TIMEOUT_MS,
+			what);
+	}
 	steam_wipe(path, sizeof(path));
 	code = 0;
 	if (!zipped)
@@ -462,10 +510,15 @@ int steam_download_depot(struct steam_session *session, const struct steam_kv *a
 		fail(result, "depot %u's manifest refused: %s", (unsigned int)depot, error[0] ? error : "malformed");
 		goto done;
 	}
-	if (metadata.depot_id != depot || metadata.gid != gid || !steam_manifest_crc_ok(manifest, manifest_size, &metadata))
 	{
-		fail(result, "depot %u's manifest is not the one asked for", (unsigned int)depot);
-		goto done;
+		const char *why;
+
+		if (!manifest_is_asked(callbacks, "depot", STEAM_APP_MCC, depot, gid, manifest, manifest_size, zipped_size,
+			&metadata, &why))
+		{
+			fail(result, "depot %u's manifest is not the one asked for: %s", (unsigned int)depot, why);
+			goto done;
+		}
 	}
 	/* every required file of this depot there; the others noted */
 	for (index = 0; index < plan_count; index++)
@@ -700,7 +753,13 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 	}
 	snprintf(path, sizeof(path), "/depot/%u/manifest/%llu/5/%llu", (unsigned int)STEAM_WORKSHOP_DEPOT,
 		(unsigned long long)item->hcontent, (unsigned long long)code);
-	zipped = cdn_get(&cdn, path, STEAM_MANIFEST_ZIPPED_MAXIMUM, &zipped_size, error, sizeof(error), MANIFEST_TIMEOUT_MS);
+	{
+		char what[64];
+
+		snprintf(what, sizeof(what), "item %s's manifest", id_text);
+		zipped = cdn_get(&cdn, path, STEAM_MANIFEST_ZIPPED_MAXIMUM, &zipped_size, error, sizeof(error), MANIFEST_TIMEOUT_MS,
+			what);
+	}
 	steam_wipe(path, sizeof(path));
 	code = 0;
 	if (!zipped)
@@ -723,11 +782,15 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 		fail(result, "item %s's manifest refused: %s", id_text, error[0] ? error : "malformed");
 		goto done;
 	}
-	if (metadata.depot_id != STEAM_WORKSHOP_DEPOT || metadata.gid != item->hcontent ||
-		!steam_manifest_crc_ok(manifest, manifest_size, &metadata))
 	{
-		fail(result, "item %s's manifest is not the one asked for", id_text);
-		goto done;
+		const char *why;
+
+		if (!manifest_is_asked(callbacks, "workshop item", STEAM_WORKSHOP_APP, STEAM_WORKSHOP_DEPOT, item->hcontent,
+			manifest, manifest_size, zipped_size, &metadata, &why))
+		{
+			fail(result, "item %s's manifest is not the one asked for: %s", id_text, why);
+			goto done;
+		}
 	}
 	if (collected.refused)
 	{
@@ -840,6 +903,8 @@ int steam_download_workshop_contents(struct steam_session *session, const struct
 	size_t zipped_size = 0, manifest_size = 0;
 	uint64_t code = 0;
 	int count = 0, index, ok = 0;
+	struct steam_download_callbacks said;
+	char id_text[24];
 
 	memset(contents, 0, sizeof(*contents));
 	error[0] = 0;
@@ -873,16 +938,29 @@ int steam_download_workshop_contents(struct steam_session *session, const struct
 	}
 	snprintf(path, sizeof(path), "/depot/%u/manifest/%llu/5/%llu", (unsigned int)STEAM_WORKSHOP_DEPOT,
 		(unsigned long long)item->hcontent, (unsigned long long)code);
+	memset(&said, 0, sizeof(said));
+	said.log = session->log;
+	said.context = session->log_context;
+	snprintf(id_text, sizeof(id_text), "%llu", (unsigned long long)item->id);
 	for (index = 0; index < count && !zipped; index++)
 	{
 		struct steam_http http;
 		int status = 0;
 
 		if (!steam_net_http_open(&http, cdn[index], error, error_size))
+		{
+			say(&said, "steam: item %s's manifest: %s cannot be reached (%s)", id_text, cdn_host(cdn[index]), error);
 			continue;
+		}
 		zipped = steam_http_get(&http, path, STEAM_MANIFEST_ZIPPED_MAXIMUM, &zipped_size, &status, MANIFEST_TIMEOUT_MS / 4,
 			error, error_size);
 		steam_http_close(&http);
+		if (zipped)
+			say(&said, "steam: item %s's manifest from %s: HTTP %d, %u bytes", id_text, cdn_host(cdn[index]), status,
+				(unsigned int)zipped_size);
+		else
+			say(&said, "steam: item %s's manifest from %s failed: HTTP %d (%s)", id_text, cdn_host(cdn[index]), status,
+				error[0] ? error : "no reason");
 	}
 	steam_wipe(path, sizeof(path));
 	code = 0;
@@ -901,14 +979,19 @@ int steam_download_workshop_contents(struct steam_session *session, const struct
 	}
 	if (steam_manifest_parse(manifest, manifest_size, key, &metadata, contents_file, contents, error, error_size) != 0)
 	{
+		say(&said, "steam: item %s's manifest refused: %s", id_text, error[0] ? error : "malformed");
 		snprintf(error, (size_t)error_size, "the item's list of files was refused");
 		goto done;
 	}
-	if (metadata.depot_id != STEAM_WORKSHOP_DEPOT || metadata.gid != item->hcontent ||
-		!steam_manifest_crc_ok(manifest, manifest_size, &metadata))
 	{
-		snprintf(error, (size_t)error_size, "the item's list of files is not the one asked for");
-		goto done;
+		const char *why;
+
+		if (!manifest_is_asked(&said, "workshop item", STEAM_WORKSHOP_APP, STEAM_WORKSHOP_DEPOT, item->hcontent, manifest,
+			manifest_size, zipped_size, &metadata, &why))
+		{
+			snprintf(error, (size_t)error_size, "the item's list of files is not the one asked for (%s)", why);
+			goto done;
+		}
 	}
 	ok = 1;
 done:

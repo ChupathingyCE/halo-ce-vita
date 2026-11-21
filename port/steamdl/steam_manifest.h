@@ -81,8 +81,15 @@ int steam_manifest_parse(const uint8_t *data, size_t size, const uint8_t *depot_
 	struct steam_manifest_metadata *metadata, steam_manifest_visitor visitor, void *context, char *error,
 	int error_size);
 
-/* the payload's CRC-32 as the metadata's crc_clear has it (the payload's
-length, little-endian, then its bytes): 1 if it matches */
+/* the payload's CRC-32 as it came (the payload's length, little-endian, then its bytes) checked against the
+metadata: 1 if it matches. Steam's metadata holds two: crc_encrypted, the payload as the CDN sends it (the names
+encrypted), and crc_clear, the payload with the names decrypted (as the Steam client keeps it in depotcache, with
+filenames_encrypted then false). A manifest with encrypted names is checked against crc_encrypted, one without against
+crc_clear. (1.1.3-insider.7 checked crc_clear always: every real CDN manifest, its names encrypted, was refused as
+"not the one asked for" - the fake server had made crc_clear over the encrypted payload. SteamKit2's DepotManifest
+serializes the two so.) */
 int steam_manifest_crc_ok(const uint8_t *data, size_t size, const struct steam_manifest_metadata *metadata);
+/* the payload's CRC-32 as above: 1, or 0 if the sections are not whole */
+int steam_manifest_crc(const uint8_t *data, size_t size, uint32_t *crc);
 
 #endif

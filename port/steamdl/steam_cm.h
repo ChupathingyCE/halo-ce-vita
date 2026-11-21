@@ -66,8 +66,33 @@ header that runs past the end or does not parse) */
 int steam_cm_parse(const uint8_t *data, size_t size, struct steam_cm_message *message);
 
 /* a Multi's messages, each handed to a visitor (each parsed, none a Multi
-itself): the count, or -1 if it is refused */
+itself): the count handed over, or -1 if it is refused. A message inside that
+is not protobuf (Steam still sends a few of the old struct messages - e.g.
+ClientVACBanStatus - in the Multi that follows a logon; SteamKit2 and
+steam-user read both kinds) is skipped, not a reason to refuse the rest: the
+download reads none of them */
 typedef int (*steam_cm_visitor)(void *context, const struct steam_cm_message *message);
 long steam_cm_multi(const uint8_t *body, size_t size, steam_cm_visitor visitor, void *context);
+
+/* what a Multi held, for the log (no contents: sizes, EMsgs and counts) */
+struct steam_cm_multi_facts
+{
+	/* the Multi's body, its gzip's declared size (0: not zipped), its payload's */
+	size_t body_size, unzipped_size, payload_size;
+	/* messages handed over, skipped (not protobuf) */
+	unsigned int handed, skipped;
+	/* the last skipped one's EMsg */
+	uint32_t skipped_emsg;
+	/* a refusal: why (a fixed text, "" none), the message's offset in the payload, its length word and raw EMsg
+	word (0 when not reached) */
+	const char *refused;
+	size_t refused_offset;
+	uint32_t refused_length, refused_emsg;
+};
+long steam_cm_multi_facts(const uint8_t *body, size_t size, steam_cm_visitor visitor, void *context,
+	struct steam_cm_multi_facts *facts);
+
+/* a received message's EMsg word (the proto bit taken off) and whether it is protobuf: 1, or 0 if under 4 bytes */
+int steam_cm_peek(const uint8_t *data, size_t size, uint32_t *emsg, int *protobuf);
 
 #endif

@@ -80,6 +80,15 @@ struct steam_session
 	uint8_t *reply;
 	size_t reply_size, reply_capacity;
 	struct steam_cm_header reply_header;
+	/* the header's steamid for the logon (0: an individual's, as a token's logon has it) */
+	uint64_t logon_steamid;
+	/* the last logon's EResult (0: no answer came) and the server's log-off's (0: none came) */
+	int logon_eresult, logged_off_eresult;
+	/* the RevokeToken is sent (the server's log-off that follows is its answer, not a kick) */
+	int revoking;
+	/* old-style (not protobuf) messages skipped, alone or in Multis; the first said in the log */
+	unsigned int skipped_messages;
+	int said_skipped;
 	/* what the end did (the tests read these) */
 	int revoked, logged_off, ended;
 	/* the no-secret marker (steam-session.txt) written at sign-in and
@@ -138,11 +147,20 @@ first): their count, or -1 */
 int steam_session_cdn_servers(struct steam_session *session, struct steam_cdn_server *servers, int maximum, char *error,
 	int error_size);
 
+/* (the same for another app's servers: the tests' real stage) */
+int steam_session_cdn_servers_for(struct steam_session *session, uint32_t app, struct steam_cdn_server *servers,
+	int maximum, char *error, int error_size);
 /* an authenticated service method call (the Workshop's PublishedFile.QueryFiles#1, GetDetails#1): 1 with the
 response's body (the session's buffer: read it before the next call), or 0 with a reason */
 int steam_session_call(struct steam_session *session, const char *method, const void *body, size_t body_size,
 	const uint8_t **reply, size_t *reply_size, char *error, int error_size);
 
+#ifdef STEAM_SESSION_ANONYMOUS
+/* (the tests' alone) signed in as an anonymous Steam user: 1, or 0 */
+int steam_session_logon_anonymous(struct steam_session *session, char *error, int error_size);
+#endif
+/* an EResult's name for the log ("other" for one not listed) */
+const char *steam_eresult_name(int eresult);
 /* revoke, log off, close, wipe: on every path; harmless twice */
 void steam_session_end(struct steam_session *session);
 

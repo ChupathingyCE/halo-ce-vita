@@ -354,6 +354,70 @@ static void test_cm(void)
 		steam_pb_put_bytes(&writer, 2, payload, used);
 		CHECK(steam_cm_multi(body, writer.size, NULL, NULL) == -1);
 	}
+	/* a Multi with old-style (struct, not protobuf) messages among protobuf ones - what a real account's logon
+	brings (ClientMarketingMessageUpdate2 5510, ClientUpdateGuestPassesList 798, ClientVACBanStatus 782):
+	insider.7 refused the whole Multi ("a malformed multi message was dropped") and lost the replies after it; now
+	they are skipped and the rest read */
+	{
+		uint8_t inner[64], payload[256], old_style[40];
+		struct steam_cm_multi_facts facts;
+		long a;
+		size_t used = 0, index;
+
+		multi_seen = 0;
+		/* (an old-style message: its EMsg without the proto bit, then an ExtendedClientMsgHdr's worth of bytes) */
+		memset(old_style, 0x24, sizeof(old_style));
+		old_style[0] = (uint8_t)(5510 & 0xff), old_style[1] = (uint8_t)(5510 >> 8), old_style[2] = old_style[3] = 0;
+		payload[used] = sizeof(old_style), payload[used + 1] = payload[used + 2] = payload[used + 3] = 0;
+		memcpy(payload + used + 4, old_style, sizeof(old_style));
+		used += 4 + sizeof(old_style);
+		header.job_target = 9;
+		a = steam_cm_build(inner, sizeof(inner), 751, &header, "", 0);
+		payload[used] = (uint8_t)a, payload[used + 1] = payload[used + 2] = payload[used + 3] = 0;
+		memcpy(payload + used + 4, inner, (size_t)a);
+		used += 4 + (size_t)a;
+		old_style[0] = (uint8_t)(798 & 0xff), old_style[1] = (uint8_t)(798 >> 8);
+		payload[used] = sizeof(old_style), payload[used + 1] = payload[used + 2] = payload[used + 3] = 0;
+		memcpy(payload + used + 4, old_style, sizeof(old_style));
+		used += 4 + sizeof(old_style);
+		steam_pb_writer_init(&writer, body, sizeof(body));
+		steam_pb_put_bytes(&writer, 2, payload, used);
+		CHECK(steam_cm_multi_facts(body, writer.size, count_multi, NULL, &facts) == 1 && multi_seen == 1 &&
+			facts.skipped == 2 && facts.skipped_emsg == 798 && facts.handed == 1 && !facts.refused[0]);
+		/* (an old-style Multi inside a Multi, a message under 4 bytes: still refused) */
+		{
+			uint8_t bad[80];
+			size_t bad_used;
+
+			memcpy(bad, payload, 4 + sizeof(old_style));
+			bad[4] = 1, bad[5] = bad[6] = bad[7] = 0;
+			bad_used = 4 + sizeof(old_style);
+			steam_pb_writer_init(&writer, body, sizeof(body));
+			steam_pb_put_bytes(&writer, 2, bad, bad_used);
+			CHECK(steam_cm_multi_facts(body, writer.size, NULL, NULL, &facts) == -1 && facts.refused[0]);
+			bad[0] = 3, bad[1] = bad[2] = bad[3] = 0;
+			bad_used = 4 + 3;
+			steam_pb_writer_init(&writer, body, sizeof(body));
+			steam_pb_put_bytes(&writer, 2, bad, bad_used);
+			CHECK(steam_cm_multi_facts(body, writer.size, NULL, NULL, &facts) == -1 &&
+				!strcmp(facts.refused, "a message inside does not parse") && facts.refused_length == 3);
+		}
+		/* every truncation and every single-byte change of the good one: no crash, counts bounded */
+		steam_pb_writer_init(&writer, body, sizeof(body));
+		steam_pb_put_bytes(&writer, 2, payload, used);
+		for (index = 0; index < writer.size; index++)
+		{
+			uint8_t copy[300];
+			long result;
+
+			memcpy(copy, body, writer.size);
+			result = steam_cm_multi_facts(copy, index, NULL, NULL, &facts);
+			CHECK(result <= 3);
+			copy[index] ^= 0xa5;
+			result = steam_cm_multi_facts(copy, writer.size, NULL, NULL, &facts);
+			CHECK(result <= 3 && facts.handed + facts.skipped <= 3);
+		}
+	}
 	/* the CDN list: a mandatory-HTTPS cache taken, plain and proxies not */
 	{
 		uint8_t list[400], server[200];
@@ -1079,6 +1143,27 @@ static void test_manifest(const char *fixtures)
 	CHECK(metadata.filenames_encrypted && metadata.gid == gid && files_seen == (int)expected_files &&
 		names_ok == files_seen && hostile_written == 0);
 	CHECK(steam_manifest_crc_ok(manifest, entry, &metadata));
+	/* Steam's CRC model (real CDN manifests, steam_real_probe, Nov 20 2026): names encrypted -> crc_encrypted over
+	the payload as sent, crc_clear 0; names clear -> crc_clear. insider.7 checked crc_clear alone: refused them all */
+	{
+		struct steam_manifest_metadata model = metadata;
+		uint32_t crc = 0;
+
+		CHECK(steam_manifest_crc(manifest, entry, &crc) && crc == metadata.crc_encrypted && metadata.crc_clear == 0);
+		model.crc_encrypted = crc ^ 1;
+		CHECK(!steam_manifest_crc_ok(manifest, entry, &model));
+		/* (insider.7's model: the payload's CRC in crc_clear, crc_encrypted 0) - not Steam's, refused */
+		model.crc_encrypted = 0;
+		model.crc_clear = crc;
+		CHECK(!steam_manifest_crc_ok(manifest, entry, &model));
+		/* the clear form: crc_clear */
+		model.filenames_encrypted = 0;
+		CHECK(steam_manifest_crc_ok(manifest, entry, &model));
+		model.crc_clear = crc ^ 0x80000000u;
+		CHECK(!steam_manifest_crc_ok(manifest, entry, &model));
+		CHECK(!steam_manifest_crc(manifest, 7, &crc));
+		CHECK(!steam_manifest_crc(NULL, 0, &crc));
+	}
 	/* no key: refused; the wrong key: refused */
 	CHECK(steam_manifest_parse(manifest, entry, NULL, &metadata, NULL, NULL, error, sizeof(error)) != 0);
 	key[5] ^= 1;

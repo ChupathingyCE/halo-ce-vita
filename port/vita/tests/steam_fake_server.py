@@ -293,9 +293,14 @@ class Depot:
                        pb_bytes(5, hashlib.sha1(data).digest()) + b"".join(pb_bytes(6, c) for c in chunk_fields))
             mappings += pb_bytes(1, mapping)
         payload = mappings
-        crc_clear = zlib.crc32(struct.pack("<I", len(payload)) + payload) & 0xFFFFFFFF
+        # (as Steam's CDN has it - checked against real CDN manifests, Nov 20 2026, steam_real_probe: with the names
+        # encrypted, crc_encrypted is the CRC of the payload as sent and crc_clear is 0; with them clear, as the
+        # Steam client's depotcache keeps them, crc_clear is. insider.7's fake put crc_clear over the encrypted
+        # payload, so the C side checked the wrong field and every real manifest was refused)
+        crc = zlib.crc32(struct.pack("<I", len(payload)) + payload) & 0xFFFFFFFF
+        crc_fields = pb_varint(8, crc) + pb_varint(9, 0) if encrypt else pb_varint(9, crc)
         metadata = (pb_varint(1, depot) + pb_varint(2, self.gid) + pb_varint(3, 1700000000) + pb_varint(4, int(encrypt)) +
-                    pb_varint(7, unique) + pb_varint(9, crc_clear))
+                    pb_varint(7, unique) + crc_fields)
         manifest = (struct.pack("<II", 0x71F617D0, len(payload)) + payload +
                     struct.pack("<II", 0x1F4812BE, len(metadata)) + metadata +
                     struct.pack("<II", 0x1B81B817, 0) + struct.pack("<I", 0x32C415AB))

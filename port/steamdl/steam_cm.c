@@ -115,7 +115,22 @@ int steam_cm_parse(const uint8_t *data, size_t size, struct steam_cm_message *me
 	return 1;
 }
 
-long steam_cm_multi(const uint8_t *body, size_t size, steam_cm_visitor visitor, void *context)
+int steam_cm_peek(const uint8_t *data, size_t size, uint32_t *emsg, int *protobuf)
+{
+	uint32_t raw;
+
+	*emsg = 0;
+	*protobuf = 0;
+	if (!data || size < 4)
+		return 0;
+	raw = le32(data);
+	*emsg = raw & ~STEAM_CM_PROTO_MASK;
+	*protobuf = (raw & STEAM_CM_PROTO_MASK) != 0;
+	return 1;
+}
+
+long steam_cm_multi_facts(const uint8_t *body, size_t size, steam_cm_visitor visitor, void *context,
+	struct steam_cm_multi_facts *facts)
 {
 	struct steam_pb_reader reader;
 	struct steam_pb_field field;
@@ -126,6 +141,9 @@ long steam_cm_multi(const uint8_t *body, size_t size, steam_cm_visitor visitor, 
 	long count = 0;
 	int result;
 
+	memset(facts, 0, sizeof(*facts));
+	facts->refused = "";
+	facts->body_size = size;
 	steam_pb_reader_init(&reader, body, size);
 	while ((result = steam_pb_next(&reader, &field)) > 0)
 	{
@@ -134,40 +152,91 @@ long steam_cm_multi(const uint8_t *body, size_t size, steam_cm_visitor visitor, 
 		else if (field.number == 2 && field.wire == STEAM_PB_BYTES)
 			payload = field.data, payload_size = field.size;
 	}
-	if (result < 0 || !payload)
+	if (result < 0)
+	{
+		facts->refused = "its protobuf does not parse";
 		return -1;
+	}
+	if (!payload)
+	{
+		facts->refused = "no payload";
+		return -1;
+	}
+	facts->unzipped_size = (size_t)(size_unzipped > STEAM_CM_MULTI_UNZIPPED_MAXIMUM ? 0 : size_unzipped);
 	if (size_unzipped)
 	{
 		if (size_unzipped > STEAM_CM_MULTI_UNZIPPED_MAXIMUM)
+		{
+			facts->refused = "its unzipped size is over the limit";
 			return -1;
+		}
 		unzipped = malloc((size_t)size_unzipped);
 		if (!unzipped || !steam_gunzip(payload, payload_size, unzipped, (size_t)size_unzipped))
 		{
+			facts->refused = unzipped ? "its gzip does not unzip to the size given" : "out of memory";
 			free(unzipped);
 			return -1;
 		}
 		payload = unzipped;
 		payload_size = (size_t)size_unzipped;
 	}
+	facts->payload_size = payload_size;
 	for (cursor = 0; cursor < payload_size;)
 	{
 		struct steam_cm_message message;
-		uint32_t length;
+		uint32_t length, emsg;
+		int protobuf;
 
-		if (payload_size - cursor < 4 || count >= (long)STEAM_CM_MULTI_MESSAGES_MAXIMUM)
-			goto refused;
-		length = le32(payload + cursor);
-		cursor += 4;
-		if (length > payload_size - cursor || !steam_cm_parse(payload + cursor, length, &message) ||
-			message.emsg == STEAM_EMSG_MULTI)
+		facts->refused_offset = cursor;
+		if (payload_size - cursor < 4)
 		{
+			facts->refused = "a length word cut short";
+			goto refused;
+		}
+		if (count + facts->skipped >= STEAM_CM_MULTI_MESSAGES_MAXIMUM)
+		{
+			facts->refused = "too many messages";
+			goto refused;
+		}
+		length = le32(payload + cursor);
+		facts->refused_length = length;
+		cursor += 4;
+		if (length > payload_size - cursor)
+		{
+			facts->refused = "a message runs past the end";
+			goto refused;
+		}
+		if (steam_cm_peek(payload + cursor, length, &emsg, &protobuf))
+			facts->refused_emsg = le32(payload + cursor);
+		if (length >= 4 && !protobuf && emsg != STEAM_EMSG_MULTI)
+		{
+			/* (an old struct message: not one the download reads) */
+			facts->skipped++;
+			facts->skipped_emsg = emsg;
+			cursor += length;
+			continue;
+		}
+		if (!steam_cm_parse(payload + cursor, length, &message))
+		{
+			facts->refused = "a message inside does not parse";
+			goto refused;
+		}
+		if (message.emsg == STEAM_EMSG_MULTI)
+		{
+			facts->refused = "a Multi inside a Multi";
 			goto refused;
 		}
 		cursor += length;
 		count++;
+		facts->handed = (unsigned int)count;
 		if (visitor && visitor(context, &message) != 0)
+		{
+			facts->refused = "its reader stopped (out of memory)";
 			goto refused;
+		}
 	}
+	facts->refused_offset = 0;
+	facts->refused_length = facts->refused_emsg = 0;
 	if (unzipped)
 	{
 		steam_wipe(unzipped, payload_size);
@@ -181,4 +250,11 @@ refused:
 		free(unzipped);
 	}
 	return -1;
+}
+
+long steam_cm_multi(const uint8_t *body, size_t size, steam_cm_visitor visitor, void *context)
+{
+	struct steam_cm_multi_facts facts;
+
+	return steam_cm_multi_facts(body, size, visitor, context, &facts);
 }

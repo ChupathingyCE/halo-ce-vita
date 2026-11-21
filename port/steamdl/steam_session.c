@@ -51,6 +51,47 @@ static void say(struct steam_session *session, const char *format, ...)
 	session->log(session->log_context, line);
 }
 
+/* a few EResults by name, for the log (Steam's enum, as SteamKit2's EResult lists them) */
+const char *steam_eresult_name(int eresult)
+{
+	switch (eresult)
+	{
+	case 0: return "none";
+	case 1: return "OK";
+	case 2: return "Fail";
+	case 3: return "NoConnection";
+	case 5: return "InvalidPassword";
+	case 6: return "LoggedInElsewhere";
+	case 7: return "InvalidProtocolVer";
+	case 8: return "InvalidParam";
+	case 9: return "FileNotFound";
+	case 10: return "Busy";
+	case 11: return "InvalidState";
+	case 15: return "AccessDenied";
+	case 16: return "Timeout";
+	case 17: return "Banned";
+	case 18: return "AccountNotFound";
+	case 20: return "ServiceUnavailable";
+	case 21: return "NotLoggedOn";
+	case 25: return "LimitExceeded";
+	case 26: return "Revoked";
+	case 27: return "Expired";
+	case 34: return "LogonSessionReplaced";
+	case 35: return "ConnectFailed";
+	case 36: return "HandshakeFailed";
+	case 37: return "IOFailure";
+	case 38: return "RemoteDisconnect";
+	case 48: return "TryAnotherCM";
+	case 63: return "AccountLogonDenied";
+	case 84: return "RateLimitExceeded";
+	case 85: return "AccountLoginDeniedNeedTwoFactor";
+	case 88: return "TwoFactorCodeMismatch";
+	case 89: return "TwoFactorActivationCodeMismatch";
+	case 105: return "AccountDisabled";
+	default: return "other";
+	}
+}
+
 int steam_session_init(struct steam_session *session, steam_log_proc log, void *log_context, const char *marker_path)
 {
 	memset(session, 0, sizeof(*session));
@@ -77,7 +118,8 @@ static int send_message(struct steam_session *session, uint32_t emsg, uint64_t j
 	if (!session->connected)
 		return 0;
 	memset(&header, 0, sizeof(header));
-	header.steamid = session->logged_on ? session->steamid : (emsg == STEAM_EMSG_CLIENT_LOGON ? STEAMID_ANONYMOUS_INDIVIDUAL : 0);
+	header.steamid = session->logged_on ? session->steamid : (emsg == STEAM_EMSG_CLIENT_LOGON ?
+		(session->logon_steamid ? session->logon_steamid : STEAMID_ANONYMOUS_INDIVIDUAL) : 0);
 	header.session_id = session->logged_on ? session->session_id : 0;
 	header.job_source = job ? job : STEAM_JOB_NONE;
 	header.job_target = STEAM_JOB_NONE;
@@ -131,9 +173,20 @@ static int handle_message(void *context, const struct steam_cm_message *message)
 
 	if (message->emsg == STEAM_EMSG_CLIENT_LOGGED_OFF && session->logged_on)
 	{
+		struct steam_pb_reader reader;
+		struct steam_pb_field field;
+		int eresult = 0;
+
+		/* (CMsgClientLoggedOff: its eresult, field 1) */
+		steam_pb_reader_init(&reader, message->body, message->body_size);
+		while (steam_pb_next(&reader, &field) > 0)
+			if (field.number == 1 && field.wire == STEAM_PB_VARINT)
+				eresult = steam_pb_int32(&field);
+		session->logged_off_eresult = eresult;
 		session->logged_on = 0;
 		session->kicked = 1;
-		say(session, "steam: the server signed this session off");
+		say(session, "steam: the server signed this session off (result %d, %s)%s", eresult, steam_eresult_name(eresult),
+			session->revoking ? ": the revoke just sent ends it" : "");
 	}
 	if (waiting->found)
 		return 0;
@@ -193,14 +246,39 @@ static int wait_for(struct steam_session *session, uint32_t emsg, uint64_t job, 
 		}
 		if (!steam_cm_parse(data, size, &message))
 		{
-			say(session, "steam: a malformed message was dropped");
+			uint32_t emsg_seen;
+			int protobuf;
+
+			/* (an old struct message - not protobuf - is one the download never reads: skipped quietly; the
+			header's facts alone are logged, never the contents) */
+			if (steam_cm_peek(data, size, &emsg_seen, &protobuf) && !protobuf)
+				session->skipped_messages++;
+			else
+				say(session, "steam: a malformed message was dropped (EMsg %u, %s, %u bytes)", (unsigned int)emsg_seen,
+					protobuf ? "protobuf" : "short", (unsigned int)size);
 			steam_ws_wipe_message(&session->ws);
 			continue;
 		}
 		if (message.emsg == STEAM_EMSG_MULTI)
 		{
-			if (steam_cm_multi(message.body, message.body_size, handle_message, &waiting) < 0)
-				say(session, "steam: a malformed multi message was dropped");
+			struct steam_cm_multi_facts facts;
+
+			if (steam_cm_multi_facts(message.body, message.body_size, handle_message, &waiting, &facts) < 0)
+				say(session, "steam: a malformed multi message was dropped: %s (body %u bytes, unzipped %u, payload %u; "
+					"%u read, %u skipped before it; at offset %u: length word %u, EMsg word 0x%08x)", facts.refused,
+					(unsigned int)facts.body_size, (unsigned int)facts.unzipped_size, (unsigned int)facts.payload_size,
+					facts.handed, facts.skipped, (unsigned int)facts.refused_offset, (unsigned int)facts.refused_length,
+					(unsigned int)facts.refused_emsg);
+			if (facts.skipped)
+			{
+				session->skipped_messages += facts.skipped;
+				if (!session->said_skipped)
+				{
+					session->said_skipped = 1;
+					say(session, "steam: a multi message held %u old-style messages (not protobuf; the last EMsg %u): "
+						"skipped, the other %u read", facts.skipped, (unsigned int)facts.skipped_emsg, facts.handed);
+				}
+			}
 		}
 		else if (handle_message(&waiting, &message) < 0)
 		{
@@ -503,15 +581,53 @@ int steam_session_qr_poll(struct steam_session *session, char *url, size_t url_c
 	return new_url ? STEAM_QR_NEW_URL : STEAM_QR_WAITING;
 }
 
+/* the ClientLogOnResponse awaited and read: 1 signed in, or 0 with a reason (session->logon_eresult the result) */
+static int logon_answer(struct steam_session *session, char *error, int error_size)
+{
+	struct steam_pb_reader reader;
+	struct steam_pb_field field;
+	int result, eresult = 2;
+
+	if (!wait_for(session, STEAM_EMSG_CLIENT_LOGON_RESPONSE, 0, CALL_TIMEOUT_MS))
+	{
+		session->logon_eresult = 0;
+		snprintf(error, (size_t)error_size, "no answer to the logon");
+		return 0;
+	}
+	steam_pb_reader_init(&reader, session->reply, session->reply_size);
+	while ((result = steam_pb_next(&reader, &field)) > 0)
+	{
+		if (field.number == 1 && field.wire == STEAM_PB_VARINT)
+			eresult = steam_pb_int32(&field);
+		else if (field.number == 3 && field.wire == STEAM_PB_VARINT)
+			session->heartbeat_seconds = steam_pb_int32(&field);
+		else if (field.number == 7 && field.wire == STEAM_PB_VARINT)
+			session->cell_id = (uint32_t)field.value;
+	}
+	session->logon_eresult = result < 0 ? 2 : eresult;
+	if (result < 0 || eresult != STEAM_ERESULT_OK)
+	{
+		snprintf(error, (size_t)error_size, "logon refused (result %d, %s)", eresult, steam_eresult_name(eresult));
+		say(session, "steam: the logon was refused: result %d (%s)", eresult, steam_eresult_name(eresult));
+		return 0;
+	}
+	if (session->heartbeat_seconds < 5 || session->heartbeat_seconds > 300)
+		session->heartbeat_seconds = 9;
+	session->steamid = session->reply_header.steamid;
+	session->session_id = session->reply_header.session_id;
+	session->logged_on = 1;
+	session->last_heartbeat_ms = now_ms();
+	say(session, "steam: signed in (cell %u)", (unsigned int)session->cell_id);
+	return 1;
+}
+
 int steam_session_logon(struct steam_session *session, char *error, int error_size)
 {
 	struct steam_secrets *secrets = session->secrets;
 	uint8_t *body;
 	size_t capacity = STEAM_TOKEN_MAXIMUM + 512;
 	struct steam_pb_writer writer;
-	struct steam_pb_reader reader;
-	struct steam_pb_field field;
-	int result, eresult = 2, sent;
+	int sent;
 
 	if (!secrets->refresh_token[0])
 	{
@@ -540,35 +656,31 @@ int steam_session_logon(struct steam_session *session, char *error, int error_si
 		snprintf(error, (size_t)error_size, "cannot send the logon");
 		return 0;
 	}
-	if (!wait_for(session, STEAM_EMSG_CLIENT_LOGON_RESPONSE, 0, CALL_TIMEOUT_MS))
-	{
-		snprintf(error, (size_t)error_size, "no answer to the logon");
-		return 0;
-	}
-	steam_pb_reader_init(&reader, session->reply, session->reply_size);
-	while ((result = steam_pb_next(&reader, &field)) > 0)
-	{
-		if (field.number == 1 && field.wire == STEAM_PB_VARINT)
-			eresult = steam_pb_int32(&field);
-		else if (field.number == 3 && field.wire == STEAM_PB_VARINT)
-			session->heartbeat_seconds = steam_pb_int32(&field);
-		else if (field.number == 7 && field.wire == STEAM_PB_VARINT)
-			session->cell_id = (uint32_t)field.value;
-	}
-	if (result < 0 || eresult != STEAM_ERESULT_OK)
-	{
-		snprintf(error, (size_t)error_size, "logon refused (result %d)", eresult);
-		return 0;
-	}
-	if (session->heartbeat_seconds < 5 || session->heartbeat_seconds > 300)
-		session->heartbeat_seconds = 9;
-	session->steamid = session->reply_header.steamid;
-	session->session_id = session->reply_header.session_id;
-	session->logged_on = 1;
-	session->last_heartbeat_ms = now_ms();
-	say(session, "steam: signed in (cell %u)", (unsigned int)session->cell_id);
-	return 1;
+	return logon_answer(session, error, error_size);
 }
+
+#ifdef STEAM_SESSION_ANONYMOUS
+/* (the tests' alone - never a game build: run_steam_download_test.sh's "real" stage reads a free depot's manifest as
+an anonymous Steam user, as SteamKit2's LogOnAnonymous: the header's steamid an AnonUser's, no name, no token) */
+int steam_session_logon_anonymous(struct steam_session *session, char *error, int error_size)
+{
+	uint8_t body[64];
+	struct steam_pb_writer writer;
+
+	steam_pb_writer_init(&writer, body, sizeof(body));
+	steam_pb_put_varint(&writer, 1, STEAM_PROTOCOL_VERSION);
+	steam_pb_put_varint(&writer, 3, session->cell_id);
+	steam_pb_put_string(&writer, 6, "english");
+	/* (universe 1, type 10 AnonUser, instance 0, account 0) */
+	session->logon_steamid = 0x01A0000000000000ull;
+	if (writer.error || !send_message(session, STEAM_EMSG_CLIENT_LOGON, 0, NULL, body, writer.size))
+	{
+		snprintf(error, (size_t)error_size, "cannot send the logon");
+		return 0;
+	}
+	return logon_answer(session, error, error_size);
+}
+#endif
 
 int steam_session_pump(struct steam_session *session, int timeout_ms)
 {
@@ -880,8 +992,8 @@ int steam_parse_cdn_servers(const uint8_t *body, size_t size, uint32_t app, stru
 	return result < 0 ? -1 : count;
 }
 
-int steam_session_cdn_servers(struct steam_session *session, struct steam_cdn_server *servers, int maximum, char *error,
-	int error_size)
+int steam_session_cdn_servers_for(struct steam_session *session, uint32_t app, struct steam_cdn_server *servers,
+	int maximum, char *error, int error_size)
 {
 	uint8_t body[32];
 	struct steam_pb_writer writer;
@@ -895,14 +1007,21 @@ int steam_session_cdn_servers(struct steam_session *session, struct steam_cdn_se
 	{
 		return -1;
 	}
-	count = steam_parse_cdn_servers(session->reply, session->reply_size, 976730u, servers, maximum);
+	count = steam_parse_cdn_servers(session->reply, session->reply_size, app, servers, maximum);
 	if (count <= 0)
 	{
 		snprintf(error, (size_t)error_size, "no usable CDN server");
 		return -1;
 	}
-	say(session, "steam: %d CDN servers", count);
+	say(session, "steam: %d CDN servers (first %s%s%s)", count, servers[0].host, count > 1 ? ", " : "",
+		count > 1 ? servers[1].host : "");
 	return count;
+}
+
+int steam_session_cdn_servers(struct steam_session *session, struct steam_cdn_server *servers, int maximum, char *error,
+	int error_size)
+{
+	return steam_session_cdn_servers_for(session, 976730u, servers, maximum, error, error_size);
 }
 
 int steam_parse_cm_list(const char *json, size_t size, char urls[][STEAM_HOST_MAXIMUM + 32], int maximum)
@@ -984,6 +1103,7 @@ void steam_session_end(struct steam_session *session)
 			steam_pb_writer_init(&writer, body, capacity);
 			steam_pb_put_string(&writer, 1, secrets->refresh_token);
 			steam_pb_put_varint(&writer, 2, 1 /* k_EAuthTokenRevokePermanent */);
+			session->revoking = 1;
 			sent = !writer.error && send_message(session, session->logged_on ? STEAM_EMSG_SERVICE_METHOD_CALL :
 				STEAM_EMSG_SERVICE_METHOD_CALL_NONAUTHED, job, "Authentication.RevokeToken#1", body, writer.size);
 			steam_wipe(body, capacity);

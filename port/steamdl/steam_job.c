@@ -869,7 +869,8 @@ static void job_item_end(void *context, const struct steam_workshop_item *item, 
 			item->title[0] ? item->title : "an item", why);
 	}
 	pthread_mutex_unlock(&job.lock);
-	say("steam job: workshop item %llu %s", (unsigned long long)item->id, ok ? "downloaded" : "failed");
+	say("steam job: workshop item %llu %s%s%.160s", (unsigned long long)item->id, ok ? "downloaded" : "failed",
+		ok || !why || !why[0] ? "" : ": ", ok || !why ? "" : why);
 }
 
 int steam_job_start_workshop(const char *data_root)

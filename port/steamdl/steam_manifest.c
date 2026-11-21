@@ -403,20 +403,29 @@ int steam_manifest_parse(const uint8_t *data, size_t size, const uint8_t *depot_
 	return 0;
 }
 
-int steam_manifest_crc_ok(const uint8_t *data, size_t size, const struct steam_manifest_metadata *metadata)
+int steam_manifest_crc(const uint8_t *data, size_t size, uint32_t *crc)
 {
 	struct sections sections;
 	uint8_t length[4];
 	char error[96];
-	uint32_t crc;
 
-	if (!find_sections(data, size, &sections, error, (int)sizeof(error)))
+	*crc = 0;
+	if (!data || size > STEAM_MANIFEST_MAXIMUM || !find_sections(data, size, &sections, error, (int)sizeof(error)))
 		return 0;
 	length[0] = (uint8_t)sections.payload_size;
 	length[1] = (uint8_t)(sections.payload_size >> 8);
 	length[2] = (uint8_t)(sections.payload_size >> 16);
 	length[3] = (uint8_t)(sections.payload_size >> 24);
-	crc = steam_crc32(0, length, 4);
-	crc = steam_crc32(crc, sections.payload, sections.payload_size);
-	return crc == metadata->crc_clear;
+	*crc = steam_crc32(0, length, 4);
+	*crc = steam_crc32(*crc, sections.payload, sections.payload_size);
+	return 1;
+}
+
+int steam_manifest_crc_ok(const uint8_t *data, size_t size, const struct steam_manifest_metadata *metadata)
+{
+	uint32_t crc;
+
+	if (!steam_manifest_crc(data, size, &crc))
+		return 0;
+	return crc == (metadata->filenames_encrypted ? metadata->crc_encrypted : metadata->crc_clear);
 }
