@@ -16,6 +16,14 @@ changed; without HALO_FRAME_TIMING the wrappers only call through.
 The steps nest (a tick's updates inside the tick, the render's passes
 inside the render): each line gives a step's own total, and "rest" what its
 parent spent outside the steps named.
+
+With the tick beside the render (HALO_CONSOLE_TICK_OVERLAP: the game's
+tick_overlap.h) the update runs on a thread of its own: its steps are
+counted there (vita_frame_split_tick_thread, from vita_platform.c as it
+starts) and shown on a line of their own ("frame-split tick thread": the
+update and its sounds a frame); the tick's updates per tick count both
+threads' ticks, and the game thread's line has the start and its wait for
+the update after the present ("join").
 */
 
 #include <stdio.h>
@@ -37,6 +45,10 @@ enum
 	_split_sound,
 	_split_render,
 	_split_present,
+	/* the tick beside the render (HALO_CONSOLE_TICK_OVERLAP): its start and
+	the game thread's wait for it after the present */
+	_split_overlap_start,
+	_split_overlap_join,
 	/* the tick's updates (game_tick) */
 	_split_game_tick,
 	_split_units,
@@ -92,6 +104,7 @@ enum
 
 static const char *const split_names[NUMBER_OF_SPLITS] = {
 	"input", "ui", "player_control", "tick", "director", "observer", "sound", "render", "present",
+	"overlap_start", "join",
 	"game_tick", "units", "ai", "effects", "objects", "players_before", "players_after", "hud", "hs", "engine",
 	"first_person", "antennas", "player_effect", "recorded_animations", "scenario", "lua", "allegiance",
 	"interpolation_tick", "game_frame", "particles_update", "game_sound",
@@ -104,8 +117,13 @@ static const char *const split_names[NUMBER_OF_SPLITS] = {
 static int split_enabled = -1;
 static unsigned long split_period;
 static unsigned long game_thread;
-static unsigned long long split_us[NUMBER_OF_SPLITS];
-static unsigned long split_calls[NUMBER_OF_SPLITS];
+/* the tick's thread, when the tick runs beside the render: its steps are
+counted apart (split_us[1]) */
+static volatile unsigned long tick_thread;
+static unsigned long long split_us_by_thread[2][NUMBER_OF_SPLITS];
+static unsigned long split_calls_by_thread[2][NUMBER_OF_SPLITS];
+#define split_us split_us_by_thread[0]
+#define split_calls split_calls_by_thread[0]
 static unsigned long long frames_started, frame_us_total, frame_us_worst;
 static unsigned long frames;
 
@@ -114,7 +132,26 @@ render passes': the outermost instrumented function's (depth 1) */
 static int d3d_depth;
 static unsigned long long d3d_entered, d3d_us, d3d_us_split[NUMBER_OF_SPLITS];
 static unsigned long d3d_calls;
-static int current_split = -1;
+static int current_split = -1, current_tick_split = -1;
+
+/* the tick thread, as it starts (vita_platform.c's tick overlap hooks) */
+void vita_frame_split_tick_thread(void)
+{
+	tick_thread = vita_host_thread_id();
+}
+
+static int split_on(void);
+
+/* 1 on the game thread, 2 on the tick's, 0 elsewhere or off */
+static int split_thread(void)
+{
+	unsigned long self;
+
+	if (!split_on() && split_enabled <= 0)
+		return 0;
+	self = vita_host_thread_id();
+	return self == game_thread ? 1 : self == tick_thread && tick_thread ? 2 : 0;
+}
 
 static int split_on(void)
 {
@@ -138,10 +175,13 @@ static int split_on(void)
 }
 
 #define SPLIT_BEGIN(split) \
-	int on = split_on(); unsigned long long started = 0; int outer = current_split; \
-	if (on) { started = vita_host_time_us(); current_split = (split); split_calls[split]++; }
+	int who = split_thread(), on = who == 1; unsigned long long started = 0; \
+	int outer = who == 2 ? current_tick_split : current_split; \
+	if (who) { started = vita_host_time_us(); if (on) current_split = (split); else current_tick_split = (split); \
+		split_calls_by_thread[who - 1][split]++; }
 #define SPLIT_END(split) \
-	if (on) { split_us[split] += vita_host_time_us() - started; current_split = outer; }
+	if (who) { split_us_by_thread[who - 1][split] += vita_host_time_us() - started; \
+		if (on) current_split = outer; else current_tick_split = outer; }
 
 #define WRAP_VOID(name, split, parameters, arguments) \
 	void __real_##name parameters; \
@@ -175,6 +215,8 @@ WRAP_VOID(observer_update, _split_observer, (real seconds), (seconds))
 WRAP_VOID(sound_render, _split_sound, (void), ())
 WRAP_VOID(render_frame, _split_render, (void *windows, short count, void const *page, void const *index, void *bitmap,
 	real seconds), (windows, count, page, index, bitmap, seconds))
+WRAP_VOID(halo_tick_overlap_start, _split_overlap_start, (real seconds), (seconds))
+WRAP_VOID(halo_tick_overlap_join, _split_overlap_join, (void), ())
 
 /* the tick (game_time.c, game.c) */
 WRAP_VOID(game_tick, _split_game_tick, (void), ())
@@ -235,7 +277,7 @@ static void split_report(void)
 	int n, index;
 	double per = 1.0 / (double)frames / 1000.0;
 	double frame = (double)frame_us_total * per;
-	unsigned long long ticks = split_calls[_split_game_tick];
+	unsigned long long ticks = split_calls_by_thread[0][_split_game_tick] + split_calls_by_thread[1][_split_game_tick];
 
 	n = snprintf(line, sizeof(line), "frame-split (ms/frame, %lu frames, %.1f fps, worst frame %.1f ms, %.2f ticks/frame):"
 		" frame %.2f", frames, frame > 0 ? 1000.0 / frame : 0.0, (double)frame_us_worst / 1000.0,
@@ -243,7 +285,7 @@ static void split_report(void)
 	{
 		unsigned long long marked = 0;
 
-		for (index = _split_input; index <= _split_present; index++)
+		for (index = _split_input; index <= _split_overlap_join; index++)
 		{
 			marked += split_us[index];
 			n += snprintf(line + n, sizeof(line) - n, " | %s %.2f", split_names[index], (double)split_us[index] * per);
@@ -252,6 +294,21 @@ static void split_report(void)
 			frame_us_total > marked ? (double)(frame_us_total - marked) * per : 0.0);
 	}
 	vita_host_log(line);
+
+	/* the tick beside the render: the tick thread's update and sounds, a frame */
+	if (tick_thread)
+	{
+		n = snprintf(line, sizeof(line), "frame-split tick thread (ms/frame): update %.2f | sound %.2f",
+			(double)split_us_by_thread[1][_split_tick] * per, (double)split_us_by_thread[1][_split_sound] * per);
+		vita_host_log(line);
+		for (index = 0; index < NUMBER_OF_SPLITS; index++)
+			if (index != _split_tick && index != _split_sound)
+			{
+				split_us[index] += split_us_by_thread[1][index];
+				split_calls[index] += split_calls_by_thread[1][index];
+			}
+		split_us[_split_tick] += split_us_by_thread[1][_split_tick];
+	}
 
 	/* the tick's updates, per tick */
 	{
@@ -309,8 +366,8 @@ static void split_report(void)
 	vita_host_threads_report(frames);
 	vita_host_thread_times_report(frames);
 
-	memset(split_us, 0, sizeof(split_us));
-	memset(split_calls, 0, sizeof(split_calls));
+	memset(split_us_by_thread, 0, sizeof(split_us_by_thread));
+	memset(split_calls_by_thread, 0, sizeof(split_calls_by_thread));
 	memset(d3d_us_split, 0, sizeof(d3d_us_split));
 	d3d_us = 0;
 	d3d_calls = 0;
@@ -342,8 +399,8 @@ void __wrap_render_frame_present(void const *index, void *bitmap)
 		if (frame > 2000000ull)
 		{
 			frame_us_total -= frame;
-			memset(split_us, 0, sizeof(split_us));
-			memset(split_calls, 0, sizeof(split_calls));
+			memset(split_us_by_thread, 0, sizeof(split_us_by_thread));
+			memset(split_calls_by_thread, 0, sizeof(split_calls_by_thread));
 			memset(d3d_us_split, 0, sizeof(d3d_us_split));
 			d3d_us = 0;
 			d3d_calls = 0;

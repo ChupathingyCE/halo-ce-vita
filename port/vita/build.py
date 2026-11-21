@@ -118,10 +118,14 @@ CONSOLE_FEATURES = [
     "-DHALO_VITA=1",
     # the Xbox 360's layout: Xbox addresses translated into a window wherever
     # the kernel puts it (the Vita's program and heap are where the Xbox's
-    # window was linked); the game's halo_console_features.h sizes it for
-    # the Vita (HALO_CONSOLE_WINDOW_LOW)
+    # window was linked); the game's HALO_CONSOLE_WINDOW_LOW sizes it for the
+    # Vita (a 48 MB heap below the 128 MB of contiguous memory), and the
+    # renderer's targets are the Xbox's sizes (#1549 left the Vita's values
+    # to its own build)
     "-DHALO_64BIT",
     "-DHALO_WINDOW_TRANSLATED",
+    "-DHALO_CONSOLE_WINDOW_LOW=0x7D000000U",
+    "-DHALO_CONSOLE_XBOX_RENDER_SIZES",
     # Delta Peer as a client, the Vita's platform number (11, the registry's)
     "-DHALO_CONSOLE_DELTA",
     "-DHALO_DELTA_PLATFORM=_delta_platform_vita",
@@ -169,6 +173,11 @@ CONSOLE_FEATURES = [
     "-DHALO_CONSOLE_COLLISION_CACHES",
     # the Xbox's own particle limit (1024: its pool holds no more)
     "'-DHALO_CONSOLE_PARTICLE_LIMIT=\"1024\"'",
+    # the game tick on a thread of its own beside the render (the shared
+    # port/linux/include/tick_overlap.h; the Vita's waits, core and clock:
+    # platform/vita_platform.c), its stack as the game thread's
+    "-DHALO_CONSOLE_TICK_OVERLAP",
+    "-DHALO_CONSOLE_TICK_OVERLAP_STACK_SIZE=0x800000UL",
 ]
 
 # the game's C89, as MSVC took it
@@ -261,6 +270,7 @@ VITA_ALIGNED_EXCEPTIONS = {"source/physics/breakable_surfaces.c", "source/ai/act
 FRAME_SPLIT_WRAPPED = (
     "input_update", "process_ui_widgets", "player_control_update", "game_time_update", "director_update",
     "observer_update", "sound_render", "render_frame", "render_frame_present",
+    "halo_tick_overlap_start", "halo_tick_overlap_join",
     "game_tick", "units_update", "ai_update", "effects_update", "objects_update", "players_update_before_game",
     "players_update_after_game", "hud_update", "hs_update", "game_engine_update", "first_person_weapons_update",
     "antennas_update", "player_effect_update", "recorded_animations_update", "scenario_tick_update",

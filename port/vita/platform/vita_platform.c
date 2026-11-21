@@ -11,6 +11,7 @@ as nothing there.
 
 #include <SDL3/SDL.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "platform.h"
@@ -21,6 +22,53 @@ as nothing there.
 
 static BOOL sdl_started;
 static BOOL menus_active;
+
+#ifdef HALO_CONSOLE_TICK_OVERLAP
+#include "tick_overlap.h"
+
+/* ---------- the tick beside the render (HALO_CONSOLE_TICK_OVERLAP, the
+game's port/linux/include/tick_overlap.h): its two threads' waits on kernel
+semaphores (vitasdk's pthread_cond_timedwait slept through broadcasts to
+its deadline: Halo CE Vita's 1-2 s campaign freezes), the tick on the third
+core (the render worker has the second: d3d8_gxm.c), the process clock */
+
+/* (a frame-split build's: platform/vita_frame_split.c) */
+void vita_frame_split_tick_thread(void) __attribute__((weak));
+
+static int tick_wake_wait(int id, unsigned long timeout_us)
+{
+	/* (the host's: 0 taken, 1 timed out; the game's: 1 woken, 0 not) */
+	int result = vita_host_wake_wait(id, timeout_us);
+
+	return result == 0 ? 1 : result == 1 ? 0 : result;
+}
+
+static void tick_thread_started(void)
+{
+	/* HALO_TICK_CORE (0-2): the tick's core, 2 by default */
+	const char *setting = getenv("HALO_TICK_CORE");
+	int core = setting ? atoi(setting) : 2;
+
+	vita_host_pin_current_thread(core >= 0 && core <= 2 ? core : 2);
+	vita_host_thread_watch("tick");
+	if (vita_frame_split_tick_thread)
+		vita_frame_split_tick_thread();
+}
+
+__attribute__((constructor)) static void tick_overlap_port(void)
+{
+	static const struct console_tick_overlap_port port =
+	{
+		vita_host_wake_create,
+		tick_wake_wait,
+		vita_host_wake_signal,
+		tick_thread_started,
+		vita_host_time_us,
+	};
+
+	console_tick_overlap_port_set(&port);
+}
+#endif
 
 BOOL platform_sdl_initialize(void)
 {
