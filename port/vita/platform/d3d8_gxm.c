@@ -6402,7 +6402,7 @@ static struct
 	unsigned long long logged_us;
 	unsigned long summary_frames, summary_over;
 	int summary_minimum, summary_maximum;
-	float summary_level_sum, summary_gpu_sum, summary_gpu_maximum;
+	float summary_level_sum, summary_gpu_sum, summary_gpu_maximum, summary_span_sum;
 	float last_gpu_ms, last_tail_ms;
 } dynres;
 
@@ -6511,10 +6511,17 @@ static void dynres_log_change(int from)
 	dynres.logged_us = now;
 }
 
-/* a frame the GPU finished, at the level it was drawn at */
-static int dynres_measured(float gpu_ms, float tail_ms, int frame_level, float interval_ms)
+/* a frame the GPU finished, at the level it was drawn at. The GPU's own
+time is what it took after the frame's last submission (tail_ms): the span
+from the first (span_ms) is the render worker's while the frame is being
+recorded, which a CPU-bound frame stretches over the whole render - counted
+as the GPU's, it held the scale at its floor (b30's beach: "GPU" 56-80 ms at
+50%, the GPU idle most of it). A GPU that cannot keep up finishes late after
+the last submission, and that is what it is judged by */
+static int dynres_measured(float span_ms, float tail_ms, int frame_level, float interval_ms)
 {
 	int level = dynres.controller.level;
+	float gpu_ms = tail_ms;
 
 	dynres.last_gpu_ms = gpu_ms;
 	dynres.last_tail_ms = tail_ms;
@@ -6525,6 +6532,7 @@ static int dynres_measured(float gpu_ms, float tail_ms, int frame_level, float i
 		dynres.summary_frames++;
 		dynres.summary_level_sum += (float)frame_level;
 		dynres.summary_gpu_sum += gpu_ms;
+		dynres.summary_span_sum += span_ms;
 		if (gpu_ms > dynres.summary_gpu_maximum)
 			dynres.summary_gpu_maximum = gpu_ms;
 		if (gpu_ms > dynres.budget_ms)
@@ -6535,15 +6543,17 @@ static int dynres_measured(float gpu_ms, float tail_ms, int frame_level, float i
 			dynres.summary_maximum = frame_level;
 		if (dynres.summary_frames == 300)
 		{
-			platform_log("dynamic resolution: %lu frames at %d..%d%% (mean %.0f%%), GPU mean %.1f ms, max %.1f, "
-				"%lu over the %.1f ms budget, %lu changes", dynres.summary_frames,
+			platform_log("dynamic resolution: %lu frames at %d..%d%% (mean %.0f%%), GPU mean %.1f ms (after the last "
+				"submission; from the first %.1f), max %.1f, %lu over the %.1f ms budget, %lu changes", dynres.summary_frames,
 				dynres.summary_minimum * 100 / DYNRES_UNITS, dynres.summary_maximum * 100 / DYNRES_UNITS,
 				(double)(dynres.summary_level_sum * 100.0f / DYNRES_UNITS / dynres.summary_frames),
-				(double)(dynres.summary_gpu_sum / dynres.summary_frames), (double)dynres.summary_gpu_maximum,
+				(double)(dynres.summary_gpu_sum / dynres.summary_frames),
+				(double)(dynres.summary_span_sum / dynres.summary_frames), (double)dynres.summary_gpu_maximum,
 				dynres.summary_over, (double)dynres.budget_ms, dynres.summary_changes);
 			dynres.summary_frames = dynres.summary_over = dynres.summary_changes = 0;
 			dynres.summary_minimum = dynres.summary_maximum = 0;
 			dynres.summary_level_sum = dynres.summary_gpu_sum = dynres.summary_gpu_maximum = 0.0f;
+			dynres.summary_span_sum = 0.0f;
 		}
 	}
 	return level;
