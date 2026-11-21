@@ -602,8 +602,23 @@ SceUID __real_sceKernelCreateThread(const char *name, SceKernelThreadEntry entry
 SceUID __wrap_sceKernelCreateThread(const char *name, SceKernelThreadEntry entry, int priority, SceSize stack,
 	SceUInt attributes, int affinity, const SceKernelThreadOptParam *options)
 {
-	SceUID thread = __real_sceKernelCreateThread(name, entry, priority, stack, attributes, affinity, options);
+	SceUID thread;
 	int index;
+
+	/* SDL's audio device thread (the game's mixer, dsound_sdl.c) on the
+	second core, beside the render worker, off the game thread's (the first)
+	and the tick's (the third): unpinned, it took a share of the tick's core
+	and the b30 fight ran at 13-15 frames a second, pinned 15-19.
+	HALO_AUDIO_CORE (0-2, -1 any) places it elsewhere */
+	if (name && !strncmp(name, "SDLAudio", 8))
+	{
+		static const int masks[3] = { 0x10000, 0x20000, 0x40000 };
+		int core = getenv("HALO_AUDIO_CORE") ? atoi(getenv("HALO_AUDIO_CORE")) : 1;
+
+		if (core >= 0 && core < 3)
+			affinity = masks[core];
+	}
+	thread = __real_sceKernelCreateThread(name, entry, priority, stack, attributes, affinity, options);
 
 	if (thread >= 0 && (index = __atomic_fetch_add(&tracked_count, 1, __ATOMIC_RELAXED)) < TRACKED_THREADS)
 		tracked_threads[index] = thread;
@@ -736,6 +751,10 @@ static void *game_pthread(void *unused)
 	static char *arguments[] = { "halo", NULL };
 
 	(void)unused;
+	/* the game's thread on the first core (the render worker has the second,
+	the tick the third: platform/d3d8_gxm.c, vita_platform.c). HALO_GAME_CORE
+	(0-2, -1 any) places it elsewhere */
+	vita_host_pin_current_thread(getenv("HALO_GAME_CORE") ? atoi(getenv("HALO_GAME_CORE")) : 0);
 	vita_host_thread_start_stack("awake", awake_thread, NULL, -1, 64, 16 * 1024);
 	if (vita_host_thread_start_priority("watchdog", watchdog_thread, NULL, -1, 64) < 0)
 		vita_host_log("watchdog: could not start");
