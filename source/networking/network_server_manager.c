@@ -484,6 +484,7 @@ boolean forge_net_command_session(void);
 #include "network_wire.h"
 #include "net_fuzz_twin.h"
 #include "player_cosmetics.h"
+#include "network_join_password.h"
 #endif
 
 #include "cache/cache_files.h"
@@ -885,6 +886,9 @@ static boolean network_game_server_countdown_slowed[MAXIMUM_NETWORK_MACHINE_COUN
 
 /* port/linux/game/network_distributed.c's (the host's bans: bans.txt) */
 boolean network_distributed_banned(unsigned long address, char const *hardware_id);
+/* port/linux/src/p2p_lobby.c's (whether the game hosted has a password in
+force: network_join_password.h) */
+int p2p_lobby_hosting_has_password(void);
 /* port/linux/game/network_anticheat.c's (the session's bans, and machines
 dropped by the anti-cheat limit, kept out a while) */
 boolean network_anticheat_refused(unsigned long address, char const *hardware_id);
@@ -2404,6 +2408,25 @@ static boolean network_game_server_machine_refused(
 			network_game_server_refusal_code = _rejection_code_blacklisted_machine;
 			return TRUE;
 		}
+#ifdef HALO_LINUX
+		/* (nor, in a game with a password, one that came from the internet
+		straight to the game's port, as a system link join does: the
+		password is asked for by the server browser's listing and a friend's
+		presence, which lead through internet play, and a join request
+		carries none. A machine of the host's own network, internet play's
+		and ad hoc play's peers (their stand-ins, 100.64/10), and every
+		machine of a game without a password, as ever: network_join_password.h) */
+		if (!network_game_server_client_machine_is_local(server, machine) &&
+			address.address.long_words[0] != IPV4_LOOPBACK_ADDRESS &&
+			network_join_password_refused((uint32_t)address.address.long_words[0],
+				p2p_lobby_hosting_has_password()))
+		{
+			network_event("refusing a machine @ %s: the game has a password, and the machine did not come "
+				"through internet play", transport_address_to_string(&address));
+			network_game_server_refusal_code = _rejection_code_bad_password;
+			return TRUE;
+		}
+#endif
 		/* (nor one more machine of a person whose machines have their share
 		of the game's players, F-11) */
 		if (!network_game_server_client_machine_is_local(server, machine) &&

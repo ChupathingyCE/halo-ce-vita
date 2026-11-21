@@ -2354,6 +2354,20 @@ int p2p_lobby_hosting_listed(int *has_password)
 	return listed;
 }
 
+int p2p_lobby_hosting_has_password(void)
+{
+	int has_password;
+
+	if (!config_boolean("network.online"))
+		return 0;
+	pthread_mutex_lock(&p2p_lock);
+	/* (as a friend's presence has it locked: p2p_lobby_friends_view) */
+	has_password = lobby.password_said ? lobby.has_password || lobby.password_pending || lobby.password_failed :
+		config_string("network.lobby_password")[0] != 0;
+	pthread_mutex_unlock(&p2p_lock);
+	return has_password;
+}
+
 void p2p_lobby_set_name(const char *name)
 {
 	char chosen[P2P_LISTING_NAME_SIZE + 1];

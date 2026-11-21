@@ -363,6 +363,12 @@ know it join from the browser (its code and invite still join it). Its key
 is worked out on a thread of its own (about a second on a Vita); until then
 the game is not listed. Setting or changing it makes a new invite */
 void p2p_lobby_set_password(const char *password);
+/* whether the game this machine hosts has a password in force for joins
+(any thread): internet play on (network.online) and a password set, its key
+ready or not. Its host then takes a machine that reaches the game's port
+from the internet only through internet play (network_join_password.h,
+network_server_manager.c) */
+int p2p_lobby_hosting_has_password(void);
 /* the server browser: on (the hosts are asked for their listings) or off;
 REFRESH asks again; the index-th game in the order shown (the most players
 first, then those not failed, the open ones, by name; this machine's own
