@@ -20,6 +20,9 @@
 #                 the Workshop, HALO_TEST_WORKSHOP_OLD2): to it a custom map it lacks, which it asks the host for;
 #                 the host refuses (never shared); the old joiner is refused cleanly, stays up, plays nothing
 # HALO_TEST_WORKSHOP_OTHER_MAP: the other map of workshopdiff (MCC's chillout.map).
+# (a Steam session's good end: revoked, or - 1.1.3-insider.8 - the sign-in kept on the device (sealed, 14 days) and
+# only logged off)
+steam_ended_ok='steam job: sign-in 1 ended: done \(revoked (1, logged off 1, kept on this device 0|0, logged off 1, kept on this device 1)\)'
 
 ws_id=2900000002
 ws_file=coldsnapextended.map
@@ -126,7 +129,7 @@ workshop_case() {
 		grep -aq "menus: workshop: item $ws_id's download begun for the host's map (the screen over the lobby)" "$jl" ||
 			fail "the Workshop download of the item did not begin with its screen over the lobby"
 		grep -aq "steam job: workshop: 1 items chosen" "$jl" || fail "the job did not take the one item"
-		grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$jl" ||
+		grep -aqE "$steam_ended_ok" "$jl" ||
 			fail "the session did not end done, revoked and logged off"
 		grep -aq "menus: workshop: $ws_id installed in mods" "$jl" || fail "the item was not installed"
 		grep -aq "map share: the Steam Workshop map '$ws_name' is installed and the host's" "$jd" ||

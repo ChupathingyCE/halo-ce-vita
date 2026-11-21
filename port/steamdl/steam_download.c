@@ -11,6 +11,7 @@ steam_download.h: the download's flow, the session always ended.
 #include "steam_file.h"
 #include "steam_net.h"
 #include "steam_plan.h"
+#include "steam_signin.h"
 #include "steam_zip.h"
 
 #include <stdarg.h>
@@ -1182,7 +1183,7 @@ void steam_download_run(const struct steam_download_options *options, const stru
 	uint32_t depots[4];
 	size_t depot_count, index;
 	float interval = 5.0f;
-	int cdn_count = 0, state, workshop_count = 0;
+	int cdn_count = 0, state, workshop_count = 0, use_kept = 0;
 	uint64_t workshop_ids[STEAM_WORKSHOP_CHOSEN_MAXIMUM];
 
 	memset(result, 0, sizeof(*result));
@@ -1204,6 +1205,80 @@ void steam_download_run(const struct steam_download_options *options, const stru
 		if (connected)
 			say(callbacks, "steam: the CM connection took %u ms", result->connect_ms);
 		else
+		{
+			fail(result, "%s", error);
+			goto end;
+		}
+	}
+	/* the sign-in kept on the device: used, or (expired, or SIGN OUT) revoked; unreadable: wiped */
+	if (options->signin_path && options->device_secret && options->device_secret_size)
+	{
+		struct steam_signin *kept = calloc(1, sizeof(*kept));
+		int state = kept ? steam_signin_load(options->signin_path, options->device_secret, options->device_secret_size,
+			(int64_t)time(NULL), kept) : STEAM_SIGNIN_NONE;
+
+		result->signin_found = state;
+		if (options->sign_out)
+			steam_signin_wipe(options->signin_path);
+		if (state == STEAM_SIGNIN_KEPT || state == STEAM_SIGNIN_EXPIRED)
+		{
+			steam_session_use_token(&session, kept->refresh_token, kept->account_name);
+			if (state == STEAM_SIGNIN_EXPIRED || options->sign_out)
+			{
+				say(callbacks, state == STEAM_SIGNIN_EXPIRED ? "steam: the sign-in kept on this device is older than "
+					"14 days: removed from it, revoked with Steam" : "steam: sign out: the kept sign-in removed from this "
+					"device, now revoked with Steam");
+				/* (signed in first, the revoke is the account's own; a refused logon revokes without) */
+				if (options->sign_out && !steam_session_logon(&session, error, sizeof(error)) && !session.connected)
+					steam_session_reconnect(&session, error, sizeof(error));
+				result->signed_out = steam_session_revoke(&session);
+			}
+			else
+			{
+				use_kept = 1;
+				say(callbacks, "steam: the sign-in kept on this device is used (saved %d days ago; kept 14)",
+					(int)(((int64_t)time(NULL) - kept->saved_at) / 86400));
+			}
+		}
+		else if (state == STEAM_SIGNIN_UNREADABLE)
+			say(callbacks, "steam: the kept sign-in could not be read (damaged, changed or another console's): removed");
+		if (kept)
+		{
+			steam_wipe(kept, sizeof(*kept));
+			free(kept);
+		}
+	}
+	if (options->sign_out)
+	{
+		if (result->signin_found != STEAM_SIGNIN_KEPT && result->signin_found != STEAM_SIGNIN_EXPIRED)
+			say(callbacks, "steam: sign out: no sign-in was kept on this device");
+		result->ok = 1;
+		goto end;
+	}
+	if (use_kept)
+	{
+		if (steam_session_logon(&session, error, sizeof(error)))
+		{
+			session.keep_token = 1;
+			result->kept = 1;
+			goto signed_in;
+		}
+		/* (Steam not answering or busy: not the token's fault - kept for the next try) */
+		if (session.logon_eresult == 0 || session.logon_eresult == 10 || session.logon_eresult == 16 ||
+			session.logon_eresult == 20 || session.logon_eresult == 48 || session.logon_eresult == 84)
+		{
+			session.keep_token = 1;
+			result->kept = 1;
+			result->session_lost = !session.connected;
+			fail(result, "%s", error);
+			goto end;
+		}
+		/* (refused: revoked or expired at Steam, the password changed, the device removed in the Steam app) */
+		say(callbacks, "steam: the kept sign-in was refused (result %d, %s): removed from this device; a new QR",
+			session.logon_eresult, steam_eresult_name(session.logon_eresult));
+		steam_signin_wipe(options->signin_path);
+		steam_session_use_token(&session, "", "");
+		if (!steam_session_reconnect(&session, error, sizeof(error)))
 		{
 			fail(result, "%s", error);
 			goto end;
@@ -1242,6 +1317,36 @@ void steam_download_run(const struct steam_download_options *options, const stru
 		fail(result, "%s", error);
 		goto end;
 	}
+	/* (kept on the device for the next 14 days: the refresh token, the account's name, the date - sealed to this
+	console; if it cannot be kept, it is revoked at the end as before) */
+	if (options->signin_path && options->device_secret && options->device_secret_size && session.secrets)
+	{
+		struct steam_signin *keep = calloc(1, sizeof(*keep));
+
+		if (keep)
+		{
+			memcpy(keep->refresh_token, session.secrets->refresh_token, sizeof(keep->refresh_token));
+			memcpy(keep->account_name, session.secrets->account_name, sizeof(keep->account_name));
+			keep->saved_at = (int64_t)time(NULL);
+		}
+		if (keep && steam_signin_save(options->signin_path, options->device_secret, options->device_secret_size, keep))
+		{
+			session.keep_token = 1;
+			result->kept = 1;
+			say(callbacks, "steam: the sign-in is kept on this device for 14 days (sealed to this console)");
+			/* (the "not signed out" marker is for a live token nothing accounts for: this one is the file's) */
+			if (options->marker_path)
+				remove(options->marker_path);
+		}
+		else
+			say(callbacks, "steam: the sign-in could not be kept on this device: it is revoked at the end");
+		if (keep)
+		{
+			steam_wipe(keep, sizeof(*keep));
+			free(keep);
+		}
+	}
+signed_in:
 	if (options->workshop)
 	{
 		/* (the list and the choice first; the CDN's servers after) */

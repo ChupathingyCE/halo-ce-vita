@@ -3594,6 +3594,23 @@
 "If \"Halo CE Vita (PS Vita)\" is in the Steam app's Authorized devices, remove it. What is in stays: download again to resume." = "Si \"Halo CE Vita (PS Vita)\" está en los dispositivos autorizados de la app de Steam, quítalo. Lo descargado se queda: descarga de nuevo para continuar."
 "MCC's dialogue, music and stream banks (1.5 GB)" = "Bancos de diálogo, música y ambiente de MCC (1,5 GB)"
 "SIGN IN WITH THE STEAM APP" = "INICIAR SESIÓN CON LA APP DE STEAM"
+# (1.1.3-insider.8: the Steam sign-in kept on the Vita for up to 14 days, and SIGN OUT)
+"Unofficial: this signs in to your own Steam account with the Steam app's QR code and downloads only your own Halo: The Master Chief Collection files. The sign-in stays on this Vita for up to 14 days, sealed to this console, so you scan the code once; SIGN OUT removes it. Valve may stop it working at any time. No password is asked for or kept." = "No oficial: inicia sesión en tu propia cuenta de Steam con el código QR de la app de Steam y descarga solo tus propios archivos de Halo: The Master Chief Collection. La sesión se queda en esta Vita hasta 14 días, sellada a esta consola, así que escaneas el código una vez; CERRAR SESIÓN la quita. Valve puede hacer que deje de funcionar en cualquier momento. No se pide ni se guarda ninguna contraseña."
+"Signing out of Steam..." = "Cerrando la sesión de Steam..."
+"The Steam session was lost. Connecting again..." = "Se perdió la sesión de Steam. Conectando de nuevo..."
+"Signed out. The Steam sign-in is removed from this Vita and Steam has revoked it." = "Sesión cerrada. La sesión de Steam se quitó de esta Vita y Steam la revocó."
+"The Steam sign-in is removed from this Vita. Steam did not confirm it: in the Steam app, remove \"Halo CE Vita (PS Vita)\" from Authorized devices." = "La sesión de Steam se quitó de esta Vita. Steam no lo confirmó: en la app de Steam, quita \"Halo CE Vita (PS Vita)\" de los dispositivos autorizados."
+"Done: %u files downloaded, %u already there. You stay signed in on this Vita for the next download (SIGN OUT removes it)." = "Listo: %u archivos descargados, %u ya estaban. La sesión sigue abierta en esta Vita para la próxima descarga (CERRAR SESIÓN la quita)."
+"You stay signed in on this Vita. What is in stays: download again to resume." = "La sesión sigue abierta en esta Vita. Lo descargado se queda: descarga de nuevo para continuar."
+"DOWNLOAD (SIGNED IN TO STEAM)" = "DESCARGAR (SESIÓN DE STEAM ABIERTA)"
+"SIGN OUT: signed in, %d days left" = "CERRAR SESIÓN: abierta, quedan %d días"
+"SIGN OUT: the sign-in has expired" = "CERRAR SESIÓN: la sesión caducó"
+"SIGN OUT: the sign-in cannot be read" = "CERRAR SESIÓN: la sesión no se puede leer"
+"SIGN OUT: not signed in" = "CERRAR SESIÓN: sin sesión"
+"No Steam sign-in is kept on this Vita." = "No hay ninguna sesión de Steam guardada en esta Vita."
+"Unofficial: this signs in to your own Steam account with the Steam app's QR code, lists Halo CE's Workshop items and downloads the ones you pick. The sign-in stays on this Vita for up to 14 days, sealed to this console (SIGN OUT in DOWNLOAD FROM STEAM removes it). Your account must own Halo: The Master Chief Collection. Campaign mods play from the mods folder, offline; multiplayer maps are in the multiplayer map lists, offline and online. No password is asked for or kept." = "No oficial: inicia sesión en tu propia cuenta de Steam con el código QR de la app de Steam, muestra los elementos de Halo CE del Workshop y descarga los que elijas. La sesión se queda en esta Vita hasta 14 días, sellada a esta consola (CERRAR SESIÓN en DESCARGAR DESDE STEAM la quita). Tu cuenta debe tener Halo: The Master Chief Collection. Los mods de campaña se juegan desde la carpeta mods, sin conexión; los mapas multijugador están en las listas de mapas multijugador, sin conexión y en línea. No se pide ni se guarda ninguna contraseña."
+"Done. You stay signed in on this Vita." = "Listo. La sesión sigue abierta en esta Vita."
+"OPEN THE WORKSHOP (SIGNED IN TO STEAM)" = "ABRIR EL WORKSHOP (SESIÓN DE STEAM ABIERTA)"
 "Charge the Vita to 30 percent or plug in the charger first." = "Primero carga la Vita al 30 por ciento o conecta el cargador."
 
 # ---------- DOWNLOAD FROM STEAM: STEAM WORKSHOP (halo3/workshop.xml, menu_functions.c h3_workshop_*)

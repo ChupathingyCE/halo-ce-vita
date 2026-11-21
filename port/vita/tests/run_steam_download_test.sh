@@ -52,7 +52,7 @@ steam="$root/port/steamdl/steam_pb.c $root/port/steamdl/steam_crypto.c $root/por
 	$root/port/steamdl/steam_kv.c $root/port/steamdl/steam_ws.c $root/port/steamdl/steam_http.c
 	$root/port/steamdl/steam_cm.c $root/port/steamdl/steam_plan.c $root/port/steamdl/steam_session.c
 	$root/port/steamdl/steam_download.c $root/port/steamdl/steam_job.c $root/port/steamdl/steam_workshop.c
-	$root/port/steamdl/steam_image.c"
+	$root/port/steamdl/steam_image.c $root/port/steamdl/steam_signin.c"
 export ASAN_OPTIONS=detect_leaks=1:exitcode=99 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:exitcode=98
 bits=-m32
 echo 'int main(void) { return 0; }' > "$out/probe.c"
@@ -93,7 +93,7 @@ flow() {
 	fifo=$work/stdin
 	rm -f "$fifo"
 	mkfifo "$fifo"
-	python3 -I "$here/steam_fake_server.py" --work "$work" --mode "$mode" $server_tls < "$fifo" > "$work/server.json" &
+	python3 -I "$here/steam_fake_server.py" --work "$work" --mode "$mode" $server_tls ${server_extra:-} < "$fifo" > "$work/server.json" &
 	server_pid=$!
 	exec 3> "$fifo"
 	i=0
@@ -116,8 +116,10 @@ flow() {
 	fail) [ "$ok" = 0 ] && [ "$cancelled" = 0 ] || { echo "FAIL $name: should have failed"; status=1; } ;;
 	cancel) [ "$cancelled" = 1 ] || { echo "FAIL $name: not cancelled"; status=1; } ;;
 	esac
-	# signed out: the token revoked (and, once signed in, logged off after it)
-	if [ "$mode" = losesession ]; then
+	# signed out: the token revoked (and, once signed in, logged off after it) - the kept sign-in's flows check their own
+	if [ -n "${signin_flow:-}" ]; then
+		:
+	elif [ "$mode" = losesession ]; then
 		# (the first session lost: revoked over a new connection; the second ends as usual)
 		order=$(grep -E "cm: (revoke|logoff|connection dropped)" "$work/transcript.txt" | tr '\n' ' ')
 		[ "$order" = "cm: connection dropped cm: revoke ok cm: revoke ok cm: logoff " ] || \
@@ -182,6 +184,71 @@ flow kicked kick 1 fail
 flow badmulti badmulti 1 ok
 flow slow slow 1 ok
 grep -q "cm: heartbeat" "$out/flow-slow/transcript.txt" || { echo "FAIL slow: no heartbeat during the download"; status=1; }
+# (the old-style message in the logon's Multi: skipped, the rest read - insider.7 dropped the whole Multi)
+grep -q "a multi message held 1 old-style messages (not protobuf; the last EMsg 5510): skipped" "$out/flow-ce/log.txt" &&
+	! grep -q "malformed multi" "$out/flow-ce/log.txt" || { echo "FAIL ce: the logon's Multi"; status=1; }
+
+echo "--- the kept sign-in (steam_signin.h: sealed to the device, 14 days, SIGN OUT)"
+# (one made-up account's token across these runs: --token-file; the card's sealed file carries over with keep)
+signin_flow=1 client_env="env STEAM_TEST_SIGNIN=1"
+signin_check() {
+	# signin_check <name> <expected revoke/logoff order> <file there: 1|0> <QR used: 1|0>
+	w=$out/flow-$1
+	order=$(grep -E "cm: (revoke|logoff)" "$w/transcript.txt" | tr '\n' ' ')
+	[ "$order" = "$2" ] || { echo "FAIL $1: end was '$order', not '$2'"; status=1; }
+	if [ "$3" = 1 ]; then [ -s "$w/card/haloce-vita/steam-signin.bin" ] || { echo "FAIL $1: no kept sign-in"; status=1; }
+	else [ ! -e "$w/card/haloce-vita/steam-signin.bin" ] || { echo "FAIL $1: the kept sign-in is still there"; status=1; }; fi
+	if [ "$4" = 1 ]; then grep -q "BeginAuthSessionViaQR" "$w/transcript.txt" || { echo "FAIL $1: no QR"; status=1; }
+	else ! grep -q "BeginAuthSessionViaQR" "$w/transcript.txt" || { echo "FAIL $1: a QR was asked for"; status=1; }; fi
+	[ ! -e "$w/steam-session.txt" ] || { echo "FAIL $1: the not-signed-out marker left"; status=1; }
+	[ ! -e "$w/card/haloce-vita/steam-signin.bin.new" ] || { echo "FAIL $1: a .new left"; status=1; }
+	# (no token of the account's, live or revoked, in the clear anywhere this run wrote: the card, the log)
+	for t in $(cut -d' ' -f1 "$out/signin-token.txt" | sort -u); do
+		if grep -r -l -a -F -e "$t" "$w/card" "$w/log.txt" 2>/dev/null | grep .; then echo "FAIL $1: a token in the clear"; status=1; fi
+	done
+}
+server_extra="--token-file $out/signin-token.txt"
+rm -f "$out/signin-token.txt"
+flow keep-first normal 1 ok
+grep -q "kept=1" "$out/flow-keep-first/line" || { echo "FAIL keep-first: not kept"; status=1; }
+signin_check keep-first "cm: logoff " 1 1
+flow keep-again normal 1 ok "" keep-first
+grep -q "found=1 kept=1" "$out/flow-keep-again/line" && grep -q "already=20" "$out/flow-keep-again/line" ||
+	{ echo "FAIL keep-again: the kept sign-in not used"; status=1; }
+signin_check keep-again "cm: logoff " 1 0
+grep -q "sign-in kept on this device is used (saved 0 days ago" "$out/flow-keep-again/log.txt" || { echo "FAIL keep-again: log"; status=1; }
+client_env="env STEAM_TEST_SIGNIN=1 STEAM_TEST_SIGN_OUT=1"
+flow keep-signout normal 1 ok "" keep-again
+grep -q "signed_out=1" "$out/flow-keep-signout/line" || { echo "FAIL keep-signout: not confirmed"; status=1; }
+signin_check keep-signout "cm: revoke ok cm: logoff " 0 0
+client_env="env STEAM_TEST_SIGNIN=1"
+# (revoked at Steam: refused at the logon with Revoked - wiped, then a new QR; the fake refuses that token from now on)
+flow keep-revoked normal 1 ok "" keep-first
+grep -q "the kept sign-in was refused (result 26, Revoked): removed from this device; a new QR" "$out/flow-keep-revoked/log.txt" ||
+	{ echo "FAIL keep-revoked: log"; status=1; }
+signin_check keep-revoked "cm: logoff " 1 1
+# (older than 14 days: revoked before the QR, not signed in; then a new QR, kept again)
+rm -f "$out/signin-token.txt"
+flow keep-base normal 1 ok
+token_now=$(tail -1 "$out/signin-token.txt")
+mkdir -p "$out/flow-keep-old-base" && cp -r "$out/flow-keep-base/card" "$out/flow-keep-old-base/"
+"$out/steam_download_test" signin-write "$out/flow-keep-old-base/card/haloce-vita/steam-signin.bin" "$token_now" fakeplayer \
+	$(($(date +%s) - 15 * 86400)) || { echo "FAIL signin-write"; status=1; }
+flow keep-old normal 1 ok "" keep-old-base
+signin_check keep-old "cm: revoke ok cm: logoff " 1 1
+# (the expired one revoked before the QR, not signed in: no logon between the connection and the revoke)
+awk '/cm: revoke ok/ {print "revoke"; exit} /cm: logon ok/ {print "logon"; exit}' "$out/flow-keep-old/transcript.txt" | grep -q revoke ||
+	{ echo "FAIL keep-old: not revoked before the logon"; status=1; }
+grep -q "older than 14 days: removed from it, revoked with Steam" "$out/flow-keep-old/log.txt" || { echo "FAIL keep-old: log"; status=1; }
+# (another console's file, or a damaged one: wiped, a new QR, kept again)
+rm -f "$out/signin-token.txt"
+mkdir -p "$out/flow-keep-bad-base/card/haloce-vita"
+head -c 300 /dev/urandom > "$out/flow-keep-bad-base/card/haloce-vita/steam-signin.bin"
+flow keep-bad normal 1 ok "" keep-bad-base
+signin_check keep-bad "cm: logoff " 1 1
+grep -q "found=3 kept=1" "$out/flow-keep-bad/line" || { echo "FAIL keep-bad: state"; status=1; }
+# (Steam not answering the logon: kept for the next try, not wiped)
+signin_flow= client_env= server_extra=
 
 echo "--- the Steam Workshop (the list, the chosen items into workshop/<id>, installed into mods/<id> after the session)"
 sub=workshop
@@ -410,7 +477,7 @@ if [ "$seconds" != 0 ]; then
 	done
 	clang -g -O1 $fsan -fwrapv -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 $include $config "$here/steam_fuzz.c" $steam \
 		"$found"/obj/*.o -lpthread -o "$found/steam_fuzz"
-	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list ws_list ws_names ws_image ws_text; do
+	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm multi signin http chunk journal cdn_list ws_list ws_names ws_image ws_text; do
 		mkdir -p "$found/$target"
 		seeds=$out/fixtures/seeds/$target
 		[ -d "$seeds" ] || seeds=
@@ -421,7 +488,7 @@ if [ "$seconds" != 0 ]; then
 			> "$found/$target.log" 2>&1 &
 	done
 	wait
-	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm http chunk journal cdn_list ws_list ws_names ws_image ws_text; do
+	for target in protobuf manifest manifest_zip kv ws_frames ws_upgrade cm multi signin http chunk journal cdn_list ws_list ws_names ws_image ws_text; do
 		runs=$(grep -E 'stat::number_of_executed_units' "$found/$target.log" | awk '{print $2}')
 		cov=$(grep -E '^#[0-9]+.*cov:' "$found/$target.log" | tail -1 | sed 's/.*cov: \([0-9]*\).*/\1/')
 		bad=$(ls "$found/$target" | grep -c -E '^(crash|leak|timeout|oom)-' || true)

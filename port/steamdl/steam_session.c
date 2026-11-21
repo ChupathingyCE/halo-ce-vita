@@ -1069,6 +1069,71 @@ int steam_parse_cm_list(const char *json, size_t size, char urls[][STEAM_HOST_MA
 	return count;
 }
 
+/* the RevokeToken (permanent) for the token in the secrets, on the connection there is (authenticated when signed
+in): 1 if Steam said OK. The token is wiped either way */
+static int revoke_now(struct steam_session *session)
+{
+	struct steam_secrets *secrets = session->secrets;
+	uint8_t *body;
+	size_t capacity = STEAM_TOKEN_MAXIMUM + 64;
+	struct steam_pb_writer writer;
+	uint64_t job = session->next_job++;
+	int sent, eresult = 0, ok = 0;
+
+	body = malloc(capacity);
+	if (body)
+	{
+		steam_pb_writer_init(&writer, body, capacity);
+		steam_pb_put_string(&writer, 1, secrets->refresh_token);
+		steam_pb_put_varint(&writer, 2, 1 /* k_EAuthTokenRevokePermanent */);
+		session->revoking = 1;
+		sent = !writer.error && send_message(session, session->logged_on ? STEAM_EMSG_SERVICE_METHOD_CALL :
+			STEAM_EMSG_SERVICE_METHOD_CALL_NONAUTHED, job, "Authentication.RevokeToken#1", body, writer.size);
+		steam_wipe(body, capacity);
+		free(body);
+		if (sent && wait_for(session, STEAM_EMSG_SERVICE_METHOD_RESPONSE, job, END_TIMEOUT_MS))
+		{
+			eresult = session->reply_header.eresult;
+			ok = eresult == STEAM_ERESULT_OK;
+		}
+		session->revoking = 0;
+	}
+	if (!ok)
+		say(session, "steam: the revoke was not confirmed (result %d, %s)", eresult, steam_eresult_name(eresult));
+	steam_wipe(secrets->refresh_token, sizeof(secrets->refresh_token));
+	steam_wipe(secrets->access_token, sizeof(secrets->access_token));
+	return ok;
+}
+
+int steam_session_revoke(struct steam_session *session)
+{
+	if (!session->secrets || !session->connected || !session->secrets->refresh_token[0])
+		return 0;
+	if (!revoke_now(session))
+		return 0;
+	session->revoked = 1;
+	say(session, "steam: the sign-in was revoked");
+	return 1;
+}
+
+void steam_session_use_token(struct steam_session *session, const char *refresh_token, const char *account_name)
+{
+	if (!session->secrets)
+		return;
+	snprintf(session->secrets->refresh_token, sizeof(session->secrets->refresh_token), "%s", refresh_token);
+	snprintf(session->secrets->account_name, sizeof(session->secrets->account_name), "%s", account_name);
+}
+
+int steam_session_reconnect(struct steam_session *session, char *error, int error_size)
+{
+	if (session->ws.stream.close || session->ws.input)
+		steam_ws_close(&session->ws);
+	session->connected = session->logged_on = session->kicked = 0;
+	session->steamid = 0;
+	session->session_id = 0;
+	return session->url[0] && steam_session_connect(session, session->url, error, error_size);
+}
+
 void steam_session_end(struct steam_session *session)
 {
 	struct steam_secrets *secrets = session->secrets;
@@ -1076,6 +1141,13 @@ void steam_session_end(struct steam_session *session)
 	if (session->ended)
 		return;
 	session->ended = 1;
+	/* (a sign-in kept on the device: not revoked, only logged off - steam_signin.h) */
+	if (secrets && session->keep_token && secrets->refresh_token[0])
+	{
+		say(session, "steam: the sign-in stays kept on this device (not revoked)");
+		steam_wipe(secrets->refresh_token, sizeof(secrets->refresh_token));
+		steam_wipe(secrets->access_token, sizeof(secrets->access_token));
+	}
 	/* (the connection lost with the token live: a new one, only to revoke it) */
 	if (secrets && !session->connected && secrets->refresh_token[0] && session->url[0])
 	{
@@ -1091,29 +1163,8 @@ void steam_session_end(struct steam_session *session)
 	}
 	if (secrets && session->connected && secrets->refresh_token[0])
 	{
-		uint8_t *body;
-		size_t capacity = STEAM_TOKEN_MAXIMUM + 64;
-		struct steam_pb_writer writer;
-		uint64_t job = session->next_job++;
-		int sent;
-
-		body = malloc(capacity);
-		if (body)
-		{
-			steam_pb_writer_init(&writer, body, capacity);
-			steam_pb_put_string(&writer, 1, secrets->refresh_token);
-			steam_pb_put_varint(&writer, 2, 1 /* k_EAuthTokenRevokePermanent */);
-			session->revoking = 1;
-			sent = !writer.error && send_message(session, session->logged_on ? STEAM_EMSG_SERVICE_METHOD_CALL :
-				STEAM_EMSG_SERVICE_METHOD_CALL_NONAUTHED, job, "Authentication.RevokeToken#1", body, writer.size);
-			steam_wipe(body, capacity);
-			free(body);
-			if (sent && wait_for(session, STEAM_EMSG_SERVICE_METHOD_RESPONSE, job, END_TIMEOUT_MS) &&
-				session->reply_header.eresult == STEAM_ERESULT_OK)
-			{
-				session->revoked = 1;
-			}
-		}
+		if (revoke_now(session))
+			session->revoked = 1;
 		say(session, session->revoked ? "steam: the sign-in was revoked" :
 			"steam: the revoke was not confirmed: remove '" STEAM_DEVICE_NAME "' in the Steam app if it is listed");
 	}
@@ -1130,7 +1181,8 @@ void steam_session_end(struct steam_session *session)
 	if (session->connected || session->ws.input || session->ws.stream.close)
 		steam_ws_close(&session->ws);
 	session->connected = 0;
-	if (session->revoked && session->marker_path[0])
+	/* (the marker says a live token may be left behind: not so once revoked, nor when the device keeps it sealed) */
+	if ((session->revoked || session->keep_token) && session->marker_path[0])
 		remove(session->marker_path);
 	if (secrets)
 	{

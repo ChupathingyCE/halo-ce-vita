@@ -517,6 +517,9 @@
 #                         level open)
 # On a gxm-null harness (configure.py --linux-d3d gxm-null) the taps, the saved frames and the
 # PC text box's typing are SKIPs: it draws nothing to tap, save or type into.
+# (a Steam session's good end: revoked, or - 1.1.3-insider.8 - the sign-in kept on the device (sealed, 14 days) and
+# only logged off)
+steam_ended_ok='steam job: sign-in 1 ended: done \(revoked (1, logged off 1, kept on this device 0|0, logged off 1, kept on this device 1)\)'
 set -u
 # (Bots online, bots.online: full by default, which fills a game hosted
 # online with bots; off here unless a run asks: run_netns_online_test.sh hostbots)
@@ -2401,7 +2404,7 @@ for case in $cases; do
 		grep -aq "ui: screen pc.h3.steam.screen" "$log" || fail h3steam "DOWNLOAD FROM STEAM did not open"
 		grep -aq "menus: steam: sign-in begun (games 3)" "$log" || fail h3steam "the sign-in did not begin for Halo CE with the banks"
 		grep -aq "steam job: QR 1 up" "$log" || fail h3steam "no QR"
-		grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log" ||
+		grep -aqE "$steam_ended_ok" "$log" ||
 			fail h3steam "the download did not end done, revoked and logged off"
 		[ "$(find "$out/h3steam/card/haloce-vita/mcc/halo1" -type f 2>/dev/null | wc -l)" = 23 ] ||
 			fail h3steam "not the 23 made-up Halo CE files"
@@ -2523,7 +2526,7 @@ for case in $cases; do
 			grep -aq "menus: OpenCE" "$log" && fail $sp_name "OpenCE's screens were added without the Halo PC files"
 			grep -aq "ui: screen pc.h3.$sp_row.screen" "$log" || fail $sp_name "the screen did not open"
 			grep -aq "steam job: QR 1 up" "$log" || fail $sp_name "no QR"
-			grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log" ||
+			grep -aqE "$steam_ended_ok" "$log" ||
 				fail $sp_name "the session did not end done, revoked and logged off"
 			awk '/ui: screen pc.h3.(steam|workshop).screen/ { seen = 1; next } seen && /ui: screen ui.shell.main_menu.main_menu$/ { back = 1 }
 				END { exit !back }' "$log" || fail $sp_name "B did not go back to the Xbox's main menu"
@@ -2623,7 +2626,7 @@ for case in $cases; do
 				fail $case "a swipe did not turn the page"
 			grep -aq "menus: workshop: tab 3" "$log" && grep -aq "steam job: workshop page 1 (list 4)" "$log" ||
 				fail $case "a tap on SUBSCRIBED did not change the tab"
-			grep -aq "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log" ||
+			grep -aqE "$steam_ended_ok" "$log" ||
 				fail $case "the session did not end done, revoked and logged off"
 			continue
 		fi
@@ -2643,7 +2646,7 @@ for case in $cases; do
 		grep -aq "menus: workshop: details of 2900000016" "$log" || fail $case "the long-titled card's page did not open"
 		grep -aq "steam job: workshop page 1 (list 0, a search): 1 items of 1" "$log" || fail $case "the search did not list its item"
 		grep -aq "steam job: workshop: 2 items chosen" "$log" || fail $case "Start did not download the two"
-		[ "$(grep -ac "steam job: sign-in 1 ended: done (revoked 1, logged off 1)" "$log")" = 2 ] ||
+		[ "$(grep -acE "$steam_ended_ok" "$log")" = 2 ] ||
 			fail $case "the two sessions did not each end done, revoked and logged off"
 		grep -aq "menus: workshop: 2900000001 installed in mods" "$log" || fail $case "2900000001 (a real map) not installed"
 		grep -aq "menus: workshop: 2900000002 refused: maps/fakegulch.map refused" "$log" ||

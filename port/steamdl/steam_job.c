@@ -11,6 +11,7 @@ steam_job.h: the download's worker thread and its snapshot.
 #include "steam_image.h"
 #include "steam_plan.h"
 #include "steam_session.h"
+#include "steam_signin.h"
 #include "steam_workshop.h"
 
 #include "qrcodegen.h"
@@ -221,8 +222,37 @@ static int default_battery_ok(void)
 	return 1;
 }
 
+/* (Linux: the install's machine id, /etc/machine-id - not the game folder's; elsewhere none: no sign-in kept) */
+static size_t default_device_secret(uint8_t *out, size_t capacity)
+{
+#if defined(__linux__) && !defined(__vita__)
+	char text[80];
+	FILE *file = fopen("/etc/machine-id", "r");
+	size_t length = 0, count;
+
+	if (!file)
+		return 0;
+	length = fread(text, 1, sizeof(text) - 1, file);
+	fclose(file);
+	while (length && (text[length - 1] == '\n' || text[length - 1] == '\r'))
+		length--;
+	count = length / 2 < capacity ? length / 2 : capacity;
+	if (length != 32 || !steam_unhex(text, count * 2, out, count))
+	{
+		steam_wipe(text, sizeof(text));
+		return 0;
+	}
+	steam_wipe(text, sizeof(text));
+	return count;
+#else
+	(void)out;
+	(void)capacity;
+	return 0;
+#endif
+}
+
 static struct steam_job_platform platform = { default_free_space, default_battery_low, default_nothing, default_busy,
-	default_log, default_roots, default_battery_ok };
+	default_log, default_roots, default_battery_ok, default_device_secret };
 
 void steam_job_set_platform(const struct steam_job_platform *given)
 {
@@ -242,6 +272,8 @@ void steam_job_set_platform(const struct steam_job_platform *given)
 		platform.roots = given->roots;
 	if (given->battery_ok)
 		platform.battery_ok = given->battery_ok;
+	if (given->device_secret)
+		platform.device_secret = given->device_secret;
 }
 
 static void job_options(struct steam_job_options *options, int games)
@@ -268,6 +300,65 @@ static void job_options(struct steam_job_options *options, int games)
 	}
 #endif
 	snprintf(options->marker_path, sizeof(options->marker_path), "%.200s/steam-session.txt", options->app_root);
+	snprintf(options->signin_path, sizeof(options->signin_path), "%.200s/" STEAM_SIGNIN_FILE, options->app_root);
+}
+
+/* the kept sign-in's state for the panel: its header, read at most every two seconds (and after each job) */
+static struct
+{
+	pthread_mutex_t lock;
+	double read_at;
+	int state, days_left;
+} signin_cache = { PTHREAD_MUTEX_INITIALIZER, -100.0, 0, 0 };
+
+static double now_seconds(void);
+
+static void signin_cache_stale(void)
+{
+	pthread_mutex_lock(&signin_cache.lock);
+	signin_cache.read_at = -100.0;
+	pthread_mutex_unlock(&signin_cache.lock);
+}
+
+int steam_job_signin_state(int *days_left)
+{
+	double now = now_seconds();
+	int state;
+
+	pthread_mutex_lock(&signin_cache.lock);
+	if (now - signin_cache.read_at >= 2.0 || now < signin_cache.read_at)
+	{
+		struct steam_job_options options;
+		int64_t saved_at = 0, wall = (int64_t)time(NULL);
+
+		job_options(&options, 0);
+		signin_cache.state = steam_signin_peek(options.signin_path, wall, &saved_at);
+		signin_cache.days_left = 0;
+		if (signin_cache.state == STEAM_SIGNIN_KEPT)
+		{
+			int64_t left = (saved_at + STEAM_SIGNIN_SECONDS - wall + 86399) / 86400;
+
+			signin_cache.days_left = left < 0 ? 0 : left > 14 ? 14 : (int)left;
+		}
+		signin_cache.read_at = now;
+	}
+	state = signin_cache.state;
+	if (days_left)
+		*days_left = signin_cache.days_left;
+	pthread_mutex_unlock(&signin_cache.lock);
+	return state;
+}
+
+int steam_job_sign_out(void)
+{
+	struct steam_job_options options;
+	int64_t saved_at = 0;
+
+	job_options(&options, 0);
+	if (steam_signin_peek(options.signin_path, (int64_t)time(NULL), &saved_at) == STEAM_SIGNIN_NONE)
+		return -1;
+	options.sign_out = 1;
+	return steam_job_start(&options);
 }
 
 int steam_job_start_games(int games)
@@ -1064,6 +1155,8 @@ static void *worker(void *unused)
 	const char *cdn[1];
 	char cm[STEAM_HOST_MAXIMUM + 32];
 	int attempt, final_phase;
+	uint8_t secret[STEAM_SIGNIN_SECRET_MAXIMUM];
+	size_t secret_size;
 
 	(void)unused;
 	platform.busy(1);
@@ -1073,6 +1166,17 @@ static void *worker(void *unused)
 	options.app_root = job.options.app_root;
 	options.marker_path = job.options.marker_path[0] ? job.options.marker_path : NULL;
 	options.workshop = job.options.workshop;
+	/* (the kept sign-in: the device's secret read for this job alone, wiped after it) */
+	secret_size = job.options.signin_path[0] && platform.device_secret ? platform.device_secret(secret, sizeof(secret)) : 0;
+	if (secret_size >= STEAM_SIGNIN_SECRET_MINIMUM && secret_size <= sizeof(secret))
+	{
+		options.signin_path = job.options.signin_path;
+		options.device_secret = secret;
+		options.device_secret_size = secret_size;
+	}
+	else if (job.options.signin_path[0])
+		say("steam job: this device has no secret to seal a sign-in with: none is kept (a QR each time)");
+	options.sign_out = job.options.sign_out;
 	if (job.options.cdn_override[0])
 	{
 		cdn[0] = job.options.cdn_override;
@@ -1109,12 +1213,16 @@ static void *worker(void *unused)
 		}
 		options.cm_url = cm;
 		steam_download_run(&options, &callbacks, &result);
-		say("steam job: sign-in %d ended: %s (revoked %d, logged off %d)", attempt + 1,
-			result.ok ? "done" : result.error, result.revoked, result.logged_off);
-		if (result.ok || result.cancelled || job.cancel || !result.session_lost)
+		say("steam job: %s %d ended: %s (revoked %d, logged off %d, kept on this device %d)",
+			options.sign_out ? "sign-out" : "sign-in", attempt + 1, result.ok ? "done" : result.error, result.revoked,
+			result.logged_off, result.kept);
+		if (result.ok || result.cancelled || job.cancel || !result.session_lost || options.sign_out)
 			break;
-		say("steam job: the session was lost: a new QR (the download resumes)");
+		say(result.kept ? "steam job: the session was lost: connecting again with the kept sign-in (the download resumes)" :
+			"steam job: the session was lost: a new QR (the download resumes)");
 	}
+	steam_wipe(secret, sizeof(secret));
+	secret_size = 0;
 	steam_image_fetcher_close(&pictures.fetcher);
 	if (job.options.workshop && result.ok && job.workshop.lost && !job.workshop.chosen)
 	{
@@ -1142,6 +1250,10 @@ static void *worker(void *unused)
 	job.status.network_waits = result.network_waits;
 	job.status.revoked = result.revoked;
 	job.status.logged_off = result.logged_off;
+	job.status.signin_found = result.signin_found;
+	job.status.kept = result.kept;
+	job.status.sign_out = options.sign_out;
+	job.status.signed_out = result.signed_out;
 	job.status.session_lost = result.session_lost;
 	job.status.connect_ms = result.connect_ms;
 	memcpy(job.status.decode_us, result.decode_us, sizeof(job.status.decode_us));
@@ -1153,6 +1265,7 @@ static void *worker(void *unused)
 	pictures_free_all();
 	job.running = 0;
 	pthread_mutex_unlock(&job.lock);
+	signin_cache_stale();
 	platform.busy(0);
 	return NULL;
 }
@@ -1175,6 +1288,7 @@ int steam_job_start(const struct steam_job_options *options)
 	job.workshop.page = 1;
 	job.options = *options;
 	job.status.games = options->games;
+	job.status.sign_out = options->sign_out;
 	job.status.phase = STEAM_JOB_CONNECTING;
 	job.status.seconds_left = -1;
 	job.cancel = 0;
@@ -1191,7 +1305,7 @@ int steam_job_start(const struct steam_job_options *options)
 		snprintf(job.status.error, sizeof(job.status.error), "no thread for the download");
 	}
 	pthread_mutex_unlock(&job.lock);
-	say("steam job: started (games %d)%s", options->games, made ? "" : ": no thread");
+	say("steam job: started (%s %d)%s", options->sign_out ? "sign out" : "games", options->games, made ? "" : ": no thread");
 	return made;
 }
 
@@ -1253,6 +1367,9 @@ void steam_job_view(struct steam_job_view *view)
 	view->files_done = status.files_done;
 	view->files_already = status.files_already;
 	view->revoked = status.revoked;
+	view->kept = status.kept;
+	view->sign_out = status.sign_out;
+	view->signed_out = status.signed_out;
 	steam_wipe(status.qr, sizeof(status.qr));
 }
 

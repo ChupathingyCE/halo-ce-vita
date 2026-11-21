@@ -41,6 +41,7 @@ The Steam download's tests on the PC (run_steam_download_test.sh), no Steam:
 #include "steam_pb.h"
 #include "steam_plan.h"
 #include "steam_session.h"
+#include "steam_signin.h"
 #include "steam_workshop.h"
 #include "steam_ws.h"
 #include "steam_zip.h"
@@ -1307,12 +1308,156 @@ static int64_t free_space(void *context, const char *root)
 	return 64ll << 30;
 }
 
+/* (the tests' made-up device secret: a Vita's OpenPSID is 16 bytes) */
+static const uint8_t test_secret[16] = { 0x51, 0x2e, 0x9a, 0x03, 0xc4, 0x77, 0x18, 0xb0, 0x6d, 0x21, 0xfe, 0x40, 0x95,
+	0x3c, 0x08, 0xd7 };
+
+/* signin-write <path> <token> <account> <saved_at>: a kept sign-in made as the game makes one (the flows' expired and
+damaged cases start from it) */
+static int signin_write(int argc, char **argv)
+{
+	struct steam_signin signin;
+
+	if (argc < 6)
+		return 2;
+	memset(&signin, 0, sizeof(signin));
+	snprintf(signin.refresh_token, sizeof(signin.refresh_token), "%s", argv[3]);
+	snprintf(signin.account_name, sizeof(signin.account_name), "%s", argv[4]);
+	signin.saved_at = strtoll(argv[5], NULL, 10);
+	return steam_signin_save(argv[2], test_secret, sizeof(test_secret), &signin) ? 0 : 1;
+}
+
+/* ---------- the kept sign-in (steam_signin.h) */
+
+static int file_has(const char *path, const char *text)
+{
+	size_t size = 0, length = strlen(text), index;
+	uint8_t *data = read_file(path, &size);
+	int found = 0;
+
+	for (index = 0; data && index + length <= size && !found; index++)
+		found = !memcmp(data + index, text, length);
+	free(data);
+	return found;
+}
+
+static void test_signin(const char *folder)
+{
+	static const uint8_t other_secret[16] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+	struct steam_signin signin, opened;
+	uint8_t salt[16], nonce[12], sealed[STEAM_SIGNIN_FILE_MAXIMUM], copy[STEAM_SIGNIN_FILE_MAXIMUM];
+	char path[600], token[STEAM_TOKEN_MAXIMUM + 1];
+	int64_t now = 1763600000, saved_at = 0;
+	long size;
+	size_t index;
+	int days = 0;
+	FILE *file;
+
+	memset(&signin, 0, sizeof(signin));
+	memset(salt, 0x11, sizeof(salt));
+	memset(nonce, 0x22, sizeof(nonce));
+	snprintf(signin.refresh_token, sizeof(signin.refresh_token), "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.TEST-%s",
+		"REFRESH-TOKEN-abcdefghijklmnop");
+	snprintf(signin.account_name, sizeof(signin.account_name), "fake_player1");
+	signin.saved_at = now;
+	size = steam_signin_seal(test_secret, sizeof(test_secret), &signin, salt, nonce, sealed, sizeof(sealed));
+	CHECK(size == (long)(STEAM_SIGNIN_HEADER_SIZE + 8 + 1 + strlen(signin.account_name) + 2 +
+		strlen(signin.refresh_token) + STEAM_SIGNIN_TAG_SIZE));
+	/* the same back; nothing of it in the clear */
+	CHECK(steam_signin_open(sealed, (size_t)size, test_secret, sizeof(test_secret), now + 60, &opened) ==
+		STEAM_SIGNIN_KEPT && !strcmp(opened.refresh_token, signin.refresh_token) &&
+		!strcmp(opened.account_name, signin.account_name) && opened.saved_at == now);
+	CHECK(!memmem(sealed, (size_t)size, "TEST-REFRESH", 12) && !memmem(sealed, (size_t)size, "fake_player1", 12));
+	/* another console's secret, every byte changed, every length: unreadable, nothing filled */
+	CHECK(steam_signin_open(sealed, (size_t)size, other_secret, sizeof(other_secret), now, &opened) ==
+		STEAM_SIGNIN_UNREADABLE && !opened.refresh_token[0] && !opened.account_name[0]);
+	for (index = 0; index < (size_t)size; index++)
+	{
+		memcpy(copy, sealed, (size_t)size);
+		copy[index] ^= 0x40;
+		CHECK(steam_signin_open(copy, (size_t)size, test_secret, sizeof(test_secret), now, &opened) ==
+			STEAM_SIGNIN_UNREADABLE && !opened.refresh_token[0]);
+		CHECK(steam_signin_open(sealed, index, test_secret, sizeof(test_secret), now, &opened) == STEAM_SIGNIN_UNREADABLE);
+	}
+	CHECK(steam_signin_open(sealed, (size_t)size, test_secret, 8, now, &opened) == STEAM_SIGNIN_UNREADABLE);
+	CHECK(steam_signin_open(NULL, 0, test_secret, sizeof(test_secret), now, &opened) == STEAM_SIGNIN_UNREADABLE);
+	/* 14 days: kept to the second, expired after; a date ahead of the clock by more than a day: expired */
+	CHECK(steam_signin_open(sealed, (size_t)size, test_secret, sizeof(test_secret), now + STEAM_SIGNIN_SECONDS,
+		&opened) == STEAM_SIGNIN_KEPT);
+	CHECK(steam_signin_open(sealed, (size_t)size, test_secret, sizeof(test_secret), now + STEAM_SIGNIN_SECONDS + 1,
+		&opened) == STEAM_SIGNIN_EXPIRED && opened.refresh_token[0]);
+	CHECK(steam_signin_open(sealed, (size_t)size, test_secret, sizeof(test_secret), now - 2 * 86400, &opened) ==
+		STEAM_SIGNIN_EXPIRED);
+	/* what is never sealed: a name with a space, a short token, no date, a short secret */
+	opened = signin;
+	snprintf(opened.account_name, sizeof(opened.account_name), "a b");
+	CHECK(steam_signin_seal(test_secret, sizeof(test_secret), &opened, salt, nonce, copy, sizeof(copy)) < 0);
+	opened = signin;
+	snprintf(opened.refresh_token, sizeof(opened.refresh_token), "short");
+	CHECK(steam_signin_seal(test_secret, sizeof(test_secret), &opened, salt, nonce, copy, sizeof(copy)) < 0);
+	opened = signin;
+	opened.saved_at = 0;
+	CHECK(steam_signin_seal(test_secret, sizeof(test_secret), &opened, salt, nonce, copy, sizeof(copy)) < 0);
+	CHECK(steam_signin_seal(test_secret, 15, &signin, salt, nonce, copy, sizeof(copy)) < 0);
+	CHECK(steam_signin_seal(test_secret, sizeof(test_secret), &signin, salt, nonce, copy, 100) < 0);
+	/* the longest token Steam may give: sealed and back */
+	memset(token, 'A', STEAM_TOKEN_MAXIMUM);
+	token[STEAM_TOKEN_MAXIMUM] = 0;
+	opened = signin;
+	memcpy(opened.refresh_token, token, sizeof(token));
+	size = steam_signin_seal(test_secret, sizeof(test_secret), &opened, salt, nonce, copy, sizeof(copy));
+	CHECK(size > 0 && steam_signin_open(copy, (size_t)size, test_secret, sizeof(test_secret), now, &opened) ==
+		STEAM_SIGNIN_KEPT && strlen(opened.refresh_token) == STEAM_TOKEN_MAXIMUM);
+	/* the file: saved, peeked (no secret), loaded; a changed one wiped at the load; an expired one wiped, its token
+	given back for the revoke */
+	snprintf(path, sizeof(path), "%s/signin-test.bin", folder);
+	signin.saved_at = (int64_t)time(NULL) - 3 * 86400;
+	CHECK(steam_signin_save(path, test_secret, sizeof(test_secret), &signin));
+	CHECK(!file_has(path, "TEST-REFRESH") && !file_has(path, "fake_player1"));
+	CHECK(steam_signin_peek(path, (int64_t)time(NULL), &saved_at) == STEAM_SIGNIN_KEPT && saved_at == signin.saved_at);
+	CHECK(steam_signin_load(path, test_secret, sizeof(test_secret), (int64_t)time(NULL), &opened) == STEAM_SIGNIN_KEPT &&
+		!strcmp(opened.refresh_token, signin.refresh_token));
+	CHECK(steam_signin_load(path, other_secret, sizeof(other_secret), (int64_t)time(NULL), &opened) ==
+		STEAM_SIGNIN_UNREADABLE && !opened.refresh_token[0]);
+	CHECK(steam_signin_peek(path, (int64_t)time(NULL), &saved_at) == STEAM_SIGNIN_NONE);
+	CHECK(steam_signin_save(path, test_secret, sizeof(test_secret), &signin));
+	CHECK(steam_signin_load(path, test_secret, sizeof(test_secret), (int64_t)time(NULL) + 12 * 86400, &opened) ==
+		STEAM_SIGNIN_EXPIRED && !strcmp(opened.refresh_token, signin.refresh_token));
+	CHECK(steam_signin_peek(path, (int64_t)time(NULL), &saved_at) == STEAM_SIGNIN_NONE);
+	/* a file of garbage, an empty one, a huge one: unreadable, wiped at the load */
+	file = fopen(path, "wb");
+	if (file)
+	{
+		fputs("XVSI not really", file);
+		fclose(file);
+	}
+	CHECK(steam_signin_peek(path, (int64_t)time(NULL), &saved_at) == STEAM_SIGNIN_UNREADABLE);
+	CHECK(steam_signin_load(path, test_secret, sizeof(test_secret), (int64_t)time(NULL), &opened) ==
+		STEAM_SIGNIN_UNREADABLE);
+	CHECK(steam_signin_peek(path, (int64_t)time(NULL), &saved_at) == STEAM_SIGNIN_NONE);
+	file = fopen(path, "wb");
+	if (file)
+	{
+		for (index = 0; index < 10000; index++)
+			fputc((int)(index * 31), file);
+		fclose(file);
+	}
+	CHECK(steam_signin_load(path, test_secret, sizeof(test_secret), (int64_t)time(NULL), &opened) ==
+		STEAM_SIGNIN_UNREADABLE);
+	CHECK(steam_signin_load(path, test_secret, sizeof(test_secret), (int64_t)time(NULL), &opened) == STEAM_SIGNIN_NONE);
+	/* peek's state: days left */
+	CHECK(steam_signin_save(path, test_secret, sizeof(test_secret), &signin));
+	(void)days;
+	steam_signin_wipe(path);
+	CHECK(steam_signin_peek(path, (int64_t)time(NULL), &saved_at) == STEAM_SIGNIN_NONE);
+}
+
 static int flow(int argc, char **argv)
 {
 	struct steam_download_options options;
 	struct steam_download_callbacks callbacks;
 	struct steam_download_result result;
-	char cm[128], cdn[128], log_path[600], marker[600], ce_root[600], app_root[600];
+	char cm[128], cdn[128], log_path[600], marker[600], ce_root[600], app_root[600], signin_path[700];
 	const char *cdn_list[1];
 
 	if (argc < 6)
@@ -1346,6 +1491,16 @@ static int flow(int argc, char **argv)
 	options.ce_root = ce_root;
 	options.app_root = app_root;
 	options.marker_path = marker;
+	/* (STEAM_TEST_SIGNIN=1: the kept sign-in in the card's folder, sealed with the test's made-up device secret;
+	STEAM_TEST_SIGN_OUT=1: SIGN OUT) */
+	if (getenv("STEAM_TEST_SIGNIN"))
+	{
+		snprintf(signin_path, sizeof(signin_path), "%s/" STEAM_SIGNIN_FILE, app_root);
+		options.signin_path = signin_path;
+		options.device_secret = test_secret;
+		options.device_secret_size = sizeof(test_secret);
+		options.sign_out = getenv("STEAM_TEST_SIGN_OUT") != NULL;
+	}
 	memset(&callbacks, 0, sizeof(callbacks));
 	callbacks.show_qr = show_qr;
 	callbacks.progress = progress;
@@ -1353,9 +1508,10 @@ static int flow(int argc, char **argv)
 	callbacks.free_space = free_space;
 	steam_download_run(&options, &callbacks, &result);
 	printf("result ok=%d cancelled=%d files=%u already=%u downloaded=%llu written=%llu retried=%u revoked=%d "
-		"logged_off=%d error=%s\n", result.ok, result.cancelled, result.files_done, result.files_already,
-		(unsigned long long)result.bytes_downloaded, (unsigned long long)result.bytes_written, result.chunks_retried,
-		result.revoked, result.logged_off, result.error[0] ? result.error : "-");
+		"logged_off=%d found=%d kept=%d signed_out=%d error=%s\n", result.ok, result.cancelled, result.files_done,
+		result.files_already, (unsigned long long)result.bytes_downloaded, (unsigned long long)result.bytes_written,
+		result.chunks_retried, result.revoked, result.logged_off, result.signin_found, result.kept, result.signed_out,
+		result.error[0] ? result.error : "-");
 	fclose(log_file);
 	return 0;
 }
@@ -2167,11 +2323,14 @@ int main(int argc, char **argv)
 		test_qr();
 		test_workshop(argv[2]);
 		test_browser(argv[2]);
+		test_signin(argv[2]);
 		printf("-- %d of %d checks failed\n", failures, checks);
 		return failures != 0;
 	}
 	if (argc >= 2 && !strcmp(argv[1], "flow"))
 		return flow(argc, argv);
+	if (argc >= 2 && !strcmp(argv[1], "signin-write"))
+		return signin_write(argc, argv);
 	if (argc >= 2 && !strcmp(argv[1], "workshop"))
 		return workshop(argc, argv);
 	fprintf(stderr, "usage: steam_download_test units <fixtures> | flow <cm port> <cdn port> <out> <games> [cancel] | "

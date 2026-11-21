@@ -6,7 +6,9 @@ the app's info, then for each depot the choice needs (steam_plan.h) its key,
 its manifest (request code, then the CDN), the planned files in it, their
 chunks fetched, checked and written (steam_chunk.h, steam_file.h); then the
 session ends - revoke, log off, close, wipe - on every path, a success, a
-cancel or any failure (docs/steam_download_security.md).
+cancel or any failure (docs/steam_download_security.md). With a sign-in
+kept on the device (options signin_path, steam_signin.h) the QR is skipped
+while it is under 14 days old, and the end logs off without revoking it.
 
 The caller (the Vita's screen; the PC tests) is told what to show through
 callbacks: the QR's URL to draw, the progress, the log's lines (none holds a
@@ -62,6 +64,13 @@ struct steam_download_options
 	const char *ce_root; /* ux0:data/haloce-vita (Halo CE's files) */
 	const char *app_root; /* the app's own folder (1.1.x: the same; the marker, the free-space check) */
 	const char *marker_path; /* the no-secret marker, or NULL */
+	/* the sign-in kept on the device (steam_signin.h): its file and the device's secret (the Vita's OpenPSID). NULL
+	or a size 0: none kept - a QR every time, the token revoked at the end (insider.7's way) */
+	const char *signin_path;
+	const uint8_t *device_secret;
+	size_t device_secret_size;
+	/* SIGN OUT: the kept sign-in wiped from the device first, then revoked with Steam; nothing else is done */
+	int sign_out;
 	/* the Steam Workshop instead of the game's depots: the list (callbacks->workshop_choose), then each chosen item
 	into <ce_root>/workshop/<id> (steam_workshop.h; the install into the mods folder is the game's, after) */
 	int workshop;
@@ -77,6 +86,9 @@ struct steam_download_result
 	unsigned int chunks_retried;
 	/* the session's end (for the tests): the token revoked, logged off */
 	int revoked, logged_off;
+	/* the kept sign-in: its state when the job began (steam_signin_state), kept on the device at the end (1), SIGN
+	OUT's revoke confirmed by Steam (1) */
+	int signin_found, kept, signed_out;
 	/* the CM session ended under the download (the Wi-Fi lost too long, the server's log-off): a new QR resumes it */
 	int session_lost;
 	/* rounds of waits for the network (the Wi-Fi lost for a while) */

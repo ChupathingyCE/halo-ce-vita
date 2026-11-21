@@ -18,12 +18,15 @@ One Steam session on a CM's WebSocket, for the download alone:
   CDN servers  ContentServerDirectory.GetServersForSteamPipe
   end          Authentication.RevokeToken (permanent) on our refresh token,
                ClientLogOff, the socket closed, every secret wiped
-               (steam_session_end: on every path, twice is harmless)
+               (steam_session_end: on every path, twice is harmless) - or,
+               when the device keeps the sign-in (keep_token, steam_signin.h:
+               sealed to the console, 14 days), ClientLogOff alone
 
 Every secret (the tokens, the QR session's ids, the account name, the PICS
 access token, the depot keys, the request codes the caller holds) lives in
 struct steam_secrets, in RAM only: never logged, never written to a file
-(docs/steam_download_security.md 3.2). The log hears what happened, with
+(docs/steam_download_security.md 3.2) - except the refresh token and the
+account name the device keeps sealed (steam_signin.c, section 10). The log hears what happened, with
 sizes at most.
 */
 
@@ -84,6 +87,8 @@ struct steam_session
 	uint64_t logon_steamid;
 	/* the last logon's EResult (0: no answer came) and the server's log-off's (0: none came) */
 	int logon_eresult, logged_off_eresult;
+	/* the token is kept on the device (steam_signin.h): the end logs off without revoking it */
+	int keep_token;
 	/* the RevokeToken is sent (the server's log-off that follows is its answer, not a kick) */
 	int revoking;
 	/* old-style (not protobuf) messages skipped, alone or in Multis; the first said in the log */
@@ -159,6 +164,12 @@ int steam_session_call(struct steam_session *session, const char *method, const 
 /* (the tests' alone) signed in as an anonymous Steam user: 1, or 0 */
 int steam_session_logon_anonymous(struct steam_session *session, char *error, int error_size);
 #endif
+/* a token kept on the device (steam_signin.h) put in the secrets, for steam_session_logon (no QR) or a revoke */
+void steam_session_use_token(struct steam_session *session, const char *refresh_token, const char *account_name);
+/* the token in the secrets revoked now (permanently; authenticated if signed in) and wiped: 1 if Steam confirmed */
+int steam_session_revoke(struct steam_session *session);
+/* the connection closed and opened again to the same CM (after a refused logon): 1, or 0 with a reason */
+int steam_session_reconnect(struct steam_session *session, char *error, int error_size);
 /* an EResult's name for the log ("other" for one not listed) */
 const char *steam_eresult_name(int eresult);
 /* revoke, log off, close, wipe: on every path; harmless twice */

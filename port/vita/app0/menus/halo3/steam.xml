@@ -4,7 +4,8 @@ account, downloaded on the Vita (port/steamdl, docs/steam_download_security.md).
 details: the title, the rule, the text, the rows, the buttons in the strip at the foot. First the notice (unofficial,
 the player's own account, what is downloaded and the room it takes) and the sound banks on or off, then
 the QR for the Steam app (drawn over the panel's right side: menu_functions.c h3_steam_qr_draw), then the progress
-(the game, MB, the rate, the time left), then the end (signed out of Steam). Circle cancels a download (it resumes
+(the game, MB, the rate, the time left), then the end. The sign-in stays on the Vita for up to 14 days (sealed to the
+console); the fourth row, SIGN OUT, shows its state and removes it. Circle cancels a download (it resumes
 next time) and leaves. The text and the rows are menu_functions.c's (port h3 steam). -->
 <menus>
 	<strings name="h3/steam_text">
@@ -25,11 +26,17 @@ next time) and leaves. The text and the rows are menu_functions.c's (port h3 ste
 	<widget name="h3/steam/row_3" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a start" run="port h3 steam row" open="h3/workshop/screen"/>
 	</widget>
+	<!-- (the fourth, SIGN OUT: the sign-in kept on this Vita for up to 14 days - the row shows its state - wiped, then
+	revoked with Steam; port/steamdl/steam_signin.h) -->
+	<widget name="h3/steam/row_4" type="text" width="536" height="20" bitmap="h3/row" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
+		<on event="a start" run="port h3 steam row"/>
+	</widget>
 	<widget name="h3/steam/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
 		<data input="port h3 steam"/>
 		<child widget="h3/steam/row_1" y="0"/>
 		<child widget="h3/steam/row_2" y="22"/>
 		<child widget="h3/steam/row_3" y="44"/>
+		<child widget="h3/steam/row_4" y="66"/>
 	</widget>
 	<widget name="h3/steam/a_butn" left="52" top="422" width="16" height="16" bitmap="h3/glyph_cross"/>
 	<widget name="h3/steam/select" type="text" left="72" top="421" width="70" height="18" font="h3/font_item" color="#FFEEF2F6" text_y="1" string_list="h3/steam_text" string_index="1"/>

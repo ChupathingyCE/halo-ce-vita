@@ -12885,12 +12885,13 @@ static void h3_steam_update(struct widget_instance *list)
 	struct widget_instance *child, *found;
 	struct steam_job_view view;
 	char text[1400], line[256];
-	int index = 0, download_mb, card_mb;
+	int index = 0, download_mb, card_mb, signin, days_left = 0;
 	boolean choosing;
 
 	h3_steam.updated = system_milliseconds();
 	steam_job_view(&view);
 	choosing = view.phase == STEAM_JOB_IDLE;
+	signin = steam_job_signin_state(&days_left);
 	text[0] = 0;
 	switch (view.phase)
 	{
@@ -12904,7 +12905,7 @@ static void h3_steam_update(struct widget_instance *list)
 			snprintf(text, sizeof(text), "%s\n\n", line);
 		}
 		h3_steam_sizes(h3_steam.games, &download_mb, &card_mb);
-		snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s\n\n", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code, downloads only your own Halo: The Master Chief Collection files, then signs out. Valve may stop it working at any time. No password is asked for or kept."));
+		snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s\n\n", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code and downloads only your own Halo: The Master Chief Collection files. The sign-in stays on this Vita for up to 14 days, sealed to this console, so you scan the code once; SIGN OUT removes it. Valve may stop it working at any time. No password is asked for or kept."));
 		snprintf(line, sizeof(line), T("About %.1f GB to download, %.1f GB on the memory card. The Vita stays awake and the PS button is locked until it ends."),
 			download_mb / 1000.0, card_mb / 1000.0);
 		strncat(text, line, sizeof(text) - strlen(text) - 1);
@@ -12916,7 +12917,7 @@ static void h3_steam_update(struct widget_instance *list)
 		break;
 	}
 	case STEAM_JOB_CONNECTING:
-		snprintf(text, sizeof(text), "%s", view.attempts > 1 ? T("The Steam session was lost. Connecting again: a new code to scan follows.") : T("Connecting to Steam..."));
+		snprintf(text, sizeof(text), "%s", view.sign_out ? T("Signing out of Steam...") : view.attempts > 1 ? T("The Steam session was lost. Connecting again...") : T("Connecting to Steam..."));
 		break;
 	case STEAM_JOB_QR:
 		snprintf(text, sizeof(text), "%s", T("On your phone, open the Steam app, then Steam Guard, and scan this code.\n\nApprove only if you started this on your Vita just now.\n\nThe Vita never sees your password."));
@@ -12942,7 +12943,16 @@ static void h3_steam_update(struct widget_instance *list)
 		snprintf(text, sizeof(text), "%s", T("Stopping and signing out of Steam..."));
 		break;
 	case STEAM_JOB_DONE:
-		snprintf(text, sizeof(text), T("Done: %u files downloaded, %u already there. Signed out of Steam."), view.files_done, view.files_already);
+		if (view.sign_out)
+		{
+			snprintf(text, sizeof(text), "%s", view.signed_out ? T("Signed out. The Steam sign-in is removed from this Vita and Steam has revoked it.") :
+				T("The Steam sign-in is removed from this Vita. Steam did not confirm it: in the Steam app, remove \"Halo CE Vita (PS Vita)\" from Authorized devices."));
+			break;
+		}
+		if (view.kept)
+			snprintf(text, sizeof(text), T("Done: %u files downloaded, %u already there. You stay signed in on this Vita for the next download (SIGN OUT removes it)."), view.files_done, view.files_already);
+		else
+			snprintf(text, sizeof(text), T("Done: %u files downloaded, %u already there. Signed out of Steam."), view.files_done, view.files_already);
 		/* (1.1.3-insider.4: the game reads MCC's files as it starts - the Halo content folder, the sound banks, the
 		new menus an Xbox-only install now gets from them -, so new files take at the next start: said) */
 		if (view.files_done)
@@ -12956,6 +12966,7 @@ static void h3_steam_update(struct widget_instance *list)
 	case STEAM_JOB_CANCELLED:
 		snprintf(text, sizeof(text), "%s\n%s\n\n%s", view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The download stopped:"),
 			view.phase == STEAM_JOB_CANCELLED ? "" : view.error, view.revoked ? T("Signed out of Steam. What is in stays: download again to resume.") :
+			view.kept ? T("You stay signed in on this Vita. What is in stays: download again to resume.") :
 			T("If \"Halo CE Vita (PS Vita)\" is in the Steam app's Authorized devices, remove it. What is in stays: download again to resume."));
 		break;
 	}
@@ -12976,7 +12987,19 @@ static void h3_steam_update(struct widget_instance *list)
 		if (index == 0)
 			snprintf(line, sizeof(line), "%s: %s", T("MCC's dialogue, music and stream banks (1.5 GB)"), (h3_steam.games & STEAM_GAME_HALO_CE_BANKS) ? T("ON") : T("OFF"));
 		else if (index == 1)
-			snprintf(line, sizeof(line), "%s", T("SIGN IN WITH THE STEAM APP"));
+			snprintf(line, sizeof(line), "%s", signin == 1 ? T("DOWNLOAD (SIGNED IN TO STEAM)") : T("SIGN IN WITH THE STEAM APP"));
+		else if (index == 3)
+		{
+			/* (SIGN OUT: the row shows the kept sign-in's state - Chupathingy's plain label and state) */
+			if (signin == 1)
+				snprintf(line, sizeof(line), T("SIGN OUT: signed in, %d days left"), days_left);
+			else if (signin == 2)
+				snprintf(line, sizeof(line), "%s", T("SIGN OUT: the sign-in has expired"));
+			else if (signin == 3)
+				snprintf(line, sizeof(line), "%s", T("SIGN OUT: the sign-in cannot be read"));
+			else
+				snprintf(line, sizeof(line), "%s", T("SIGN OUT: not signed in"));
+		}
 		else
 		{
 			/* (STEAM WORKSHOP: a build with the Workshop alone) */
@@ -13002,7 +13025,7 @@ static void h3_steam_update(struct widget_instance *list)
 #endif
 }
 
-/* (port h3 steam row: Cross) the sound banks on or off, or the sign-in begun */
+/* (port h3 steam row: Cross) the sound banks on or off, the sign-in begun, or SIGN OUT */
 static boolean h3_steam_row(struct widget_instance *widget)
 {
 #ifdef HALO_STEAM_DOWNLOAD
@@ -13025,6 +13048,15 @@ static boolean h3_steam_row(struct widget_instance *widget)
 #else
 		return FALSE;
 #endif
+	}
+	if (row == 3)
+	{
+		/* (SIGN OUT: the kept sign-in wiped, then revoked with Steam - the job's thread; the screen shows it) */
+		started = steam_job_sign_out();
+		if (started < 0)
+			snprintf(h3_steam.message, sizeof(h3_steam.message), "%s", T("No Steam sign-in is kept on this Vita."));
+		platform_log("menus: steam: sign out %s", started > 0 ? "begun" : started < 0 ? "(none kept)" : "(a job is running)");
+		return started > 0;
 	}
 	if (row != 1)
 		return FALSE;
@@ -13584,7 +13616,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 	{
 	case STEAM_JOB_IDLE:
 		snprintf(status_text, sizeof(status_text), "%s", T("Halo CE items of MCC's Steam Workshop, on this Vita."));
-		snprintf(details, sizeof(details), "%s", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code, lists Halo CE's Workshop items, downloads the ones you pick, then signs out. Your account must own Halo: The Master Chief Collection. Campaign mods play from the mods folder, offline; multiplayer maps are in the multiplayer map lists, offline and online. No password is asked for or kept."));
+		snprintf(details, sizeof(details), "%s", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code, lists Halo CE's Workshop items and downloads the ones you pick. The sign-in stays on this Vita for up to 14 days, sealed to this console (SIGN OUT in DOWNLOAD FROM STEAM removes it). Your account must own Halo: The Master Chief Collection. Campaign mods play from the mods folder, offline; multiplayer maps are in the multiplayer map lists, offline and online. No password is asked for or kept."));
 		if (h3_workshop.installed || h3_workshop.refused)
 		{
 			snprintf(line, sizeof(line), T("\n\nInstalled: %d. Not installed: %d."), h3_workshop.installed, h3_workshop.refused);
@@ -13597,7 +13629,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 		}
 		break;
 	case STEAM_JOB_CONNECTING:
-		snprintf(status_text, sizeof(status_text), "%s", view.attempts > 1 ? T("The Steam session was lost. Connecting again: a new code to scan follows.") : T("Connecting to Steam..."));
+		snprintf(status_text, sizeof(status_text), "%s", view.attempts > 1 ? T("The Steam session was lost. Connecting again...") : T("Connecting to Steam..."));
 		break;
 	case STEAM_JOB_QR:
 		snprintf(status_text, sizeof(status_text), "%s", T("Sign in"));
@@ -13638,7 +13670,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 	case STEAM_JOB_DONE:
 	case STEAM_JOB_FAILED:
 	case STEAM_JOB_CANCELLED:
-		snprintf(status_text, sizeof(status_text), "%s", view.phase == STEAM_JOB_DONE ? T("Done. Signed out of Steam.") :
+		snprintf(status_text, sizeof(status_text), "%s", view.phase == STEAM_JOB_DONE ? (view.kept ? T("Done. You stay signed in on this Vita.") : T("Done. Signed out of Steam.")) :
 			view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The Workshop stopped."));
 		details[0] = 0;
 		if (view.phase == STEAM_JOB_FAILED)
@@ -13654,7 +13686,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 			strncat(details, line, sizeof(details) - strlen(details) - 1);
 		}
 		strncat(details, h3_workshop.message, sizeof(details) - strlen(details) - 1);
-		if (!view.revoked && view.phase != STEAM_JOB_DONE)
+		if (!view.revoked && !view.kept && view.phase != STEAM_JOB_DONE)
 			strncat(details, T("If \"Halo CE Vita (PS Vita)\" is in the Steam app's Authorized devices, remove it."),
 				sizeof(details) - strlen(details) - 1);
 		break;
@@ -13693,7 +13725,8 @@ static void h3_workshop_update(struct widget_instance *widget)
 	if ((found = named(screen, "signin")) != NULL)
 	{
 		widget_instance_set_visibility_recursive(found, idle);
-		snprintf(line, sizeof(line), "%s", T("SIGN IN WITH THE STEAM APP"));
+		snprintf(line, sizeof(line), "%s", steam_job_signin_state(NULL) == 1 ? T("OPEN THE WORKSHOP (SIGNED IN TO STEAM)") :
+			T("SIGN IN WITH THE STEAM APP"));
 		h3_capitals(line);
 		text_show(found, line);
 		found->animation.current_frame_index = 1;
@@ -13928,8 +13961,11 @@ static void h3_workshop_update(struct widget_instance *widget)
 			shown[3] = browsing && h3_workshop.marked_count;
 			labels[3] = download_label;
 			shown[4] = TRUE;
+			/* (browsing with the sign-in kept on the Vita: Circle leaves the list and the session, the sign-in stays -
+			"Back"; SIGN OUT is DOWNLOAD FROM STEAM's row) */
 			labels[4] = details_mode || !h3_steam_running(view.phase) ? h3_workshop_footer_word("{footer}Back", "Back") :
-				browsing ? T("Sign out") : T("Cancel");
+				browsing ? (steam_job_signin_state(NULL) == 1 ? h3_workshop_footer_word("{footer}Back", "Back") : T("Sign out")) :
+				T("Cancel");
 			for (button = 0; button < 5; button++)
 			{
 				if ((found = named(screen, glyphs[button * 2])) != NULL)

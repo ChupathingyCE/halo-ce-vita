@@ -512,12 +512,36 @@ def bad_url(kind, item_id):
 
 
 class State:
+    def new_token(self, fresh=True):
+        if fresh:
+            self.refresh_token = "eyJ0ZXN0.FAKE-REFRESH-" + os.urandom(12).hex()
+        with open(self.token_file, "a") as kept:
+            kept.write(self.refresh_token + "\n")
+
     def __init__(self, args):
         self.args = args
         self.mode = args.mode
         self.lock = threading.Lock()
         self.transcript = open(os.path.join(args.work, "transcript.txt"), "a", buffering=1)
         self.refresh_token = "eyJ0ZXN0.FAKE-REFRESH-" + os.urandom(12).hex()
+        # (--token-file: the same made-up account's token across runs - the kept sign-in's flows - and whether it was
+        # revoked: a revoked one is refused at the logon with Revoked, 26, as Steam does)
+        # (each line "<token> [revoked]"; the last unrevoked one is the account's live token, a new QR approval after a
+        # revoke gets a new one - as Steam's do)
+        self.token_file = args.token_file
+        self.revoked_tokens = set()
+        if self.token_file and os.path.exists(self.token_file):
+            with open(self.token_file) as kept:
+                for line in kept.read().splitlines():
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[1] == "revoked":
+                        self.revoked_tokens.add(parts[0])
+                    elif parts:
+                        self.refresh_token = parts[0]
+            if self.refresh_token in self.revoked_tokens:
+                self.new_token()
+        elif self.token_file:
+            self.new_token(fresh=False)
         self.access_token = "eyJ0ZXN0.FAKE-ACCESS-" + os.urandom(12).hex()
         self.depots = {d: Depot(d, args.seed) for d in (976733, 976734, 976736)}
         workshop_key = random.Random(args.seed * 13).randbytes(32)
@@ -733,6 +757,11 @@ def cm_client(state, conn):
                 ok = token == state.refresh_token and first(body, 2) == 1
                 state.log("cm: revoke %s" % ("ok" if ok else "WRONG TOKEN"))
                 result = 1 if ok else 8
+                if ok and state.token_file:
+                    state.revoked_tokens.add(token)
+                    with open(state.token_file, "a") as kept:
+                        kept.write(token + " revoked\n")
+                    state.new_token()
             else:
                 result = 9
             ws_send(conn, cm_message(147, reply, job_target=job, eresult=result,
@@ -740,10 +769,13 @@ def cm_client(state, conn):
         elif emsg == 5514:
             ok = (first(body, 108, b"").decode() == state.refresh_token and first(body, 50) == b"fakeplayer" and
                   first(body, 8, 0) == 0 and first(body, 1) == 65580)
+            eresult = 1 if ok else 5
             if state.mode == "logon_refuse":
-                ok = False
-            state.log("cm: logon %s" % ("ok" if ok else "refused"))
-            response = cm_message(751, pb_varint(1, 1 if ok else 5) + pb_varint(3, 5) + pb_varint(7, 7),
+                ok, eresult = False, 5
+            elif first(body, 108, b"").decode() in state.revoked_tokens:
+                ok, eresult = False, 26
+            state.log("cm: logon %s" % ("ok" if ok else "refused %d" % eresult))
+            response = cm_message(751, pb_varint(1, eresult) + pb_varint(3, 5) + pb_varint(7, 7),
                                   steamid=steamid if ok else 0, session=42 if ok else 0)
             logged_on = ok
             if ok and state.mode == "losesession" and not state.lost:
@@ -752,8 +784,11 @@ def cm_client(state, conn):
                 state.lost = True
                 threading.Timer(1.5, lambda c=conn: (state.log("cm: connection dropped"),
                                                       c.shutdown(socket.SHUT_RDWR))).start()
-            # (the response inside a gzipped Multi, beside two others)
-            ws_send(conn, multi([cm_message(768, pb_bytes(1, "fake")), response, cm_message(780, b"")]))
+            # (the response inside a gzipped Multi, beside others - an old-style struct message first, as a real
+            # account's logon brings (ClientMarketingMessageUpdate2, 5510): skipped, never the reason to drop the rest)
+            old_style = struct.pack("<I", 5510) + struct.pack("<BHQQ", 36, 2, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF)
+            old_style += bytes(36 - len(old_style)) + struct.pack("<II", 1700000000, 0)
+            ws_send(conn, multi([old_style, cm_message(768, pb_bytes(1, "fake")), response, cm_message(780, b"")]))
         elif emsg == 703:
             state.log("cm: heartbeat")
         elif emsg == 8905:
@@ -1012,6 +1047,7 @@ def main():
     parser.add_argument("--scale", type=int, default=1)
     parser.add_argument("--cert")
     parser.add_argument("--key")
+    parser.add_argument("--token-file", help="the made-up refresh token kept across runs (the kept sign-in's flows)")
     parser.add_argument("--workshop-map", help="a real MCC map file as Workshop item 2900000001's map (local tests)")
     parser.add_argument("--workshop-mp-map", help="a real MCC multiplayer map as Workshop item 2900000002's (local tests)")
     parser.add_argument("--workshop-mp-name", help="its file name in the item (default: the file's own)")

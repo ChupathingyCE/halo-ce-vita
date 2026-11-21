@@ -14,6 +14,8 @@ docs/steam_download_security.md):
   the app sent to the background (a power callback on its own thread) abort
   the job: its session revoked and logged off before the system acts, as far
   as the time given allows (a power loss kills the RAM, and the token with it);
+- the kept sign-in's device secret: the console's OpenPSID
+  (sceKernelGetOpenPsId; port/steamdl/steam_signin.h);
 - at start, a sign-in left behind (its no-secret marker,
   steam-session.txt): the panel's message says to remove "Halo CE Vita (PS
   Vita)" in the Steam app.
@@ -26,6 +28,7 @@ HALO_STEAM_TEST_CM / HALO_STEAM_TEST_CDN the fake server (steam_job.c).
 #include <psp2/appmgr.h>
 #include <psp2/io/devctl.h>
 #include <psp2/io/stat.h>
+#include <psp2/kernel/openpsid.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/power.h>
@@ -109,6 +112,26 @@ static void log_line(const char *line)
 	}
 }
 
+/* the kept Steam sign-in's device secret (port/steamdl/steam_signin.h): this console's OpenPSID - not on the memory
+card, so the sealed file does not open on another Vita or from the card alone; any app on this Vita can read it
+(docs/steam_download_security.md section 10 says what that does and does not protect) */
+static size_t device_secret(uint8_t *out, size_t capacity)
+{
+	SceKernelOpenPsId id;
+	size_t index, zero = 1;
+
+	memset(&id, 0, sizeof(id));
+	if (capacity < sizeof(id.id) || sceKernelGetOpenPsId(&id) < 0)
+		return 0;
+	for (index = 0; index < sizeof(id.id); index++)
+		zero &= id.id[index] == 0;
+	if (zero)
+		return 0;
+	memcpy(out, id.id, sizeof(id.id));
+	memset(&id, 0, sizeof(id));
+	return sizeof(id.id);
+}
+
 /* a power warning: the job aborted, its session ended in the time the system gives */
 static int power_callback(int notify, int count, int argument, void *common)
 {
@@ -171,7 +194,8 @@ static void autostart_thread(void *argument)
 
 void vita_steam_init(void)
 {
-	struct steam_job_platform platform = { free_space, battery_low, keep_awake, busy, log_line, roots, battery_ok };
+	struct steam_job_platform platform = { free_space, battery_low, keep_awake, busy, log_line, roots, battery_ok,
+		device_secret };
 	char date[32];
 	SceUID thread;
 

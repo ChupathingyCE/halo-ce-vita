@@ -17,7 +17,7 @@ the Steam phone app. No server of ours is in between, nothing is cached or share
 |---|---|---|
 | The player's Steam account | Months of access if a refresh token leaks | Nowhere of ours |
 | The QR auth session (client_id, request_id, challenge URL) | Whoever polls it first gets the tokens once approved | RAM, for the QR screen only |
-| Refresh token (JWT) and access token | Full account sign-in until revoked or expired | **RAM only**, one struct, wiped after use |
+| Refresh token (JWT) and access token | Full account sign-in until revoked or expired | **RAM only**, one struct, wiped after use; since 1.1.3-insider.8 the refresh token (+ account name, date) may also be kept **sealed to the console** for 14 days at most (section 10) |
 | Depot keys (32-byte AES), manifest request codes, PICS access tokens | Let anyone with the CDN address read the depot | **RAM only**, wiped after use |
 | The memory card | A hostile server must not write outside our folders or fill it | Only the planned files, at their planned sizes |
 | The Vita process | Parsers read hostile bytes from the network | Every parser bounded and fuzzed |
@@ -67,7 +67,8 @@ Not in scope: an attacker with code execution on the Vita already (they own the 
   3. close the WebSocket;
   4. `mbedtls_platform_zeroize` every secret, then free.
   `steam_session_end()` does all four and is safe to call twice and from every error path. Nothing is kept,
-  so the next session needs a new QR.
+  so the next session needs a new QR. **Changed in 1.1.3-insider.8 (owner, Nov 20 2026):** the refresh token
+  may be kept sealed to the console for up to 14 days; then the end does 2-4 and not 1 (section 10).
 - If the process dies before the revoke (power loss, crash), the token dies with the RAM. The game writes a
   **no-secret marker** at sign-in (`steam-session.txt`: the date and the device name, nothing else) and removes
   it after a successful revoke. If the marker is there at the next start, the game tells the player to remove
@@ -603,3 +604,69 @@ Workshop uses). The image CDN's resize (imw/imh) was measured on one public item
    ws_image fuzzer).
 7. Open: the fields of GetUserFiles, GetPlayerLinkDetails and GetDetails' previews/votes against the real Steam
    (9.7); the textures' memory on the real Vita (the PC harness shows the C heap only).
+
+## 10. The kept sign-in (fix/113-steamdl-manifest, Nov 20 2026, 1.1.3-insider.8)
+
+The owner asked for a QR scan about once every two weeks instead of at every download. The refresh token a QR
+sign-in gives is kept on the Vita, under these rules (port/steamdl/steam_signin.c, steam_download.c, steam_job.c):
+
+**What is kept.** One file, `ux0:data/haloce-vita/steam-signin.bin`: the refresh token, the account name and the
+date it was saved. Never a password (there is none: QR only), never the access token, depot keys, request codes or
+PICS tokens (RAM only, as before). The log says "kept", "used (saved N days ago)", "expired", "unreadable", "refused
+(result N)" - never the token, the name, the key or the secret. Nothing of it goes to settings.txt, env.txt, the
+crash text or a friend-code backup; nothing in the game copies that file anywhere.
+
+**How it is sealed.** AES-256-GCM. The key is HKDF-SHA256 of a device secret with a random 16-byte salt per save
+and a fixed purpose label; a random 12-byte nonce per save. The header (magic `XVSI`, version, the date, salt,
+nonce, length) is the cipher's associated data, so a change to any byte - header, body or tag - fails the tag.
+The device secret is the Vita's **OpenPSID** (`sceKernelGetOpenPsId`, 16 bytes, unique per console, not stored on
+the memory card); on Linux PC builds `/etc/machine-id`; on any platform without one, nothing is kept (a QR each
+time, revoked at the end as before). No key or secret is a constant in the binary.
+
+**When it is used, refused, removed.**
+- Kept at most **14 days** from the QR approval, checked against the clock at every load. A date more than a day in
+  the future (the clock set back, or a file from elsewhere) counts as expired. An expired one is revoked with Steam
+  (RevokeToken, permanent, before any logon) and wiped, then a new QR.
+- Any failure to open it - tag, format, length, characters, another console's file, a damaged card - **wipes it**
+  (overwritten with zeros, then removed) and a new QR follows. Nothing else is tried with it.
+- A logon refused by Steam (revoked in the Steam app, password changed, expired at Steam: any result but "no answer",
+  Busy, Timeout, ServiceUnavailable, TryAnotherCM, RateLimitExceeded) wipes it; a new QR follows on a new
+  connection. Steam not answering keeps it for the next try.
+- **SIGN OUT** (DOWNLOAD FROM STEAM, the fourth row; it shows "signed in, N days left" / "expired" / "cannot be read"
+  / "not signed in") wipes the file **first**, then signs in with the token and revokes it (or revokes it unsigned
+  if the logon is refused). Offline, the file is still gone and the screen says to remove "Halo CE Vita (PS Vita)"
+  in the Steam app.
+- While a session uses it, the token is in RAM as before (struct steam_secrets, wiped at the session's end). The
+  end of a session with a kept sign-in logs off **without** revoking. The "not signed out" marker
+  (steam-session.txt) is removed once the token is kept: the file accounts for it.
+
+**Threat model: what the console binding protects, and what it does not.**
+- *A stolen or copied memory card, a backup of ux0:data copied off the card, the file sent to someone:* protected.
+  Without that Vita's OpenPSID the key cannot be derived; the file does not open on another Vita, a PC or an
+  emulator (GCM fails, the file is wiped there). An attacker would have to brute-force a 128-bit console ID. The
+  ID itself is not on the card.
+- *The file moved back after the 14 days, or the clock rolled back to revive it:* refused (the date is inside the
+  tag; future dates count as expired). Steam's own token lifetime is longer, so the 14 days are enforced by the
+  Vita; SIGN OUT and the Steam app's Authorized devices end it at Steam.
+- *Other homebrew on the same Vita* (any app can read ux0:data and ask for the OpenPSID): **not protected.** A
+  hostile homebrew running on this Vita could derive the same key and read the token, as it could read the game's
+  RAM during a session. The Vita gives a safe homebrew no per-app sealed storage or hardware key it could not reach.
+  Mitigations: 14 days at most, SIGN OUT revokes it, the device is listed as "Halo CE Vita (PS Vita)" in the Steam
+  app's Authorized devices where the player can remove it at any time, and the token Steam gives a QR sign-in is a
+  client sign-in: trades and market actions still need the Steam app's Steam Guard confirmation.
+- *Someone holding the unlocked Vita:* can start a download from the player's account without a QR for up to 14
+  days (the same as leaving any device signed in). SIGN OUT before lending or selling the Vita.
+- *A crash dump taken during a session* holds the token in RAM, as before (3.2): never share a dump from a Steam
+  session. A dump taken while no session runs holds no token (the file is read only when a job starts).
+- *The OpenPSID is not secret from Sony or from game servers the Vita talks to.* It only binds the file to the
+  console; it is one factor, not a password. Someone who has both the card and that console's OpenPSID can open the
+  file - that is the same person as "has the Vita".
+
+**Tests.** run_steam_download_test.sh: units (seal/open round trip, every byte of a sealed file flipped, every
+truncation, another console's secret, the 14-day edge to the second, a future date, names and tokens refused, the
+file never holds the token or name in the clear, save/peek/load/wipe, garbage and oversized files) and the kept
+sign-in flows against the fake server (first QR kept with log-off only; the next download with no QR; SIGN OUT
+wipes then revokes; revoked at Steam -> refused 26 -> wiped -> new QR; 15 days old -> revoked before the QR ->
+new QR; a damaged file -> wiped -> new QR; no token of the account in the clear anywhere a run wrote). Fuzz target
+`signin` (steam_fuzz.c).
+

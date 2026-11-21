@@ -28,6 +28,9 @@ STEAM_FUZZ_SECONDS, under AddressSanitizer and UBSan):
                 the text rule (with and without lines, a small and a large buffer), 3 a picture's URL through the URL
                 rule, 4 a GetUserFiles list: every text out is ours (UTF-8 of ASCII and Latin-1, no control
                 character, no '|'), every URL taken is https to Steam's image CDN
+  multi         a Multi's body straight (steam_cm_multi_facts: old-style messages skipped, the facts' counts bounded)
+  signin        a kept sign-in file (steam_signin_open under a fixed device secret): unreadable, or a token and a name
+                of the allowed characters; and a byte-flipped copy of a good file sealed from the input never opens
 Every input must only be taken or refused: no crash, no leak, no read or
 write out of bounds.
 */
@@ -44,6 +47,7 @@ write out of bounds.
 #include "steam_pb.h"
 #include "steam_plan.h"
 #include "steam_session.h"
+#include "steam_signin.h"
 #include "steam_workshop.h"
 #include "steam_ws.h"
 #include "steam_zip.h"
@@ -419,6 +423,63 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				text_ours(items[index].title, sizeof(items[index].title), 0);
 			break;
 		}
+		}
+	}
+	else if (!strcmp(target, "multi"))
+	{
+		struct steam_cm_multi_facts facts;
+		long count = steam_cm_multi_facts(data, size, cm_visit, NULL, &facts);
+
+		if (count > (long)STEAM_CM_MULTI_MESSAGES_MAXIMUM || facts.handed + facts.skipped > STEAM_CM_MULTI_MESSAGES_MAXIMUM ||
+			(count < 0 && !facts.refused[0]) || facts.payload_size > STEAM_CM_MULTI_UNZIPPED_MAXIMUM + size)
+			abort();
+	}
+	else if (!strcmp(target, "signin"))
+	{
+		static const uint8_t secret[16] = { 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6 };
+		struct steam_signin signin;
+		int state = steam_signin_open(data, size, secret, sizeof(secret), 1763600000, &signin);
+
+		if (state == STEAM_SIGNIN_UNREADABLE)
+		{
+			if (signin.refresh_token[0] || signin.account_name[0])
+				abort();
+		}
+		else if (state != STEAM_SIGNIN_KEPT && state != STEAM_SIGNIN_EXPIRED)
+			abort();
+		else
+		{
+			const char *c;
+
+			for (c = signin.refresh_token; *c; c++)
+				if ((unsigned char)*c <= ' ' || (unsigned char)*c >= 0x7f)
+					abort();
+			if (!signin.account_name[0] || strlen(signin.refresh_token) < 16)
+				abort();
+		}
+		/* (the input as a token: sealed, one byte flipped, never opens) */
+		if (size >= 16 && size <= STEAM_TOKEN_MAXIMUM)
+		{
+			uint8_t sealed[STEAM_SIGNIN_FILE_MAXIMUM], salt[16], nonce[12];
+			long length;
+			size_t index;
+
+			memset(&signin, 0, sizeof(signin));
+			for (index = 0; index < size; index++)
+				signin.refresh_token[index] = (char)(0x21 + data[index] % 0x5e);
+			snprintf(signin.account_name, sizeof(signin.account_name), "fuzz");
+			signin.saved_at = 1763600000;
+			memset(salt, data[0], sizeof(salt));
+			memset(nonce, data[size - 1], sizeof(nonce));
+			length = steam_signin_seal(secret, sizeof(secret), &signin, salt, nonce, sealed, sizeof(sealed));
+			if (length <= 0)
+				abort();
+			if (steam_signin_open(sealed, (size_t)length, secret, sizeof(secret), 1763600000, &signin) != STEAM_SIGNIN_KEPT)
+				abort();
+			sealed[data[1] % (size_t)length] ^= (uint8_t)(1u << (data[2] % 8));
+			if (steam_signin_open(sealed, (size_t)length, secret, sizeof(secret), 1763600000, &signin) !=
+				STEAM_SIGNIN_UNREADABLE)
+				abort();
 		}
 	}
 	else if (!strcmp(target, "cdn_list"))

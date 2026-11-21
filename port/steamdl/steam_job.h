@@ -68,6 +68,9 @@ struct steam_job_status
 	char error[256];
 	unsigned int files_done, files_already, network_waits;
 	int revoked, logged_off, session_lost;
+	/* the kept sign-in (steam_signin.h): its state when the job began, kept at the end (1), SIGN OUT's job (1) and
+	its revoke confirmed by Steam (1) */
+	int signin_found, kept, sign_out, signed_out;
 	/* the measurements the dev Vita run reads (also logged at the end) */
 	unsigned int connect_ms;
 	uint64_t decode_us[3], decoded_bytes[3];
@@ -89,6 +92,10 @@ struct steam_job_options
 	/* (the browser) the tests' image server instead of Steam's image CDN (http://127.0.0.1:port): "" in the game; a
 	test build's HALO_STEAM_TEST_IMAGES alone. Every picture's URL is checked first as ever (steam_image_url) */
 	char images_override[128];
+	/* the kept sign-in's file (<app root>/steam-signin.bin; steam_signin.h): "" keeps none */
+	char signin_path[300];
+	/* SIGN OUT: the kept sign-in wiped, then revoked with Steam - no QR, no download */
+	int sign_out;
 };
 
 struct steam_job_platform
@@ -106,6 +113,10 @@ struct steam_job_platform
 	void (*roots)(char *ce_root, char *app_root, size_t size);
 	/* nonzero: the battery allows a start (the Vita: 30% or charging) */
 	int (*battery_ok)(void);
+	/* this device's own secret for the kept sign-in's key (steam_signin.h): its bytes into out (16-64), the count, or
+	0 if the device has none - then no sign-in is kept (a QR each time). The Vita's: its OpenPSID (vita_steam.c);
+	Linux's default: /etc/machine-id; elsewhere none */
+	size_t (*device_secret)(uint8_t *out, size_t capacity);
 };
 
 /* the device's side; NULL or a NULL member keeps the default (statvfs, never low, nothing, nothing, stderr) */
@@ -119,6 +130,14 @@ low to start */
 int steam_job_start_games(int games);
 /* (the screens') a sign-in left behind (its marker in the app's folder): 1 with its date */
 int steam_job_marker_check(char *date, size_t date_size);
+
+/* (the screens') SIGN OUT: the sign-in kept on the device wiped, then revoked with Steam on the job's thread (the
+screen shows the job: CONNECTING, ENDING, DONE): 1 begun, 0 if a job runs, -1 if none is kept (nothing to do) */
+int steam_job_sign_out(void);
+/* (the screens') the sign-in kept on the device, from its file's header (nothing decrypted; read at most every two
+seconds): 0 none, 1 kept with *days_left (0-14), 2 expired (revoked at the next connection or SIGN OUT), 3 a file
+that does not read (removed at the next sign-in) */
+int steam_job_signin_state(int *days_left);
 
 /* the player's cancel (Circle): the session ends as on any path */
 void steam_job_cancel(void);
@@ -144,6 +163,8 @@ struct steam_job_view
 	char error[256];
 	unsigned int files_done, files_already;
 	int revoked;
+	/* the sign-in kept on the device at the end; SIGN OUT's job, its revoke confirmed */
+	int kept, sign_out, signed_out;
 };
 void steam_job_view(struct steam_job_view *view);
 
