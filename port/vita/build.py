@@ -285,6 +285,14 @@ FRAME_SPLIT_WRAPPED = (
     "rasterizer_lens_flares_draw", "interface_draw_screen", "render_ui_widgets", "rasterizer_frame_begin",
     "rasterizer_frame_end",
 )
+# the platform layer's units that read nothing of the game's through a
+# pointer of no particular alignment, built without -fmax-type-align=1: the
+# sound mixer (dsound_sdl.c, the Xbox's reverb with it), whose every float
+# through a pointer otherwise goes through an integer register and a
+# transfer - 50 to 96% of a core in the b30 fight (HALO_MIX_TIMING) on the
+# A9. Its arithmetic is the same either way; the sound the game hands it is
+# its own buffers' and the game's structures, naturally aligned
+ALIGNED_PLATFORM_SOURCES = {"dsound_sdl.c"}
 DEVICE_SOURCES = {
     "d3d8_gxm.c", "vita_textures.c", "nv2a_psh_cg.c", "nv2a_vsh_cg.c", "blend_constant.c", "dynamic_resolution.c",
     "fill_stats.c",
@@ -561,7 +569,10 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
             continue
         profile_id = " -DHALO_CONSOLE_PROFILE_ID" if source.name == "delta_peer_game.c" else ""
         extra = f" {https_defines}" if source.name in ("delta.c", "delta_peer_game.c") else ""
-        add(override_of(source), "vita_cc", platform_cflags + extra + profile_id)
+        cflags = platform_cflags + extra + profile_id
+        if source.name in ALIGNED_PLATFORM_SOURCES:
+            cflags = cflags.replace(" -fmax-type-align=1 ", " ")
+        add(override_of(source), "vita_cc", cflags)
     add(game / CONSOLE_LINK / "console_link.c", "vita_cc", f"{platform_cflags} -I{_quote(game / CONSOLE_LINK)}")
     add(hud_assets, "vita_cc", platform_cflags)
     # the port's units in the platform layer's terms: the Vita's Direct3D
