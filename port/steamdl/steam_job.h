@@ -163,8 +163,9 @@ struct steam_job_view
 	char error[256];
 	unsigned int files_done, files_already;
 	int revoked;
-	/* the sign-in kept on the device at the end; SIGN OUT's job, its revoke confirmed */
-	int kept, sign_out, signed_out;
+	/* the sign-in kept on the device at the end; SIGN OUT's job, its revoke confirmed; the kept sign-in's state when
+	the job began (steam_signin_state) */
+	int kept, sign_out, signed_out, signin_found;
 };
 void steam_job_view(struct steam_job_view *view);
 

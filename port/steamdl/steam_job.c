@@ -1370,6 +1370,7 @@ void steam_job_view(struct steam_job_view *view)
 	view->kept = status.kept;
 	view->sign_out = status.sign_out;
 	view->signed_out = status.signed_out;
+	view->signin_found = status.signin_found;
 	steam_wipe(status.qr, sizeof(status.qr));
 }
 

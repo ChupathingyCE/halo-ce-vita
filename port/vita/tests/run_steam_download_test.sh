@@ -239,7 +239,7 @@ signin_check keep-old "cm: revoke ok cm: logoff " 1 1
 # (the expired one revoked before the QR, not signed in: no logon between the connection and the revoke)
 awk '/cm: revoke ok/ {print "revoke"; exit} /cm: logon ok/ {print "logon"; exit}' "$out/flow-keep-old/transcript.txt" | grep -q revoke ||
 	{ echo "FAIL keep-old: not revoked before the logon"; status=1; }
-grep -q "older than 14 days: removed from it, revoked with Steam" "$out/flow-keep-old/log.txt" || { echo "FAIL keep-old: log"; status=1; }
+grep -q "older than 14 days: removed from it, to be revoked with Steam" "$out/flow-keep-old/log.txt" || { echo "FAIL keep-old: log"; status=1; }
 # (another console's file, or a damaged one: wiped, a new QR, kept again)
 rm -f "$out/signin-token.txt"
 mkdir -p "$out/flow-keep-bad-base/card/haloce-vita"

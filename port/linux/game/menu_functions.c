@@ -12945,8 +12945,14 @@ static void h3_steam_update(struct widget_instance *list)
 	case STEAM_JOB_DONE:
 		if (view.sign_out)
 		{
-			snprintf(text, sizeof(text), "%s", view.signed_out ? T("Signed out. The Steam sign-in is removed from this Vita and Steam has revoked it.") :
-				T("The Steam sign-in is removed from this Vita. Steam did not confirm it: in the Steam app, remove \"Halo CE Vita (PS Vita)\" from Authorized devices."));
+			/* (steam_signin_state: 1 kept, 2 expired - a token to revoke -, 3 a file that did not open, 0 none) */
+			if (view.signin_found == 3)
+				snprintf(text, sizeof(text), "%s", T("The Steam sign-in on this Vita could not be read, so it is removed. If \"Halo CE Vita (PS Vita)\" is in the Steam app's Authorized devices, remove it there."));
+			else if (view.signin_found != 1 && view.signin_found != 2)
+				snprintf(text, sizeof(text), "%s", T("No Steam sign-in is kept on this Vita."));
+			else
+				snprintf(text, sizeof(text), "%s", view.signed_out ? T("Signed out. The Steam sign-in is removed from this Vita and Steam has revoked it.") :
+					T("The Steam sign-in is removed from this Vita. Steam did not confirm it: in the Steam app, remove \"Halo CE Vita (PS Vita)\" from Authorized devices."));
 			break;
 		}
 		if (view.kept)
