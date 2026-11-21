@@ -126,6 +126,11 @@ on (the settings panel's change, between frames: d3d8_gxm.c) */
 (display.resolution_limit "544") */
 #define VGXM_RENDER_SCALE_MAXIMUM (544.0f / 480.0f)
 float vgxm_render_scale(void);
+/* the high-res text's atlas (vita_gxm.c): rows [top, bottom) of the game's
+coverage copied in (made at the first call; 0 when it could not be), and
+the texture (NULL until made) */
+int vgxm_text_atlas_update(const unsigned char *coverage, unsigned long size, unsigned long top, unsigned long bottom);
+const struct vgxm_texture *vgxm_text_atlas(void);
 void vgxm_render_scale_set(float scale);
 /* the dynamic resolution (d3d8_gxm.c, on the worker between two frames, or
 with it idle): the screen-sized targets drawn into their top left, scale

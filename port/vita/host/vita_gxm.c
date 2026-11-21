@@ -2231,6 +2231,62 @@ static SceGxmFragmentProgram *fragment_program_get(unsigned long shader, unsigne
 	return entry->program;
 }
 
+/* ---------- the high-res text's atlas (Warthog, HALO_CONSOLE_HOST_ART)
+
+The game's sharp text (display.high_res_text, port/linux/src/text_hires.c)
+draws its glyphs from an atlas of coverage, a byte a texel, standing for a
+placeholder bitmap: here a texture of one byte a texel in CDRAM (4 MB for
+the game's 2048 square), the byte read into all four channels: the glyphs'
+colour is the draw's, and a pass that weighs by the texture's colour rather
+than its alpha (the menus' labels') sees nothing outside a glyph (with the
+colour white the labels' glyphs came out in boxes). Its rows are copied in as the game writes glyphs into them
+(d3d8_gxm.c, when the placeholder is bound: the game's thread, the one that
+writes them); a glyph is new rows only, so the rows a frame in flight reads
+do not change under it. Made when first needed; none when CDRAM has no room
+(the maps' own fonts are drawn for the rest of the run then: d3d8_gxm.c). */
+static struct
+{
+	struct block memory;
+	SceGxmTexture texture;
+	unsigned long size;
+	int state; /* 0 not made, 1 made, -1 refused */
+} text_atlas;
+
+int vgxm_text_atlas_update(const unsigned char *coverage, unsigned long size, unsigned long top, unsigned long bottom)
+{
+	if (!text_atlas.state)
+	{
+		text_atlas.state = -1;
+		if (size && size <= 4096 && !(size & 7) &&
+			cdram_block_get(_memory_other, (unsigned int)(size * size), "text atlas", &text_atlas.memory) &&
+			sceGxmTextureInitLinear(&text_atlas.texture, text_atlas.memory.base, SCE_GXM_TEXTURE_FORMAT_U8_RRRR,
+				(unsigned int)size, (unsigned int)size, 0) >= 0)
+		{
+			sceGxmTextureSetMinFilter(&text_atlas.texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
+			sceGxmTextureSetMagFilter(&text_atlas.texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
+			memset(text_atlas.memory.base, 0, size * size);
+			text_atlas.size = size;
+			text_atlas.state = 1;
+			log_line("gxm: the high-res text's atlas: %lux%lu, one byte a texel (%lu KB of CDRAM)", size, size,
+				size * size / 1024);
+		}
+		else
+			log_line("gxm: no room for the high-res text's atlas (%lux%lu): the maps' fonts", size, size);
+	}
+	if (text_atlas.state != 1 || size != text_atlas.size)
+		return 0;
+	if (bottom > size)
+		bottom = size;
+	if (top < bottom)
+		memcpy((unsigned char *)text_atlas.memory.base + top * size, coverage + top * size, (bottom - top) * size);
+	return 1;
+}
+
+const struct vgxm_texture *vgxm_text_atlas(void)
+{
+	return text_atlas.state == 1 ? (const struct vgxm_texture *)&text_atlas.texture : NULL;
+}
+
 const char *vgxm_counts(void)
 {
 	static char line[160];

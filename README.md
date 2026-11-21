@@ -42,16 +42,19 @@ build count: 0.9.2 (build 1).
   second.
 - Plays the Xbox maps. Measured on a PS Vita 2000:
   - Blood Gulch, alone: 33 frames a second, steady.
-  - The Silent Cartographer (b30), the beach: 13 frames a second on average,
-    9 at the worst moment, when the Covenant engage on the beach. Halo CE
-    Vita 1.1.3 runs the same beach at 28: its game tick runs beside the
-    drawing, on a core of its own.
+  - The Silent Cartographer (b30), the beach: 13 frames a second on average
+    (up to 30 before the Covenant engage), 9 at the worst moment, when they
+    engage on the beach. Halo CE Vita 1.1.3 runs the same beach at 28: its
+    game tick runs beside the drawing, on a core of its own.
+- Halo CE Vita's defaults: 480 lines (or 544, the screen's), dynamic
+  resolution, objects too small to see left out, and its touch, rear touch
+  guard and gyro settings, on rows of the Chupathingy menus.
+- Chupathingy's high-resolution HUD and sharp text.
 - **Not yet:**
   - Online play through Delta: Online Games, Link Profile, friends and
     parties.
   - The system keyboard for text boxes. The game's on-screen keyboard works.
   - The intro and the cutscene movies.
-  - The high-resolution text and HUD. The maps' own fonts and HUD are used.
   - Custom Edition maps.
   - Updates from inside the game.
   - Most of the speed Halo CE Vita had.

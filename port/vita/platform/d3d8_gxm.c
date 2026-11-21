@@ -22,6 +22,9 @@ the game gave their surface, as in the OpenGL device.
 #include "halo_cond.h"
 #include "halo_ui_pointer.h"
 #include "port_config.h"
+#ifdef HALO_CONSOLE_HOST_ART
+#include "text_hires.h"
+#endif
 
 #include <math.h>
 #include <stddef.h>
@@ -2205,12 +2208,65 @@ void WINAPI D3DDevice_SetTextureState_BumpEnv(DWORD stage, D3DTEXTURESTAGESTATET
 	texture_state_store(stage, (unsigned long)type, value);
 }
 
+#ifdef HALO_CONSOLE_HOST_ART
+/* the high-res text's atlas (text_hires.c): its placeholder's data once its
+texture is made, for the texture cache (vita_textures.c), which draws the
+atlas in the placeholder's place */
+volatile unsigned long vita_text_atlas_data;
+
+/* the placeholder bound: the rows the game wrote since copied into the
+atlas's texture, here on the game's thread, which writes them
+(vita_gxm.c vgxm_text_atlas_update); all of them for a new placeholder */
+static void text_atlas_bound(unsigned long data)
+{
+	static unsigned long sent_for;
+	long size, top, bottom;
+	const unsigned char *rows = text_hires_atlas_rows(data, &size, data != sent_for, &top, &bottom);
+
+	if (!rows || size <= 0)
+		return;
+	if (vgxm_text_atlas_update(rows, (unsigned long)size, top > 0 ? (unsigned long)top : 0,
+		bottom > 0 ? (unsigned long)bottom : 0))
+	{
+		if (sent_for != data)
+		{
+			sent_for = data;
+			__atomic_store_n(&vita_text_atlas_data, data, __ATOMIC_RELEASE);
+		}
+	}
+	else if (!vgxm_text_atlas())
+	{
+		/* (no room for its texture: the maps' own fonts for this run,
+		rather than text drawn from the empty placeholder) */
+		static int given_up;
+
+		if (!given_up)
+		{
+			given_up = 1;
+			config_set("display.high_res_text", "false");
+			platform_log("text: no room for the high-res text's atlas: the maps' fonts for this run");
+		}
+	}
+}
+
+/* the display's pixels for each of the game's 480 lines, which the sharp
+text's glyphs are made at: the interface is drawn at the display's 544 */
+float halo_screen_pixel_scale(void)
+{
+	return halo_ui_pixel_scale();
+}
+#endif
+
 void WINAPI D3DDevice_SetTexture(DWORD stage, D3DBaseTexture *texture)
 {
 	/* (no dirty mark: the textures and their headers are compared at each
 	draw, so a texture whose header the game rewrites in place is seen) */
 	if (stage < D3DTSS_MAXSTAGES)
 		device.textures[stage] = texture;
+#ifdef HALO_CONSOLE_HOST_ART
+	if (texture && texture->Data)
+		text_atlas_bound(texture->Data);
+#endif
 }
 
 void WINAPI D3DDevice_SetPalette(DWORD stage, D3DPalette *palette)

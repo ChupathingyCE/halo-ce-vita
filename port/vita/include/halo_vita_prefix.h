@@ -93,4 +93,15 @@ the translated layout, halo_linux_prefix.h) */
 #undef tolower
 #undef toupper
 
+/* the high-res HUD and text (port/linux/src/hud_hires.c, text_hires.c, the
+game's hud_hires_tags.c): every console build goes without them
+(halo_port_features.h's HALO_CONSOLE_NO_HIRES), drawing the maps' own fonts
+and bitmaps; the Vita's renderer draws the HUD's sheets and the text's
+atlas (platform/vita_textures.c, host/vita_gxm.c), so they are kept: the
+header is read here first and the switch taken back, its guard keeping it
+out from then on. Until upstream has a console ask for them
+(HALO_CONSOLE_HIRES, a pull request candidate) */
+#include "halo_port_features.h"
+#undef HALO_CONSOLE_NO_HIRES
+
 #endif /* __HALO_VITA_PREFIX_H */

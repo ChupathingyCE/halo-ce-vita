@@ -826,11 +826,6 @@ int main(int argc, char **argv)
 	setenv("HALO_LOG_ROOT", VITA_DATA_DIRECTORY "/logs", 0);
 	/* the Vita's 16:9 screen: 480 lines of 848 columns */
 	setenv("HALO_DISPLAY_WIDTH", "848", 0);
-	/* the game's own fonts, not the high-resolution ones: the Vita's
-	renderer does not draw those yet (HALO_CONSOLE_HOST_ART's text atlas,
-	port/vita/README.md). The high-res HUD's sheets it draws
-	(vita_textures.c) */
-	setenv("HALO_HIGH_RES_TEXT", "0", 0);
 	read_environment_file();
 	/* (debug) the folder a test's screenshots go to (debug.screenshot_directory) */
 	if (getenv("HALO_SCREENSHOT_DIR") && *getenv("HALO_SCREENSHOT_DIR"))

@@ -2431,6 +2431,20 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 	BOOL palettized = ((format_word & D3DFORMAT_FORMAT_MASK) >> D3DFORMAT_FORMAT_SHIFT) == 0x0b;
 	unsigned long hash = palettized ? palette_hash(palette) : 0;
 
+#ifdef HALO_CONSOLE_HOST_ART
+	/* (the high-res text's atlas in its placeholder's place: d3d8_gxm.c
+	text_atlas_bound, vita_gxm.c vgxm_text_atlas) */
+	{
+		extern volatile unsigned long vita_text_atlas_data;
+
+		if (data && data == __atomic_load_n(&vita_text_atlas_data, __ATOMIC_ACQUIRE) && vgxm_text_atlas())
+		{
+			xgpu_texture_describe(format_word, size_word, description);
+			description->hires = TRUE;
+			return vgxm_text_atlas();
+		}
+	}
+#endif
 	for (entry = *bucket; entry; entry = entry->next)
 	{
 		if (entry->data == data && entry->format_word == format_word && entry->size_word == size_word)

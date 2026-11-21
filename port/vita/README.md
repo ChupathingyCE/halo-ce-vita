@@ -37,7 +37,18 @@ The Vita sets two of the game's console capabilities for its speed:
 no snapshot of every object after each tick, 9-10 ms of a b30 frame) and
 `HALO_CONSOLE_NO_STRUCTURE_CULLING` (the level's surfaces walked as the
 original game walks them: the culling's tests cost the A9 more than they
-spare the GPU; `overrides/` until upstream has it).
+spare the GPU).
+
+Round 2 (on the game's main of Nov 21: 11.6 frames a second on b30, worst
+8.4) adds the console gates upstream merged from Halo CE Vita's work
+(`HALO_CONSOLE_FEWER_WALKS`, `_MARKER_LOOKUPS`, `_ANIMATION_FRAMES`,
+`_XBOX_MAP_SIZES`), still props' node matrices left as they are
+(`HALO_CONSOLE_STATIC_SCENERY`: 11.9), four open pull requests from the same
+work and the Xbox's particle limit (12.4), and Halo CE Vita's defaults:
+dynamic resolution and 8-pixel object culling (13.1, worst 8.6; up to 30
+before the beach fight). All of the simulation's changes give the same
+results; the defaults change only what is drawn. `overrides/README.md` says
+which files wait on which pull request.
 
 ## What is the Vita's own
 
@@ -96,14 +107,16 @@ application on the dev Vita 14 s after it started.
 - Slow: b30 about 13 frames a second (worst 9) where Halo CE Vita 1.1.3
   runs 28; Blood Gulch alone 33. The game thread is busy the whole frame
   (`--vita-frame-split`): the drawing takes as long as Halo CE Vita's (about
-  38 ms in the beach fight), but the game's two ticks a frame (about 18 ms
+  36 ms in the beach fight), but the game's two ticks a frame (about 24 ms
   each) run on the same thread, where Halo CE Vita ran its tick on a thread
   of its own; at two ticks a frame the game runs slower than real time.
-  The tick thread is upstream's ChupathingyCE/chupathingyce#1548. The Xbox's
-  settings (particles 1024, no anti-aliasing, 128 shadows) change nothing
-  measurable.
+  The tick thread is upstream's ChupathingyCE/chupathingyce#1548.
+- The high-res HUD's sheets are decoded when the HUD is first drawn on a
+  map: about 1.6 s once at the start of play (b30), on the render worker.
+- Each checkpoint stops the picture for about 1.3 s: the game state the
+  Vita builds with is the desktop's 20 MB, and the game writes all of it to
+  the memory card at once (the Xbox wrote 3.3 MB).
 - Not yet: Link Profile and the Online Games screen (the Delta Guide is not
-  built for consoles), the system keyboard for text boxes, movies, the
-  high-resolution text and HUD (`HALO_CONSOLE_HOST_ART`'s text atlas and HUD
-  sheets; the game's own fonts are used), Custom Edition maps, an updater.
+  built for consoles), the system keyboard for text boxes, movies,
+  Custom Edition maps, an updater.
 - "failed to change bitmap hardware format" lines in debug.txt at start.
