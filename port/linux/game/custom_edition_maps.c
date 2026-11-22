@@ -1726,6 +1726,13 @@ boolean custom_edition_maps_family_mixed(
 	{
 		return FALSE;
 	}
+	/* (a stock campaign level: mixed co-op plays it from either family's
+	files, the digests compared once it is loaded - mixed_coop.h; an older
+	host is refused there, as the level loads) */
+	if (mixed_coop_host_level_acceptable(level_name, host_identity))
+	{
+		return FALSE;
+	}
 	/* (one of MCC's own levels, the host's MCC file: a machine of the Xbox's
 	maps alone, no MCC files to play it from. A PC-exclusive map has no Xbox
 	level: never a mixed game, its own refusal says why) */
