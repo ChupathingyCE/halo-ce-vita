@@ -366,7 +366,8 @@
 #            content folder; SKIP without one): its ui.map's build, 01.03.43.0000, plays multiplayer
 #            (cache_files.c's MCC region) - Menu style Halo 3's MULTIPLAYER, BROWSE GAMES opens the LAN
 #            browser, Classic+'s MULTIPLAYER rows open their screens, the settings panel's join and host open
-#            the System Link screen in every Menu style; never "multiplayer unavailable" (insider.8d)
+#            the System Link screen in every Menu style, Classic's too (mixed play r3); never "multiplayer
+#            unavailable" (insider.8d)
 #   steampanelget  (1.1.3-insider.4) the Xbox files alone, Menu style Classic, against steam_fake_server.py
 #            (a Steam Workshop test build alone; else SKIP): the panel's Download from Steam - SIGN IN, the
 #            QR, the fake's approval, Halo CE's 23 made-up files, the end's restart line, B back to the
@@ -4230,11 +4231,9 @@ PY
 				# (MULTIPLAYER's rows: each opened a screen of its own over pc\mp\screen)
 				[ "$(grep -a "ui: screen" "$log" | grep -avc 'pc.mp.screen\|main_menu.main_menu')" -ge 3 ] ||
 					fail $mp_name "MULTIPLAYER's rows did not open their screens" ;;
-			mccmp_panel_original_*)
-				# (Menu style Halo CE on MCC's files alone is Halo PC's own ui.map, which has no Xbox System Link
-				# screens to open: told so, never "unavailable") ;;
-				;;
 			*)
+				# (Menu style Classic too, mixed play r3: Halo PC's ui.map with Classic+'s screens for the network
+				# ones it has not)
 				grep -aq "system link: the settings panel's .*: the System Link screen opened" "$log" ||
 					fail $mp_name "the panel's row did not open the System Link screen" ;;
 			esac
