@@ -426,6 +426,10 @@ void release_assert_failed(
 }
 #endif
 
+#if defined(HALO_LINUX) && !defined(HALO_RELEASE)
+void platform_log(char const *format, ...);
+#endif
+
 void display_assert(
 	char *information,
 	char *file,
@@ -446,6 +450,15 @@ void display_assert(
 #endif
 	
 	error(_error_silent, "EXCEPTION %s in %s,#%d: %s", fatal ? "halt" : "warn", file, line, information ? information : "<no reason given>");
+#ifdef HALO_LINUX
+	/* (port, Nov 22 2026) a halt's reason in the game's log too: a dev
+	Vita's halt was in data/debug.txt alone, which a Vita that went off the
+	network before it was pulled kept to itself */
+	if (fatal)
+	{
+		platform_log("EXCEPTION halt in %s,#%ld: %s", file, line, information ? information : "<no reason given>");
+	}
+#endif
 #endif
 }
 

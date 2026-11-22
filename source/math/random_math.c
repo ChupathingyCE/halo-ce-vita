@@ -104,12 +104,16 @@ struct random_math_globals random_math_globals;
 #pragma bss_seg()
 #endif
 
-#if defined(HALO_LINUX) && !defined(HALO_VITA)
+#if defined(HALO_LINUX)
 /* (port) the lock is each thread's: the render (main.c) holds it while the
 tick runs on its own thread (tick_thread.c), whose global random() is not
 the render's (a debug build halted in a multiplayer game, and the two
-threads' counts were lost to each other). The Vita's builds check no
-assertions. */
+threads' counts were lost to each other). The Vita's too (Nov 22 2026): its
+test builds check assertions, and a dev-Vita build joining a PC's Longest
+CTF halted 0.16 s into the game on this one (random_math.c #56, "you should
+not be using global random()"), the tick's biped animation asking for the
+global random() while the render held its lock; thread-local storage is
+each thread's own there (vita_main.c's tls_check) */
 static __thread long global_random_seed_lock;
 #define GLOBAL_RANDOM_SEED_LOCK global_random_seed_lock
 #else

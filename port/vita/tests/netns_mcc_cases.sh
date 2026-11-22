@@ -33,6 +33,15 @@
 #             sidewinder either way; carousel hangemhigh with an MCC host and an Xbox joiner, told they need an
 #             Xbox-files host), the other family joining: refused with the message naming the map as one
 #             Halo PC rebuilt, never in the game
+#   mixedvitajoin  the dev Vita's MCC-only join (Nov 22 2026): an Xbox host's Longest CTF, an MCC-only joiner
+#             with only the files that Vita had (ui.map, bitmaps.map, a10.map, longest.map, custom_edition's
+#             bitmaps.map and loc.map), Menu style Halo 3, its game thread held 6.5 s as it enters the game
+#             (the Vita's 5.9 s of the Halo 3 menus' pictures read; "@stall"): the mixedmp checks, and the
+#             joiner is never told CONNECTION PROBLEM (error 9) for a host that kept sending
+#   mixedvitahost  the dev Vita's MCC-only host (Nov 22 2026): that file set hosts a10 co-op from Menu style
+#             Classic, Who can join Vitas and PCs, its lobby's own countdown (no early start), an Xbox
+#             machine joins: the game starts, the MCC level loads on the host, the joiner matches its
+#             dictionary and both play 60 s at least with two players
 
 mcc_root=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
 # (MCC's own folder, as pcmapjoin takes HALO_TEST_MCC_ROOT, holding halo1: its halo1)
@@ -56,6 +65,67 @@ mcc_setup() {
 	for file in "$mcc_root"/*; do
 		[ "$(basename "$file")" = maps ] || ln -sfn "$file" "$out/mcc-content/halo1/"
 	done
+}
+
+# mcc_vita_setup: the dev Vita's MCC file set alone ($out/mcc-vita/halo1/maps: ui.map, bitmaps.map,
+# a10.map, longest.map, custom_edition's bitmaps.map and loc.map; no sounds.map, no other level)
+mcc_vita_setup() {
+	local file
+	rm -rf "$out/mcc-vita"
+	mkdir -p "$out/mcc-vita/halo1/maps/custom_edition"
+	for file in ui.map bitmaps.map a10.map longest.map custom_edition/bitmaps.map custom_edition/loc.map; do
+		[ -r "$mcc_root/maps/$file" ] || { echo "SKIP ($mode): no MCC $file at $mcc_root"; exit 0; }
+		ln -sfn "$mcc_root/maps/$file" "$out/mcc-vita/halo1/maps/$file"
+	done
+}
+
+# mixed_vita_case: mixedvitajoin, mixedvitahost (the dev Vita's MCC-only sessions, off the Vita)
+mixed_vita_case() {
+	mcc_setup
+	mcc_vita_setup
+	mcc_lan_machine
+	if [ $mode = mixedvitajoin ]; then
+		copy_data_host=$data
+		copy_data_joiner=$out/mcc-none
+		run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NET_ONLINE=false \
+			HALO_NETWORK_TEST=host:longest:ctf HALO_CONTENT_ROOT=none HALO_MIXED_COOP_HASH=1; host_pid=$last_pid
+		sleep 5
+		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2 \
+			HALO_MENU_STYLE=halo3 HALO_CONTENT_ROOT="$out/mcc-vita" HALO_MIXED_COOP_HASH=1 \
+			"HALO_TEST_COMMANDS=L1:@stall,6500"; join_pid=$last_pid
+	else
+		# (the lobby's 31 s countdown once the joiner is in, then the level: 240 s at least)
+		[ "$seconds" -ge 240 ] || seconds=240
+		copy_data_host=$out/mcc-none
+		copy_data_joiner=$data
+		run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false HALO_NET_COOP_LEVEL=a10 \
+			HALO_NETWORK_TEST=host:a10 HALO_NETWORK_TEST_START=150 HALO_TEST_INPUT=bot:1:look HALO_NET_COOP_PLAYERS=2 \
+			HALO_NET_WHO_CAN_JOIN=vita_pc HALO_MENU_STYLE=classic HALO_UI_LOG=1 HALO_CONTENT_ROOT="$out/mcc-vita" \
+			HALO_MIXED_COOP_HASH=1; host_pid=$last_pid
+		sleep 5
+		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2:look \
+			HALO_CONTENT_ROOT=none HALO_MIXED_COOP_HASH=1; join_pid=$last_pid
+	fi
+	wait $join_pid $host_pid 2>/dev/null
+	hl=$out/host/run.log
+	jl=$out/joiner/run.log
+	echo "--- host"; grep -aE "mixed co-op: (hosting|machine|the dictionary|a10's)|network test: (hosting|map|starting)|h3 pregame: Starting" "$hl" | head -8
+	echo "--- joiner"; grep -aE "join: the host's map|mixed co-op: (the host plays|the host's level|refused|[0-9]+ of the host)|test command|h3 dialog" "$jl" | head -10
+	two=$(grep -a "network test: tick" "$jl" | grep -a "| playing" | grep -aEc "player [0-9]+:.* player [0-9]+:")
+	echo "joiner's seconds with two players playing: $two"
+	mcc_no_assertion host
+	mcc_no_assertion joiner
+	[ "$two" -ge 60 ] || fail "the joiner played the host's game for $two s with two players"
+	grep -aq "mixed co-op: the host's level matches this machine's" "$jl" || fail "the joiner never matched the host's dictionary"
+	if [ $mode = mixedvitajoin ]; then
+		grep -aq "test command: the game thread stalls 6500 ms" "$jl" || fail "the joiner's game thread was never held"
+		grep -aq "h3 dialog: error 9" "$jl" && fail "the joiner was told CONNECTION PROBLEM (error 9) after its own long frame"
+		mcc_scoreboards
+		mixed_hashes
+	else
+		grep -aq "network test: starting the game" "$hl" && fail "the host's game was started early (the test's, not the lobby's countdown)"
+		grep -aq "mixed co-op: a10's MCC level in network co-op loaded" "$hl" || fail "the MCC host never loaded a10"
+	fi
 }
 
 # mcc_lan_machine: a machine on the host's LAN ($lan), as lan's
@@ -221,7 +291,7 @@ mixed_case() {
 
 mcc_case() {
 	local host_data=$data join_data=$data host_content=none join_content=none host_game=host:bloodgulch:slayer
-	case $mode in mixedmp|mixedrebuilt) mixed_case; return ;; esac
+	case $mode in mixedmp|mixedrebuilt) mixed_case; return ;; mixedvitajoin|mixedvitahost) mixed_vita_case; return ;; esac
 	case $mode in
 	mcclan|mccmenus) host_data=$out/mcc-none join_data=$out/mcc-none host_content=$out/mcc-content
 		join_content=$out/mcc-content host_game=host:mcc_bloodgulch:slayer ;;
