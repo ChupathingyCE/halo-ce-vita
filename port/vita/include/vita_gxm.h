@@ -328,6 +328,33 @@ void *vgxm_movie_memory(unsigned long bytes, int cdram_first, const char **kind)
 void vgxm_movie_memory_free(void);
 void vgxm_movie_present(const void *pixels, unsigned long width, unsigned long height, unsigned long pitch,
 	const float rect[4]);
+/* the game's overlay (Online Games, the Delta Guide: the game's
+ui_overlay.c, handed over by platform/vita_ui_overlay.c's
+console_overlay_draw on the game's thread): its triangles, in the display's
+pixels from its top left, kept for the next present, which draws them over
+the picture; its textures made or updated now (the atlas a byte a texel and
+its rows dirty_top to dirty_bottom changed; the icons one above the other,
+the picture and the plasma's noise RGBA, each new when its serial changes).
+1 when taken */
+struct vgxm_ui_overlay
+{
+	const void *vertices;
+	int count, vertex_bytes;
+	const unsigned char *atlas;
+	int atlas_size, dirty_top, dirty_bottom;
+	const unsigned char *icons;
+	int icon_size, icon_count;
+	const unsigned char *picture;
+	int picture_width, picture_height, picture_serial;
+	const unsigned char *plasma;
+	int plasma_width, plasma_height, plasma_serial;
+	float plasma_shift[8];
+	float cutouts[4][4];
+};
+int vgxm_ui_overlay_submit(const struct vgxm_ui_overlay *frame);
+/* where the last present drew the game's picture on the display: left,
+top, width, height (0 before the first) */
+void vgxm_picture_place(float place[4]);
 /* waits until the GPU has finished every frame presented so far (any
 thread; the frames' scenes all end with the present's notification) */
 void vgxm_wait_gpu_idle(void);

@@ -9567,6 +9567,11 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		struct render_record *command;
 		unsigned long long before;
 		float frame_ms, tick_ms, render_ms;
+		/* (platform/vita_ui_overlay.c) the game's overlay, Online Games and
+		the Delta Guide, handed to the present */
+		void vita_ui_overlay_present(void);
+
+		vita_ui_overlay_present();
 
 		halo_frame_timing_recent(&frame_ms, &tick_ms, &render_ms);
 		vgxm_overlay_set(frame_ms > 0.0f ? 1000.0f / frame_ms : 0.0f, tick_ms, render_ms);

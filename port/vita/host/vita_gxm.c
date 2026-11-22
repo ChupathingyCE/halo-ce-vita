@@ -4351,6 +4351,412 @@ static void movie_draw(void)
 			(movie_frame.rect[2] - movie_frame.rect[0]) * width, (movie_frame.rect[3] - movie_frame.rect[1]) * height);
 }
 
+/* ---------- the game's overlay (Online Games, the Delta Guide: the game's
+port/linux/src/ui_overlay.c, its console_overlay_draw in
+platform/vita_ui_overlay.c)
+
+The overlay gathers its shapes and text on the game's thread and hands
+them over at the Direct3D device's present: its triangles (in the
+display's pixels), the glyphs' atlas and the button icons, the picture and
+the plasma's noise. Their textures are made here once, in user RAM mapped
+uncached for the GPU (the atlas's changed rows and a new picture copied in
+as they come), and the triangles are kept for the next present, which
+draws them over the picture with programs of its own: ui_overlay.c's
+fragment shader in Cg (rounded rectangles and outlines by their distance,
+the atlas's coverage, the icons, the picture and the plasma; no cellwall,
+no medals). Each frame's triangles go to the worker's ring. */
+
+struct ui_texture
+{
+	struct block memory;
+	SceGxmTexture texture;
+	unsigned long width, height, stride;
+	int serial, made;
+};
+
+static struct
+{
+	SceUID lock;
+	int failed;
+	unsigned long vertex_shader, fragment_shader;
+	SceGxmVertexProgram *vertex_program;
+	/* the next present's triangles (count of them vertices), and the
+	fragment program's parameters (the plasma's shift and threads' colour,
+	the cutouts, the icons' count) */
+	unsigned char *vertices;
+	unsigned long capacity, count, vertex_bytes;
+	int pending;
+	float parameters[7][4];
+	unsigned short *indices;
+	unsigned long index_count;
+	struct block index_memory;
+	struct ui_texture atlas, icons, picture, plasma;
+	unsigned long frames, largest;
+} ui;
+
+static const char ui_vertex_source[] =
+	"void main(float2 position, float2 texcoord, float4 shape, float2 edge, float4 color,\n"
+	"	out float4 out_position : POSITION, out float2 out_texcoord : TEXCOORD0, out float4 out_shape : TEXCOORD1,\n"
+	"	out float2 out_edge : TEXCOORD2, out float4 out_color : COLOR0)\n"
+	"{\n"
+	"	out_position = float4(position.x * (2.0 / 960.0) - 1.0, 1.0 - position.y * (2.0 / 544.0), 0.5, 1.0);\n"
+	"	out_texcoord = texcoord;\n"
+	"	out_shape = shape;\n"
+	"	out_edge = edge;\n"
+	"	out_color = color;\n"
+	"}\n";
+
+/* (ui_overlay.c's fragment_source, but the cellwall and the medals:
+parameters[0] the plasma's shift, [1] its threads' colour, [2..5] the
+cutouts, [6].x the icons' count) */
+static const char ui_fragment_source[] =
+	"float4 main(float2 texcoord : TEXCOORD0, float4 shape : TEXCOORD1, float2 edge : TEXCOORD2,\n"
+	"	float4 color : COLOR0, float4 place : WPOS,\n"
+	"	uniform sampler2D tex0, uniform sampler2D tex1, uniform sampler2D tex2, uniform sampler2D tex3,\n"
+	"	uniform float4 parameters[7] : BUFFER[0]) : COLOR\n"
+	"{\n"
+	"	float alpha;\n"
+	"	for (int i = 0; i < 4; i++)\n"
+	"	{\n"
+	"		float4 cut = parameters[2 + i];\n"
+	"		if (place.x >= cut.x && place.y >= cut.y && place.x < cut.z && place.y < cut.w)\n"
+	"			discard;\n"
+	"	}\n"
+	"	if (edge.x < -3.5)\n"
+	"	{\n"
+	"		float2 q = abs(shape.xy) - shape.zw + float2(edge.y, edge.y);\n"
+	"		float d = length(max(q, float2(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - edge.y;\n"
+	"		float4 t0 = tex2D(tex3, texcoord);\n"
+	"		float4 t1 = tex2D(tex3, texcoord * parameters[0].z + parameters[0].xy);\n"
+	"		float a0 = t0.a * dot(t0.rgb, float3(0.3333, 0.3333, 0.3333));\n"
+	"		float a1 = t1.a * dot(t1.rgb, float3(0.3333, 0.3333, 0.3333));\n"
+	"		float thread = pow(saturate(1.0 - abs(a0 - a1) * 3.0), 8.0);\n"
+	"		float3 c = color.rgb * (0.8 + 0.6 * a0 * a1) + parameters[1].rgb * thread * 0.18;\n"
+	"		return float4(c, color.a * saturate(0.5 - d) * (0.92 + 0.08 * thread));\n"
+	"	}\n"
+	"	if (edge.x < -2.5)\n"
+	"		return tex2D(tex2, texcoord) * color;\n"
+	"	if (edge.x < -1.5)\n"
+	"	{\n"
+	"		float4 texel = tex2D(tex1, float2(texcoord.x, (texcoord.y + shape.x) / parameters[6].x));\n"
+	"		return float4(texel.rgb / max(texel.a, 0.001), texel.a) * color;\n"
+	"	}\n"
+	"	if (texcoord.x >= 0.0)\n"
+	"		alpha = tex2D(tex0, texcoord).r;\n"
+	"	else\n"
+	"	{\n"
+	"		float2 q = abs(shape.xy) - shape.zw + float2(edge.x, edge.x);\n"
+	"		float d = length(max(q, float2(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - edge.x;\n"
+	"		alpha = saturate(0.5 - d);\n"
+	"		if (edge.y > 0.0)\n"
+	"			alpha *= saturate(d + edge.y + 0.5);\n"
+	"	}\n"
+	"	return float4(color.rgb, color.a * alpha);\n"
+	"}\n";
+
+/* a texture of width x height texels of bytes bytes each (rows padded to 8
+texels), made the first time or when it grows */
+static int ui_texture_make(struct ui_texture *texture, unsigned long width, unsigned long height, int bytes,
+	SceGxmTextureFormat format, int repeat, const char *name)
+{
+	unsigned long stride = ((width + 7) & ~7ul) * (unsigned long)bytes;
+
+	if (texture->made && texture->width == width && texture->height == height)
+		return 1;
+	if (texture->made && texture->memory.size >= stride * height)
+	{
+		/* (the same memory, its texels from now on another size) */
+	}
+	else
+	{
+		if (texture->made)
+		{
+			vgxm_wait_gpu_idle();
+			memory_os_free(&texture->memory);
+			memset(&texture->memory, 0, sizeof(texture->memory));
+			texture->made = 0;
+		}
+		if (!block_allocate(&texture->memory, SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, (unsigned int)(stride * height),
+			1, name))
+			return 0;
+		memset(texture->memory.base, 0, texture->memory.size);
+	}
+	if (sceGxmTextureInitLinearStrided(&texture->texture, texture->memory.base, format, (unsigned int)width,
+		(unsigned int)height, (unsigned int)stride) < 0)
+		return 0;
+	sceGxmTextureSetMinFilter(&texture->texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetMagFilter(&texture->texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetUAddrMode(&texture->texture, repeat ? SCE_GXM_TEXTURE_ADDR_REPEAT : SCE_GXM_TEXTURE_ADDR_CLAMP);
+	sceGxmTextureSetVAddrMode(&texture->texture, repeat ? SCE_GXM_TEXTURE_ADDR_REPEAT : SCE_GXM_TEXTURE_ADDR_CLAMP);
+	texture->width = width;
+	texture->height = height;
+	texture->stride = stride;
+	texture->made = 1;
+	return 1;
+}
+
+/* rows of a texture's texels copied in (from rows pitch bytes apart) */
+static void ui_texture_rows(struct ui_texture *texture, const unsigned char *pixels, unsigned long pitch,
+	unsigned long top, unsigned long bottom, int bytes)
+{
+	unsigned long row;
+
+	for (row = top; row < bottom && row < texture->height; row++)
+		memcpy((unsigned char *)texture->memory.base + row * texture->stride, pixels + row * pitch,
+			texture->width * (unsigned long)bytes);
+}
+
+int vgxm_ui_overlay_submit(const struct vgxm_ui_overlay *frame)
+{
+	unsigned long bytes = (unsigned long)frame->count * (unsigned long)frame->vertex_bytes;
+	int index;
+
+	if (ui.failed || frame->count <= 0 || frame->vertex_bytes <= 0)
+		return 0;
+	if (!ui.lock)
+	{
+		ui.lock = sceKernelCreateMutex("ui overlay", 0, 0, NULL);
+		if (ui.lock < 0)
+		{
+			ui.lock = 0;
+			ui.failed = 1;
+			return 0;
+		}
+	}
+	sceKernelLockMutex(ui.lock, 1, NULL);
+	/* the textures: the atlas's changed rows, the icons once, a new
+	picture and noise (the GPU may still be reading the frame before:
+	the atlas's rows that change are ones it has not drawn from since it
+	started over, and a picture changes seldom) */
+	if (frame->atlas && ui_texture_make(&ui.atlas, frame->atlas_size, frame->atlas_size, 1,
+		SCE_GXM_TEXTURE_FORMAT_U8_RRRR, 0, "overlay atlas"))
+	{
+		if (!ui.atlas.serial)
+		{
+			ui_texture_rows(&ui.atlas, frame->atlas, frame->atlas_size, 0, frame->atlas_size, 1);
+			ui.atlas.serial = 1;
+		}
+		else if (frame->dirty_top < frame->dirty_bottom)
+			ui_texture_rows(&ui.atlas, frame->atlas, frame->atlas_size, frame->dirty_top, frame->dirty_bottom, 1);
+	}
+	if (frame->icons && !ui.icons.serial && ui_texture_make(&ui.icons, frame->icon_size,
+		frame->icon_size * frame->icon_count, 4, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR, 0, "overlay icons"))
+	{
+		ui_texture_rows(&ui.icons, frame->icons, frame->icon_size * 4, 0, frame->icon_size * frame->icon_count, 4);
+		ui.icons.serial = 1;
+	}
+	if (frame->picture && frame->picture_serial != ui.picture.serial && frame->picture_width &&
+		frame->picture_height && ui_texture_make(&ui.picture, frame->picture_width, frame->picture_height, 4,
+		SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR, 0, "overlay picture"))
+	{
+		ui_texture_rows(&ui.picture, frame->picture, frame->picture_width * 4, 0, frame->picture_height, 4);
+		ui.picture.serial = frame->picture_serial;
+	}
+	if (frame->plasma && frame->plasma_serial != ui.plasma.serial && frame->plasma_width && frame->plasma_height &&
+		ui_texture_make(&ui.plasma, frame->plasma_width, frame->plasma_height, 4, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR,
+		1, "overlay plasma"))
+	{
+		ui_texture_rows(&ui.plasma, frame->plasma, frame->plasma_width * 4, 0, frame->plasma_height, 4);
+		ui.plasma.serial = frame->plasma_serial;
+	}
+	/* the triangles, for the next present */
+	if (bytes > ui.capacity)
+	{
+		unsigned char *grown = realloc(ui.vertices, bytes);
+
+		if (!grown)
+		{
+			sceKernelUnlockMutex(ui.lock, 1);
+			return 0;
+		}
+		ui.vertices = grown;
+		ui.capacity = bytes;
+	}
+	memcpy(ui.vertices, frame->vertices, bytes);
+	ui.count = (unsigned long)frame->count;
+	ui.vertex_bytes = (unsigned long)frame->vertex_bytes;
+	ui.parameters[0][0] = frame->plasma_shift[0];
+	ui.parameters[0][1] = frame->plasma_shift[1];
+	ui.parameters[0][2] = frame->plasma_shift[2];
+	ui.parameters[0][3] = 0.0f;
+	ui.parameters[1][0] = frame->plasma_shift[4];
+	ui.parameters[1][1] = frame->plasma_shift[5];
+	ui.parameters[1][2] = frame->plasma_shift[6];
+	ui.parameters[1][3] = frame->plasma_shift[7];
+	for (index = 0; index < 4; index++)
+		memcpy(ui.parameters[2 + index], frame->cutouts[index], sizeof(ui.parameters[0]));
+	ui.parameters[6][0] = (float)(frame->icon_count > 0 ? frame->icon_count : 1);
+	ui.parameters[6][1] = ui.parameters[6][2] = ui.parameters[6][3] = 0.0f;
+	ui.pending = 1;
+	sceKernelUnlockMutex(ui.lock, 1);
+	return 1;
+}
+
+void vgxm_picture_place(float place[4])
+{
+	place[0] = gxm.picture_left;
+	place[1] = gxm.picture_top;
+	place[2] = gxm.picture_width;
+	place[3] = gxm.picture_height;
+}
+
+static int ui_programs(void)
+{
+	static const struct { const char *name; unsigned int offset; SceGxmAttributeFormat format; int components; } inputs[5] = {
+		{ "position", 0, SCE_GXM_ATTRIBUTE_FORMAT_F32, 2 },
+		{ "texcoord", 8, SCE_GXM_ATTRIBUTE_FORMAT_F32, 2 },
+		{ "shape", 16, SCE_GXM_ATTRIBUTE_FORMAT_F32, 4 },
+		{ "edge", 32, SCE_GXM_ATTRIBUTE_FORMAT_F32, 2 },
+		{ "color", 40, SCE_GXM_ATTRIBUTE_FORMAT_U8N, 4 },
+	};
+	SceGxmVertexAttribute attributes[5];
+	SceGxmVertexStream stream;
+	const struct shader *shader;
+	int index;
+
+	if (ui.vertex_program)
+		return 1;
+	if (ui.failed)
+		return 0;
+	ui.failed = 1;
+	ui.vertex_shader = vgxm_shader_get(ui_vertex_source, 0);
+	ui.fragment_shader = vgxm_shader_get(ui_fragment_source, 1);
+	if (!ui.vertex_shader || !ui.fragment_shader || ui.vertex_bytes != 44)
+	{
+		log_line("gxm: the game's overlay has no programs (vertex %lu, fragment %lu, %lu-byte vertices): not drawn",
+			ui.vertex_shader, ui.fragment_shader, ui.vertex_bytes);
+		return 0;
+	}
+	shader = &gxm.shaders[ui.vertex_shader - 1];
+	for (index = 0; index < 5; index++)
+	{
+		const SceGxmProgramParameter *parameter = sceGxmProgramFindParameterByName(shader->program, inputs[index].name);
+
+		if (!parameter)
+		{
+			log_line("gxm: the game's overlay's vertex program has no %s", inputs[index].name);
+			return 0;
+		}
+		attributes[index].streamIndex = 0;
+		attributes[index].offset = (uint16_t)inputs[index].offset;
+		attributes[index].format = inputs[index].format;
+		attributes[index].componentCount = (uint8_t)inputs[index].components;
+		attributes[index].regIndex = (uint16_t)sceGxmProgramParameterGetResourceIndex(parameter);
+	}
+	stream.stride = (uint16_t)ui.vertex_bytes;
+	stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
+	if (sceGxmShaderPatcherCreateVertexProgram(gxm.patcher, shader->id, attributes, 5, &stream, 1,
+		&ui.vertex_program) < 0)
+	{
+		ui.vertex_program = NULL;
+		return 0;
+	}
+	ui.failed = 0;
+	log_line("gxm: the game's overlay's programs made");
+	return 1;
+}
+
+static void ui_overlay_draw(void)
+{
+	SceGxmFragmentProgram *fragment_program;
+	SceGxmBlendInfo blend;
+	const struct shader *fragment;
+	void *vertices;
+	float *parameters;
+	unsigned long count, bytes, index;
+
+	if (!ui.lock)
+		return;
+	sceKernelLockMutex(ui.lock, 1, NULL);
+	if (!ui.pending || !ui.count || !ui_programs())
+	{
+		ui.pending = 0;
+		sceKernelUnlockMutex(ui.lock, 1);
+		return;
+	}
+	ui.pending = 0;
+	count = ui.count > 65535 ? 65535 : ui.count;
+	bytes = count * ui.vertex_bytes;
+	vertices = vgxm_worker_alloc(bytes, 16);
+	parameters = vgxm_worker_alloc(sizeof(ui.parameters), 16);
+	if (vertices)
+		memcpy(vertices, ui.vertices, bytes);
+	if (parameters)
+		memcpy(parameters, ui.parameters, sizeof(ui.parameters));
+	sceKernelUnlockMutex(ui.lock, 1);
+	if (!vertices || !parameters)
+		return;
+	/* (0, 1, 2 ... in a block of their own, as long as the longest frame) */
+	if (count > ui.index_count)
+	{
+		unsigned long wanted = (count + 4095) & ~4095ul;
+
+		if (wanted > 65536)
+			wanted = 65536;
+		if (ui.index_memory.base)
+		{
+			vgxm_wait_gpu_idle();
+			memory_os_free(&ui.index_memory);
+			memset(&ui.index_memory, 0, sizeof(ui.index_memory));
+		}
+		if (!block_allocate(&ui.index_memory, SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
+			(unsigned int)(wanted * sizeof(unsigned short)), 1, "overlay indices"))
+		{
+			ui.index_count = 0;
+			return;
+		}
+		ui.indices = ui.index_memory.base;
+		for (index = 0; index < wanted; index++)
+			ui.indices[index] = (unsigned short)index;
+		ui.index_count = wanted;
+	}
+	memset(&blend, 0, sizeof(blend));
+	blend.colorMask = SCE_GXM_COLOR_MASK_ALL;
+	blend.colorFunc = blend.alphaFunc = SCE_GXM_BLEND_FUNC_ADD;
+	blend.colorSrc = SCE_GXM_BLEND_FACTOR_SRC_ALPHA;
+	blend.colorDst = SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	blend.alphaSrc = SCE_GXM_BLEND_FACTOR_ONE;
+	blend.alphaDst = SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	fragment_program = fragment_program_get(ui.fragment_shader, ui.vertex_shader, &blend);
+	if (!fragment_program)
+		return;
+	fragment = &gxm.shaders[ui.fragment_shader - 1];
+	shadow.valid = 0;
+	sceGxmSetVertexProgram(gxm.context, ui.vertex_program);
+	sceGxmSetFragmentProgram(gxm.context, fragment_program);
+	sceGxmSetVertexStream(gxm.context, 0, vertices);
+	if (ui.atlas.made && fragment->sampler_index[0] >= 0)
+		sceGxmSetFragmentTexture(gxm.context, (unsigned int)fragment->sampler_index[0], &ui.atlas.texture);
+	if (ui.icons.made && fragment->sampler_index[1] >= 0)
+		sceGxmSetFragmentTexture(gxm.context, (unsigned int)fragment->sampler_index[1], &ui.icons.texture);
+	if (fragment->sampler_index[2] >= 0)
+		sceGxmSetFragmentTexture(gxm.context, (unsigned int)fragment->sampler_index[2],
+			ui.picture.made ? &ui.picture.texture : &ui.atlas.texture);
+	if (fragment->sampler_index[3] >= 0)
+		sceGxmSetFragmentTexture(gxm.context, (unsigned int)fragment->sampler_index[3],
+			ui.plasma.made ? &ui.plasma.texture : &ui.atlas.texture);
+	sceGxmSetFragmentUniformBuffer(gxm.context, 0, parameters);
+	sceGxmSetFrontDepthFunc(gxm.context, SCE_GXM_DEPTH_FUNC_ALWAYS);
+	sceGxmSetFrontDepthWriteEnable(gxm.context, SCE_GXM_DEPTH_WRITE_DISABLED);
+	sceGxmSetFrontStencilFunc(gxm.context, SCE_GXM_STENCIL_FUNC_ALWAYS, SCE_GXM_STENCIL_OP_KEEP,
+		SCE_GXM_STENCIL_OP_KEEP, SCE_GXM_STENCIL_OP_KEEP, 0, 0);
+	sceGxmSetCullMode(gxm.context, SCE_GXM_CULL_NONE);
+	sceGxmSetFrontDepthBias(gxm.context, 0, 0);
+	sceGxmSetViewportEnable(gxm.context, SCE_GXM_VIEWPORT_ENABLED);
+	sceGxmSetViewport(gxm.context, DISPLAY_WIDTH * 0.5f, DISPLAY_WIDTH * 0.5f, DISPLAY_HEIGHT * 0.5f,
+		-DISPLAY_HEIGHT * 0.5f, 0.0f, 1.0f);
+	sceGxmSetRegionClip(gxm.context, SCE_GXM_REGION_CLIP_OUTSIDE, 0, 0, DISPLAY_WIDTH - 1, DISPLAY_HEIGHT - 1);
+	sceGxmDraw(gxm.context, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, ui.indices, (unsigned int)count);
+	gxm.scene_draws++;
+	if (count > ui.largest)
+		ui.largest = count;
+	if (ui.frames++ == 0)
+		log_line("gxm: the game's overlay drawn (%lu vertices; atlas %lux%lu, icons %lux%lu: %lu KB of user RAM)",
+			count, ui.atlas.width, ui.atlas.height, ui.icons.width, ui.icons.height,
+			(unsigned long)(ui.atlas.memory.size + ui.icons.memory.size + ui.picture.memory.size +
+			ui.plasma.memory.size + ui.index_memory.size) / 1024);
+}
+
 /* ---------- the overlay (Xita's panel: fps, game and render ms, cores) */
 
 struct overlay_vertex
@@ -6325,6 +6731,7 @@ void vgxm_present(unsigned long color_target, unsigned long width, unsigned long
 			blit(&gxm.targets[color_target - 1]);
 	}
 	movie_draw();
+	ui_overlay_draw();
 	overlay_draw();
 	notification.address = gxm.notification;
 	notification.value = ++gxm.frame;
