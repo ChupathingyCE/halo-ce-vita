@@ -88,7 +88,7 @@ last=
 flow() {
 	name=$1 mode=$2 games=$3 expect=$4 cancel=$5 keep=$6
 	work=$out/flow-$name
-	if [ -n "$keep" ]; then cp -r "$out/flow-$keep" "$work"; rm -f "$work/transcript.txt" "$work/log.txt"
+	if [ -n "$keep" ]; then cp -a "$out/flow-$keep" "$work"; rm -f "$work/transcript.txt" "$work/log.txt"
 	else mkdir -p "$work"; fi
 	fifo=$work/stdin
 	rm -f "$fifo"
@@ -158,6 +158,31 @@ echo "  ce: $n files under mcc/halo1, $left partial, $banks banks"
 [ "$n" = 20 ] && [ "$left" = 0 ] && [ "$banks" = 1 ] || { echo "FAIL ce: files"; status=1; }
 flow ce-again normal 1 ok "" ce
 grep -q "already=20" "$out/flow-ce-again/line" || { echo "FAIL ce-again: not all already there"; status=1; }
+# (1.1.3: the verified files' record - the first run recorded every file it checked or wrote; the second takes them
+# from it without reading them: no "checking", every file "verified before, unchanged")
+grep -q "already=20 recorded=20" "$out/flow-ce-again/line" &&
+	[ "$(grep -c "already there (verified before, unchanged)" "$out/flow-ce-again/log.txt")" = 20 ] ||
+	{ echo "FAIL ce-again: not taken from the record"; status=1; }
+[ -s "$out/flow-ce/card/haloce-vita/steam-verified.txt" ] || { echo "FAIL ce: no verified files' record"; status=1; }
+# (a file changed on the card after it was recorded - same size, another time -: checked whole, found wrong, fetched
+# again; the others still from the record)
+cp -a "$out/flow-ce-again" "$out/flow-cemod"
+changed=$(find "$out/flow-cemod/card/haloce-vita/mcc/halo1" -type f -name '*.map' | sort | head -1)
+python3 -I -c 'import sys; f=open(sys.argv[1],"r+b"); f.seek(100); b=f.read(1); f.seek(100); f.write(bytes([b[0]^0xFF]))' "$changed"
+touch -d '2001-01-01 00:00:00' "$changed"
+flow cemod-again normal 1 ok "" cemod
+grep -q "files=1 already=19 recorded=19" "$out/flow-cemod-again/line" &&
+	diff -r "$out/flow-ce/card/haloce-vita/mcc" "$out/flow-cemod-again/card/haloce-vita/mcc" > /dev/null ||
+	{ echo "FAIL cemod-again: the changed file not fetched again, or files differ"; status=1; }
+# (a record that does not read: dropped, every file checked whole, a new one written)
+cp -a "$out/flow-ce-again" "$out/flow-cebadrec"
+printf 'steamdl-verified 1\nnot a record line\n' > "$out/flow-cebadrec/card/haloce-vita/steam-verified.txt"
+flow cebadrec-again normal 1 ok "" cebadrec
+grep -q "already=20 recorded=0" "$out/flow-cebadrec-again/line" &&
+	grep -q "record does not read: dropped" "$out/flow-cebadrec-again/log.txt" &&
+	grep -q "^steamdl-verified 1" "$out/flow-cebadrec-again/card/haloce-vita/steam-verified.txt" &&
+	[ "$(wc -l < "$out/flow-cebadrec-again/card/haloce-vita/steam-verified.txt")" = 21 ] ||
+	{ echo "FAIL cebadrec-again: a bad record not dropped and made again"; status=1; }
 # (the sound banks alone: depot 976733 only, the three the fake has; the music's absence is a note)
 flow banks normal 2 ok
 n=$(find "$out/flow-banks/card/haloce-vita/mcc/halo1" -type f | wc -l)
@@ -200,7 +225,7 @@ echo "  gone-resume: $n files, $left partial"
 # (every file the same bytes as a download that never failed)
 diff -r "$out/flow-ce/card/haloce-vita/mcc" "$w/card/haloce-vita/mcc" > /dev/null || { echo "FAIL gone-resume: files differ"; status=1; }
 # (the same failed card, a journalled chunk damaged on it meanwhile: the resume finds it by its hash and fetches it again)
-cp -r "$out/flow-gone" "$out/flow-gonedmg"
+cp -a "$out/flow-gone" "$out/flow-gonedmg"
 w=$out/flow-gonedmg
 damaged=
 for j in $(find "$w/card" -name '*.part.journal' | sort); do
@@ -420,6 +445,18 @@ flow job-lost losesession 1 ok
 grep -q "attempts=2" "$out/flow-job-lost/line" || { echo "FAIL job-lost: not signed in again"; status=1; }
 grep -q "resumed\|already there" "$out/flow-job-lost/log.txt" || { echo "FAIL job-lost: nothing kept"; status=1; }
 flow job-outage outage 1 ok
+# (1.1.3: the device sleeps mid-download - the power button, a suspend: its sockets die - and wakes: the job pauses,
+# then connects again by itself and finishes, nothing cancelled; the screen saw "asleep" and "carrying on")
+signin_flow=1 client_env="env STEAM_TEST_SLEEP=300" flow job-sleep slow 1 ok
+signin_flow= client_env=
+# (the slept session's token revoked over a new connection - its own died with the "suspend" -, the next one signed in
+# and ended as usual, as a lost session's)
+[ "$(grep -E "cm: (revoke|logoff)" "$out/flow-job-sleep/transcript.txt" | tr '\n' ' ')" = "cm: revoke ok cm: revoke ok cm: logoff " ] ||
+	{ echo "FAIL job-sleep: the sessions' end"; status=1; }
+grep -q "asleep_seen=3" "$out/flow-job-sleep/line" &&
+	grep -q "the device slept during the download: connecting again" "$out/flow-job-sleep/log.txt" &&
+	diff -r "$out/flow-ce/card/haloce-vita/mcc" "$out/flow-job-sleep/card/haloce-vita/mcc" > /dev/null ||
+	{ echo "FAIL job-sleep: not carried on after the wake"; status=1; }
 grep -q "waits=[1-9]" "$out/flow-job-outage/line" || { echo "FAIL job-outage: no wait for the network"; status=1; }
 # (1.1.3-insider.8, the owner's daily: a cancel while the job checked gigabytes already on the card took minutes and
 # kept the PS button locked. The player's cancel at each phase, and with a CDN that stalls: the cancel call (the

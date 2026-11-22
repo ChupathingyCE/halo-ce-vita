@@ -3588,6 +3588,7 @@
 "Signed in. Getting Halo CE ready..." = "Sesión iniciada. Preparando Halo CE..."
 "Halo CE, part %d of %d\n%.1f of %.1f MB" = "Halo CE, parte %d de %d\n%.1f de %.1f MB"
 "Paused: the battery is low. Plug in the charger." = "En pausa: la batería está baja. Conecta el cargador."
+"Paused while asleep - carrying on" = "En pausa mientras la Vita duerme - sigue sola"
 "\n%.1f MB/s, about %d min left" = "\n%.1f MB/s, faltan unos %d min"
 "Circle stops it: what is in stays, and the next download resumes." = "Círculo la detiene: lo descargado se queda y la próxima descarga continúa."
 "Stopping and signing out of Steam..." = "Deteniendo y cerrando la sesión de Steam..."

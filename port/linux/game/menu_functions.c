@@ -12944,7 +12944,9 @@ static void h3_steam_update(struct widget_instance *list)
 		break;
 	}
 	case STEAM_JOB_CONNECTING:
-		snprintf(text, sizeof(text), "%s", view.sign_out ? T("Signing out of Steam...") : view.attempts > 1 ? T("The Steam session was lost. Connecting again...") : T("Connecting to Steam..."));
+		snprintf(text, sizeof(text), "%s", view.sign_out ? T("Signing out of Steam...") : view.asleep ?
+			T("Paused while asleep - carrying on") : view.attempts > 1 ? T("The Steam session was lost. Connecting again...") :
+			T("Connecting to Steam..."));
 		break;
 	case STEAM_JOB_QR:
 		snprintf(text, sizeof(text), "%s", T("On your phone, open the Steam app, then Steam Guard, and scan this code.\n\nApprove only if you started this on your Vita just now.\n\nThe Vita never sees your password."));
@@ -12956,7 +12958,9 @@ static void h3_steam_update(struct widget_instance *list)
 	case STEAM_JOB_PAUSED:
 		snprintf(text, sizeof(text), T("Halo CE, part %d of %d\n%.1f of %.1f MB"), view.depot_index + 1, view.depot_count,
 			view.done_kb / 1024.0, view.total_kb / 1024.0);
-		if (view.phase == STEAM_JOB_PAUSED)
+		if (view.asleep)
+			snprintf(line, sizeof(line), "\n%s", T("Paused while asleep - carrying on"));
+		else if (view.phase == STEAM_JOB_PAUSED)
 			snprintf(line, sizeof(line), "\n%s", T("Paused: the battery is low. Plug in the charger."));
 		else if (view.rate_kb && view.seconds_left >= 0)
 			snprintf(line, sizeof(line), T("\n%.1f MB/s, about %d min left"), view.rate_kb / 1024.0, (view.seconds_left + 59) / 60);
@@ -13695,7 +13699,9 @@ static void h3_workshop_update(struct widget_instance *widget)
 		snprintf(details, sizeof(details), "%.100s\n\n", ws.item_title);
 		snprintf(line, sizeof(line), T("%.1f of %.1f MB"), view.done_kb / 1024.0, view.total_kb / 1024.0);
 		strncat(details, line, sizeof(details) - strlen(details) - 1);
-		if (view.phase == STEAM_JOB_PAUSED)
+		if (view.asleep)
+			snprintf(line, sizeof(line), "\n%s", T("Paused while asleep - carrying on"));
+		else if (view.phase == STEAM_JOB_PAUSED)
 			snprintf(line, sizeof(line), "\n%s", T("Paused: the battery is low. Plug in the charger."));
 		else if (view.rate_kb && view.seconds_left >= 0)
 			snprintf(line, sizeof(line), T("\n%.1f MB/s, about %d min left"), view.rate_kb / 1024.0, (view.seconds_left + 59) / 60);

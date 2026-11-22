@@ -71,6 +71,8 @@ struct steam_job_status
 	/* the kept sign-in (steam_signin.h): its state when the job began, kept at the end (1), SIGN OUT's job (1) and
 	its revoke confirmed by Steam (1) */
 	int signin_found, kept, sign_out, signed_out;
+	/* the device asleep (1: paused while it sleeps) or just woken (2: carrying on, until the bytes move again) */
+	int asleep;
 	/* the measurements the dev Vita run reads (also logged at the end) */
 	unsigned int connect_ms;
 	uint64_t decode_us[3], decoded_bytes[3];
@@ -147,6 +149,12 @@ void steam_job_cancel(void);
 int steam_job_busy_held(void);
 /* a power warning or the app's exit: cancel and wait (at most timeout_ms) until the session has ended */
 void steam_job_abort(int timeout_ms);
+/* the device goes to sleep (1: the power button, a system suspend - its sockets die) or woke (0): the job pauses,
+keeping what it got and the kept sign-in, and after the wake connects again by itself and carries on - never a
+cancel (the screen: "Paused while asleep") */
+void steam_job_sleep(int asleep);
+/* a true low battery (the system's warning): the job stops - what it got kept - and the screen says why */
+void steam_job_stop_battery(int timeout_ms);
 /* where the job is */
 void steam_job_get(struct steam_job_status *status);
 /* the snapshot for the game's own code (the menus: port/linux/game/steam_screen.c), in ints and bytes alone -
@@ -170,6 +178,8 @@ struct steam_job_view
 	/* the sign-in kept on the device at the end; SIGN OUT's job, its revoke confirmed; the kept sign-in's state when
 	the job began (steam_signin_state) */
 	int kept, sign_out, signed_out, signin_found;
+	/* 1 paused while the device sleeps, 2 woken: carrying on (until the bytes move again), 0 neither */
+	int asleep;
 };
 void steam_job_view(struct steam_job_view *view);
 

@@ -10,10 +10,11 @@ docs/steam_download_security.md):
 - awake while a job runs: auto-suspend held off (sceKernelPowerTick) and the
   PS button locked (sceShellUtilLock), so the system does not suspend the app
   and kill its sockets mid-download;
-- the power warnings: a suspend, a low-battery suspend, the power button or
-  the app sent to the background (a power callback on its own thread) abort
-  the job: its session revoked and logged off before the system acts, as far
-  as the time given allows (a power loss kills the RAM, and the token with it);
+- the power's events (a power callback on its own thread, each logged with
+  its flags): a true low battery stops the job (what it got kept); the power
+  button or a suspend pauses it, and the wake carries it on by itself - its
+  connections made again, the kept sign-in reused; the hold on auto-suspend
+  renewed every second while a job runs (the screen may dim and turn off);
 - the kept sign-in's device secret: the console's OpenPSID
   (sceKernelGetOpenPsId; port/steamdl/steam_signin.h);
 - at start, a sign-in left behind (its no-secret marker,
@@ -132,23 +133,73 @@ static size_t device_secret(uint8_t *out, size_t capacity)
 	return sizeof(id.id);
 }
 
-/* a power warning: the job aborted, its session ended in the time the system gives */
+/* the power callback's flags, named for the log (which event it was: the owner's 1.1.3-insider.8d "power warning"
+stopped two downloads with nothing in the log saying which) */
+static void power_flags_text(int argument, char *text, size_t size)
+{
+	static const struct { unsigned int flag; const char *name; } names[] = {
+		{ SCE_POWER_CB_BUTTON_POWER_PRESS, "power button" }, { SCE_POWER_CB_BUTTON_POWER_HOLD, "power button held" },
+		{ SCE_POWER_CB_LOW_BATTERY, "low battery" }, { SCE_POWER_CB_LOW_BATTERY_SUSPEND, "low-battery suspend" },
+		{ SCE_POWER_CB_THERMAL_SUSPEND, "thermal suspend" }, { SCE_POWER_CB_SYSTEM_SUSPEND, "system suspend" },
+		{ SCE_POWER_CB_SYSTEM_RESUMING, "system resuming" }, { SCE_POWER_CB_SYSTEM_RESUME, "system resume" },
+		{ SCE_POWER_CB_APP_SUSPEND, "app suspend" }, { SCE_POWER_CB_APP_RESUMING, "app resuming" },
+		{ SCE_POWER_CB_APP_RESUME, "app resume" }, { SCE_POWER_CB_AFTER_SYSTEM_RESUME, "after system resume" },
+		{ SCE_POWER_CB_UNK_0x100000, "display switch" }, { SCE_POWER_CB_POWER_ONLINE, "charger in" },
+		{ SCE_POWER_CB_BATTERY_ONLINE, "battery" }, { SCE_POWER_CB_BUTTON_PS_PRESS, "PS button" },
+	};
+	size_t index, used = 0;
+
+	text[0] = 0;
+	for (index = 0; index < sizeof(names) / sizeof(names[0]) && used + 2 < size; index++)
+		if ((unsigned int)argument & names[index].flag)
+			used += (size_t)snprintf(text + used, size - used, "%s%s", used ? ", " : "", names[index].name);
+	if (!used)
+		snprintf(text, size, "none named");
+}
+
+#define SLEEP_FLAGS (SCE_POWER_CB_SYSTEM_SUSPEND | SCE_POWER_CB_APP_SUSPEND | SCE_POWER_CB_BUTTON_POWER_PRESS | \
+	SCE_POWER_CB_THERMAL_SUSPEND)
+#define WAKE_FLAGS (SCE_POWER_CB_SYSTEM_RESUME | SCE_POWER_CB_SYSTEM_RESUMING | SCE_POWER_CB_APP_RESUME | \
+	SCE_POWER_CB_APP_RESUMING | SCE_POWER_CB_AFTER_SYSTEM_RESUME)
+
+/* (a sleep's notice with no suspend after it - the power button's press the system did not act on: the job carries
+on after this long; a real suspend stops this thread, and its resume wakes the job first) */
+#define SLEEP_WITHOUT_SUSPEND_US (10 * 1000 * 1000)
+static volatile int sleeping;
+static volatile SceUInt64 sleep_since;
+
+/* the power's events while a job runs: a true low battery stops it (what it got kept, the screen says why); the power
+button or a suspend pauses it - the sockets die with the suspend - and the wake carries it on by itself (the kept
+sign-in reused): never a cancel. Every event logged with its flags */
 static int power_callback(int notify, int count, int argument, void *common)
 {
+	struct steam_job_status status;
+	char flags[200], line[260];
+
 	(void)notify;
 	(void)count;
 	(void)common;
-	if (argument & (SCE_POWER_CB_SYSTEM_SUSPEND | SCE_POWER_CB_LOW_BATTERY_SUSPEND | SCE_POWER_CB_APP_SUSPEND |
-		SCE_POWER_CB_BUTTON_POWER_PRESS | SCE_POWER_CB_LOW_BATTERY))
+	steam_job_get(&status);
+	if (status.phase == STEAM_JOB_IDLE || status.phase >= STEAM_JOB_DONE)
+		return 0;
+	power_flags_text(argument, flags, sizeof(flags));
+	snprintf(line, sizeof(line), "steam: power event 0x%08x (%s) during a download", (unsigned int)argument, flags);
+	vita_host_log(line);
+	if (argument & (SCE_POWER_CB_LOW_BATTERY | SCE_POWER_CB_LOW_BATTERY_SUSPEND))
 	{
-		struct steam_job_status status;
-
-		steam_job_get(&status);
-		if (status.phase != STEAM_JOB_IDLE && status.phase < STEAM_JOB_DONE)
-		{
-			vita_host_log("steam: a power warning: the download stops and signs out");
-			steam_job_abort(4000);
-		}
+		vita_host_log("steam: the battery is low: the download stops (what it got is kept)");
+		steam_job_stop_battery(4000);
+	}
+	else if (argument & SLEEP_FLAGS)
+	{
+		sleep_since = sceKernelGetProcessTimeWide();
+		sleeping = 1;
+		steam_job_sleep(1);
+	}
+	else if ((argument & WAKE_FLAGS) && sleeping)
+	{
+		sleeping = 0;
+		steam_job_sleep(0);
 	}
 	return 0;
 }
@@ -161,12 +212,21 @@ static int power_thread(SceSize size, void *argument)
 	(void)argument;
 	callback = sceKernelCreateCallback("halo steam power", 0, power_callback, NULL);
 	if (callback < 0 || scePowerRegisterCallback(callback) < 0)
-	{
 		vita_host_log("steam: no power callback");
-		return 0;
-	}
 	for (;;)
+	{
 		sceKernelDelayThreadCB(1000 * 1000);
+		/* (the hold on auto-suspend renewed every second for the whole job, not only as bytes come: a long check or a
+		slow server keeps the Vita awake too; the screen may still dim and turn off on its own) */
+		if (locked)
+			keep_awake();
+		if (sleeping && sceKernelGetProcessTimeWide() - sleep_since > SLEEP_WITHOUT_SUSPEND_US)
+		{
+			sleeping = 0;
+			vita_host_log("steam: no suspend followed the power event: the download carries on");
+			steam_job_sleep(0);
+		}
+	}
 	return 0;
 }
 

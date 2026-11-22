@@ -1531,9 +1531,9 @@ static int flow(int argc, char **argv)
 	callbacks.log = log_line;
 	callbacks.free_space = free_space;
 	steam_download_run(&options, &callbacks, &result);
-	printf("result ok=%d cancelled=%d files=%u already=%u downloaded=%llu written=%llu retried=%u revoked=%d "
+	printf("result ok=%d cancelled=%d files=%u already=%u recorded=%u downloaded=%llu written=%llu retried=%u revoked=%d "
 		"logged_off=%d found=%d kept=%d signed_out=%d error=%s\n", result.ok, result.cancelled, result.files_done,
-		result.files_already, (unsigned long long)result.bytes_downloaded, (unsigned long long)result.bytes_written,
+		result.files_already, result.files_recorded, (unsigned long long)result.bytes_downloaded, (unsigned long long)result.bytes_written,
 		result.chunks_retried, result.revoked, result.logged_off, result.signin_found, result.kept, result.signed_out,
 		result.error[0] ? result.error : "-");
 	fclose(log_file);
@@ -1687,6 +1687,12 @@ static int job(int argc, char **argv)
 	after STEAM_TEST_CANCEL_MS in it, default 0 -: how long the cancel call took (the game's thread), whether the
 	device's hold was let go at once, and how long until the job ended; the longest snapshot call meanwhile) */
 	const char *cancel_phase = getenv("STEAM_TEST_CANCEL");
+	/* (STEAM_TEST_SLEEP=<ms>: that long into DOWNLOADING the device "sleeps" - steam_job_sleep(1) as the Vita's power
+	callback calls it, every connection cut as a suspend kills the sockets -, 1.5 s later it wakes - steam_job_sleep(0)
+	-: the job must carry on by itself and finish) */
+	double sleep_ms = getenv("STEAM_TEST_SLEEP") ? atof(getenv("STEAM_TEST_SLEEP")) : -1, downloading_at = -1,
+		slept_at = -1;
+	int asleep_seen = 0, woke = 0;
 	double cancel_wait_ms = getenv("STEAM_TEST_CANCEL_MS") ? atof(getenv("STEAM_TEST_CANCEL_MS")) : 0;
 	double cancelled_at = -1, cancel_call_ms = -1, end_ms = -1, view_max_ms = 0, phase_seen_at = -1;
 	int busy_after_cancel = -1;
@@ -1751,6 +1757,24 @@ static int job(int argc, char **argv)
 			last_phase = status.phase;
 			fprintf(log_file, "phase %d\n", status.phase);
 		}
+		if (sleep_ms >= 0 && status.phase == STEAM_JOB_DOWNLOADING && downloading_at < 0)
+			downloading_at = test_ms();
+		if (sleep_ms >= 0 && downloading_at >= 0 && slept_at < 0 && test_ms() - downloading_at >= sleep_ms)
+		{
+			slept_at = test_ms();
+			steam_job_sleep(1);
+			steam_net_abort(1);
+		}
+		if (slept_at >= 0 && !woke && test_ms() - slept_at >= 1500)
+		{
+			woke = 1;
+			steam_net_abort(0);
+			steam_job_sleep(0);
+		}
+		if (status.asleep == 1)
+			asleep_seen |= 1;
+		if (status.asleep == 2)
+			asleep_seen |= 2;
 		if (status.qr_size)
 			qr_size = status.qr_size;
 		if (status.qr_serial > qr_serial)
@@ -1779,11 +1803,11 @@ static int job(int argc, char **argv)
 	}
 	printf("result ok=%d cancelled=%d files=%u already=%u qr=%d serials=%u attempts=%d revoked=%d logged_off=%d "
 		"session_lost=%d waits=%u phases=%d busy_end=%d busy_twice=%d view_max_ms=%.1f cancel_call_ms=%.1f "
-		"busy_after_cancel=%d end_ms=%.0f error=%s\n", status.phase == STEAM_JOB_DONE,
+		"busy_after_cancel=%d end_ms=%.0f asleep_seen=%d error=%s\n", status.phase == STEAM_JOB_DONE,
 		status.phase == STEAM_JOB_CANCELLED, status.files_done, status.files_already, qr_size, qr_serial, status.attempts,
 		status.revoked, status.logged_off, status.session_lost, status.network_waits, phases,
 		test_busy_count + steam_job_busy_held(), test_busy_twice, view_max_ms, cancel_call_ms, busy_after_cancel, end_ms,
-		status.error[0] ? status.error : "-");
+		asleep_seen, status.error[0] ? status.error : "-");
 	CHECK(steam_job_forget());
 	fclose(log_file);
 	return 0;

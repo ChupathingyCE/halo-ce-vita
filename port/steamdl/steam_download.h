@@ -82,6 +82,8 @@ struct steam_download_result
 	int cancelled;
 	char error[256];
 	unsigned int files_done, files_already;
+	/* of files_already: taken from the verified files' record without reading them */
+	unsigned int files_recorded;
 	uint64_t bytes_downloaded, bytes_written;
 	unsigned int chunks_retried;
 	/* the session's end (for the tests): the token revoked, logged off */
