@@ -852,6 +852,14 @@ int main(int argc, char **argv)
 	setenv("HALO_DISPLAY_WIDTH", "848", 0);
 	read_environment_file();
 	vita_host_fourth_core_probe();
+#ifdef VITA_GAME_LIST
+	{
+		/* HTTPS for the game list and the Delta Guide (vita_https.c) */
+		void vita_host_https_start(void);
+
+		vita_host_https_start();
+	}
+#endif
 	/* (debug) the folder a test's screenshots go to (debug.screenshot_directory) */
 	if (getenv("HALO_SCREENSHOT_DIR") && *getenv("HALO_SCREENSHOT_DIR"))
 		sceIoMkdir(getenv("HALO_SCREENSHOT_DIR"), 0777);
