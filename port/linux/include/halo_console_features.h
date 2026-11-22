@@ -60,6 +60,14 @@ HALO_CONSOLE_NO_GUIDE
 	sent to the site (browser.c, network.share_presence), their settings
 	left out of config.toml: every console for now, until the Guide is
 	sized to each one's memory and input
+HALO_CONSOLE_OVERLAY_DRAW
+	a console with the game list (HALO_GAME_BROWSER) whose own renderer
+	draws the overlay (Online Games, the Guide: ui_overlay.c), as the bgfx
+	backend does: console_overlay_draw, defined by the port (ui_overlay.h),
+	is handed each frame's triangles and the overlay's textures' texels; no
+	cellwall (the plain backdrop, as on OpenGL ES 2). HALO_UI_OVERLAY_QUADS
+	and HALO_UI_OVERLAY_ATLAS_SIZE may make its buffers smaller than the
+	desktop's 16384 quads (about 4.7 MB of vertices) and 2048 square atlas
 HALO_CONSOLE_NO_CAPTURE
 	no screenshots or clips (port/linux/src/capture.c and capture_clips.c,
 	controls.screenshot and controls.clip): every console; the desktop

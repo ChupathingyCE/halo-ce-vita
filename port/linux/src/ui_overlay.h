@@ -418,4 +418,27 @@ d3d8_gl.c): x 2 for a floating-point window's linear light */
 void ui_overlay_set_output(const float encoding[4]);
 void ui_overlay_present(int x, int y, int width, int height, int window_width, int window_height);
 
+#ifdef HALO_CONSOLE_OVERLAY_DRAW
+/* a console's own renderer draws the overlay (halo_console_features.h): at
+ui_overlay_present, the frame's triangles (count vertices of vertex_bytes
+each, in window pixels from the top left: x, y, u, v, the shape's local x,
+y, half width and height, its radius and thickness, then RGBA bytes), the
+glyphs' atlas (one byte a texel, atlas_size square; the rows from
+dirty_top up to dirty_bottom changed since the last call), the button
+icons (icon_count of them, icon_size square each, one above the other,
+RGBA premultiplied), the picture and the plasma's noise (RGBA, each new
+when its serial changes; plasma NULL when none is drawn), the plasma's
+shift (the second map's place and scale, then its threads' color), the
+medals' atlas (NULL in a build without them) and the cutouts (x0, y0, x1,
+y1 in window pixels from the top: the game's own pictures show through).
+ui_overlay.c's fragment shader says what each vertex's edge.x picks.
+Nonzero when the medals' atlas was taken (it is then let go) */
+int console_overlay_draw(const void *vertices, int count, int vertex_bytes, const unsigned char *atlas, int atlas_size,
+	int dirty_top, int dirty_bottom, const unsigned char *icons, int icon_size, int icon_count,
+	const unsigned char *picture, int picture_width, int picture_height, int picture_serial,
+	const unsigned char *plasma, int plasma_width, int plasma_height, int plasma_serial, const float plasma_shift[8],
+	const float cellwall[12], const unsigned char *medals, int medals_width, int medals_height,
+	const float cutouts[4][4], int window_width, int window_height);
+#endif
+
 #endif

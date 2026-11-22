@@ -95,12 +95,36 @@ extern const int ui_medal_atlas_cell, ui_medal_atlas_width, ui_medal_atlas_heigh
 extern const unsigned int *const ui_medal_atlas;
 #endif
 
+/* the quads a frame holds and the glyphs' atlas's side: a console's build
+may set smaller ones (HALO_CONSOLE_OVERLAY_DRAW: about 290 bytes a quad,
+the atlas's side squared bytes, held for the whole run) */
+#ifndef HALO_UI_OVERLAY_QUADS
+#define HALO_UI_OVERLAY_QUADS 16384
+#endif
+#ifndef HALO_UI_OVERLAY_ATLAS_SIZE
+#define HALO_UI_OVERLAY_ATLAS_SIZE 2048
+#endif
+
+/* the backends that draw the gathered vertices from the overlay's own
+buffers (the atlas's texels here, the rows changed since it last had them,
+the icons premultiplied): bgfx's (d3d8_bgfx.inl, while it is the renderer)
+and a console's own renderer (HALO_CONSOLE_OVERLAY_DRAW, always) */
+#if defined(HALO_CONSOLE_OVERLAY_DRAW)
+#define OVERLAY_TEXELS 1
+#define overlay_texels_backend() 1
+#define overlay_texels_draw console_overlay_draw
+#elif defined(HALO_BGFX)
+#define OVERLAY_TEXELS 1
+#define overlay_texels_backend() xgpu_bgfx
+#define overlay_texels_draw xgpu_bgfx_overlay_draw
+#endif
+
 enum
 {
 	LAYOUT_WIDTH = 640,
 	LAYOUT_HEIGHT = 480,
-	MAXIMUM_QUADS = 16384,
-	ATLAS_SIZE = 2048,
+	MAXIMUM_QUADS = HALO_UI_OVERLAY_QUADS,
+	ATLAS_SIZE = HALO_UI_OVERLAY_ATLAS_SIZE,
 	MAXIMUM_GLYPHS = 4096,
 	MAXIMUM_TEXT = 64 * 1024,
 	MAXIMUM_TEXTS = 4096,
@@ -205,7 +229,7 @@ static struct
 	float last_scale;
 
 	struct vertex vertices[MAXIMUM_QUADS * 6];
-#ifdef HALO_BGFX
+#ifdef OVERLAY_TEXELS
 	/* (the bgfx backend: the atlas's texels here, the rows changed since it
 	last had them, and the icons premultiplied; d3d8_bgfx.inl draws) */
 	unsigned char *atlas_texels, *icon_texels;
@@ -1154,8 +1178,9 @@ void ui_overlay_plasma(float x, float y, float width, float height, float radius
 int ui_overlay_cellwall(float x, float y, float width, float height, const float motion[4], unsigned int side,
 	unsigned int front, unsigned int fill)
 {
-#ifdef HALO_CONSOLE_GLES2
-	/* (ES 2 has no fwidth for its lines: the caller's plain backdrop) */
+#if defined(HALO_CONSOLE_GLES2) || defined(HALO_CONSOLE_OVERLAY_DRAW)
+	/* (ES 2 has no fwidth for its lines, nor a console's own renderer this
+	shader: the caller's plain backdrop) */
 	(void)x; (void)y; (void)width; (void)height; (void)motion; (void)side; (void)front; (void)fill;
 	return 0;
 #else
@@ -1624,8 +1649,8 @@ static int set_up(void)
 		return FALSE;
 	}
 #endif
-#ifdef HALO_BGFX
-	if (xgpu_bgfx)
+#ifdef OVERLAY_TEXELS
+	if (overlay_texels_backend())
 	{
 		int size = ui_prompt_icon_size, icon, texel;
 
@@ -1874,8 +1899,8 @@ static struct glyph *glyph(int font, int pixel_size, unsigned int codepoint, int
 		{
 			for (row = 0; row < height; row++)
 				memcpy(bordered + (row + 1) * bordered_width + 1, bitmap + row * width, (size_t)width);
-#ifdef HALO_BGFX
-			if (xgpu_bgfx)
+#ifdef OVERLAY_TEXELS
+			if (overlay_texels_backend())
 			{
 				for (row = 0; row < bordered_height; row++)
 					memcpy(overlay.atlas_texels + (overlay.shelf_y - 1 + row) * ATLAS_SIZE + overlay.shelf_x - 1,
@@ -1991,7 +2016,7 @@ static void put_vertex(struct vertex *vertex, float x, float y, float u, float v
 	vertex->color[3] = (unsigned char)color;
 }
 
-#ifdef HALO_BGFX
+#ifdef OVERLAY_TEXELS
 /* the quads as triangles in window pixels, each layer's shapes, then its
 text, then the next layer's (shape_count of them shapes, the rest glyphs);
 how many vertices */
@@ -2104,16 +2129,18 @@ static int build_vertices(int shape_count, float scale, float origin_x, float or
 	return count;
 }
 #endif
-#ifdef HALO_CONSOLE_GLES2
-/* where the overlay draws: the window, or the game's picture, to be scaled up
-with it, on an ES 2 console whose picture is drawn small (d3d8_gl.c) */
-static GLuint overlay_target_framebuffer;
-
+#if defined(HALO_CONSOLE_GLES2) || defined(HALO_CONSOLE_OVERLAY_DRAW)
 /* whether anything is gathered to draw */
 int ui_overlay_pending(void)
 {
 	return overlay.quad_count || overlay.text_count;
 }
+#endif
+
+#ifdef HALO_CONSOLE_GLES2
+/* where the overlay draws: the window, or the game's picture, to be scaled up
+with it, on an ES 2 console whose picture is drawn small (d3d8_gl.c) */
+static GLuint overlay_target_framebuffer;
 
 void ui_overlay_present_to(unsigned int framebuffer, int width, int height)
 {
@@ -2170,10 +2197,11 @@ void ui_overlay_present(int x, int y, int width, int height, int window_width, i
 	/* the picture's top left, in window pixels from the window's top */
 	origin_x = (float)x + ((float)width - LAYOUT_WIDTH * scale) * 0.5f;
 	origin_y = (float)(window_height - (y + height));
-#ifdef HALO_BGFX
-	if (xgpu_bgfx)
+#ifdef OVERLAY_TEXELS
+	if (overlay_texels_backend())
 	{
-		/* (the bgfx backend draws: d3d8_bgfx.inl) */
+		/* (the bgfx backend draws: d3d8_bgfx.inl; or the console's renderer,
+		console_overlay_draw) */
 		float cutouts[4][4];
 		int cutout;
 
@@ -2190,7 +2218,7 @@ void ui_overlay_present(int x, int y, int width, int height, int window_width, i
 			cutouts[cutout][3] = origin_y + overlay.cutouts[cutout][3] * scale;
 		}
 		/* (the medals' atlas let go once bgfx has it) */
-		if (xgpu_bgfx_overlay_draw(overlay.vertices, count, (int)sizeof(struct vertex), overlay.atlas_texels, ATLAS_SIZE,
+		if (overlay_texels_draw(overlay.vertices, count, (int)sizeof(struct vertex), overlay.atlas_texels, ATLAS_SIZE,
 			overlay.dirty_top, overlay.dirty_bottom, overlay.icon_texels, ui_prompt_icon_size, NUMBER_OF_ICONS,
 			overlay.picture_pixels, overlay.picture_width, overlay.picture_height, overlay.picture_serial,
 			overlay.plasma_drawn ? overlay.plasma_pixels : NULL, overlay.plasma_width, overlay.plasma_height,
