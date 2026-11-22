@@ -45,6 +45,8 @@ struct steam_file_job
 	int (*checking)(void *context, uint64_t read, uint64_t total);
 	void *checking_context;
 	int stopped;
+	/* the finished file failed its whole-file check and was removed (the .part and its journal): bad data */
+	int discarded;
 };
 
 enum

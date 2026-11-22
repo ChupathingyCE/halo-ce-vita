@@ -344,6 +344,7 @@ int steam_file_finish(struct steam_file_job *job, char *error, int error_size)
 	if (!ok)
 	{
 		snprintf(error, (size_t)error_size, "%s: the whole file's SHA-1 or header does not match", job->path);
+		job->discarded = 1;
 		steam_file_discard(job);
 		return 0;
 	}

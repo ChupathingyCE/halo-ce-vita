@@ -21,7 +21,8 @@ client must never write.
 
 Every event goes to <work>/transcript.txt (the tests read the order of revoke
 and log-off). --mode picks a failure to act out:
-  normal, corrupt_once (one chunk damaged the first time it is sent),
+  normal, corrupt_once (one chunk damaged the first time it is sent), chunk_gone (after 4 chunks every
+  chunk request is answered 404: a server error mid-download),
   drop_once (the connection cut mid-body once), logon_refuse, qr_refuse,
   logon_busy (ServiceUnavailable, 20, at the logon), stall_chunk (the third chunk's body stops a third in,
   the connection held), stall_manifest (a manifest request never answered), not_owned (no key for 976734), kick (the server logs the client off during
@@ -523,6 +524,8 @@ class State:
         self.args = args
         self.mode = args.mode
         self.lock = threading.Lock()
+        # (chunk_gone: the chunks served so far, every connection's)
+        self.chunks_served = 0
         self.transcript = open(os.path.join(args.work, "transcript.txt"), "a", buffering=1)
         self.refresh_token = "eyJ0ZXN0.FAKE-REFRESH-" + os.urandom(12).hex()
         # (--token-file: the same made-up account's token across runs - the kept sign-in's flows - and whether it was
@@ -918,6 +921,15 @@ def cdn_client(state, conn):
             if state.outage_start is not None and time.time() - state.outage_start < 8:
                 conn.close()
                 return
+        if state.mode == "chunk_gone" and status == 200 and parts[2] == "chunk":
+            # (a server's error mid-download: after 4 chunks every chunk is 404 - the download fails, not a cancel;
+            # what it got must stay on the card for the next run)
+            with state.lock:
+                state.chunks_served += 1
+                gone = state.chunks_served > 4
+            if gone:
+                status, body = 404, b"gone"
+                state.log("cdn: chunk gone")
         if state.mode == "drop_once" and not state.dropped and status == 200 and parts[2] == "chunk" and count > 3:
             state.dropped = True
             conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n" % len(body) + body[:len(body) // 2])

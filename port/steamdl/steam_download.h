@@ -101,6 +101,13 @@ struct steam_download_result
 	unsigned int connect_ms;
 	/* (the Workshop) items downloaded whole (waiting for their install), items refused or failed */
 	unsigned int items_done, items_failed;
+	/* (the Workshop) the last item's download failed on its data or Steam refused the item (a manifest not the one
+	asked for or not readable, files refused, too large, the CDN's 403/404): its staging folder is dropped. Any other
+	failure (the network, a timeout, a server's error, the session) keeps its verified chunks for the next try */
+	int item_dropped;
+	/* (the Workshop) failed items whose verified part stayed in staging for a resume, and those bytes */
+	unsigned int items_kept;
+	uint64_t kept_bytes;
 };
 
 /* runs it all; result says how it went. Never leaves a session open */
