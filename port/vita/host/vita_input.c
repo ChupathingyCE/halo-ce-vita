@@ -572,6 +572,46 @@ static int ctrl_port_types(unsigned char types[VITA_CTRL_PORTS])
 static const struct vita_ctrl_layer ctrl_layer = { ctrl_read_vita, ctrl_read_port, ctrl_port_types, vita_host_log };
 static struct vita_ctrl_ports ctrl_ports;
 
+/* (debug) HALO_TEST_CHECKPOINTS=T1,T2,... (or T1/T2/...): at each of those times (seconds
+from the program's start) the game saves a checkpoint (the odd ones: the
+first, third, ...) or reverts to the last (the even ones), as the game's
+game_save_totally_unsafe and game_revert do: tests of checkpoints and reverts
+without anyone at the Vita. Read with the pad, on the game's thread */
+void main_save_map_nonsafe(void);
+void main_revert_map(void);
+
+static void test_checkpoints_poll(unsigned long long now)
+{
+	static int checked, count, next;
+	static unsigned long long times[32];
+
+	if (!checked)
+	{
+		const char *text = getenv("HALO_TEST_CHECKPOINTS");
+
+		checked = 1;
+		while (text && *text && count < 32)
+		{
+			char *end;
+			double seconds = strtod(text, &end);
+
+			if (end == text)
+				break;
+			times[count++] = (unsigned long long)(seconds * 1000000.0);
+			text = *end == ',' || *end == '/' ? end + 1 : end;
+		}
+	}
+	if (next >= count || now < times[next])
+		return;
+	if (next % 2 == 0)
+		main_save_map_nonsafe();
+	else
+		main_revert_map();
+	vita_host_log(next % 2 == 0 ? "test: checkpoint asked for (HALO_TEST_CHECKPOINTS)" :
+		"test: revert asked for (HALO_TEST_CHECKPOINTS)");
+	next++;
+}
+
 void vita_host_pad_read(struct vita_host_pad *pad)
 {
 	static int started;
@@ -590,6 +630,7 @@ void vita_host_pad_read(struct vita_host_pad *pad)
 		gyro_start();
 	}
 	now = sceKernelGetProcessTimeWide();
+	test_checkpoints_poll(now);
 	/* the Vita's buttons and sticks, and a paired controller's (port 1 to
 	4: a PS TV's DualShocks, or a pad a plugin puts there) */
 	vita_ctrl_ports_read(&ctrl_ports, &ctrl_layer, now, &data);

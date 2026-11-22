@@ -104,4 +104,13 @@ out from then on. Until upstream has a console ask for them
 #include "halo_port_features.h"
 #undef HALO_CONSOLE_NO_HIRES
 
+/* the loading screen's picture (port/linux/game/loading_picture.c): every
+console build shows only the disc's loading.tga (halo_console_features.h's
+HALO_CONSOLE_NO_LOADING_PICTURE), and a maps folder without it (an NTSC
+disc's copy, a manual install) gave a screen with no picture. The Vita keeps
+the desktop's: display.xbox_loading_picture (default true) shows the Xbox's,
+xbox_loading.tga or loading.tga in the maps folder, and Chupathingy's own,
+embedded in the program (tools/vita_embed_assets.py), when there is none */
+#undef HALO_CONSOLE_NO_LOADING_PICTURE
+
 #endif /* __HALO_VITA_PREFIX_H */

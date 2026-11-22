@@ -173,6 +173,11 @@ CONSOLE_FEATURES = [
     "-DHALO_CONSOLE_COLLISION_CACHES",
     # the Xbox's own particle limit (1024: its pool holds no more)
     "'-DHALO_CONSOLE_PARTICLE_LIMIT=\"1024\"'",
+    # a checkpoint revert, a core or a saved game read straight into the
+    # game state, as the Xbox did: the 48 MB heap has no room for a second
+    # copy of the native builds' 20 MB state (source/saved games/
+    # game_state_xbox.c)
+    "-DHALO_CONSOLE_STATE_IN_PLACE",
     # the game tick on a thread of its own beside the render (the shared
     # port/linux/include/tick_overlap.h; the Vita's waits, core and clock:
     # platform/vita_platform.c), its stack as the game thread's
