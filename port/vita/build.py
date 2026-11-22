@@ -173,6 +173,10 @@ CONSOLE_FEATURES = [
     "-DHALO_CONSOLE_COLLISION_CACHES",
     # the Xbox's own particle limit (1024: its pool holds no more)
     "'-DHALO_CONSOLE_PARTICLE_LIMIT=\"1024\"'",
+    # a model's parts share what they can, and set the states every part
+    # sets alike only when another draw changed one (the shared
+    # rasterizer_xbox_models.c; platform/d3d8_gxm.c's halo_d3d_state_serial)
+    "-DHALO_CONSOLE_MODEL_PARTS",
     # a checkpoint revert, a core or a saved game read straight into the
     # game state, as the Xbox did: the 48 MB heap has no room for a second
     # copy of the native builds' 20 MB state (source/saved games/
