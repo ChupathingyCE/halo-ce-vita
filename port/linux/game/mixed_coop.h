@@ -141,5 +141,8 @@ void mixed_coop_translate_outgoing(unsigned char type, void *entries, short coun
 /* (HALO_MIXED_COOP_HASH=1) the state both machines must agree on, a line each
 tick in debug.txt: "mixed hash <tick> <objects> <hash>" (mixed_coop.c) */
 void mixed_coop_tick_hash(void);
+/* (network_game_manager.c, a network game's map loaded) "mixed placed
+<objects> <hash>": every object the map placed, by index */
+void mixed_coop_placed_hash(void);
 
 #endif

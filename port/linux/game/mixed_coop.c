@@ -2568,8 +2568,12 @@ static void mixed_coop_dictionary_take(
 		mixed_coop.animation_pool_used);
 	if (gameplay_differences)
 	{
-		mixed_coop_leave(T("The host's %s and yours play differently (%s and %ld more): Xbox and MCC files can't play "
-			"this level together."), mixed_coop_level_stems[mixed_coop.level], first_difference, gameplay_differences - 1);
+		if (gameplay_differences > 1)
+			mixed_coop_leave(T("The host's %s and yours play differently (%s and %ld more): Xbox and MCC files can't play "
+				"this level together."), mixed_coop_level_stems[mixed_coop.level], first_difference, gameplay_differences - 1);
+		else
+			mixed_coop_leave(T("The host's %s and yours play differently (%s): Xbox and MCC files can't play this level "
+				"together."), mixed_coop_level_stems[mixed_coop.level], first_difference);
 		return;
 	}
 	mixed_coop.matched = TRUE;
@@ -2773,14 +2777,49 @@ void mixed_coop_translate_outgoing(
 
 /* ---------- tests: the state both machines agree on */
 
+void mixed_coop_placed_hash(
+	void)
+{
+	struct object_iterator iterator;
+	struct object_datum *object;
+	uint32_t placed = MIXED_COOP_FNV_BASIS;
+	long objects = 0;
+
+	if (!getenv("HALO_MIXED_COOP_HASH") || !mixed_coop.loaded || !mixed_coop.network_coop)
+		return;
+	/* (every object the map placed, by its index and the path of its
+	definition, before a script or the AI has run: the placed objects at
+	the same indices on every machine) */
+	object_iterator_new(&iterator, _object_mask_all, 0);
+	while ((object = object_iterator_next(&iterator)) != NULL)
+	{
+		uint32_t path = mixed_coop_tag_path_hash(object->definition_index);
+		long absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(iterator.index);
+
+		placed = mixed_coop_fnv(placed, &absolute_index, sizeof(absolute_index));
+		placed = mixed_coop_fnv(placed, &path, sizeof(path));
+		objects++;
+		if (getenv("HALO_MIXED_COOP_HASH_DUMP"))
+		{
+			struct cache_file_tag_instance_view *instance = mixed_coop_instance(object->definition_index);
+
+			error(_error_silent, "mixed placedobject %04lx %d %s", (unsigned long)absolute_index, (int)object->object.type,
+				instance && instance->name ? instance->name : "?");
+		}
+	}
+	error(_error_silent, "mixed placed %ld %08x", objects, (unsigned)placed);
+}
+
 void mixed_coop_tick_hash(
 	void)
 {
 	static int enabled = -1;
+	static long placed_logged_for = NONE;
 	struct object_iterator iterator;
 	struct object_datum *object;
-	uint32_t hash = MIXED_COOP_FNV_BASIS;
-	long objects = 0;
+	uint32_t synced = MIXED_COOP_FNV_BASIS, named = 0, placed = MIXED_COOP_FNV_BASIS;
+	long objects = 0, synced_objects = 0;
+	unsigned long synced_mask = _object_mask_biped | _object_mask_vehicle | _object_mask_weapon | _object_mask_equipment;
 
 	if (enabled < 0)
 		enabled = getenv("HALO_MIXED_COOP_HASH") && getenv("HALO_MIXED_COOP_HASH")[0] == '1';
@@ -2788,19 +2827,47 @@ void mixed_coop_tick_hash(
 		return;
 	if (mixed_coop_holding())
 		return;
-	/* (every object's index, the path of its definition - the host's on a
-	translating client is the same path: its own tag - and its type) */
+	/* (what the netcode makes the same on every machine (network_objects.c,
+	network_coop.c): the units, vehicles, weapons and equipment at the host's
+	object index, each by its index and the path of its definition - the
+	host's on a translating client is the same path, its own tag -; scenery,
+	devices and the rest by their definition's path and their name, wherever
+	they are: the host's scripts create named scenery a client creates by
+	its name in a slot of its own) */
 	object_iterator_new(&iterator, _object_mask_all & ~(_object_mask_garbage | _object_mask_projectile), 0);
 	while ((object = object_iterator_next(&iterator)) != NULL)
 	{
 		uint32_t path = mixed_coop_tag_path_hash(object->definition_index);
-		long index = iterator.index;
+		long absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(iterator.index);
 		short type = object->object.type;
 
-		hash = mixed_coop_fnv(hash, &index, sizeof(index));
-		hash = mixed_coop_fnv(hash, &path, sizeof(path));
-		hash = mixed_coop_fnv(hash, &type, sizeof(type));
+		if (TEST_FLAG(synced_mask, type))
+		{
+			synced = mixed_coop_fnv(synced, &absolute_index, sizeof(absolute_index));
+			synced = mixed_coop_fnv(synced, &path, sizeof(path));
+			synced = mixed_coop_fnv(synced, &type, sizeof(type));
+			synced_objects++;
+		}
+		else
+		{
+			uint32_t one = mixed_coop_fnv(MIXED_COOP_FNV_BASIS, &path, sizeof(path));
+
+			one = mixed_coop_fnv(one, &object->object.name_index, sizeof(object->object.name_index));
+			named += one;
+		}
+		placed = mixed_coop_fnv(placed, &absolute_index, sizeof(absolute_index));
+		placed = mixed_coop_fnv(placed, &path, sizeof(path));
 		objects++;
+		if (getenv("HALO_MIXED_COOP_HASH_DUMP") && atol(getenv("HALO_MIXED_COOP_HASH_DUMP")) == (long)game_time_get())
+		{
+			struct cache_file_tag_instance_view *instance = mixed_coop_instance(object->definition_index);
+
+			error(_error_silent, "mixed object %ld %04lx %d %d %s", (long)game_time_get(), (unsigned long)absolute_index,
+				(int)type, (int)object->object.name_index, instance && instance->name ? instance->name : "?");
+		}
 	}
-	error(_error_silent, "mixed hash %ld %ld %08x", (long)game_time_get(), objects, (unsigned)hash);
+	(void)placed_logged_for;
+	(void)placed;
+	error(_error_silent, "mixed hash %ld %ld %08x %ld %08x", (long)game_time_get(), synced_objects,
+		(unsigned)mixed_coop_fnv(synced, &named, sizeof(named)), objects, (unsigned)named);
 }

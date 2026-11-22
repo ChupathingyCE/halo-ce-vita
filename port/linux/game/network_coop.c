@@ -3513,16 +3513,25 @@ void network_coop_handle_object_names(
 {
 	struct distributed_coop_object_names const *names = entries;
 	short name_index;
+	short local_count = (short)MIN(global_scenario_get()->object_names.count, MAXIMUM_OBJECT_NAMES_PER_SCENARIO);
+	short name_count = names->name_count;
 
 	if (!coop_client())
 		return;
+	/* (a mixed co-op game, mixed_coop.h: MCC's level has the Xbox's names
+	and its extras' after them - a10's six sh_ names of the scavenger hunt's
+	Moas, which are not placed in network co-op - so the names both have are
+	the first of each, and the rest are no one's) */
+	if (mixed_coop_translating() && name_count >= 0)
+		name_count = MIN(name_count, local_count);
 	if (names->structure_bsp_index != global_structure_bsp_index_get() ||
-		names->name_count != MIN(global_scenario_get()->object_names.count, MAXIMUM_OBJECT_NAMES_PER_SCENARIO))
+		(name_count != local_count && !mixed_coop_translating()) || name_count < 0 ||
+		name_count > MAXIMUM_OBJECT_NAMES_PER_SCENARIO)
 	{
 		csmemset(client_names_differing, 0, sizeof(client_names_differing));
 		return;
 	}
-	for (name_index = 0; name_index < names->name_count; name_index++)
+	for (name_index = 0; name_index < name_count; name_index++)
 	{
 		byte *differing = &client_names_differing[name_index / 8];
 		byte bit = (byte)(1 << (name_index % 8));

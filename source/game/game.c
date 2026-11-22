@@ -1111,6 +1111,15 @@ void game_initialize_for_new_map(
 
 	game_globals->active = TRUE;
 	objects_place();
+#ifdef HALO_LINUX
+	/* port: (tests) mixed co-op's hash of the objects the map placed, before
+	the AI places its own (port/linux/game/mixed_coop.c) */
+	{
+		void mixed_coop_placed_hash(void);
+
+		mixed_coop_placed_hash();
+	}
+#endif
 	if (!game_in_editor())
 		ai_place();
 #ifdef HALO_LINUX
