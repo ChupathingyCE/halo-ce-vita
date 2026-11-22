@@ -4201,7 +4201,14 @@ void halt_and_catch_fire(
 	struct rasterizer_window_begin_parameters window_parameters;
 
 #ifdef HALO_LINUX
+	/* (port, Nov 22 2026: a dev Vita's checked build, on any thread: a
+	dump says where, the error screen nothing - a dev Vita hosting a10
+	stopped logging with no dump, which the error screen looks like) */
+#if defined(HALO_VITA) && !defined(HALO_RELEASE)
+	if (TRUE)
+#else
 	if (halo_epoch_threaded)
+#endif
 	{
 		/* with the tick on its own thread this may run there, and drawing
 		the error screen from it wedged the Vita (a second producer on the
@@ -4210,6 +4217,9 @@ void halt_and_catch_fire(
 		platform_log("halt_and_catch_fire: a fatal error (see the lines above); crashing for the dump");
 		*(volatile int *)8 = 0;
 	}
+	/* (port, Nov 22 2026: the error screen below never ends and the log
+	said nothing - a dev Vita hosting a10 looked frozen) */
+	platform_log("halt_and_catch_fire: a fatal error (see the lines above); the error screen");
 #endif
 	if (!global_screenshot_count.halt_recursion_lock)
 	{
@@ -4516,7 +4526,7 @@ the debug camera there (degrees; yaw 0 looks along +x, pitch up is
 positive), through d:\\camera.txt and debug_camera_load ("@pan x y z yaw
 pitch yaw_rate pitch_rate": from then on turned by the rates, in degrees a
 tick, every frame), "M<tick>:..." runs in turn, each once a map has
-loaded since the one before it ran (map cycles), "@tv name" puts every player's unit at the centre of
+loaded since the one before it ran (map cycles), "@stall MS" holds the game thread MS milliseconds, "@tv name" puts every player's unit at the centre of
 that scenario trigger volume (the benchmarks walk the player through a
 level's encounters this way: triage/perf2-status.md), "@where" logs where
 every vehicle and scenery object is, "@seat" which vehicle and seat each
@@ -4917,6 +4927,17 @@ static void main_test_commands_update(
 		}
 		else if (!strncmp(commands[index].command, "@tv ", 4))
 			main_test_trigger_volume(commands[index].command + 4);
+		/* "@stall MS" (or "@stall,MS"): the game thread does nothing for MS
+		milliseconds, as a dev Vita's 5.9 s frame entering a network game
+		(the Halo 3 menus' pictures read): what the network makes of a
+		frame of this machine's own that long */
+		else if (!strncmp(commands[index].command, "@stall ", 7) || !strncmp(commands[index].command, "@stall,", 7))
+		{
+			long milliseconds = atol(commands[index].command + 7);
+
+			platform_log("test command: the game thread stalls %ld ms", milliseconds);
+			Sleep((DWORD)(milliseconds > 0 && milliseconds < 60000 ? milliseconds : 0));
+		}
 		/* network co-op (port/linux/game/network_coop.c): "@vote" is this
 		machine's press of skip in a cinematic; "@bsp P K" stands player P
 		(its absolute index, -1 every player) in the Kth of the loaded BSP's

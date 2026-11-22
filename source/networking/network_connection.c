@@ -1766,6 +1766,22 @@ boolean network_connection_idle(
 		{
 			error(_error_silent, "network_connection_idle_client_reliable_endpoint failed");
 		}
+#ifdef HALO_LINUX
+		/* port (Nov 22 2026): going stale is what the connection is after
+		this idle's reads, not before them. A frame of this machine's own
+		that took seconds (a dev Vita entering a Longest CTF: 5.9 s of the
+		Halo 3 menus' pictures read on the game thread) left the host's
+		stream unread meanwhile; the bit, set above from the time before the
+		reads, stayed set although the stream had just been read, and the
+		next frame showed CONNECTION PROBLEM (error 9) for a host that had
+		never been silent */
+		if (success && timeout &&
+			TEST_FLAG(connection->flags, _connection_going_stale_bit) &&
+			system_milliseconds() - connection->last_keep_alive_time <= MILLISECONDS_PER_SECOND * 5)
+		{
+			SET_FLAG(connection->flags, _connection_going_stale_bit, FALSE);
+		}
+#endif
 	}
 
 	if (success && connection->unreliable_endpoint)
