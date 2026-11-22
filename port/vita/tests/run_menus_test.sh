@@ -912,7 +912,11 @@ for case in $cases; do
 			fail h3pause "SAVE AND QUIT did not save"
 		grep -a "ui: screen" "$log" | tail -1 | grep -q 'pc.h3.main.screen' ||
 			fail h3pause "SAVE AND QUIT did not go back to the Halo 3 main menu"
-		grep -aqiE "assert|exception|halt" "$log" && fail h3pause "an assertion, exception or halt" ;;
+		# (the threaded render's "render assertion skipped (torn read?)" - a particle, contrail or colour read while the
+		# tick changes it, logged and passed over (render_epoch.c) - as the other cases take it: on a fast GPU about one
+		# run in three logs one, 1.1.3-insider.8c before the Classic+ menus as well as release-1.1.3, Nov 22)
+		grep -aiE "assert|exception|halt" "$log" | grep -av "render assertion skipped (torn read?)" | grep -q . &&
+			fail h3pause "an assertion, exception or halt" ;;
 	h3campaign)
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- h3campaign"; echo "SKIP: no HALO_TEST_PROFILE (a blam.sav with every level)"; continue
