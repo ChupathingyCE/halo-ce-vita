@@ -810,9 +810,14 @@ static boolean in_game(void)
 	return !main_menu_is_active() && game_in_progress();
 }
 
-/* whether SIGN IN goes anywhere: Delta Profile's Link Profile */
+/* whether SIGN IN goes anywhere: Delta Profile's Link Profile; on a
+console without the Delta Profile screen (HALO_CONSOLE_NO_DELTA_PROFILE),
+the Guide's own Quick Connect code alone */
 static short sign_in_section(void)
 {
+#ifdef HALO_CONSOLE_NO_DELTA_PROFILE
+	return 0;
+#else
 	short section, count;
 
 	if (!profile_screen_available())
@@ -824,6 +829,7 @@ static short sign_in_section(void)
 			return section;
 	}
 	return NONE;
+#endif
 }
 
 /* debug.delta_sample (debug_sample_friends) */
@@ -1008,13 +1014,16 @@ static void players_update(void)
 		csmemset(&row, 0, sizeof(row));
 		if (you || !player_verified(player, handle, display))
 			handle[0] = 0;
-		/* (a shared Delta profile's name, else the game name) */
+		/* (a shared Delta profile's name, else the game name; the game name
+		alone without the Delta Profile's names) */
+#ifndef HALO_CONSOLE_NO_DELTA_PROFILE
 		if (profile_names_player(absolute, shown, NUMBEROF(shown)))
 		{
 			utf8_from_wide(row.tag, sizeof(row.tag), shown, NUMBEROF(shown));
 			row.verified = TRUE;
 		}
 		else
+#endif
 			utf8_from_wide(row.tag, sizeof(row.tag), player->name, NUMBEROF(player->name));
 		row.platform = delta ? delta_peer_player_platform((int)absolute) : 0;
 		if (row.platform < 0)
@@ -1025,9 +1034,12 @@ static void players_update(void)
 		row.actions = you ? 0 : SOCIAL_ACTION_MUTE;
 		if (can_add_friend(handle))
 			row.actions |= SOCIAL_ACTION_ADD_FRIEND;
+#ifdef HALO_PORT_VOICE
 		if (voice_game_machine_talking(player->network_player_data.machine_index) && !row.muted)
 			snprintf(row.status, sizeof(row.status), "Talking");
-		else if (you)
+		else
+#endif
+		if (you)
 			snprintf(row.status, sizeof(row.status), "You");
 		else if (row.muted)
 			snprintf(row.status, sizeof(row.status), "Muted");
@@ -1293,8 +1305,13 @@ static void setting_change(short setting, short direction)
 then the logs' (guide_logs.c), then ABOUT */
 static short settings_rows(void)
 {
+#ifdef HALO_CONSOLE_NO_DELTA_PROFILE
+	/* (no Delta Profile screen for the devices' rows to open) */
+	return (short)(settings_count() + guide_logs_rows() + 1);
+#else
 	return (short)(settings_count() + (guide.linked && profile_screen_available() ? NUMBER_OF_DEVICE_ROWS : 0) +
 		guide_logs_rows() + 1);
+#endif
 }
 
 /* ABOUT's row, the last */
@@ -1344,6 +1361,10 @@ static char const *settings_a_word(short row)
 /* a device row's A: Delta Profile's dialog, over what was under DELTA */
 static void device_row_activate(short row)
 {
+#ifdef HALO_CONSOLE_NO_DELTA_PROFILE
+	/* (no devices' rows without it: settings_rows) */
+	(void)row;
+#else
 	guide_close();
 	if (!(row == _device_row_devices ? profile_screen_open_devices() : profile_screen_open_link_a_device()))
 	{
@@ -1351,6 +1372,7 @@ static void device_row_activate(short row)
 		message_set(row == _device_row_devices ? "Your devices aren't loaded yet." :
 			"Sign in on this device first.");
 	}
+#endif
 }
 
 /* A on a row after the settings: a device row's dialog, or ABOUT's screen */
@@ -3248,7 +3270,9 @@ static void party_update(void)
 	tagged = guide.party.has && social_party_tag_bytes(guide.party.tag, tag);
 	delta_peer_game_set_party_tag(tagged ? tag : NULL);
 	/* (its members in a game hear each other on the party channel) */
+#ifdef HALO_PORT_VOICE
 	voice_game_set_party(tagged ? tag : NULL);
+#endif
 }
 
 /* about once a second: the leader's game told to the party (with BRING PARTY

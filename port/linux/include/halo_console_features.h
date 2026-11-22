@@ -60,6 +60,13 @@ HALO_CONSOLE_NO_GUIDE
 	sent to the site (browser.c, network.share_presence), their settings
 	left out of config.toml: every console for now, until the Guide is
 	sized to each one's memory and input
+HALO_CONSOLE_GUIDE
+	a console with the game list (HALO_GAME_BROWSER) that has the Guide
+	too: HALO_CONSOLE_NO_GUIDE is not set for it. Its SIGN IN is the
+	Guide's own Quick Connect code (without HALO_CONSOLE_NO_DELTA_PROFILE's
+	Delta Profile screen, nor its devices' rows); its port gives the
+	platform_guide_* input hooks and platform_power_state as sdl_platform.c
+	and xinput_sdl.c do, and draws the overlay (ui_overlay.h)
 HALO_CONSOLE_NO_CAPTURE
 	no screenshots or clips (port/linux/src/capture.c and capture_clips.c,
 	controls.screenshot and controls.clip): every console; the desktop
@@ -629,7 +636,8 @@ d3d8_gl.c) */
 presence it tells the site (browser.c): desktop and Android first; each
 console gets them sized to its limits later */
 #if (defined(HALO_CONSOLE) || defined(HALO_SWITCH_CONSOLE) || defined(HALO_WIIU_CONSOLE) || \
-	defined(HALO_XBOX_CONSOLE) || defined(HALO_XBOX360_CONSOLE)) && !defined(HALO_CONSOLE_NO_GUIDE)
+	defined(HALO_XBOX_CONSOLE) || defined(HALO_XBOX360_CONSOLE)) && !defined(HALO_CONSOLE_NO_GUIDE) && \
+	!(defined(HALO_CONSOLE_GUIDE) && defined(HALO_GAME_BROWSER))
 #define HALO_CONSOLE_NO_GUIDE 1
 #endif
 /* (the Guide's builds: the game list's, not the consoles' nor the dedicated
