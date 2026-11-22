@@ -44,6 +44,8 @@
 		<string text="Play with several controllers\non this screen."/>
 		<string text="Set all the attributes for your\nmultiplayer gametypes and keep\nthem for future use."/>
 		<string text="Forge, Command and Firefight;\nGAMETYPES PLUS: every gametype,\nInfection's too, and all its rules."/>
+		<!-- (9: GAME MODES' words with the experimental modes off - Command and Firefight hidden, 1.1.3 -) -->
+		<string text="Forge;\nGAMETYPES PLUS: every gametype,\nInfection's too, and all its rules."/>
 	</strings>
 	<strings name="offline">
 		<string text="Internet play is off.\n\nOpen the settings panel (SELECT + DOWN),\nMultiplayer tab, set Connection to Online,\nthen restart the game."/>

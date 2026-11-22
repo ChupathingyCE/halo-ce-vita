@@ -3961,6 +3961,8 @@ PY
 		grep -aq "menus: COMMAND and FIREFIGHT hidden (game.experimental_modes off)" "$log" ||
 			fail experimental "off: GAME MODES did not hide COMMAND and FIREFIGHT"
 		grep -aq "ui: screen pc.ce.modes.screen" "$log" || fail experimental "off: GAME MODES did not open"
+		grep -aq "menus: multiplayer: GAME MODES' words: Forge and GAMETYPES PLUS" "$log" ||
+			fail experimental "off: the Multiplayer screen's GAME MODES words still named Command and Firefight"
 		grep -aq "ui: screen pc.cp.gametypes.screen" "$log" || fail experimental "off: down once from FORGE was not GAMETYPES PLUS"
 		grep -aqE "ui: screen pc.cp.(command|firefight).lobby" "$log" && fail experimental "off: a Command or Firefight lobby opened"
 		grep -aq "experimental modes: Command refused (game.experimental_modes is off)" "$log" ||

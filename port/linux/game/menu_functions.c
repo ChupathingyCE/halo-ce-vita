@@ -9698,7 +9698,17 @@ static void multiplayer_update(struct widget_instance *list)
 		/* (1.1.3: GAME MODES' words, the ninth row's, without Command and
 		Firefight while they are off: experimental_modes.h) */
 		if (index == 8 && !experimental_modes_on())
-			text_show(text, T("Forge;\nGAMETYPES PLUS: every gametype,\nInfection's too, and all its rules."));
+		{
+			static boolean said;
+
+			/* (art.xml's mp_descriptions, its tenth) */
+			string_show(text, 9);
+			if (!said)
+			{
+				said = TRUE;
+				platform_log("menus: multiplayer: GAME MODES' words: Forge and GAMETYPES PLUS (the experimental modes off)");
+			}
+		}
 		else
 			string_show(text, index);
 	}
