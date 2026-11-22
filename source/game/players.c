@@ -1906,6 +1906,19 @@ static void players_compute_combined_pvs(
 			}
 
 			cluster_index = player->cluster_index;
+#ifdef HALO_LINUX
+			/* port: a player with no unit keeps the cluster it last stood in: a
+			network co-op client's partner waiting out a cutscene (a10's opening:
+			no unit until it ends) still had the old BSP's cluster as the host's
+			switch reached it - past the new BSP's clusters (the checked builds'
+			assertion, structure_bsp_get_cluster_pvs; release builds took an empty
+			PVS). None, as players_reconnect_to_structure_bsp leaves it */
+			if (cluster_index != NONE && (cluster_index < 0 || cluster_index >= structure_bsp->clusters.count))
+			{
+				player->cluster_index = NONE;
+				cluster_index = NONE;
+			}
+#endif
 			if (cluster_index != NONE)
 			{
 				bit_vector_or(
@@ -1918,6 +1931,15 @@ static void players_compute_combined_pvs(
 			}
 		}
 
+#ifdef HALO_LINUX
+		/* port: the same for the cluster a cutscene activates (pvs_set_object of
+		the host's script, on a client a tick before the host's BSP switch is) */
+		if (activating_cluster_index != NONE &&
+			(activating_cluster_index < 0 || activating_cluster_index >= structure_bsp->clusters.count))
+		{
+			activating_cluster_index = NONE;
+		}
+#endif
 		if (activating_cluster_index != NONE)
 		{
 			bit_vector_or(
