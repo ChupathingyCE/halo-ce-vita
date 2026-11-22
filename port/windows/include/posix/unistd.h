@@ -17,6 +17,11 @@ Windows C runtime (<io.h>), sysconf from port/windows/src/win32_posix.c.
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+/* access()'s modes (the C runtime's _access: 0 is "it exists") */
+#ifndef F_OK
+#define F_OK 0
+#endif
+
 #ifndef _SSIZE_T_DEFINED
 #define _SSIZE_T_DEFINED
 typedef int ssize_t;

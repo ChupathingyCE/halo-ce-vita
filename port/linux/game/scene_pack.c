@@ -1785,7 +1785,11 @@ static char const *write_fail_detail(void)
 {
 	int error = errno;
 
-	return error == ENOSPC || error == EFBIG || error == EDQUOT ? ": no space left" : "";
+#ifdef EDQUOT /* (Windows' C runtime has no EDQUOT) */
+	if (error == EDQUOT)
+		return ": no space left";
+#endif
+	return error == ENOSPC || error == EFBIG ? ": no space left" : "";
 }
 
 static void build_fail(struct build_state *state, char const *format, char const *detail)
