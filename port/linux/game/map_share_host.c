@@ -34,7 +34,7 @@ Each request and each stream closed is logged, the peer's address through
 log_address (a tag for a public one).
 */
 
-#ifdef HALO_GAME_BROWSER
+#if defined(HALO_GAME_BROWSER) && defined(HALO_CUSTOM_EDITION)
 
 #include "cseries.h"
 #include "cseries/cseries_windows.h"
@@ -1189,6 +1189,42 @@ boolean map_share_host_downloading(
 	if ((long)(now - machine->started) >= (long)host_download_limit(machine->total))
 		return FALSE;
 	return (long)(now - machine->growth_time) < GROWTH_WINDOW;
+}
+
+#elif defined(HALO_GAME_BROWSER)
+
+/* (a build without Custom Edition maps, a console's game list: it never
+hosts one, so it has none to share, and keeps none of the streams' buffers,
+2.3 MB at the game list's 15 streams) */
+
+#include "cseries.h"
+#include "cseries/cseries_windows.h"
+#include "map_share.h"
+
+void map_share_update(
+	void)
+{
+}
+
+boolean map_share_host_message(
+	long machine_index,
+	void const *message,
+	long size)
+{
+	unsigned char type;
+	unsigned char const *body;
+	long body_size;
+
+	(void)machine_index;
+	/* (map sharing's, dropped) */
+	return map_share_message_parse(message, size, &type, &body, &body_size) ? TRUE : FALSE;
+}
+
+boolean map_share_host_downloading(
+	long machine_index)
+{
+	(void)machine_index;
+	return FALSE;
 }
 
 #endif /* HALO_GAME_BROWSER */

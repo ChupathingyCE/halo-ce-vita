@@ -1373,6 +1373,45 @@ void map_family_list_mcc(
 		list_files(family, (long)MCC_CACHE_VERSION, CACHE_TYPE_MULTIPLAYER, found, context);
 }
 
+#elif defined(HALO_GAME_BROWSER)
+
+/* (the game list without Custom Edition and Halo PC maps, a console's: one
+of Halo PC's own maps is never here, nor a version of one) */
+long map_family_stock_need(
+	char const *file,
+	unsigned long version,
+	char *first,
+	long first_size,
+	char *second,
+	long second_size,
+	char *blocker,
+	long blocker_size)
+{
+	char display[MAP_FAMILY_FILE_LENGTH];
+
+	(void)version;
+	map_archive_display_name(file, display, (int)sizeof(display));
+	snprintf(first, (size_t)first_size, "%s.map comes with Halo PC.", display);
+	snprintf(second, (size_t)second_size, "This build plays the Xbox's maps:\nHalo PC's maps can't be joined here.");
+	snprintf(blocker, (size_t)blocker_size, JOIN_REASON_MAP_MISSING, display);
+	return _map_family_xbox;
+}
+
+boolean map_family_find_version(
+	short family,
+	char const *file,
+	unsigned long version,
+	char *path,
+	long size)
+{
+	(void)family;
+	(void)file;
+	(void)version;
+	(void)path;
+	(void)size;
+	return FALSE;
+}
+
 #endif
 
 /* ---------- downloaded maps
