@@ -1130,7 +1130,12 @@ static long mixed_coop_compute_reach(
 	mixed_coop_free(mixed_coop_reach_parent);
 	mixed_coop_reach_parent = malloc(sizeof(long) * (size_t)MAX(1, halo_loaded_tag_count));
 	mixed_coop_reach_current = NONE;
-	mixed_coop_reach = calloc((size_t)MAX(1, halo_loaded_tag_count), 1);
+	/* (the game's malloc, as mixed_coop_free frees: libc's calloc is not
+	the game's debug allocator, and its block freed here at the next level
+	corrupted the heap) */
+	mixed_coop_reach = malloc((size_t)MAX(1, halo_loaded_tag_count));
+	if (mixed_coop_reach)
+		csmemset(mixed_coop_reach, 0, (size_t)MAX(1, halo_loaded_tag_count));
 	mixed_coop_reach_queue = malloc(sizeof(long) * (size_t)MAX(1, halo_loaded_tag_count));
 	mixed_coop_reach_queued = 0;
 	if (!mixed_coop_reach || !mixed_coop_reach_queue)
@@ -2925,6 +2930,7 @@ static void mixed_coop_dictionary_take(
 	uint8_t const *bytes,
 	uint32_t length)
 {
+	boolean layout_differs = FALSE;
 	struct mixed_coop_dictionary dictionary;
 	char why[96];
 	struct mixed_coop_lookup *lookups;
@@ -2951,12 +2957,13 @@ static void mixed_coop_dictionary_take(
 		(unsigned)mixed_coop.digests.layout, (unsigned)dictionary.digests.gameplay, (unsigned)mixed_coop.digests.gameplay,
 		(unsigned)dictionary.digests.host_only, (unsigned)mixed_coop.digests.host_only, (unsigned)dictionary.bsp_count,
 		(unsigned long)dictionary.graph_count);
+	/* (a layout that differs is said once the tags are compared: a tag that
+	differs is often why - a collision model the other family has not makes
+	its placements not collide, the flag stand's - and names it) */
 	if (dictionary.digests.layout != mixed_coop.digests.layout &&
 		dictionary.digests.layout_offset != mixed_coop.digests.layout_offset)
 	{
-		mixed_coop_leave(T("The host's %s and yours place the level's objects differently: Xbox and MCC files can't "
-			"play this level together."), mixed_coop_level_stems[mixed_coop.level]);
-		return;
+		layout_differs = TRUE;
 	}
 	if (dictionary.digests.host_only != mixed_coop.digests.host_only)
 		platform_log("mixed co-op: the host's scripts and AI differ from this machine's (the host runs them: told, not refused)");
@@ -3091,6 +3098,12 @@ static void mixed_coop_dictionary_take(
 		else
 			mixed_coop_leave(T("The host's %s and yours play differently (%s): Xbox and MCC files can't play this level "
 				"together."), mixed_coop_level_stems[mixed_coop.level], first_difference);
+		return;
+	}
+	if (layout_differs)
+	{
+		mixed_coop_leave(T("The host's %s and yours place the level's objects differently: Xbox and MCC files can't "
+			"play this level together."), mixed_coop_level_stems[mixed_coop.level]);
 		return;
 	}
 	/* (a multiplayer map: the host's netgame flags, the same ones - their
