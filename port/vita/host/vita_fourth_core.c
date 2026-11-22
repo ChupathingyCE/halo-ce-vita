@@ -353,3 +353,61 @@ int vita_host_frame_cores(char *line, int size, int describe)
 	}
 	return length;
 }
+
+/* (debug) HALO_CORE3_PROBE=1: other ways to the fourth core than moving a
+running thread, tried once at start and logged: a thread made with core 3 in
+its mask (alone, and with cores 0-2), and the game thread's own mask widened
+to all four. A thread made runs a busy half second and notes each core it
+ran on */
+static volatile unsigned int probe_cores_seen;
+
+static int probe_entry(SceSize size, void *argument)
+{
+	unsigned long long until = sceKernelGetProcessTimeWide() + 500000;
+
+	(void)size;
+	(void)argument;
+	while (sceKernelGetProcessTimeWide() < until)
+		__atomic_fetch_or(&probe_cores_seen, 1u << (sceKernelGetCpuId() & 7), __ATOMIC_RELAXED);
+	return 0;
+}
+
+void vita_host_fourth_core_probe(void)
+{
+	static const int masks[] = { FOURTH_CORE_MASK, 0xF0000, 0 };
+	const char *setting = getenv("HALO_CORE3_PROBE");
+	char message[200];
+	unsigned int index;
+	SceUID self = sceKernelGetThreadId();
+	int before, result, after;
+
+	if (!setting || !atoi(setting))
+		return;
+	for (index = 0; index < sizeof(masks) / sizeof(*masks); index++)
+	{
+		SceUID thread = sceKernelCreateThread("core3 probe", probe_entry, 0x10000100, 0x4000, 0, masks[index], NULL);
+		int started = -1, mask = -1;
+
+		probe_cores_seen = 0;
+		if (thread >= 0)
+		{
+			mask = sceKernelGetThreadCpuAffinityMask(thread);
+			started = sceKernelStartThread(thread, 0, NULL);
+			if (started >= 0)
+				sceKernelWaitThreadEnd(thread, NULL, NULL);
+			sceKernelDeleteThread(thread);
+		}
+		snprintf(message, sizeof(message), "core3 probe: a thread made with mask 0x%x: 0x%08x, its mask 0x%x, start 0x%08x, "
+			"ran on cores 0x%x", (unsigned)masks[index], (unsigned)thread, (unsigned)mask, (unsigned)started,
+			probe_cores_seen);
+		vita_host_log(message);
+	}
+	before = sceKernelGetThreadCpuAffinityMask(self);
+	result = sceKernelChangeThreadCpuAffinityMask(self, 0xF0000);
+	after = sceKernelGetThreadCpuAffinityMask(self);
+	snprintf(message, sizeof(message), "core3 probe: the game thread's mask 0x%x -> 0xf0000: 0x%08x, now 0x%x",
+		(unsigned)before, (unsigned)result, (unsigned)after);
+	vita_host_log(message);
+	if (after != before && before >= 0)
+		sceKernelChangeThreadCpuAffinityMask(self, before);
+}

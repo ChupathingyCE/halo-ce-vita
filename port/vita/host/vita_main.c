@@ -846,6 +846,7 @@ int main(int argc, char **argv)
 	/* the Vita's 16:9 screen: 480 lines of 848 columns */
 	setenv("HALO_DISPLAY_WIDTH", "848", 0);
 	read_environment_file();
+	vita_host_fourth_core_probe();
 	/* (debug) the folder a test's screenshots go to (debug.screenshot_directory) */
 	if (getenv("HALO_SCREENSHOT_DIR") && *getenv("HALO_SCREENSHOT_DIR"))
 		sceIoMkdir(getenv("HALO_SCREENSHOT_DIR"), 0777);

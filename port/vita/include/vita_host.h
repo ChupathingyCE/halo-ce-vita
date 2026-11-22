@@ -57,6 +57,7 @@ halo.log says which, naming it `role` */
 int vita_host_fourth_core_join(const char *role, int level);
 /* the same whatever the setting (HALO_AUDIO_CORE=3) */
 int vita_host_fourth_core_move(const char *role);
+void vita_host_fourth_core_probe(void);
 /* the calling thread, moved to the fourth core, off it to cores 0-2
 (aside) or back: 1 when its mask changed (the sound mixer during a load) */
 int vita_host_fourth_core_step_aside(int aside);

@@ -99,6 +99,20 @@ enum
 	_split_ui_widgets,
 	_split_frame_begin,
 	_split_frame_end,
+	/* (--vita-frame-split objects) what objects_update calls, inclusive */
+	_split_object_type_update,
+	_split_object_damage,
+	_split_unit_update,
+	_split_biped_update,
+	_split_vehicle_update,
+	_split_weapon_update,
+	_split_item_update,
+	_split_projectile_update,
+	_split_device_update,
+	_split_garbage,
+	_split_physics,
+	_split_collision_vector,
+	_split_node_matrices,
 	NUMBER_OF_SPLITS
 };
 
@@ -112,6 +126,8 @@ static const char *const split_names[NUMBER_OF_SPLITS] = {
 	"specular_lightmaps", "lights_specular", "reflections", "structure_transparent", "fog", "objects", "shadows",
 	"particles", "particle_systems", "weather", "contrails", "transparent", "decals", "detail_objects", "flares",
 	"interface", "ui_widgets", "frame_begin", "frame_end",
+	"type_update", "damage", "unit", "biped", "vehicle", "weapon", "item", "projectile", "device", "garbage",
+	"physics", "collision_vector", "node_matrices",
 };
 
 static int split_enabled = -1;
@@ -271,6 +287,26 @@ WRAP_VOID(render_ui_widgets, _split_ui_widgets, (short player, void const *bound
 WRAP_VOID(rasterizer_frame_begin, _split_frame_begin, (void const *parameters), (parameters))
 WRAP_VOID(rasterizer_frame_end, _split_frame_end, (void), ())
 
+#ifdef VITA_FRAME_SPLIT_OBJECTS
+/* what the tick's objects_update calls (objects.c, object_types.c and the
+types' units) */
+WRAP_RESULT(boolean, object_type_update, _split_object_type_update, (long index), (index))
+WRAP_VOID(object_damage_update, _split_object_damage, (long index), (index))
+WRAP_RESULT(boolean, unit_update, _split_unit_update, (long index), (index))
+WRAP_RESULT(boolean, biped_update, _split_biped_update, (long index), (index))
+WRAP_RESULT(boolean, vehicle_update, _split_vehicle_update, (long index), (index))
+WRAP_RESULT(boolean, weapon_update, _split_weapon_update, (long index), (index))
+WRAP_RESULT(boolean, item_update, _split_item_update, (long index), (index))
+WRAP_RESULT(boolean, projectile_update, _split_projectile_update, (long index), (index))
+WRAP_RESULT(boolean, device_update, _split_device_update, (long index), (index))
+WRAP_VOID(objects_garbage_collection, _split_garbage, (void), ())
+WRAP_VOID(physics_update, _split_physics, (long index, void *powered, void *mass, void const *force, void const *torque),
+	(index, powered, mass, force, torque))
+WRAP_RESULT(boolean, collision_test_vector, _split_collision_vector, (unsigned long flags, void const *point,
+	void const *vector, long ignore, void *collision), (flags, point, vector, ignore, collision))
+WRAP_VOID(object_compute_node_matrices, _split_node_matrices, (long index), (index))
+#endif
+
 static void split_report(void)
 {
 	static char line[2400];
@@ -328,6 +364,14 @@ static void split_report(void)
 			split_us[_split_tick] > split_us[_split_game_tick] ?
 				(double)(split_us[_split_tick] - split_us[_split_game_tick]) * per : 0.0);
 		vita_host_log(line);
+		if (split_calls[_split_object_type_update] || split_calls[_split_collision_vector])
+		{
+			n = snprintf(line, sizeof(line), "frame-split objects (ms/tick, inclusive; calls/tick):");
+			for (index = _split_object_type_update; index < NUMBER_OF_SPLITS; index++)
+				n += snprintf(line + n, sizeof(line) - n, " | %s %.2f (%.0f)", split_names[index],
+					(double)split_us[index] * per_tick, ticks ? (double)split_calls[index] / (double)ticks : 0.0);
+			vita_host_log(line);
+		}
 		n = snprintf(line, sizeof(line), "frame-split time update (ms/frame, outside the ticks):");
 		for (index = _split_interpolation_tick; index <= _split_game_sound; index++)
 			n += snprintf(line + n, sizeof(line) - n, " | %s %.2f", split_names[index], (double)split_us[index] * per);
@@ -338,11 +382,11 @@ static void split_report(void)
 	{
 		unsigned long long marked = 0, device = d3d_us_split[_split_render];
 
-		for (index = _split_visibility; index < NUMBER_OF_SPLITS; index++)
+		for (index = _split_visibility; index <= _split_frame_end; index++)
 			device += d3d_us_split[index];
 		n = snprintf(line, sizeof(line), "frame-split render (ms/frame, [the Vita's Direct3D device's part]): render %.2f [%.2f]",
 			(double)split_us[_split_render] * per, (double)device * per);
-		for (index = _split_visibility; index < NUMBER_OF_SPLITS; index++)
+		for (index = _split_visibility; index <= _split_frame_end; index++)
 		{
 			marked += split_us[index];
 			if (split_us[index] * per >= 0.05)

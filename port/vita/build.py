@@ -273,6 +273,14 @@ VITA_ALIGNED_DIRS = (
 )
 VITA_ALIGNED_EXCEPTIONS = {"source/physics/breakable_surfaces.c", "source/ai/actions.c"}
 
+# --vita-frame-split objects: what the tick's objects_update calls, timed too
+# (inclusive: a vehicle's update is inside its object's type update)
+FRAME_SPLIT_OBJECTS_WRAPPED = (
+    "object_type_update", "object_damage_update", "unit_update", "biped_update", "vehicle_update", "weapon_update",
+    "item_update", "projectile_update", "device_update", "objects_garbage_collection", "physics_update",
+    "collision_test_vector", "object_compute_node_matrices",
+)
+
 # --vita-frame-split: the game's functions timed from outside it
 # (platform/vita_frame_split.c), and the Direct3D device's units whose time on
 # the game thread it counts
@@ -341,9 +349,10 @@ def add_arguments(parser: Any) -> None:
     parser.add_argument("--vita-aligned", choices=["none", "hot"], default="none",
                         help="hot: the game's hot directories compiled without -fmax-type-align=1 (VITA_ALIGNED_DIRS); "
                              "none (the default): every game unit assumes nothing aligned")
-    parser.add_argument("--vita-frame-split", nargs="?", const="device", choices=["steps", "device"],
+    parser.add_argument("--vita-frame-split", nargs="?", const="device", choices=["steps", "device", "objects"],
                         help="a test build that times the game thread's steps (steps), and the Direct3D device's "
-                             "part of them (device, the default; its timing slows the device) "
+                             "part of them (device, the default; its timing slows the device), or the steps and what "
+                             "the tick's objects_update calls (objects; its timing slows the tick) "
                              "(platform/vita_frame_split.c; HALO_FRAME_TIMING=n in env.txt)")
     parser.add_argument("--vita-build-number", metavar="N", type=int, default=1,
                         help="the Vita's build count after the game's version, \"0.9.2 (build N)\" (default 1)")
@@ -466,7 +475,9 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     # The wrapped functions that the clang side defines are wrapped inside
     # the module too, before its calls to them are resolved
     lto = getattr(sln, "port_lto", "off") != "off"
-    lto_wraps = ["D3DTexture_LockRect", *(FRAME_SPLIT_WRAPPED if getattr(sln.args, "vita_frame_split", False) else ())]
+    split_wraps = (*FRAME_SPLIT_WRAPPED, *(FRAME_SPLIT_OBJECTS_WRAPPED
+                                         if getattr(sln.args, "vita_frame_split", None) == "objects" else ()))
+    lto_wraps = ["D3DTexture_LockRect", *(split_wraps if getattr(sln.args, "vita_frame_split", False) else ())]
     n.rule(name="vita_lto",
            command=("ld.lld -r -m armelf_linux_eabi --lto-O2 -mllvm -mcpu=cortex-a9 -mllvm -float-abi=hard "
                     "-mllvm -emulated-tls " + " ".join(f"--wrap={name}" for name in lto_wraps) +
@@ -593,6 +604,8 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
             continue
         instrument = (" -finstrument-functions-after-inlining"
                       if getattr(sln.args, "vita_frame_split", None) == "device" and source.name in DEVICE_SOURCES else "")
+        if source.name == "vita_frame_split.c" and getattr(sln.args, "vita_frame_split", None) == "objects":
+            instrument += " -DVITA_FRAME_SPLIT_OBJECTS"
         add(source, "vita_cc", f"{platform_cflags} -I{_quote(port_dir / 'host')} "
                                f"-include {_quote(port_dir / 'include' / 'vita_xgpu_game.h')} "
                                f"-include {_quote(port_dir / 'include' / 'vita_glue.h')}{instrument}")
@@ -672,7 +685,7 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
         objects.insert(0, lto_object)
     n.build(outputs=elf, rule="vita_link", inputs=objects, implicit_outputs=[build_dir / "warthog.map"],
             variables={"libs": " ".join(f"-l{lib}" for lib in VITA_LIBRARIES),
-                       "wraps": "-Wl," + ",".join(f"--wrap={name}" for name in FRAME_SPLIT_WRAPPED)
+                       "wraps": "-Wl," + ",".join(f"--wrap={name}" for name in split_wraps)
                        if frame_split else ""})
     n.build(outputs=velf, rule="vita_velf", inputs=elf)
     n.build(outputs=eboot, rule="vita_eboot", inputs=velf)
