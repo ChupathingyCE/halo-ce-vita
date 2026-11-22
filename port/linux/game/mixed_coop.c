@@ -731,6 +731,30 @@ static struct
 	{ _mixed_decision_granite_boulder, "scenery\\rocks\\boulder_granite_medium\\boulder_granite_medium" },
 };
 
+/* (mixed play r3, the Xbox-host-decides mode) what differs that the host alone uses or decides: with an
+Xbox-files host it is the Xbox's game - the host's collision of the flag stand and teleporter base (MCC's
+files have none; an MCC client near one is corrected to the host's), the host's needler item collection
+(the host spawns every item); with an MCC host they would be Halo PC's, so a mixed game there needs an
+Xbox-files host (refused, said so). The owner's call on the flag stand stays open (_mixed_decision_flag_stand) */
+static char const *const mixed_coop_xbox_host_decides[] =
+{
+	"scenery\\flag_base\\flag_base", "scenery\\teleporter_base\\teleporter_base",
+	"item collections\\single weapons\\needler",
+};
+
+static boolean mixed_coop_xbox_host_decides_tag(
+	char const *name)
+{
+	short index;
+
+	for (index = 0; name && index < NUMBEROF(mixed_coop_xbox_host_decides); index++)
+	{
+		if (!csstrcasecmp(name, mixed_coop_xbox_host_decides[index]))
+			return TRUE;
+	}
+	return FALSE;
+}
+
 /* a multiplayer map's level is loaded (its rules: mixed_coop_tags_loaded) */
 static boolean mixed_coop_multiplayer_level;
 /* its scenario has race vehicle flags (the globals' multiplayer vehicles can
@@ -1780,6 +1804,10 @@ static uint32_t mixed_coop_placements_digest(
 
 			collides = !instance || !instance->base_address ||
 				((struct object_definition const *)instance->base_address)->object.collision_model.index != NONE;
+			/* (the flag stand and teleporter base: collision on Xbox machines alone, the host's deciding -
+			their places as a non-colliding object's on every machine, mixed_coop_xbox_host_decides) */
+			if (instance && mixed_coop_xbox_host_decides_tag(instance->name))
+				collides = FALSE;
 		}
 		if (!collides)
 		{
@@ -2995,6 +3023,12 @@ static boolean mixed_coop_accepted(
 		if (!csstrcasecmp(name, mixed_coop_decision_tags[decision].path) && mixed_coop_decided(mixed_coop_decision_tags[decision].decision))
 			return TRUE;
 	}
+	/* (an Xbox-files host's game, this machine MCC's: the host decides) */
+	if (mixed_coop.host_family == _mixed_coop_family_xbox && mixed_coop.family == _mixed_coop_family_mcc &&
+		mixed_coop_xbox_host_decides_tag(name))
+	{
+		return TRUE;
+	}
 	if (!setting || !setting[0] || !name)
 		return FALSE;
 	length = strlen(name);
@@ -3022,7 +3056,7 @@ static void mixed_coop_dictionary_take(
 	struct mixed_coop_dictionary dictionary;
 	char why[96];
 	struct mixed_coop_lookup *lookups;
-	long index, gameplay_differences = 0, told_differences = 0, host_only_tags = 0, mapped = 0;
+	long index, gameplay_differences = 0, xbox_host_needed = 0, told_differences = 0, host_only_tags = 0, mapped = 0;
 	char first_difference[200];
 	uint32_t offset = 0;
 	uint16_t host_graph, animation_count;
@@ -3107,6 +3141,8 @@ static void mixed_coop_dictionary_take(
 			}
 			else if (mixed_coop.tags[(short)local].kind == _mixed_tag_gameplay)
 			{
+				if (mixed_coop_xbox_host_decides_tag(mixed_coop_instances()[(short)local].name))
+					xbox_host_needed++;
 				if (!gameplay_differences++)
 					snprintf(first_difference, sizeof(first_difference), "%s", text);
 				platform_log("mixed co-op: gameplay differs: %s (host %08x, here %08x)", text, (unsigned)tag.digest,
@@ -3178,6 +3214,13 @@ static void mixed_coop_dictionary_take(
 	platform_log("mixed co-op: %ld of the host's tags are this machine's, %ld the host's alone; %ld gameplay tags differ, "
 		"%ld others (told); %ld animations mapped", mapped, host_only_tags, gameplay_differences, told_differences,
 		mixed_coop.animation_pool_used);
+	if (gameplay_differences && xbox_host_needed == gameplay_differences)
+	{
+		mixed_coop_leave(T("The host plays %s from MCC's files: with Xbox and MCC files together this map needs an "
+			"Xbox-files host (MCC's files have no collision for the flag stand and teleporter base). Ask a player with "
+			"the Xbox's maps to host."), mixed_coop_level_stems[mixed_coop.level]);
+		return;
+	}
 	if (gameplay_differences)
 	{
 		if (gameplay_differences > 1)
