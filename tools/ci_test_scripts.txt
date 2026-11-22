@@ -4,6 +4,7 @@
 tools/test_audio_doppler.py
 tools/test_bitmap_byte_order.py
 tools/test_button_mappings.py
+tools/test_console_browser_http.py
 tools/test_console_https.py
 tools/test_controller_layout.py
 tools/test_light_storage.py
