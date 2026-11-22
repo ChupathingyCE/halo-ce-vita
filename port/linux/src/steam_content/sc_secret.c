@@ -5,7 +5,8 @@ Where the Steam refresh token is kept (sc_internal.h): the system's own
 secret store where there is one (macOS: the login Keychain; Windows: the
 token sealed with DPAPI to the player's Windows account; Linux and BSD:
 libsecret, the desktop's keyring, loaded at run time when installed),
-else only the sign-in file (readable by the player alone). The token is
+else only the sign-in file (readable by the player alone): Android, and a
+console, whose build defines SC_SECRET_FILE_ONLY. The token is
 never logged.
 
 SPDX-FileCopyrightText: Milenko x Horrible Dev
@@ -182,7 +183,7 @@ void sc_secret_delete(const char *account)
 		remove(path);
 }
 
-#elif !defined(__ANDROID__)
+#elif !defined(__ANDROID__) && !defined(SC_SECRET_FILE_ONLY)
 
 #include <dlfcn.h>
 
