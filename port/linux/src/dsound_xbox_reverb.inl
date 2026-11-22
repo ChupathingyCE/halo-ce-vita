@@ -590,7 +590,11 @@ static void reverb_frame(float send)
 target_level */
 static void reverb_process(const float *send, float *output, unsigned long frames, float target_level)
 {
-	float peak = 0.0f;
+	/* (the peak's magnitude as an integer: float_magnitude) */
+	float quiet_peak = REVERB_QUIET_PEAK;
+	uint32_t peak = 0;
+	/* (a level at its target stays there: no clamp a frame) */
+	BOOL level_moves = reverb.level != target_level;
 	unsigned long frame;
 
 	reverb.silent = FALSE;
@@ -625,18 +629,28 @@ static void reverb_process(const float *send, float *output, unsigned long frame
 			output[frame * 2] += (held[0] + 0.70710678f * held[2]) * level;
 			output[frame * 2 + 1] += (held[1] + 0.70710678f * held[3]) * level;
 		}
-		peak = fabsf(held[0]) > peak ? fabsf(held[0]) : peak;
-		peak = fabsf(held[1]) > peak ? fabsf(held[1]) : peak;
-		peak = fabsf(held[2]) > peak ? fabsf(held[2]) : peak;
-		peak = fabsf(held[3]) > peak ? fabsf(held[3]) : peak;
-		peak = fabsf(send[frame]) > peak ? fabsf(send[frame]) : peak;
+		{
+			uint32_t magnitudes[5];
+			int index;
+
+			magnitudes[0] = float_magnitude(&held[0]);
+			magnitudes[1] = float_magnitude(&held[1]);
+			magnitudes[2] = float_magnitude(&held[2]);
+			magnitudes[3] = float_magnitude(&held[3]);
+			magnitudes[4] = float_magnitude(&send[frame]);
+			for (index = 0; index < 5; index++)
+				peak = magnitudes[index] > peak ? magnitudes[index] : peak;
+		}
 		if (reverb.fade && !--reverb.fade)
 			reverb.from = reverb.to;
 		reverb_delays_step(1);
-		reverb.level = clamp_real(target_level, reverb.level - 1.0f / REVERB_LEVEL_FADE_FRAMES,
-			reverb.level + 1.0f / REVERB_LEVEL_FADE_FRAMES);
+		if (level_moves)
+		{
+			reverb.level = clamp_real(target_level, reverb.level - 1.0f / REVERB_LEVEL_FADE_FRAMES,
+				reverb.level + 1.0f / REVERB_LEVEL_FADE_FRAMES);
+		}
 	}
-	reverb.quiet = peak > REVERB_QUIET_PEAK ? 0 : reverb.quiet + frames;
+	reverb.quiet = peak > float_magnitude(&quiet_peak) ? 0 : reverb.quiet + frames;
 }
 
 /* whether anything is sent to the reverb in send */
@@ -644,9 +658,12 @@ static BOOL reverb_sent(const float *send, unsigned long frames)
 {
 	unsigned long frame;
 
+	float quiet_peak = REVERB_QUIET_PEAK;
+	uint32_t quiet = float_magnitude(&quiet_peak);
+
 	for (frame = 0; frame < frames; frame++)
 	{
-		if (fabsf(send[frame]) > REVERB_QUIET_PEAK)
+		if (float_magnitude(&send[frame]) > quiet)
 			return TRUE;
 	}
 	return FALSE;
