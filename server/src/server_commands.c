@@ -3134,7 +3134,11 @@ void server_commands_update(
 	}
 	server_moderation_update();
 	names_update();
+	/* (the Workshop's downloads: none in a build without MCC maps, a
+	console's game list) */
+#if !defined(HALO_MCC) || HALO_MCC
 	steam_update();
+#endif
 	server_conduct_update();
 #ifdef HALO_SERVER
 	server_gamespy_update();

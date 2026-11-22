@@ -16,14 +16,15 @@ and its UPDATES tab installs with no system dialog (updater_install_begin).
 
 The desktop builds with the overlay (HALO_GAME_BROWSER) have it; the others
 keep the message boxes (sdl_platform.c), and a console with screens of its
-own for the start (HALO_CONSOLE_SETUP_SCREENS) has those.
+own for the start (HALO_CONSOLE_SETUP_SCREENS) has those. A console with the
+game list (HALO_CONSOLE) has neither: its own start, as before.
 */
 
 #ifndef __HALO_LAUNCHER_H
 #define __HALO_LAUNCHER_H
 
 #if defined(HALO_GAME_BROWSER) && !defined(HALO_ANDROID) && !defined(HALO_SERVER) && \
-	!defined(HALO_CONSOLE_SETUP_SCREENS)
+	!defined(HALO_CONSOLE_SETUP_SCREENS) && !defined(HALO_CONSOLE)
 #define HALO_LAUNCHER 1
 #endif
 

@@ -64,4 +64,12 @@ int mcc_workshop_host_item(char const name[128], struct mcc_workshop_item *item)
 /* The joiner's text; title is the host's, or the level's readable name. */
 void mcc_workshop_refusal_text(enum mcc_workshop_refusal kind, struct mcc_workshop_item const *item,
     char const *level, char *text, unsigned size);
+
+#if defined(HALO_MCC) && !HALO_MCC
+/* no MCC maps in this build (HALO_MCC, halo_port_features.h): a listing
+has no Workshop item (a console's game list: its host's announcement) */
+#define mcc_workshop_listing(a0, a1) ((void)sizeof(a0), (void)sizeof(a1), 0)
+#define mcc_workshop_map_title(a0, a1, a2, a3, a4) \
+    ((void)sizeof(a0), (void)sizeof(a1), (void)sizeof(a2), (void)sizeof(a3), (void)sizeof(a4), 0)
+#endif
 #endif
