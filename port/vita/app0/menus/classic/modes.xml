@@ -1,25 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Menu style Classic+ (1.2.0 menu round 3, owner Nov 8; 1.1.4, 1.1.5): the main menu's MEDIA and
-     EXTRAS (classic/main.xml) and the COMMAND and FIREFIGHT lobbies, in the original menus' look as
-     classic/forge.xml's FORGE lobby is (a cp/<name> widget stands for h3/<name> while the style is
-     Classic+: menu_tags.c menu_tags_online).
-     - MEDIA: File Share, Friends and the Game Manager together, as ElDewrito's START > MEDIA
-       (online/start.xml): each row opens Classic+'s own screen of it (classic/fileshare.xml,
-       friends.xml, mods.xml).
-     - EXTRAS: Forge, Command and Firefight, each opening its lobby as ElDewrito's main menu's
-       rows do (h3/forge/lobby, h3/command/lobby, h3/firefight/lobby: cp/forge/lobby and the two
-       below).
+<!-- Menu style Classic+ (1.1.3, owner Nov 21: the main menu as Halo PC's and ChupathingyCE's -
+     CAMPAIGN, MULTIPLAYER, PROFILES, SETTINGS, QUIT -, 1.1.3's MEDIA and EXTRAS folded into them,
+     classic/main.xml), the screens behind its rows, and the COMMAND and FIREFIGHT lobbies, in the
+     original menus' look as classic/forge.xml's FORGE lobby is (a cp/<name> widget stands for
+     h3/<name> while the style is Classic+: menu_tags.c menu_tags_online).
+     - SETTINGS (the main menu's): ChupathingyCE's SETTINGS - the game's settings, then its files -
+       as the Xbox's list screens: on the PS Vita the settings panel at each of its pages
+       (CONTROLS ... ADVANCED: menu_functions.c's port start panel, the START hub's rows of those
+       names; the panel stays whole, Start opens it too), then GAME MANAGER (Halo CE's files, the
+       mods, DOWNLOAD FROM STEAM and its WORKSHOP: ChupathingyCE's SETUP's maps and downloads),
+       FILE SHARE and FRIENDS - 1.1.3's MEDIA, together as ElDewrito's START > MEDIA has them -, each
+       opening Classic+'s own screen of it (classic/mods.xml, fileshare.xml, friends.xml); the
+       focused row's words in the description's panel at the right (port ce settings). A PC has no
+       settings panel: its rows are not there (port ce settings).
+     - GAME MODES (OpenCE's MULTIPLAYER screen's last row, multiplayer.xml: ChupathingyCE's
+       Multiplayer screen holds its FORGE so): Forge, Command and Firefight, each opening its lobby as
+       ElDewrito's main menu's rows do (h3/forge/lobby, h3/command/lobby, h3/firefight/lobby:
+       cp/forge/lobby and the two below), and GAMETYPES PLUS, the Halo 3 GAME TYPES (Infection's
+       rules too), the Multiplayer screen's ninth row until 1.1.3's.
+     - QUIT (the main menu's): the question as the Xbox's own questions look - ui.map's
+       semi_transparent_grey over the screen, alert_bkd's box, its large_ui and small_ui words -; A
+       closes the game (port online exit: on the PS Vita the process's own end, vita_main.c), B goes
+       back.
      - COMMAND and FIREFIGHT: the Halo 3 set's lobbies' rows and functions (halo3/forge_lobby.xml,
        menu_functions.c "port command lobby init", "port firefight lobby init": the rows found by
        their names), laid out as cp/forge/lobby, sharing its rows, description panel and key.
      The pictures and fonts are the player's own (ui.map); the headings are the port's words drawn
-     in the game's look (tools/classic_menu_art.py) -->
+     in the game's look (tools/classic_menu_art.py; menu_titles.c sets them in the game's own heading
+     letters where those spell them) -->
 <menus>
-	<bitmap name="ce/media/header_art">
-		<frame png="classic/{lang}/header_media.png" width="512" height="64"/>
+	<bitmap name="ce/settings/header_art">
+		<frame png="classic/{lang}/header_settings.png" width="512" height="64"/>
 	</bitmap>
 	<bitmap name="ce/modes/header_art">
-		<frame png="classic/{lang}/header_modes.png" width="512" height="64"/>
+		<frame png="classic/{lang}/header_game_modes.png" width="512" height="64"/>
 	</bitmap>
 	<bitmap name="cp/command/header_art">
 		<frame png="classic/{lang}/header_command.png" width="512" height="64"/>
@@ -27,68 +41,143 @@
 	<bitmap name="cp/firefight/header_art">
 		<frame png="classic/{lang}/header_firefight.png" width="512" height="64"/>
 	</bitmap>
-	<strings name="ce/modes_text">
+	<strings name="ce/settings_text">
+		<string text="CONTROLS"/>
+		<string text="GRAPHICS"/>
+		<string text="SOUND"/>
+		<string text="INTERFACE"/>
+		<string text="ONLINE"/>
+		<string text="ADVANCED"/>
+		<string text="GAME MANAGER"/>
 		<string text="FILE SHARE"/>
 		<string text="FRIENDS"/>
-		<string text="GAME MANAGER"/>
+	</strings>
+	<strings name="ce/modes_text">
 		<string text="FORGE"/>
 		<string text="COMMAND"/>
 		<string text="FIREFIGHT"/>
+		<string text="GAMETYPES PLUS"/>
+	</strings>
+	<strings name="ce/quit_text">
+		<string text="QUIT"/>
+		<string text="Are you sure you want to quit Halo?"/>
+		<string text="%a-button =QUIT   %b-button =CANCEL"/>
 	</strings>
 
-	<!-- MEDIA -->
-	<widget name="ce/media/header" left="35" top="11" width="512" height="64" bitmap="ce/media/header_art"/>
-	<widget name="ce/media/fileshare/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="0"/>
-	<widget name="ce/media/fileshare" left="0" width="224" height="32" bitmap="list_item_bkd">
-		<on event="a start" run="port fileshare enter" open="ce/fileshare/screen"/>
-		<child widget="ce/media/fileshare/row_name"/>
+	<!-- SETTINGS: each row a list_item_bkd at 51, 32 apart, named as the START hub's row of it (its
+	     panel page and its words: menu_functions.c start_rows) -->
+	<widget name="ce/settings/header" left="35" top="11" width="512" height="64" bitmap="ce/settings/header_art"/>
+	<!-- (a row's words too wide for its box in the large font - ARCHIVOS COMPARTIDOS -: in the small one,
+	     whole; menu_functions.c classic_text_fit, its twin row_name_small) -->
+	<widget name="ce/settings/row_name_small" type="text" left="13" top="9" width="197" height="16" font="ui\small_ui" color="#FF2896FF"/>
+	<widget name="ce/settings/controls/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="0"/>
+	<widget name="ce/settings/controls" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port start panel"/>
+		<child widget="ce/settings/controls/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
 	</widget>
-	<widget name="ce/media/friends/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="1"/>
-	<widget name="ce/media/friends" left="0" width="224" height="32" bitmap="list_item_bkd">
-		<on event="a start" open="h3/friends/screen"/>
-		<child widget="ce/media/friends/row_name"/>
+	<widget name="ce/settings/graphics/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="1"/>
+	<widget name="ce/settings/graphics" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port start panel"/>
+		<child widget="ce/settings/graphics/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
 	</widget>
-	<widget name="ce/media/mods/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="2"/>
-	<widget name="ce/media/mods" left="0" width="224" height="32" bitmap="list_item_bkd">
+	<widget name="ce/settings/sound/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="2"/>
+	<widget name="ce/settings/sound" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port start panel"/>
+		<child widget="ce/settings/sound/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
+	</widget>
+	<widget name="ce/settings/interface/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="3"/>
+	<widget name="ce/settings/interface" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port start panel"/>
+		<child widget="ce/settings/interface/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
+	</widget>
+	<widget name="ce/settings/online/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="4"/>
+	<widget name="ce/settings/online" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port start panel"/>
+		<child widget="ce/settings/online/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
+	</widget>
+	<widget name="ce/settings/advanced/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="5"/>
+	<widget name="ce/settings/advanced" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port start panel"/>
+		<child widget="ce/settings/advanced/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
+	</widget>
+	<widget name="ce/settings/games/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="6"/>
+	<widget name="ce/settings/games" left="0" width="224" height="32" bitmap="list_item_bkd">
 		<on event="a start" run="port h3 mods init" open="ce/mods/screen"/>
-		<child widget="ce/media/mods/row_name"/>
+		<child widget="ce/settings/games/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
 	</widget>
-	<widget name="ce/media/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
-		<child widget="ce/media/fileshare" x="51" y="78"/>
-		<child widget="ce/media/friends" x="51" y="110"/>
-		<child widget="ce/media/mods" x="51" y="142"/>
+	<widget name="ce/settings/fileshare/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="7"/>
+	<widget name="ce/settings/fileshare" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port fileshare enter" open="ce/fileshare/screen"/>
+		<child widget="ce/settings/fileshare/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
 	</widget>
-	<widget name="ce/media/screen" flags="pass_unhandled_to_focused_child" bitmap="gradient">
+	<widget name="ce/settings/friends/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="8"/>
+	<widget name="ce/settings/friends" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" open="h3/friends/screen"/>
+		<child widget="ce/settings/friends/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
+	</widget>
+	<widget name="ce/settings/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<data input="port ce settings"/>
+		<child widget="ce/settings/controls" x="51" y="78"/>
+		<child widget="ce/settings/graphics" x="51" y="110"/>
+		<child widget="ce/settings/sound" x="51" y="142"/>
+		<child widget="ce/settings/interface" x="51" y="174"/>
+		<child widget="ce/settings/online" x="51" y="206"/>
+		<child widget="ce/settings/advanced" x="51" y="238"/>
+		<child widget="ce/settings/games" x="51" y="270"/>
+		<child widget="ce/settings/fileshare" x="51" y="302"/>
+		<child widget="ce/settings/friends" x="51" y="334"/>
+	</widget>
+	<widget name="ce/settings/desc" type="text" left="290" top="92" width="290" height="290" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="ce/settings/description" left="275" top="78" width="320" height="322" bitmap="list_field">
+		<child widget="ce/settings/desc"/>
+	</widget>
+	<widget name="ce/settings/screen" flags="pass_unhandled_to_focused_child" bitmap="gradient">
 		<on event="b back" back="true"/>
-		<child widget="ce/media/header"/>
-		<child widget="ce/media/list"/>
+		<child widget="ce/settings/header"/>
+		<child widget="ce/settings/description"/>
+		<child widget="ce/settings/list"/>
 		<child widget="cp/key/b_butn"/>
 		<child widget="cp/key/back"/>
 		<child widget="cp/key/a_butn"/>
 		<child widget="cp/key/select"/>
 	</widget>
 
-	<!-- EXTRAS -->
+	<!-- GAME MODES -->
 	<widget name="ce/modes/header" left="35" top="11" width="512" height="64" bitmap="ce/modes/header_art"/>
-	<widget name="ce/modes/forge/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="3"/>
+	<widget name="ce/modes/forge/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="0"/>
 	<widget name="ce/modes/forge" left="0" width="224" height="32" bitmap="list_item_bkd">
 		<on event="a start" open="h3/forge/lobby"/>
 		<child widget="ce/modes/forge/row_name"/>
 	</widget>
-	<widget name="ce/modes/command/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="4"/>
+	<widget name="ce/modes/command/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="1"/>
 	<widget name="ce/modes/command" left="0" width="224" height="32" bitmap="list_item_bkd">
 		<on event="a start" open="h3/command/lobby"/>
 		<child widget="ce/modes/command/row_name"/>
 	</widget>
-	<widget name="ce/modes/firefight/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="5"/>
+	<widget name="ce/modes/firefight/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="2"/>
 	<widget name="ce/modes/firefight" left="0" width="224" height="32" bitmap="list_item_bkd">
 		<on event="a start" open="h3/firefight/lobby"/>
 		<child widget="ce/modes/firefight/row_name"/>
+	</widget>
+	<widget name="ce/modes/gametypes/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/modes_text" string_index="3"/>
+	<widget name="ce/modes/gametypes" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" open="h3/gametypes/screen"/>
+		<child widget="ce/modes/gametypes/row_name"/>
 	</widget>
 	<widget name="ce/modes/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
 		<child widget="ce/modes/forge" x="51" y="78"/>
 		<child widget="ce/modes/command" x="51" y="110"/>
 		<child widget="ce/modes/firefight" x="51" y="142"/>
+		<child widget="ce/modes/gametypes" x="51" y="174"/>
 	</widget>
 	<widget name="ce/modes/screen" flags="pass_unhandled_to_focused_child" bitmap="gradient">
 		<on event="b back" back="true"/>
@@ -98,6 +187,21 @@
 		<child widget="cp/key/back"/>
 		<child widget="cp/key/a_butn"/>
 		<child widget="cp/key/select"/>
+	</widget>
+
+	<!-- QUIT: the question over the main menu, as GAME MANAGER's DELETE? (classic/mods.xml ce/mods/confirm) -->
+	<widget name="ce/quit/title" type="text" left="56" top="158" width="528" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/quit_text" string_index="0" text_flags="no_focus_test"/>
+	<widget name="ce/quit/text" type="text" left="56" top="190" width="528" height="90" font="ui\small_ui" color="#FF2896FF" string_list="ce/quit_text" string_index="1" text_flags="no_focus_test"/>
+	<widget name="ce/quit/keys" type="text" left="56" top="283" width="528" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/quit_text" string_index="2" text_flags="no_focus_test"/>
+	<widget name="ce/quit/box" left="40" top="150" width="560" height="170" bitmap="ui\shell\bitmaps\alert_bkd">
+		<child widget="ce/quit/title"/>
+		<child widget="ce/quit/text"/>
+		<child widget="ce/quit/keys"/>
+	</widget>
+	<widget name="ce/quit/screen" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\semi_transparent_grey">
+		<on event="a" run="port online exit"/>
+		<on event="b back" back="true"/>
+		<child widget="ce/quit/box"/>
 	</widget>
 
 	<!-- the COMMAND lobby: NETWORK, the map, OBJECTIVE, AI COMMANDER, SIDE, START COMMAND -->

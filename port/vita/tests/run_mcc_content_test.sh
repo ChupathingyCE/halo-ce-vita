@@ -48,17 +48,17 @@
 #                 greyed (halo_pc_menus.c), no assertion
 #      mcccplus   no Xbox file, Menu style Classic+ (after campaign, with its
 #                 profile): Classic+'s rows on MCC's main menu (CAMPAIGN
-#                 MULTIPLAYER SETTINGS MEDIA FORGE) and every screen behind
+#                 MULTIPLAYER PROFILES SETTINGS QUIT) and every screen behind
 #                 them the Xbox's as on the Xbox's files (classic/
 #                 xbox_screens.xml), no Halo 3 screen: SELECT PROFILE, LOAD
 #                 LEVEL, CHOOSE DIFFICULTY; split screen's START TO JOIN,
 #                 SELECT MAP (another map), SELECT GAMETYPE, lobby; SELECT
-#                 PROFILE TO EDIT, EDIT PROFILE SETTINGS and its pages; MEDIA;
+#                 PROFILE TO EDIT, EDIT PROFILE SETTINGS and its pages; SETTINGS;
 #                 FORGE's START FORGE playing MCC's Blood Gulch
 #      b30        mods\mcc_b30 started by the console from that menu, played
 #      campaign   CAMPAIGN, a new profile, the difficulty, with no Xbox map:
 #                 MCC's a10 starts (mods\mcc_a10)
-#      mccgames   (1.1.3) no Xbox file, Classic+: MEDIA > GAME MANAGER's GAMES
+#      mccgames   (1.1.3) no Xbox file, Classic+: SETTINGS > GAME MANAGER's GAMES
 #                 tab says Halo CE installed from MCC's files alone (its maps
 #                 counted, its PC files the custom_edition ones), nothing wrong
 #      bothgames  (1.1.3) the Xbox's maps and MCC's, Halo 3: START > MEDIA >
@@ -446,13 +446,13 @@ PY
 		fi
 
 		# mccgames / bothgames (1.1.3): GAME MANAGER's GAMES tab - where Halo CE was installed from, its
-		# maps counted and checked (game_manager.c), Triangle its details. Classic+: down three to MEDIA,
-		# down two to GAME MANAGER; Halo 3: Select (START), down three to GAME MANAGER
+		# maps counted and checked (game_manager.c), Triangle its details. Classic+: down three to SETTINGS
+		# (1.1.3's main menu), its first row on a PC GAME MANAGER; Halo 3: Select (START), down three to GAME MANAGER
 		mrun mccgames 32 no HALO_MENU_STYLE=classic \
-			"HALO_TEST_PAD=wait:150:5000 down:150:600 down:150:600 down:150:600 a wait:150:2500 down:150:600 down:150:600 a wait:150:5000 y wait:150:2500 b wait:150:2000"
+			"HALO_TEST_PAD=wait:150:5000 down:150:600 down:150:600 down:150:600 a wait:150:2500 a wait:150:5000 y wait:150:2500 b wait:150:2000"
 		log=$(menu_log mccgames)
 		if ! grep -aq "ui: screen pc.ce.mods.screen" "$log"; then
-			fail "mccgames: Classic+'s MEDIA > GAME MANAGER did not open ($out/mccgames)"
+			fail "mccgames: Classic+'s SETTINGS > GAME MANAGER did not open ($out/mccgames)"
 		elif ! grep -aqE "game manager: checked: Halo CE [1-9][0-9]* maps \(Xbox 0, MCC [1-9][0-9]*\), sources 2, 0 issues, PC files 7" "$log"; then
 			fail "mccgames: GAMES did not say Halo CE from MCC's files alone, all good ($out/mccgames)"
 		elif ! grep -aq "ui: screen pc.ce.mods.details" "$log"; then
@@ -502,16 +502,20 @@ PY
 		# the Xbox's screens as Classic+ has them on the Xbox's files (classic/xbox_screens.xml), never
 		# the Halo 3 set's: CAMPAIGN's SELECT PROFILE, LOAD LEVEL, CHOOSE DIFFICULTY; MULTIPLAYER, its
 		# SPLIT SCREEN's START TO JOIN, SELECT MAP (another map picked), SELECT GAMETYPE and lobby;
-		# SETTINGS' SELECT PROFILE TO EDIT, EDIT PROFILE SETTINGS and each of its pages (CONTROLLER
-		# SETUP, ADVANCED CONTROLS, CHANGE COLOR, MORE OPTIONS); MEDIA; EXTRAS' FORGE (its first row since
-		# 1.1.4's EXTRAS: FORGE, COMMAND, FIREFIGHT), its START FORGE playing MCC's Blood Gulch. Each backed out of to the main menu. The profile: campaign's.
+		# PROFILES' SELECT PROFILE TO EDIT, EDIT PROFILE SETTINGS and each of its pages (CONTROLLER
+		# SETUP, ADVANCED CONTROLS, CHANGE COLOR, MORE OPTIONS); SETTINGS; MULTIPLAYER > GAME MODES'
+		# FORGE (its first row; 1.1.3's main menu: CAMPAIGN, MULTIPLAYER, PROFILES, SETTINGS, QUIT, the
+		# rows Halo PC's own pictures), its START FORGE playing MCC's Blood Gulch. Each backed out of to
+		# the main menu. The profile: campaign's.
 		pad="wait:150:4000 a:150:3500 a:150:3500 a:150:3500 b:150:2500 b:150:2500 b:150:2500"
 		pad="$pad down:150:700 a:150:3500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500"
 		pad="$pad a:150:4000 start:150:2500 a:150:3000 a:150:4000 right:150:1500 a:150:4000 a:150:4000"
 		pad="$pad b:150:2500 b:150:2500 b:150:2500 b:150:2500 b:150:2500"
 		pad="$pad down:150:700 a:150:3000 a:150:3000 down:150:600 a:150:3000 b:150:2500 down:150:600 a:150:3000"
 		pad="$pad b:150:2500 down:150:600 a:150:3000 b:150:2500 down:150:600 a:150:3000 b:150:2500 b:150:2500 b:150:2500"
-		pad="$pad down:150:700 a:150:3000 b:150:2500 down:150:700 a:150:3500 a:150:4000 down:150:600 down:150:600 a:150:3000"
+		pad="$pad down:150:700 a:150:3000 b:150:2500 up:150:700 up:150:700 a:150:3500"
+		pad="$pad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500"
+		pad="$pad a:150:3500 a:150:4000 down:150:600 down:150:600 a:150:3000"
 		pad="$pad level:150:5000"
 		rm -rf "$out/mcccplus_save"
 		cp -a "$out/campaign/save" "$out/mcccplus_save" 2> /dev/null
@@ -531,7 +535,7 @@ PY
 		done
 		for screen in 'pc.mp.screen' 'pc.cp.xb.settings_select.player_setup.player_profile_edit.controller_edit.controller_options_screen' \
 			'pc.cp.xb.settings_select.player_setup.player_profile_edit.advanced_controls.advanced_controls_screen' \
-			'pc.cp.custom.screen' 'pc.ce.media.screen' 'pc.cp.forge.lobby'; do
+			'pc.cp.custom.screen' 'pc.ce.settings.screen' 'pc.ce.modes.screen' 'pc.cp.forge.lobby'; do
 			grep -aq "ui: screen $screen\$" "$log" || missing="$missing $screen"
 		done
 		if grep -aq "OpenCE's multiplayer screens not added" "$log"; then
@@ -551,7 +555,7 @@ PY
 		elif ! picture_drawn "$out/mcccplus"; then
 			fail "mcccplus: no picture drawn ($out/mcccplus)"
 		else
-			echo "mcccplus: MCC's ui.map alone, Classic+: the Xbox's screens for every row (SELECT PROFILE, LOAD LEVEL, CHOOSE DIFFICULTY; split screen's START TO JOIN, SELECT MAP, SELECT GAMETYPE, lobby; SELECT PROFILE TO EDIT, EDIT PROFILE SETTINGS and its pages), MEDIA, FORGE played; no Halo 3 screen"
+			echo "mcccplus: MCC's ui.map alone, Classic+: the Xbox's screens for every row (SELECT PROFILE, LOAD LEVEL, CHOOSE DIFFICULTY; split screen's START TO JOIN, SELECT MAP, SELECT GAMETYPE, lobby; SELECT PROFILE TO EDIT, EDIT PROFILE SETTINGS and its pages), SETTINGS, GAME MODES' FORGE played; no Halo 3 screen"
 		fi
 	fi
 	;;

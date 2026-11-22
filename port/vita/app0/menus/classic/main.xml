@@ -1,49 +1,66 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Menu style Halo CE: the Xbox's main menu with the port's rows (classic_patch: the map's list
-     itself while the style is Halo CE; Halo 3's main menu is menus/halo3/main.xml). CAMPAIGN,
-     MULTIPLAYER and SETTINGS are the game's own rows, as they are; MEDIA (File Share, Friends and
-     the Game Manager together, as ElDewrito's START > MEDIA) and EXTRAS (Forge, Command and
-     Firefight: classic/modes.xml) under them, the modes last (1.2.0 menu round 3, owner Nov 8;
-     1.1.4, 1.1.5), are words drawn in their look
-     (tools/classic_menu_art.py: 256 x 32, frame 0 not focused, 1 focused, as the game's column list
-     shows them), in the language chosen (classic/<lang>/, menu_tags.c "{lang}"; in English of the
-     game's own letters, menu_words.c), 29 pixels apart as the Xbox's three are 36 -->
+<!-- Menu style Classic+: the Xbox's main menu with Halo PC's five rows - CAMPAIGN, MULTIPLAYER,
+     PROFILES, SETTINGS and QUIT, as ChupathingyCE's main menu has them (owner, Nov 21: "bring back
+     profiles, settings and quit"; 1.1.3) - at Halo PC's own places, 36 pixels apart from 247 (MCC's
+     ui.map's main_menu_select_list; the Xbox's three were 36 apart from 235). classic_patch: the
+     map's list itself while the style is Classic+; Halo 3's main menu is menus/halo3/main.xml.
+     - CAMPAIGN and MULTIPLAYER are the game's own rows, as they are (MULTIPLAYER: OpenCE's screen,
+       whose GAME MODES row holds FORGE, FIREFIGHT, COMMAND and GAMETYPES PLUS: classic/modes.xml).
+     - PROFILES: what the Xbox's SETTINGS opened - SELECT PROFILE TO EDIT, then the profile's
+       settings (Halo PC's PROFILES).
+     - SETTINGS: the game's own SETTINGS row's look, opening Classic+'s SETTINGS screen
+       (classic/modes.xml: the settings panel's pages on the PS Vita, GAME MANAGER, FILE SHARE,
+       FRIENDS - 1.1.3's MEDIA).
+     - QUIT: the question in the Xbox's own look, then the game closes (classic/modes.xml).
+     On the Xbox's ui.map PROFILES and QUIT are words drawn in its rows' look (tools/
+     classic_menu_art.py: 256 x 32, frame 0 not focused, 1 focused, as the game's column list shows
+     them), in the language chosen (classic/<lang>/, menu_tags.c "{lang}"; in English of the game's
+     own letters, menu_words.c). On MCC's (Halo PC's) they are Halo PC's own (halo_pc=). -->
 <menus>
-	<bitmap name="ce/main/media_art">
-		<frame png="classic/{lang}/main_media_0.png" width="256" height="64"/>
-		<frame png="classic/{lang}/main_media_1.png" width="256" height="64"/>
+	<bitmap name="ce/main/profiles_art">
+		<frame png="classic/{lang}/main_profiles_0.png" width="256" height="64"/>
+		<frame png="classic/{lang}/main_profiles_1.png" width="256" height="64"/>
 	</bitmap>
-	<bitmap name="ce/main/modes_art">
-		<frame png="classic/{lang}/main_modes_0.png" width="256" height="64"/>
-		<frame png="classic/{lang}/main_modes_1.png" width="256" height="64"/>
+	<bitmap name="ce/main/quit_art">
+		<frame png="classic/{lang}/main_quit_0.png" width="256" height="64"/>
+		<frame png="classic/{lang}/main_quit_1.png" width="256" height="64"/>
 	</bitmap>
-	<widget name="ce/main/media" extends="ui\shell\main_menu\main_menu_item_settings" bitmap="ce/main/media_art">
-		<on event="a start" open="ce/media/screen"/>
+	<!-- (PROFILES: the Xbox's SETTINGS row's look and handler, in the words PROFILES) -->
+	<widget name="ce/main/profiles" extends="ui\shell\main_menu\main_menu_item_settings" bitmap="ce/main/profiles_art">
+		<on event="a start" open="ui\shell\main_menu\settings_select\player_setup\player_profile_select_screen" label="settings"/>
 	</widget>
-	<widget name="ce/main/modes" extends="ui\shell\main_menu\main_menu_item_settings" bitmap="ce/main/modes_art">
-		<on event="a start" open="ce/modes/screen"/>
+	<widget name="ce/main/settings" extends="ui\shell\main_menu\main_menu_item_settings">
+		<on event="a start" open="ce/settings/screen"/>
 	</widget>
-	<!-- (an MCC-only install: its ui.map is Halo PC's, whose CAMPAIGN, MULTIPLAYER and SETTINGS rows
-	     open Halo PC's own flows, which run Halo PC's functions - this build has not those. halo_pc=
-	     puts these in their place there: the map's rows' look, the Xbox's rows' handlers - CAMPAIGN and
-	     SETTINGS the Xbox's profile pickers, the Halo 3 set's for them as the map has not the Xbox's
-	     (menu_tags.c menu_tags_screen); MULTIPLAYER straight to its screen, as the Xbox's, without
-	     Halo PC's new-profile step first; rc.8) -->
+	<widget name="ce/main/quit" extends="ui\shell\main_menu\main_menu_item_settings" bitmap="ce/main/quit_art">
+		<on event="a start" open="ce/quit/screen"/>
+	</widget>
+	<!-- (an MCC-only install: its ui.map is Halo PC's, whose CAMPAIGN, MULTIPLAYER, PROFILES and
+	     SETTINGS rows open Halo PC's own flows, which run Halo PC's functions - this build has not
+	     those. halo_pc= puts these in their place there: the map's rows' look - Halo PC's own
+	     PROFILES and QUIT too -, the Xbox's rows' handlers - CAMPAIGN and PROFILES the Xbox's profile
+	     pickers, the Halo 3 set's for them as the map has not the Xbox's (menu_tags.c
+	     menu_tags_screen); MULTIPLAYER straight to its screen, as the Xbox's, without Halo PC's
+	     new-profile step first; rc.8. On the Xbox's ui.map, which has not Halo PC's PROFILES and
+	     QUIT rows, these two are empty and not used) -->
 	<widget name="ce/main/campaign_pc" extends="ui\shell\main_menu\main_menu_item_load_camp">
 		<on event="a start" run="new game if no plyr profiles" open="ui\shell\main_menu\load_campaign_player_profile" branch="true" label="load_campaign"/>
 	</widget>
 	<widget name="ce/main/multiplayer_pc" extends="ui\shell\main_menu\main_menu_item_multiplayer">
 		<on event="a start" open="ui\shell\main_menu\multiplayer_type_select\multiplayer_type_select_screen" label="multiplayer"/>
 	</widget>
-	<widget name="ce/main/settings_pc" extends="ui\shell\main_menu\main_menu_item_settings">
+	<widget name="ce/main/profiles_pc" extends="ui\shell\main_menu\main_menu_item_profile">
 		<on event="a start" open="ui\shell\main_menu\settings_select\player_setup\player_profile_select_screen" label="settings"/>
+	</widget>
+	<widget name="ce/main/quit_pc" extends="ui\shell\main_menu\main_menu_item_quit_game">
+		<on event="a start" open="ce/quit/screen"/>
 	</widget>
 	<widget name="ce/main/list" extends="ui\shell\main_menu\main_menu_select_list" classic_patch="true" drop="children">
 		<on event="start" run="port settings panel"/>
-		<child widget="ui\shell\main_menu\main_menu_item_load_camp" halo_pc="ce/main/campaign_pc" x="194" y="235"/>
-		<child widget="ui\shell\main_menu\main_menu_item_multiplayer" halo_pc="ce/main/multiplayer_pc" x="192" y="264"/>
-		<child widget="ui\shell\main_menu\main_menu_item_settings" halo_pc="ce/main/settings_pc" x="192" y="293"/>
-		<child widget="ce/main/media" x="192" y="322"/>
-		<child widget="ce/main/modes" x="192" y="351"/>
+		<child widget="ui\shell\main_menu\main_menu_item_load_camp" halo_pc="ce/main/campaign_pc" x="194" y="247"/>
+		<child widget="ui\shell\main_menu\main_menu_item_multiplayer" halo_pc="ce/main/multiplayer_pc" x="192" y="283"/>
+		<child widget="ce/main/profiles" halo_pc="ce/main/profiles_pc" x="192" y="319"/>
+		<child widget="ce/main/settings" x="192" y="355"/>
+		<child widget="ce/main/quit" halo_pc="ce/main/quit_pc" x="192" y="391"/>
 	</widget>
 </menus>

@@ -634,6 +634,8 @@ enum
 	_input_command_prepare,
 	/* (1.1.4 polish: the Forge menu's LEAVE screen in a Command game) */
 	_input_forge_leave_text,
+	/* (1.1.3: Menu style Classic+'s SETTINGS, classic/modes.xml) */
+	_input_ce_settings,
 };
 
 /* what a line of typing is for */
@@ -24346,6 +24348,56 @@ static boolean start_hub_panel(struct widget_instance *widget)
 #endif
 }
 
+/* ---- Menu style Classic+'s SETTINGS (classic/modes.xml, the main menu's SETTINGS since 1.1.3)
+
+(port ce settings, its list) the settings panel's rows - the START hub's of the same names, each the
+panel at its page (port start panel) - only where there is a panel, the PS Vita: elsewhere they are
+not shown and the rows after them take their places from the top, 32 apart as the list has them; the
+focus on a row shown; the focused row's words (the START hub's) in the panel at the right */
+static void ce_settings_update(struct widget_instance *list)
+{
+	static char said[32];
+	struct widget_instance *screen = screen_of(list), *child, *first_shown = NULL;
+	short top, pitch, place = 0;
+	int row;
+
+	if (!list->child || !list->child->next)
+		return;
+	/* (the first row's place - that row a panel's, so never moved where any is - and the list's step) */
+	top = list->child->vertical_offset;
+	pitch = (short)(list->child->next->vertical_offset - top);
+	for (child = list->child; child; child = child->next)
+	{
+		boolean shown = TRUE;
+
+		row = start_row_of(child);
+#if !defined(HALO_VITA)
+		shown = row == NONE || !start_rows[row].panel;
+#endif
+		if (!shown)
+		{
+			if (child->visible || !child->disabled)
+			{
+				widget_instance_set_visibility_recursive(child, FALSE);
+				child->disabled = TRUE;
+			}
+			continue;
+		}
+		if (!first_shown)
+			first_shown = child;
+		child->vertical_offset = (short)(top + pitch * place++);
+	}
+	if (first_shown && (!list->focused_child || list->focused_child->disabled))
+		ui_widget_port_give_focus(list, first_shown);
+	row = start_row_of(list->focused_child);
+	classic_text_fit(named(screen, "desc"), row != NONE ? T(start_rows[row].description) : "");
+	if (row != NONE && strcmp(start_rows[row].row, said))
+	{
+		snprintf(said, sizeof(said), "%s", start_rows[row].row);
+		platform_log("menus: ce settings: %s", start_rows[row].row);
+	}
+}
+
 /* (port cascade forge, port cascade missions...: a picker opened on the lobby's choice) */
 static boolean cascade_open(struct cascade_kind const *kind)
 {
@@ -26240,6 +26292,10 @@ void pc_menu_game_data_function_invoke(
 		break;
 	case _input_forge_controls:
 		h3_forge_controls_update(widget);
+		break;
+	case _input_ce_settings:
+		if (widget->type == _ui_widget_type_column_list)
+			ce_settings_update(widget);
 		break;
 	case _input_forge_leave_text:
 		h3_forge_leave_text_update(widget);

@@ -37,10 +37,15 @@ Menu style Halo CE's additions (classic/)
   style is Halo CE, and the map's own again while it is Halo 3 (menu_tags.c
   swaps the tag's definition as each screen opens), so the Xbox screen keeps
   its name, history and look and the Halo 3 menus are as they were.
-- main.xml: the main menu's FORGE, FRIENDS (its PARTY row; the friend code
-  and its backup), FILE SHARE and MOD MANAGER under SETTINGS, each opening the
-  port's screen (halo3/forge_lobby.xml, friends.xml; classic/fileshare.xml,
-  mods.xml).
+- main.xml: the main menu as Halo PC's and ChupathingyCE's - CAMPAIGN,
+  MULTIPLAYER, PROFILES, SETTINGS, QUIT, at Halo PC's own places (1.1.3, owner
+  Nov 21). PROFILES is what the Xbox's SETTINGS opened (SELECT PROFILE TO
+  EDIT); SETTINGS opens modes.xml's SETTINGS (the settings panel's pages on
+  the PS Vita, GAME MANAGER, FILE SHARE, FRIENDS); QUIT asks, then closes the
+  game. On MCC's ui.map PROFILES and QUIT are Halo PC's own rows' pictures.
+- modes.xml: SETTINGS, GAME MODES (OpenCE's Multiplayer screen's ninth row:
+  FORGE, COMMAND, FIREFIGHT and GAMETYPES PLUS - 1.1.3's main menu EXTRAS), the
+  QUIT question, and the COMMAND and FIREFIGHT lobbies.
 - fileshare.xml, mods.xml: the main menu's FILE SHARE and MOD MANAGER in
   the look of the Xbox's list screens (ui.map's gradient, list_item_bkd,
   list_field, alert_bkd, large_ui and small_ui; the headings drawn by
@@ -58,17 +63,17 @@ Menu style Halo CE's additions (classic/)
   classic/<name> screen opens in place of halo3/'s h3/<name> while the Menu
   style is Halo CE (menu_tags.c's classic set), its parts ce/<screen>/...
   named as the Halo 3 set's, so the same functions fill them.
-- OpenCE's Multiplayer screen's GAMETYPES PLUS (multiplayer.xml: the
-  Halo 3 GAME TYPES, Infection's rules too) and Server Setup's BOTS
-  (setup.xml) are theirs.
+- OpenCE's Multiplayer screen's GAME MODES (multiplayer.xml: modes.xml's
+  screen, its GAMETYPES PLUS the Halo 3 GAME TYPES, Infection's rules too)
+  and Server Setup's BOTS (setup.xml) are theirs.
 - No Bungie picture or line of text is added: the new rows' words are the
   port's (translated, lang/), drawn in the map's own fonts or as pictures of
   the port's own (tools/classic_menu_art.py, Saira Semi Condensed, SIL OFL):
-  the main menu's new rows and LOBBY OPTIONS's heading in the look of the
-  game's, one set per language - in English the main menu's rows are made,
-  as the menus load, of the very letters of the player's ui.map's own
-  CAMPAIGN, MULTIPLAYER, SETTINGS and GAME DEMOS (port/linux/game/
-  menu_words.c, kept in the data folder; the pictures here the fallback),
+  the main menu's new rows (PROFILES, QUIT) and LOBBY OPTIONS's heading in
+  the look of the game's, one set per language - in English the main menu's
+  rows are made, as the menus load, of the very letters of the player's
+  ui.map's own CAMPAIGN, MULTIPLAYER, SETTINGS and GAME DEMOS (port/linux/
+  game/menu_words.c, kept in the data folder; the pictures here the fallback),
   and the headings of the port's screens (classic/<lang>/header_*.png) are
   set, as the menus load, in the letters of the player's ui.map's own
   screen headings (CHOOSE DIFFICULTY, SELECT GAMETYPE, ...), at their size

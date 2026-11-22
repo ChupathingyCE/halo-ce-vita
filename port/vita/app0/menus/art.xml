@@ -32,7 +32,7 @@
 		<string text="JOIN BY CODE"/>
 		<string text="CO-OP CAMPAIGN"/>
 		<string text="SPLIT SCREEN"/>
-		<string text="GAMETYPES PLUS"/>
+		<string text="GAME MODES"/>
 	</strings>
 	<strings name="mp_descriptions">
 		<string text="Join a public game on the Internet:\nthe server browser lists them."/>
@@ -43,7 +43,7 @@
 		<string text="Host the campaign for up to three\nothers: pick a level and a\ndifficulty, then press %y-button."/>
 		<string text="Play with several controllers\non this screen."/>
 		<string text="Set all the attributes for your\nmultiplayer gametypes and keep\nthem for future use."/>
-		<string text="Every gametype, Infection's too:\nmake new ones from any base and\nset all of their rules."/>
+		<string text="Forge, Command and Firefight;\nGAMETYPES PLUS: every gametype,\nInfection's too, and all its rules."/>
 	</strings>
 	<strings name="offline">
 		<string text="Internet play is off.\n\nOpen the settings panel (SELECT + DOWN),\nMultiplayer tab, set Connection to Online,\nthen restart the game."/>
