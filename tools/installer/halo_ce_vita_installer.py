@@ -92,7 +92,7 @@ if not getattr(sys, "frozen", False):
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "release"))
 import ed25519_rfc8032 as ed25519  # noqa: E402
 
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 RELEASES_URL = "https://github.com/ChupathingyCE/halo-ce-vita/releases/latest"
 CE_INSTALLER_URL = "https://www.halomaps.org/hce/detail.cfm?fid=410"
 
