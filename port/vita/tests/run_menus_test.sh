@@ -4000,8 +4000,8 @@ PY
 		done
 		# (on: GAME MODES' COMMAND and FIREFIGHT - down once and twice from FORGE - open their lobbies,
 		# each EXPERIMENTAL, its maps Blood Gulch alone)
-		for row in "command|$modes $d|pc.cp.command.lobby|EXPERIMENTAL: Command on Blood Gulch" \
-			"firefight|$modes $d $d|pc.cp.firefight.lobby|EXPERIMENTAL: Firefight on Blood Gulch"; do
+		for row in "command|$modes $d|pc.cp.command.lobby|EXPERIMENTAL: Command$" \
+			"firefight|$modes $d $d|pc.cp.firefight.lobby|EXPERIMENTAL: Firefight$"; do
 			IFS='|' read -r name presses screen caption <<< "$row"
 			run "experimental_on_$name" "$menus_data" 44 "wait:150:3000 $presses a:150:5000 b:150:3000 b:150:3000 b:150:3000" \
 				HALO_SCENE_PACKS=0 HALO_EXPERIMENTAL_MODES=true

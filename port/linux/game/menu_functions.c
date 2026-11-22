@@ -3533,12 +3533,13 @@ static void h3_forge_lobby_update(struct widget_instance *widget)
 		}
 	}
 	/* (1.1.3: Command and Firefight marked experimental in their lobbies) */
+	/* (one line in Classic+'s panel: the map is the MAP row's and the picture's) */
 	if (h3_forge.mode == H3_FORGE_MODE_COMMAND)
-		snprintf(text, sizeof(text), T("EXPERIMENTAL: Command on %s"), T(forge_map_name(h3_forge.map)));
+		snprintf(text, sizeof(text), "%s", T("EXPERIMENTAL: Command"));
 	else if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT && !h3_forge.variant_file[0])
-		snprintf(text, sizeof(text), T("EXPERIMENTAL: Firefight on %s"), T(forge_map_name(h3_forge.map)));
+		snprintf(text, sizeof(text), "%s", T("EXPERIMENTAL: Firefight"));
 	else if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT)
-		snprintf(text, sizeof(text), T("EXPERIMENTAL: %s on %s"), h3_forge.variant_title, T(forge_map_name(h3_forge.map)));
+		snprintf(text, sizeof(text), T("EXPERIMENTAL: %s"), h3_forge.variant_title);
 	else if (h3_forge.variant_file[0])
 		snprintf(text, sizeof(text), T("%s on %s"), h3_forge.variant_title, T(forge_map_name(h3_forge.map)));
 	else
