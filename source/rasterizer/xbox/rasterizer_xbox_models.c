@@ -558,6 +558,32 @@ static boolean local_environment_fog_screen_flag = FALSE;
 static boolean local_do_not_change_z_stencil_states = FALSE;
 static boolean local_reported_too_many_transparent_geometry_groups = FALSE;
 static boolean local_pixel_shader_dirty_flag = TRUE;
+#ifdef HALO_CONSOLE_MODEL_PARTS
+/* (port) what a model's parts share, worked out at its first part and kept
+until the next rasterizer_model_begin: the camera's distance to the model's
+centroid, the fog's combiner colours (from that distance and the window's
+fog), and the seeded phase of the self-illumination (from the model's
+unique identifier) - each part worked them out again, the same */
+static boolean local_model_constants_valid = FALSE;
+static real local_model_camera_distance;
+static boolean local_model_fog_valid = FALSE;
+static pixel32 local_model_cc0_pixel, local_model_cc0_error_pixel, local_model_cc1_pixel;
+static boolean local_model_phase_valid = FALSE;
+static real local_model_self_illumination_phase;
+#endif
+#ifdef HALO_CONSOLE_MODEL_PARTS
+/* (port) the device's count of state changes (halo_d3d_state_serial, the
+console's renderer's) when the last part had set its states: while it is the
+same, no draw changed a state since, and the states every part sets alike
+(the culling, the colour writes, the blend function, the alpha reference,
+the stages' addressing and filters) are as that part left them */
+unsigned long halo_d3d_state_serial(void);
+static boolean local_static_states_valid = FALSE;
+static unsigned long local_static_states_serial;
+#define MODEL_STATIC_STATE if (set_static_states)
+#else
+#define MODEL_STATIC_STATE
+#endif
 extern boolean rasterizer_model_cortana_hack;
 
 #ifdef HALO_CUSTOM_EDITION
@@ -619,6 +645,9 @@ void _rasterizer_models_begin(
 	if (rasterizer_debug_options.draw_models)
 	{
 		local_pixel_shader_dirty_flag = TRUE;
+#ifdef HALO_CONSOLE_MODEL_PARTS
+		local_static_states_valid = FALSE;
+#endif
 		local_sky_flag = sky;
 		if (sky)
 		{
@@ -705,6 +734,11 @@ void _rasterizer_model_begin(
 
 		local_parameters = parameters;
 		local_parameters_queued_flag = FALSE;
+#ifdef HALO_CONSOLE_MODEL_PARTS
+		local_model_constants_valid = FALSE;
+		local_model_fog_valid = FALSE;
+		local_model_phase_valid = FALSE;
+#endif
 		local_do_not_change_z_stencil_states =
 			do_not_change_z_stencil_states;
 
@@ -1661,6 +1695,9 @@ void _rasterizer_model_draw(
 	struct transparent_geometry_group *group;
 	struct shader_model_definition *shader_model;
 	boolean alpha_blended_decal;
+#ifdef HALO_CONSOLE_MODEL_PARTS
+	boolean set_static_states = TRUE;
+#endif
 	real_vector3d camera_to_model;
 	real camera_distance;
 	real reflection_fraction;
@@ -1789,6 +1826,18 @@ void _rasterizer_model_draw(
 					771,
 					local_model_effect_type==_render_model_effect_type_none);
 
+#ifdef HALO_CONSOLE_MODEL_PARTS
+				set_static_states = !local_static_states_valid ||
+					halo_d3d_state_serial() != local_static_states_serial;
+#endif
+#ifdef HALO_CONSOLE_MODEL_PARTS
+				if (local_model_constants_valid)
+				{
+					camera_distance = local_model_camera_distance;
+				}
+				else
+#endif
+				{
 				vector_from_points3d(
 					&global_window_parameters.camera.position,
 					&local_parameters->centroid,
@@ -1796,6 +1845,11 @@ void _rasterizer_model_draw(
 				camera_distance = dot_product3d(
 					&camera_to_model,
 					&global_window_parameters.camera.forward);
+#ifdef HALO_CONSOLE_MODEL_PARTS
+				local_model_camera_distance = camera_distance;
+				local_model_constants_valid = TRUE;
+#endif
+				}
 
 				if (shader_model->model.reflection_cutoff_distance != 0.0f)
 				{
@@ -1847,10 +1901,12 @@ void _rasterizer_model_draw(
 							0);
 				}
 
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetRenderState(
 					global_d3d_device,
 					D3DRS_CULLMODE,
 					D3DCULL_CCW);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetRenderState(
 					global_d3d_device,
 					D3DRS_COLORWRITEENABLE,
@@ -1861,14 +1917,17 @@ void _rasterizer_model_draw(
 					global_d3d_device,
 					D3DRS_ALPHABLENDENABLE,
 					alpha_blended_decal);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetRenderState(
 					global_d3d_device,
 					D3DRS_SRCBLEND,
 					D3DBLEND_SRCALPHA);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetRenderState(
 					global_d3d_device,
 					D3DRS_DESTBLEND,
 					D3DBLEND_INVSRCALPHA);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetRenderState(
 					global_d3d_device,
 					D3DRS_BLENDOP,
@@ -1880,6 +1939,7 @@ void _rasterizer_model_draw(
 					!TEST_FLAG(
 						shader_model->model.flags,
 						_shader_model_not_alpha_tested_bit));
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetRenderState(
 					global_d3d_device,
 					D3DRS_ALPHAREF,
@@ -1891,14 +1951,19 @@ void _rasterizer_model_draw(
 					1,
 					shader_model->model.base_map.index,
 					shader_permutation_index);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 0, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 0, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 0, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 0, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 0, D3DTSS_MIPFILTER, D3DTEXF_LINEAR);
 
@@ -1908,14 +1973,19 @@ void _rasterizer_model_draw(
 					2,
 					shader_model->model.detail_map.index,
 					shader_permutation_index);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 1, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 1, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 1, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 1, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetTextureStageState(
 					global_d3d_device, 1, D3DTSS_MIPFILTER, D3DTEXF_LINEAR);
 
@@ -1932,14 +2002,19 @@ void _rasterizer_model_draw(
 					1,
 					shader_model->model.multipurpose_map.index,
 					shader_permutation_index);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					2, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					2, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					2, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					2, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					2, D3DTSS_MIPFILTER, D3DTEXF_LINEAR);
 
@@ -1949,16 +2024,22 @@ void _rasterizer_model_draw(
 					0,
 					shader_model->model.reflection_cube_map.index,
 					shader_permutation_index);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					3, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					3, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					3, D3DTSS_ADDRESSW, D3DTADDRESS_CLAMP);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					3, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					3, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
+				MODEL_STATIC_STATE
 				SetTextureStageStateSmart(
 					3, D3DTSS_MIPFILTER, D3DTEXF_LINEAR);
 
@@ -1971,7 +2052,20 @@ void _rasterizer_model_draw(
 				}
 				else
 				{
+#ifdef HALO_CONSOLE_MODEL_PARTS
+					if (local_model_phase_valid)
+					{
+						self_illumination_phase = local_model_self_illumination_phase;
+					}
+					else
+					{
+						self_illumination_phase = real_seed_random(&seed);
+						local_model_self_illumination_phase = self_illumination_phase;
+						local_model_phase_valid = TRUE;
+					}
+#else
 					self_illumination_phase = real_seed_random(&seed);
+#endif
 				}
 
 				match_assert(
@@ -2259,6 +2353,16 @@ void _rasterizer_model_draw(
 					1077,
 					global_window_parameters.fog.planar_maximum_depth>0.0f);
 
+#ifdef HALO_CONSOLE_MODEL_PARTS
+				if (local_model_fog_valid)
+				{
+					cc0_pixel = local_model_cc0_pixel;
+					cc0_error_pixel = local_model_cc0_error_pixel;
+					cc1_pixel = local_model_cc1_pixel;
+				}
+				else
+				{
+#endif
 				if (rasterizer_debug_options.draw_environment_fog &&
 					!TEST_FLAG(
 						local_parameters->geometry_flags,
@@ -2379,6 +2483,13 @@ void _rasterizer_model_draw(
 					cc0_error_pixel = 0xFF000000;
 					cc0_pixel = 0xFF000000;
 				}
+#ifdef HALO_CONSOLE_MODEL_PARTS
+				local_model_cc0_pixel = cc0_pixel;
+				local_model_cc0_error_pixel = cc0_error_pixel;
+				local_model_cc1_pixel = cc1_pixel;
+				local_model_fog_valid = TRUE;
+				}
+#endif
 
 				set_environment_shader_pixel_shader(
 					real_rgb_color_to_pixel32(&self_illumination_color),
@@ -2398,10 +2509,15 @@ void _rasterizer_model_draw(
 				/* port: the Assault Rifle screen's draw brighter (Light effects) */
 				ammo_counter_lighting_draw_begin(shader, pixel_shader.rgb_outputs[7]);
 
+				MODEL_STATIC_STATE
 				IDirect3DDevice8_SetRenderState(
 					global_d3d_device,
 					D3DRS_CULLMODE,
 					D3DCULL_CCW);
+#ifdef HALO_CONSOLE_MODEL_PARTS
+				local_static_states_serial = halo_d3d_state_serial();
+				local_static_states_valid = TRUE;
+#endif
 
 				rasterizer_draw(
 					triangle_buffer,
@@ -2427,6 +2543,13 @@ void _rasterizer_model_draw(
 						shader_model->model.flags,
 						_shader_model_two_sided_bit))
 				{
+#ifdef HALO_CONSOLE_MODEL_PARTS
+					/* (port) the second pass's constants are the first's but
+					for the winding's sign: the texture transform (registers 1
+					and 2), evaluated from the same shader, parameters and time,
+					is the one the first pass left there */
+					vertex_constants[0].n[3] = -1.0f;
+#else
 					vertex_constants[0].n[0] =
 						shader_model->model.detail_map_scale;
 					vertex_constants[0].n[1] =
@@ -2458,6 +2581,7 @@ void _rasterizer_model_draw(
 						&vertex_constants[2]);
 					vertex_constants[2].n[2] =
 						shader_model->model.translucency;
+#endif
 
 					IDirect3DDevice8_SetVertexShaderConstant(
 						global_d3d_device,
