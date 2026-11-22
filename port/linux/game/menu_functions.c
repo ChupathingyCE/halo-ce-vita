@@ -9695,7 +9695,12 @@ static void multiplayer_update(struct widget_instance *list)
 
 		if (picture)
 			picture->animation.current_frame_index = multiplayer_pictures[index % NUMBEROF(multiplayer_pictures)];
-		string_show(text, index);
+		/* (1.1.3: GAME MODES' words, the ninth row's, without Command and
+		Firefight while they are off: experimental_modes.h) */
+		if (index == 8 && !experimental_modes_on())
+			text_show(text, T("Forge;\nGAMETYPES PLUS: every gametype,\nInfection's too, and all its rules."));
+		else
+			string_show(text, index);
 	}
 }
 

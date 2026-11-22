@@ -3809,3 +3809,4 @@
 "Command + Firefight: unfinished, may have bugs, Blood Gulch only" = "Mando + Firefight: sin terminar, puede tener fallos, solo Blood Gulch"
 "Experimental: lead squads in battle on Blood Gulch" = "Experimental: dirige escuadras en Blood Gulch"
 "Experimental: survive waves of the Covenant on Blood Gulch" = "Experimental: resiste oleadas del Covenant en Blood Gulch"
+"Forge;\nGAMETYPES PLUS: every gametype,\nInfection's too, and all its rules." = "Forja;\nTIPOS DE JUEGO+: todos los tipos\nde juego, Infección también, y sus reglas."
