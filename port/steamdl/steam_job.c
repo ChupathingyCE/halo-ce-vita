@@ -35,6 +35,8 @@ steam_job.h: the download's worker thread and its snapshot.
 #endif
 /* a lost session starts the flow again with a new QR, at most this often */
 #define JOB_RESTARTS 2
+/* (sleeps of the device in one job that each start the flow again) */
+#define JOB_SLEEPS_MAXIMUM 50
 #define CM_DIRECTORY_URL "https://api.steampowered.com/ISteamDirectory/GetCMListForConnect/v1/?cellid=0&cmtype=websockets"
 
 int posix_https_get(const char *url, const char *user_agent, char *body, int capacity, char *error, int error_size);
@@ -44,6 +46,10 @@ static struct
 	pthread_mutex_t lock;
 	int running;
 	volatile int cancel;
+	/* (the device asleep: the power button or a system suspend - steam_job_sleep) asleep now; slept: a sleep came
+	during this sign-in (its failure then starts the flow again, not counted); battery_stop: a low battery ended it */
+	volatile int asleep;
+	int slept, sleeps, battery_stop;
 	struct steam_job_status status;
 	struct steam_job_options options;
 	/* the rate's last sample */
@@ -66,7 +72,7 @@ static struct
 		int details_picture;
 		struct steam_job_workshop_details details;
 	} workshop;
-} job = { PTHREAD_MUTEX_INITIALIZER, 0, 0, { 0 }, { 0 }, 0, 0, 0, { 0 } };
+} job = { PTHREAD_MUTEX_INITIALIZER, 0, 0, 0, 0, 0, 0, { 0 }, { 0 }, 0, 0, 0, { 0 } };
 
 /* (the browser's pictures: the job thread's, under job.lock; freed as the page changes and when the job ends) */
 static struct
@@ -519,8 +525,10 @@ static int progress(void *context, uint64_t done, uint64_t total, const char *fi
 	if (!job.cancel)
 		platform.keep_awake();
 	pthread_mutex_lock(&job.lock);
-	if (file && !job.cancel)
+	if (file && !job.cancel && !job.asleep)
 	{
+		if (job.status.asleep == 2 && done != job.status.done)
+			job.status.asleep = 0;
 		job.status.phase = STEAM_JOB_DOWNLOADING;
 		job.status.done = done;
 		job.status.total = total;
@@ -547,16 +555,17 @@ static int progress(void *context, uint64_t done, uint64_t total, const char *fi
 
 static int device_gate(void *context)
 {
-	int low = platform.battery_low();
+	int low = platform.battery_low(), hold;
 
 	(void)context;
 	pthread_mutex_lock(&job.lock);
-	if (low && job.status.phase == STEAM_JOB_DOWNLOADING)
+	hold = low || job.asleep;
+	if (hold && job.status.phase == STEAM_JOB_DOWNLOADING)
 		job.status.phase = STEAM_JOB_PAUSED;
-	else if (!low && job.status.phase == STEAM_JOB_PAUSED)
+	else if (!hold && job.status.phase == STEAM_JOB_PAUSED)
 		job.status.phase = STEAM_JOB_DOWNLOADING;
 	pthread_mutex_unlock(&job.lock);
-	return low && !job.cancel;
+	return hold && !job.cancel;
 }
 
 static void log_line(void *context, const char *line)
@@ -1265,6 +1274,27 @@ static void *worker(void *unused)
 		say("steam job: %s %d ended: %s (revoked %d, logged off %d, kept on this device %d)",
 			options.sign_out ? "sign-out" : "sign-in", attempt + 1, result.ok ? "done" : result.error, result.revoked,
 			result.logged_off, result.kept);
+		if (!result.ok && !result.cancelled && !job.cancel && !options.sign_out && job.slept &&
+			job.sleeps <= JOB_SLEEPS_MAXIMUM)
+		{
+			/* (the device slept during it: its connections died with the suspend - whatever failed, the flow starts again
+			from what is on the card, the kept sign-in reused; not one of the lost session's restarts) */
+			pthread_mutex_lock(&job.lock);
+			job.slept = 0;
+			pthread_mutex_unlock(&job.lock);
+			while (job.asleep && !job.cancel)
+			{
+				struct timespec step = { 0, 250 * 1000 * 1000 };
+
+				nanosleep(&step, NULL);
+			}
+			if (job.cancel)
+				break;
+			say("steam job: the device slept during the download: connecting again (the download carries on)");
+			memset(&result, 0, sizeof(result));
+			attempt--;
+			continue;
+		}
 		if (result.ok || result.cancelled || job.cancel || !result.session_lost || options.sign_out)
 			break;
 		say(result.kept ? "steam job: the session was lost: connecting again with the kept sign-in (the download resumes)" :
@@ -1278,7 +1308,10 @@ static void *worker(void *unused)
 		result.ok = 0;
 		snprintf(result.error, sizeof(result.error), "The Steam session was lost");
 	}
-	final_phase = result.ok ? STEAM_JOB_DONE : result.cancelled || job.cancel ? STEAM_JOB_CANCELLED : STEAM_JOB_FAILED;
+	final_phase = result.ok ? STEAM_JOB_DONE : job.battery_stop ? STEAM_JOB_FAILED :
+		result.cancelled || job.cancel ? STEAM_JOB_CANCELLED : STEAM_JOB_FAILED;
+	if (!result.ok && job.battery_stop)
+		snprintf(result.error, sizeof(result.error), "The battery is low: the download stopped. What it got is kept.");
 	{
 		static const char *const names[] = { "VZa LZMA", "VSZa zstd", "zip" };
 		int kind;
@@ -1341,6 +1374,8 @@ int steam_job_start(const struct steam_job_options *options)
 	job.status.phase = STEAM_JOB_CONNECTING;
 	job.status.seconds_left = -1;
 	job.cancel = 0;
+	job.asleep = 0;
+	job.slept = job.sleeps = job.battery_stop = 0;
 	job.running = 1;
 	pthread_attr_init(&attributes);
 	pthread_attr_setstacksize(&attributes, JOB_STACK_BYTES);
@@ -1376,6 +1411,41 @@ void steam_job_cancel(void)
 		busy_release();
 		say("steam job: cancelled by the player (stopping; the PS button unlocked)");
 	}
+}
+
+void steam_job_sleep(int asleep)
+{
+	if (!job.running)
+		return;
+	pthread_mutex_lock(&job.lock);
+	if (asleep && !job.asleep)
+	{
+		job.asleep = 1;
+		job.slept = 1;
+		job.sleeps++;
+		job.status.asleep = 1;
+		if (job.status.phase == STEAM_JOB_DOWNLOADING)
+			job.status.phase = STEAM_JOB_PAUSED;
+	}
+	else if (!asleep && job.asleep)
+	{
+		job.asleep = 0;
+		job.status.asleep = 2;
+	}
+	pthread_mutex_unlock(&job.lock);
+	say(asleep ? "steam job: the device sleeps: the download pauses (what it got is kept; it carries on after the wake)" :
+		"steam job: the device woke: the download carries on");
+}
+
+void steam_job_stop_battery(int timeout_ms)
+{
+	if (!job.running)
+		return;
+	pthread_mutex_lock(&job.lock);
+	job.battery_stop = 1;
+	pthread_mutex_unlock(&job.lock);
+	say("steam job: the battery is low: the download stops (what it got is kept)");
+	steam_job_abort(timeout_ms);
 }
 
 void steam_job_abort(int timeout_ms)
@@ -1435,6 +1505,7 @@ void steam_job_view(struct steam_job_view *view)
 	view->sign_out = status.sign_out;
 	view->signed_out = status.signed_out;
 	view->signin_found = status.signin_found;
+	view->asleep = status.asleep;
 	steam_wipe(status.qr, sizeof(status.qr));
 }
 

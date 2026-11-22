@@ -313,6 +313,232 @@ static int cancelled_now(const struct steam_download_callbacks *callbacks, uint6
 	return callbacks->progress && callbacks->progress(callbacks->context, done, total, NULL);
 }
 
+/* ---------- the verified files' record (1.1.3: the owner's 8d test spent 11 minutes reading 2.7 GB already on the
+card at every start). After a file is checked whole or written and checked, its size, modification time and SHA-1 go
+into <app root>/steam-verified.txt; at a later start a file whose record matches - the manifest's SHA-1 for it, its
+size, the size and time on the card - is taken as there without reading it. Anything else (no record, a changed
+time or size, another SHA-1 in the manifest: a new version) gets the whole check. The record is one file written
+whole (a temporary, then renamed); a record that does not read exactly is dropped: every file checked again */
+
+#define RECORD_MAGIC "steamdl-verified 1"
+#define RECORD_ENTRIES_MAXIMUM 8192
+#define RECORD_KEY_MAXIMUM 224
+#define RECORD_BYTES_MAXIMUM (2u << 20)
+
+struct record_entry
+{
+	char key[RECORD_KEY_MAXIMUM];
+	uint64_t size;
+	long long mtime;
+	uint8_t sha[20];
+};
+
+static struct
+{
+	char path[STEAM_PATH_MAXIMUM];
+	struct record_entry *entries;
+	int count, dirty, loaded;
+	time_t saved;
+} record;
+
+static int hex_value(char c)
+{
+	return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
+}
+
+static void record_free(void)
+{
+	free(record.entries);
+	memset(&record, 0, sizeof(record));
+}
+
+/* the record of app_root read (once per depot run): its entries, or none if anything in it does not read */
+static void record_load(const struct steam_download_options *options, const struct steam_download_callbacks *callbacks)
+{
+	FILE *file;
+	char *text = NULL, *line, *next;
+	long size;
+	int bad = 0;
+
+	record_free();
+	record.loaded = 1;
+	record.entries = calloc(RECORD_ENTRIES_MAXIMUM, sizeof(*record.entries));
+	if (!record.entries || snprintf(record.path, sizeof(record.path), "%s/steam-verified.txt", options->app_root) >=
+		(int)sizeof(record.path))
+	{
+		record_free();
+		return;
+	}
+	file = fopen(record.path, "rb");
+	if (!file)
+		return;
+	if (fseek(file, 0, SEEK_END) != 0 || (size = ftell(file)) < 0 || size > (long)RECORD_BYTES_MAXIMUM ||
+		fseek(file, 0, SEEK_SET) != 0 || !(text = malloc((size_t)size + 1)) || fread(text, 1, (size_t)size, file) != (size_t)size)
+	{
+		bad = 1;
+	}
+	fclose(file);
+	if (!bad)
+	{
+		text[size] = 0;
+		bad = strncmp(text, RECORD_MAGIC "\n", sizeof(RECORD_MAGIC)) != 0;
+	}
+	for (line = bad ? NULL : text + sizeof(RECORD_MAGIC); line && *line && !bad; line = next)
+	{
+		struct record_entry *entry;
+		char *end;
+		int index;
+
+		next = strchr(line, '\n');
+		if (!next)
+		{
+			bad = 1;
+			break;
+		}
+		*next++ = 0;
+		if (record.count >= RECORD_ENTRIES_MAXIMUM || strlen(line) < 46 || line[40] != ' ')
+		{
+			bad = 1;
+			break;
+		}
+		entry = &record.entries[record.count];
+		for (index = 0; index < 20; index++)
+		{
+			int high = hex_value(line[index * 2]), low = hex_value(line[index * 2 + 1]);
+
+			if (high < 0 || low < 0)
+				bad = 1;
+			entry->sha[index] = (uint8_t)(high << 4 | low);
+		}
+		entry->size = strtoull(line + 41, &end, 10);
+		if (bad || end == line + 41 || *end != ' ')
+		{
+			bad = 1;
+			break;
+		}
+		line = end + 1;
+		entry->mtime = strtoll(line, &end, 10);
+		if (end == line || *end != ' ' || !end[1] || strlen(end + 1) >= sizeof(entry->key) || strchr(end + 1, '\r'))
+		{
+			bad = 1;
+			break;
+		}
+		snprintf(entry->key, sizeof(entry->key), "%s", end + 1);
+		record.count++;
+	}
+	free(text);
+	if (bad)
+	{
+		say(callbacks, "steam: the verified files' record does not read: dropped (every file is checked)");
+		record.count = 0;
+		remove(record.path);
+	}
+	else if (record.count)
+		say(callbacks, "steam: the verified files' record: %d files", record.count);
+}
+
+static int record_save(const struct steam_download_callbacks *callbacks)
+{
+	char temporary[STEAM_PATH_MAXIMUM + 8];
+	FILE *file;
+	int index, ok;
+
+	if (!record.loaded || !record.entries || !record.dirty)
+		return 1;
+	snprintf(temporary, sizeof(temporary), "%s.tmp", record.path);
+	file = fopen(temporary, "wb");
+	if (!file)
+		return 0;
+	ok = fprintf(file, RECORD_MAGIC "\n") > 0;
+	for (index = 0; index < record.count && ok; index++)
+	{
+		char hex[41];
+
+		steam_hex(record.entries[index].sha, 20, hex);
+		ok = fprintf(file, "%s %llu %lld %s\n", hex, (unsigned long long)record.entries[index].size,
+			record.entries[index].mtime, record.entries[index].key) > 0;
+	}
+	ok = fflush(file) == 0 && ok;
+	ok = fclose(file) == 0 && ok;
+	/* (the Vita's rename does not replace: the old one removed first - a stop in between leaves no record, and every
+	file is checked the next time: never a wrong one) */
+	if (ok)
+	{
+		remove(record.path);
+		ok = rename(temporary, record.path) == 0;
+	}
+	if (!ok)
+	{
+		remove(temporary);
+		say(callbacks, "steam: the verified files' record could not be written");
+		return 0;
+	}
+	record.dirty = 0;
+	record.saved = time(NULL);
+	return 1;
+}
+
+static void record_key(const struct planned *planned, char *key, size_t size)
+{
+	snprintf(key, size, "%s:%s", planned->root == STEAM_ROOT_CE ? "ce" : "app", planned->destination);
+}
+
+static struct record_entry *record_find(const char *key)
+{
+	int index;
+
+	for (index = 0; record.entries && index < record.count; index++)
+		if (!strcmp(record.entries[index].key, key))
+			return &record.entries[index];
+	return NULL;
+}
+
+/* the file at path, checked whole just now: recorded (its size and time on the card, the manifest's SHA-1) */
+static void record_verified(const struct planned *planned, const char *path,
+	const struct steam_download_callbacks *callbacks)
+{
+	struct record_entry *entry;
+	struct stat info;
+	char key[RECORD_KEY_MAXIMUM];
+
+	if (!record.entries || !planned->file->has_sha_content || stat(path, &info) != 0 ||
+		(uint64_t)info.st_size != planned->file->size)
+		return;
+	record_key(planned, key, sizeof(key));
+	if (strlen(key) >= sizeof(entry->key) - 1)
+		return;
+	entry = record_find(key);
+	if (!entry)
+	{
+		if (record.count >= RECORD_ENTRIES_MAXIMUM)
+			return;
+		entry = &record.entries[record.count++];
+		snprintf(entry->key, sizeof(entry->key), "%s", key);
+	}
+	entry->size = planned->file->size;
+	entry->mtime = (long long)info.st_mtime;
+	memcpy(entry->sha, planned->file->sha_content, 20);
+	record.dirty = 1;
+	if (time(NULL) - record.saved >= 10)
+		record_save(callbacks);
+}
+
+/* 1: the record says this file is there whole (the manifest's SHA-1, its size and time unchanged on the card) */
+static int record_trusted(const struct planned *planned, const char *path)
+{
+	struct record_entry *entry;
+	struct stat info;
+	char key[RECORD_KEY_MAXIMUM];
+
+	if (!record.entries || !planned->file->has_sha_content)
+		return 0;
+	record_key(planned, key, sizeof(key));
+	entry = record_find(key);
+	return entry && entry->size == planned->file->size && !memcmp(entry->sha, planned->file->sha_content, 20) &&
+		stat(path, &info) == 0 && S_ISREG(info.st_mode) && (uint64_t)info.st_size == entry->size &&
+		(long long)info.st_mtime == entry->mtime;
+}
+
 static int download_file(struct steam_session *session, struct planned *planned, uint32_t depot, uint64_t gid,
 	const uint8_t *key, struct cdn *cdn,
 	const struct steam_download_options *options, const struct steam_download_callbacks *callbacks,
@@ -331,6 +557,15 @@ static int download_file(struct steam_session *session, struct planned *planned,
 	{
 		fail(result, "path too long: %s", planned->destination);
 		return 0;
+	}
+	/* (the Workshop's staging is moved into mods: no record for it) */
+	if (!options->workshop && record_trusted(planned, path))
+	{
+		say(callbacks, "%s: already there (verified before, unchanged)", planned->destination);
+		result->files_already++;
+		result->files_recorded++;
+		*done += planned->file->size;
+		return 1;
 	}
 	{
 		struct checking checking;
@@ -361,6 +596,8 @@ static int download_file(struct steam_session *session, struct planned *planned,
 		say(callbacks, "%s: already there", planned->destination);
 		result->files_already++;
 		*done += planned->file->size;
+		if (!options->workshop)
+			record_verified(planned, path, callbacks);
 		return 1;
 	}
 	*done += job.resumed_bytes;
@@ -475,6 +712,8 @@ static int download_file(struct steam_session *session, struct planned *planned,
 	}
 	say(callbacks, "%s: done (%llu bytes)", planned->destination, (unsigned long long)planned->file->size);
 	result->files_done++;
+	if (!options->workshop)
+		record_verified(planned, path, callbacks);
 	ok = 1;
 	goto stopped;
 stop:
@@ -619,6 +858,7 @@ int steam_download_depot(struct steam_session *session, const struct steam_kv *a
 		}
 	}
 	say(callbacks, "depot %u: %u files, %.1f MB", (unsigned int)depot, (unsigned int)collected.count, total / 1e6);
+	record_load(options, callbacks);
 	for (index = 0; index < collected.count; index++)
 	{
 		struct planned *planned = &collected.files[index];
@@ -628,6 +868,9 @@ int steam_download_depot(struct steam_session *session, const struct steam_kv *a
 	}
 	ok = 1;
 done:
+	/* (what was verified kept for the next start, whatever ended it) */
+	record_save(callbacks);
+	record_free();
 	steam_http_close(&cdn.http);
 	for (index = 0; index < collected.count; index++)
 		free_planned(&collected.files[index]);
