@@ -67,6 +67,14 @@ HALO_CONSOLE_GUIDE
 	Delta Profile screen, nor its devices' rows); its port gives the
 	platform_guide_* input hooks and platform_power_state as sdl_platform.c
 	and xinput_sdl.c do, and draws the overlay (ui_overlay.h)
+HALO_CONSOLE_OVERLAY_DRAW
+	a console with the game list (HALO_GAME_BROWSER) whose own renderer
+	draws the overlay (Online Games, the Guide: ui_overlay.c), as the bgfx
+	backend does: console_overlay_draw, defined by the port (ui_overlay.h),
+	is handed each frame's triangles and the overlay's textures' texels; no
+	cellwall (the plain backdrop, as on OpenGL ES 2). HALO_UI_OVERLAY_QUADS
+	and HALO_UI_OVERLAY_ATLAS_SIZE may make its buffers smaller than the
+	desktop's 16384 quads (about 4.7 MB of vertices) and 2048 square atlas
 HALO_CONSOLE_NO_CAPTURE
 	no screenshots or clips (port/linux/src/capture.c and capture_clips.c,
 	controls.screenshot and controls.clip): every console; the desktop
