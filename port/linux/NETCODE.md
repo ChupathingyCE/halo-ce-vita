@@ -142,6 +142,70 @@ A host's game advertisement says that it plays this netcode. A client does
 not join a host that does not (one of network version 4 built before the
 lockstep netcode was removed, set to play it): it tells the player why.
 
+## Mixed co-op: Xbox and MCC files in one game
+
+A co-op game on a stock campaign level may have machines playing the level
+from the Xbox's maps and others from Halo: The Master Chief Collection's
+(the Halo content folder), the host either (`port/linux/game/mixed_coop.c`,
+`mixed_coop.h`). Everywhere else the two families stay apart (MCC's
+multiplayer maps are `mcc_<name>`); campaign co-op is the one place they
+meet, because all ten levels' collision is the same in both and MCC's level
+is the Xbox's with things appended (the research of Nov 13 2026).
+
+- **The level's name** on the wire stays the Xbox's (`levels\a10\a10`). A
+  machine without the Xbox's file but with MCC's plays MCC's: in a network
+  game (its lobby too) the cache loader takes the name as MCC's file of the
+  level (`mixed_coop_mcc_alias`). Alone, MCC's levels stay `mods\mcc_a10`.
+- **The Xbox's level on MCC's files.** In network co-op a machine playing
+  MCC's file removes the scenario's MCC-only placements before anything is
+  placed (the scavenger hunt's Moa scenery: the placed objects take the
+  Xbox's object indices), makes MCC's own scripts static (breadcrumb and nav
+  point scripts: never started), and plays three of the Xbox's values in
+  code (the owner, Nov 14): the rocket launcher's movement penalty when
+  zoomed or reloading (0.25), the Warthog's ground friction (0.20), the
+  Banshee fuel rod's air damage range (30).
+- **The lobby.** The host of co-op on a stock campaign level says hello to
+  each machine that joins (`_message_server_mixed_coop`: its family and the
+  level) and a machine that plays mixed co-op answers with its own
+  (`_message_client_mixed_coop`). An MCC host gives the level an identity
+  no file has (`MIXED_COOP_MCC_IDENTITY`), which an older build with the
+  Xbox's file refuses as another copy; an Xbox host's stays 0, so older
+  Xbox builds join as before. A joiner with MCC's files alone whose host
+  never says hello (an older host) leaves with a message as the level loads.
+- **Digests and the dictionary.** Once a machine has loaded the level it
+  works out digests of what must match: the layout of the placed objects
+  (palettes by path, placements with their place on two grids half a step
+  apart, the flags the game reads), every gameplay tag that can come into
+  play (each walked through its group's tag schema: references by path,
+  blocks by their elements, the plain numbers and flags as bytes, with the
+  rules the ten levels' tags called for), and each structure BSP's
+  collision as it loads (on two grids). A client in a game where either
+  side plays MCC's files asks the host (`DISTRIBUTED_MESSAGE_MIXED_REQUEST`)
+  and the host sends its dictionary in pieces
+  (`DISTRIBUTED_MESSAGE_MIXED_DICTIONARY`): its digests, then every tag by a
+  hash of its group and path, its digest and its datum, then every
+  animation graph's animations by name hash; no data. The client compares,
+  and only then says it is ready: a level that differs is left with a
+  message naming the tag (never a desync). A structure BSP's digest goes
+  to the clients as the host first loads it (`DISTRIBUTED_MESSAGE_MIXED_BSP`).
+- **Translation.** The client translates the host's tag indices into its
+  own as each message comes in (objects' definitions, damage effects,
+  pickups, sounds, effects, actors' speech and animation graphs) and
+  animation indices by name (damage animations, actors' and the scripts'
+  custom animations); its hit reports' damage effects go out as the host's
+  datums. Object indices need none: the placed objects are at the same
+  indices, and the rest are the host's.
+- **Gameplay differences awaiting the owner** refuse a level by default:
+  the field generator's collision model (8 levels), the flood carrier's
+  autoaim width (c20, c40, d20, d40), a50's medium granite boulder's
+  material. `network.mixed_coop_accept` names those a machine plays anyway
+  (tests).
+
+Tests: `HALO_MIXED_COOP_HASH=1` logs the objects the map placed (by index,
+before the AI places its own) and each tick the state the netcode makes the
+same everywhere; `port/vita/tests/net_fuzz_mixed_coop.c` fuzzes the
+messages. Never on the crossplay wire.
+
 ## Versions
 
 The native builds' network code has a version, an unsigned 16-bit number
