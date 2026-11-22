@@ -912,6 +912,15 @@ static void network_test_log_players(
 			network_distributed_byte_statistics(&sent_bytes, &received_bytes);
 			platform_log("network test: bytes at tick %ld: sent %ld received %ld", game_time_get(), sent_bytes, received_bytes);
 		}
+		{
+			void network_distributed_host_decides_statistics(long *refused, long *corrected);
+			long refused, host_corrected;
+
+			network_distributed_host_decides_statistics(&refused, &host_corrected);
+			if (refused || host_corrected)
+				platform_log("network test: host decides at tick %ld: refused %ld corrected %ld", game_time_get(), refused,
+					host_corrected);
+		}
 	}
 	/* co-op: the structure BSP, the cinematic, the skip vote, whom a dead
 	local player watches */

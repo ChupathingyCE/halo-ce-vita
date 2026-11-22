@@ -140,23 +140,33 @@ static char const *const mixed_coop_level_stems[MIXED_COOP_LEVELS] =
 {
 	"a10", "a30", "a50", "b30", "b40", "c10", "c20", "c40", "d20", "d40",
 	"chillout", "longest", "prisoner", "putput", "ratrace", "wizard", "boardingaction", "damnation",
+	/* (r3, two of the maps Halo PC rebuilt whose placements, flags and starts are the Xbox's: an Xbox-files
+	host's game alone, its collision deciding - mixed_coop_rebuilt_maps) */
+	"carousel", "hangemhigh",
 };
 
 /* the multiplayer maps Halo PC rebuilt (the research: walls, ceilings,
-invisible walls, spawns, vehicles - MCC has Halo PC's): never one mixed
-game, refused with this said (mixed_coop_multiplayer_refusal) */
+invisible walls, spawns, vehicles - MCC has Halo PC's). Derelict and Hang 'Em
+High (r3): MCC's placements, flags and starts are the Xbox's, only the
+collision differs - mixed in an Xbox-files host's game, the host's collision
+deciding (the Xbox-host-decides mode: mixed_coop_rebuilt_level), an MCC host's
+refused to an Xbox machine. Blood Gulch, Battle Creek and Sidewinder place
+other scenery or vehicles too: never one mixed game yet. Refused with this said
+(mixed_coop_multiplayer_refusal) */
 static struct
 {
 	char const *stem;
 	char const *title;
 	char const *why;
+	/* (one of mixed_coop_level_stems: an Xbox-files host's game mixed) */
+	boolean xbox_host_mixes;
 } const mixed_coop_rebuilt_maps[] =
 {
-	{ "bloodgulch", "Blood Gulch", "rebuilt walls, a lower ceiling, invisible walls and other vehicles" },
-	{ "beavercreek", "Battle Creek", "rebuilt collision" },
-	{ "carousel", "Derelict", "rebuilt collision" },
-	{ "hangemhigh", "Hang 'Em High", "rebuilt collision" },
-	{ "sidewinder", "Sidewinder", "rebuilt collision" },
+	{ "bloodgulch", "Blood Gulch", "rebuilt walls, a lower ceiling, invisible walls and other vehicles", FALSE },
+	{ "beavercreek", "Battle Creek", "rebuilt collision and other scenery", FALSE },
+	{ "carousel", "Derelict", "rebuilt collision", TRUE },
+	{ "hangemhigh", "Hang 'Em High", "rebuilt collision", TRUE },
+	{ "sidewinder", "Sidewinder", "rebuilt collision, other scenery and vehicles", FALSE },
 };
 
 /* a tag's place in the digests */
@@ -367,6 +377,21 @@ int mixed_coop_level_is_multiplayer(
 	return level >= MIXED_COOP_CAMPAIGN_LEVELS && level < MIXED_COOP_LEVELS;
 }
 
+/* whether the level is one Halo PC rebuilt (mixed_coop_rebuilt_maps): mixed with an Xbox-files host alone */
+static boolean mixed_coop_rebuilt_level(
+	int level)
+{
+	short index;
+
+	for (index = 0; level >= MIXED_COOP_CAMPAIGN_LEVELS && level < MIXED_COOP_LEVELS &&
+		index < NUMBEROF(mixed_coop_rebuilt_maps); index++)
+	{
+		if (!csstrcasecmp(mixed_coop_level_stems[level], mixed_coop_rebuilt_maps[index].stem))
+			return TRUE;
+	}
+	return FALSE;
+}
+
 char const *mixed_coop_multiplayer_refusal(
 	char const *level_name)
 {
@@ -379,9 +404,14 @@ char const *mixed_coop_multiplayer_refusal(
 	{
 		if (!mixed_coop_multiplayer_name_is(level_name, mixed_coop_rebuilt_maps[index].stem))
 			continue;
-		snprintf(text, sizeof(text), T("Halo PC rebuilt %s (%s), and MCC's files have Halo PC's. Mixed games on %s "
-			"will need an Xbox-files host and aren't ready yet: everyone needs the same files for now."),
-			mixed_coop_rebuilt_maps[index].title, mixed_coop_rebuilt_maps[index].why, mixed_coop_rebuilt_maps[index].title);
+		if (mixed_coop_rebuilt_maps[index].xbox_host_mixes)
+			snprintf(text, sizeof(text), T("Halo PC rebuilt %s (%s), and MCC's files have Halo PC's. With Xbox and MCC "
+				"files together %s needs an Xbox-files host: ask a player with the Xbox's maps to host."),
+				mixed_coop_rebuilt_maps[index].title, mixed_coop_rebuilt_maps[index].why, mixed_coop_rebuilt_maps[index].title);
+		else
+			snprintf(text, sizeof(text), T("Halo PC rebuilt %s (%s), and MCC's files have Halo PC's. Mixed games on %s "
+				"will need an Xbox-files host and aren't ready yet: everyone needs the same files for now."),
+				mixed_coop_rebuilt_maps[index].title, mixed_coop_rebuilt_maps[index].why, mixed_coop_rebuilt_maps[index].title);
 		return text;
 	}
 	return NULL;
@@ -478,8 +508,12 @@ static boolean mixed_coop_host_rename(
 	int level = mixed_coop_level_index_mcc_name(map_name);
 	char const *stem;
 
-	if (!mixed_coop_level_is_multiplayer(level) || !mixed_coop_capable() || network_wire_crossplay())
+	/* (a map Halo PC rebuilt: an MCC host's game is MCC's own, never the Xbox's - mixed_coop_rebuilt_maps) */
+	if (!mixed_coop_level_is_multiplayer(level) || mixed_coop_rebuilt_level(level) || !mixed_coop_capable() ||
+		network_wire_crossplay())
+	{
 		return FALSE;
+	}
 	stem = mixed_coop_level_stems[level];
 	/* (MCC's name, on a machine with no Xbox file of the map: else the
 	host chose MCC's copy beside the Xbox's, MCC's own game) */
@@ -2352,7 +2386,13 @@ static struct
 
 /* the maps whose MCC collision is the Xbox's with its invisible surfaces colliding with nothing: on an MCC
 machine in an Xbox-files host's game, that machine's structure BSP's are (the host's simulation has none) */
-static char const *const mixed_coop_invisible_mask_maps[] = { "damnation" };
+static char const *const mixed_coop_invisible_mask_maps[] =
+{
+	"damnation",
+	/* (Derelict and Hang 'Em High, rebuilt: their Xbox BSPs have no invisible surface either, PRIOR-ART.md -
+	the mask takes Halo PC's invisible walls away; the rest of their collision differs, the host's deciding) */
+	"carousel", "hangemhigh",
+};
 
 /* (test: HALO_MIXED_COLLISION_PROBE=<step in wu>) the structure BSP's collision as a grid of rays (down from
 above the world bounds, and along x and along y at four heights): each ray's first hit distance (1/64 wu) and
@@ -2444,6 +2484,15 @@ static boolean mixed_coop_bsp_accepted(
 {
 	short index;
 
+	/* (a map Halo PC rebuilt, an Xbox-files host's game and this machine MCC's: the Xbox-host-decides mode -
+	the host's simulation decides where every player is, this machine's prediction corrected to it) */
+	if (mixed_coop_rebuilt_level(mixed_coop.level) && mixed_coop.host_family == _mixed_coop_family_xbox &&
+		mixed_coop.family == _mixed_coop_family_mcc)
+	{
+		platform_log("mixed play: %s's BSP %ld: Halo PC rebuilt it; the Xbox-files host's collision decides",
+			mixed_coop_level_stems[mixed_coop.level], bsp_index);
+		return TRUE;
+	}
 	for (index = 0; index < NUMBEROF(mixed_coop_accepted_bsps); index++)
 	{
 		uint32_t const *xd = mixed_coop_accepted_bsps[index].xbox_digests, *md = mixed_coop_accepted_bsps[index].mcc_digests;
@@ -2725,10 +2774,13 @@ int mixed_coop_host_level_acceptable(
 
 	if (level < 0 || !mixed_coop_capable())
 		return FALSE;
-	/* (an MCC host: this machine plays it from either family's files) */
+	/* (an MCC host: this machine plays it from either family's files - a map Halo PC rebuilt from MCC's alone:
+	an Xbox machine is refused, told it needs an Xbox-files host, mixed_coop_multiplayer_refusal) */
 	if (host_identity == MIXED_COOP_MCC_IDENTITY)
 	{
 		if (family == _mixed_coop_family_none)
+			return FALSE;
+		if (family == _mixed_coop_family_xbox && mixed_coop_rebuilt_level(level))
 			return FALSE;
 		return TRUE;
 	}
@@ -2737,6 +2789,21 @@ int mixed_coop_host_level_acceptable(
 	mixed_coop_client_ready_allowed - its lobby's hello may come after its
 	settings) */
 	return !host_identity && family == _mixed_coop_family_mcc;
+}
+
+int mixed_coop_host_decides_here(
+	void)
+{
+	return mixed_coop.matched && !global_network_game_server_get() && mixed_coop_rebuilt_level(mixed_coop.level) &&
+		mixed_coop.host_family == _mixed_coop_family_xbox && mixed_coop.family == _mixed_coop_family_mcc;
+}
+
+int mixed_coop_host_decides_machine(
+	long machine_index)
+{
+	return VALID_INDEX(machine_index, HALO_PORT_MAXIMUM_NETWORK_MACHINES) && global_network_game_server_get() &&
+		mixed_coop.loaded && mixed_coop_rebuilt_level(mixed_coop.level) && mixed_coop.family == _mixed_coop_family_xbox &&
+		mixed_coop.machines[machine_index].known && mixed_coop.machines[machine_index].family == _mixed_coop_family_mcc;
 }
 
 /* ---------- leaving */
@@ -3131,6 +3198,7 @@ static boolean mixed_coop_accepted(
 	{
 		return TRUE;
 	}
+
 	if (!setting || !setting[0] || !name)
 		return FALSE;
 	length = strlen(name);

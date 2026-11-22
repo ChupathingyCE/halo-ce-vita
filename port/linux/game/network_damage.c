@@ -2357,7 +2357,10 @@ static short distributed_report_valid(
 			damage_players[player_index].unseen_time = now;
 			if (last != NONE && now - last <= UNSEEN_SHOT_TICKS)
 				return _anticheat_hit_wall;
-			network_anticheat_violation(machine_index, _anticheat_hit_wall, TRUE, 1.0f);
+			/* (mixed play, a map Halo PC rebuilt: an MCC client of this Xbox-files host sees through gaps its
+			files have and the host's not - refused as ever, never counted toward a kick) */
+			if (!mixed_coop_host_decides_machine(machine_index))
+				network_anticheat_violation(machine_index, _anticheat_hit_wall, TRUE, 1.0f);
 		}
 	}
 	/* the damage as the host deals it: what a client's hit can be, from the

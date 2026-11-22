@@ -62,9 +62,11 @@ enum mixed_coop_family
 /* the levels by index: the campaign's ten (a10 ... d40, as main.c names
 them, 0 to 9: version 1), then the multiplayer maps whose MCC and Xbox files
 the research found to have the same collision (10 ...: version 2,
-mixed_coop.c's mixed_coop_level_stems) */
+mixed_coop.c's mixed_coop_level_stems), Damnation (17), and two Halo PC
+rebuilt, Derelict and Hang 'Em High (18, 19: an Xbox-files host's game alone,
+mixed_coop_rebuilt_maps) */
 #define MIXED_COOP_CAMPAIGN_LEVELS 10
-#define MIXED_COOP_MULTIPLAYER_LEVELS 8
+#define MIXED_COOP_MULTIPLAYER_LEVELS 10
 #define MIXED_COOP_LEVELS (MIXED_COOP_CAMPAIGN_LEVELS + MIXED_COOP_MULTIPLAYER_LEVELS)
 #define MIXED_COOP_NO_LEVEL 0xFF
 

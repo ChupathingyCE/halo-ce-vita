@@ -165,6 +165,18 @@ int mixed_coop_translate_incoming(unsigned char type, void *entries, short count
 /* (network_distributed.c) a client's message to the host translated in place */
 void mixed_coop_translate_outgoing(unsigned char type, void *entries, short count);
 
+/* (r3, the Xbox-host-decides mode) a map Halo PC rebuilt played by an
+Xbox-files host and an MCC machine: the host's collision decides where every
+player is. On the MCC client: TRUE once it matched such a host's game (its
+own player corrected to the host's copy past a small tolerance). On the
+host: TRUE for such a client's machine (its predictions taken within that
+tolerance alone, never across the host's walls; its shots the host's walls
+refuse not counted toward a kick). MIXED_COOP_HOST_DECIDES_TOLERANCE in
+world units. */
+#define MIXED_COOP_HOST_DECIDES_TOLERANCE 0.75f
+int mixed_coop_host_decides_here(void);
+int mixed_coop_host_decides_machine(long machine_index);
+
 /* ---------- tests */
 
 /* (HALO_MIXED_COOP_HASH=1) the state both machines must agree on, a line each

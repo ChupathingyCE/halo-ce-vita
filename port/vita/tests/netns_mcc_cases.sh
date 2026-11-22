@@ -21,16 +21,18 @@
 #   mixedmp   mixed multiplayer (mixed_coop.h): HALO_TEST_MIXED="HOST JOINER MAP GAME" (HOST, JOINER: xbox or
 #             mcc; MAP: one of the maps whose files are one game - chillout longest prisoner putput ratrace
 #             wizard boardingaction, and damnation (an MCC client of an Xbox host: its invisible surfaces
-#             collide with nothing); GAME: slayer, ctf ...). With no HALO_TEST_MIXED_DECISIONS an MCC host's
+#             collide with nothing), and carousel hangemhigh with an Xbox host and an MCC joiner (Halo PC
+#             rebuilt their collision alone: the host's decides, mixed_coop_host_decides_*); GAME: slayer, ctf ...). With no HALO_TEST_MIXED_DECISIONS an MCC host's
 #             Xbox joiner is refused, told the map needs an Xbox-files host, System Link: an MCC host hosts MCC's map, named the
 #             Xbox's on the wire; the joiner joins and plays 60 s at least with two players; a mixed joiner
 #             matched the host's dictionary (never refused); both scoreboards agree; the per-tick state
 #             hashes (HALO_MIXED_COOP_HASH) agree but for runs of 90 ticks at most, and at the end; the placed
 #             objects are the same. HALO_TEST_MIXED_DECISIONS: the owner's pending decisions turned on
 #             (HALO_MIXED_DECISIONS, mixed_coop.c)
-#   mixedrebuilt  a map Halo PC rebuilt (HALO_TEST_MIXED="HOST JOINER MAP": bloodgulch beavercreek carousel
-#             hangemhigh sidewinder), the other family joining: refused with the message naming the
-#             map as one Halo PC rebuilt, never in the game
+#   mixedrebuilt  a map Halo PC rebuilt (HALO_TEST_MIXED="HOST JOINER MAP": bloodgulch beavercreek
+#             sidewinder either way; carousel hangemhigh with an MCC host and an Xbox joiner, told they need an
+#             Xbox-files host), the other family joining: refused with the message naming the map as one
+#             Halo PC rebuilt, never in the game
 
 mcc_root=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
 # (MCC's own folder, as pcmapjoin takes HALO_TEST_MCC_ROOT, holding halo1: its halo1)
@@ -210,7 +212,10 @@ mixed_case() {
 	mixedrebuilt)
 		[ "$two" = 0 ] || fail "the joiner played the host's game on a map Halo PC rebuilt ($two s)"
 		grep -aq "a map Halo PC rebuilt: refused" "$jl" || fail "the joiner was not refused the rebuilt map"
-		grep -aq "Halo: map: Halo PC rebuilt " "$jl" || fail "the joiner was not told Halo PC rebuilt the map" ;;
+		grep -aq "Halo: map: Halo PC rebuilt " "$jl" || fail "the joiner was not told Halo PC rebuilt the map"
+		case $map in carousel|hangemhigh)
+			grep -aq "needs an Xbox-files host" "$jl" || fail "the joiner was not told the map needs an Xbox-files host" ;;
+		esac ;;
 	esac
 }
 

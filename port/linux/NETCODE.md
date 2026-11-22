@@ -219,9 +219,25 @@ The same machinery plays the multiplayer maps whose collision the research
 found the same in both families: Chill Out, Longest, Prisoner, Chiron TL-34,
 Rat Race, Wizard and Boarding Action (its two ladders up to 10 cm apart, which
 the owner accepted: that BSP's two digests are listed, `mixed_coop_accepted_bsps`).
-The six maps Halo PC rebuilt (Blood Gulch, Battle Creek, Derelict, Damnation,
-Hang 'Em High, Sidewinder) stay apart: a machine of the other family is refused
-with a message saying Halo PC rebuilt the map (`mixed_coop_multiplayer_refusal`).
+Of the six maps Halo PC rebuilt, Damnation (only invisible surfaces added:
+masked on an MCC machine, the Xbox's collision exactly), Derelict and Hang 'Em
+High (their placements, flags and starts the Xbox's, only the collision
+rebuilt) play mixed in an Xbox-files host's game; Blood Gulch, Battle Creek and
+Sidewinder (other scenery or vehicles too) stay apart, and so do an MCC host's
+Derelict and Hang 'Em High: a machine of the other family is refused with a
+message saying Halo PC rebuilt the map and, for those two, that it needs an
+Xbox-files host (`mixed_coop_multiplayer_refusal`).
+
+- **The Xbox-host-decides mode** (Derelict, Hang 'Em High). The host's
+  collision decides where every player is: the host takes an MCC client's
+  prediction only within `MIXED_COOP_HOST_DECIDES_TOLERANCE` (0.75 wu, against
+  `HOST_ACCEPT_TOLERANCE`'s 3.5) of its own copy, which it runs from the
+  client's input as ever, and never across its walls (no `WALL_ESCAPE_TICKS`);
+  the client puts its own player at the host's copy past the same tolerance
+  (against `LOCAL_CORRECTION_TOLERANCE`'s 3.0). A shot through a gap only
+  MCC's files have is refused as ever but not counted toward a kick
+  (`mixed_coop_host_decides_machine`/`_here`; the counts in the network
+  test's log, "host decides at tick").
 
 - **The name.** An MCC machine with no Xbox file of the map hosting MCC's
   copy (`levels\test\mcc_chillout\mcc_chillout`) names its game the Xbox's

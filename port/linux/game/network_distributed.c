@@ -325,6 +325,11 @@ had it on the ground it may be (world units: steps climbed in the ticks a
 prediction is late, where the host and the client have the ground) */
 #define PREDICTED_RISE_TOLERANCE 1.0f
 
+/* (mixed play, the Xbox-host-decides mode: mixed_coop_host_decides_machine/_here) the host's refused
+predictions of such clients, a client's own corrections */
+static long distributed_host_decides_refused;
+static long distributed_host_decides_corrected;
+
 /* how far players are from a client's own (world units) before the host
 sends them to it (their units and their input) every second tick, every
 third, and every fourth; one no cluster of the client's players' can see
@@ -2484,10 +2489,19 @@ static void distributed_correct_own_unit(
 			{
 				error.k = 0.0f;
 			}
-			if (!(error.i * error.i + error.j * error.j + error.k * error.k >
-				LOCAL_CORRECTION_TOLERANCE * LOCAL_CORRECTION_TOLERANCE))
+			/* (mixed play, a map Halo PC rebuilt, this MCC machine in an Xbox-files host's game: the host's
+			collision decides, its copy put here past a small tolerance - mixed_coop_host_decides_here) */
 			{
-				return;
+				real tolerance = mixed_coop_host_decides_here() ? MIXED_COOP_HOST_DECIDES_TOLERANCE :
+					LOCAL_CORRECTION_TOLERANCE;
+
+				if (!(error.i * error.i + error.j * error.j + error.k * error.k > tolerance * tolerance))
+					return;
+				if (tolerance != LOCAL_CORRECTION_TOLERANCE && distributed_host_decides_corrected++ < 400)
+				{
+					platform_log("mixed play: the host decides: corrected at %.2f %.2f %.2f by %.2f %.2f %.2f",
+						own->position.x, own->position.y, own->position.z, error.i, error.j, error.k);
+				}
 			}
 			{
 				real_point3d before = object->object.position;
@@ -2913,6 +2927,15 @@ static struct
 	long counted;
 } distributed_wall_refusals[MAXIMUM_TRACKED_PLAYERS];
 
+/* (network_test.c) the Xbox-host-decides mode's counts */
+void network_distributed_host_decides_statistics(
+	long *refused,
+	long *corrected)
+{
+	*refused = distributed_host_decides_refused;
+	*corrected = distributed_host_decides_corrected;
+}
+
 enum
 {
 	WALL_ESCAPE_TICKS = 3 * TICKS_PER_SECOND,
@@ -2949,7 +2972,8 @@ static boolean distributed_take_prediction(
 	struct distributed_unit_state const *state = predicted;
 	struct object_datum *object = object_get(unit_index);
 	long now = game_time_get();
-	real dx, dy, dz;
+	real dx, dy, dz, tolerance;
+	boolean host_decides;
 
 	/* (OpenCE's 30, spec 3.2: a unit riding an elevator keeps the height the
 	host's own carry gives it, the client's word taken across, not up) */
@@ -2963,8 +2987,16 @@ static boolean distributed_take_prediction(
 	dy = state->position.y - object->object.position.y;
 	dz = state->position.z - object->object.position.z;
 
-	if (!(dx * dx + dy * dy + dz * dz <= HOST_ACCEPT_TOLERANCE * HOST_ACCEPT_TOLERANCE))
+	/* (mixed play, a map Halo PC rebuilt: an MCC client of this Xbox-files host is taken close to the host's
+	copy alone, the host's collision deciding - mixed_coop_host_decides_machine) */
+	host_decides = mixed_coop_host_decides_machine(distributed_player_machine(player_index));
+	tolerance = host_decides ? MIXED_COOP_HOST_DECIDES_TOLERANCE : HOST_ACCEPT_TOLERANCE;
+	if (!(dx * dx + dy * dy + dz * dz <= tolerance * tolerance))
+	{
+		if (host_decides)
+			distributed_host_decides_refused++;
 		return FALSE;
+	}
 	if (distributed_accepted[player_index].valid)
 	{
 		long ticks = MIN(distributed_predictions[player_index].time - distributed_accepted[player_index].time,
@@ -3002,7 +3034,7 @@ static boolean distributed_take_prediction(
 	once parted across a wall - one thrown by a blast the client hears of a
 	round trip late - is never held there, nor dropped; a walk through a
 	wall stalls that long each time) */
-	if (distributed_wall_refusals[player_index].since == NONE ||
+	if (host_decides || distributed_wall_refusals[player_index].since == NONE ||
 		now - distributed_wall_refusals[player_index].last > PREDICTION_JITTER_TICKS ||
 		now - distributed_wall_refusals[player_index].since < WALL_ESCAPE_TICKS)
 	{
@@ -3017,7 +3049,9 @@ static boolean distributed_take_prediction(
 				distributed_wall_refusals[player_index].counted = NONE;
 			}
 			distributed_wall_refusals[player_index].last = now;
-			if (distributed_wall_refusals[player_index].counted == NONE ||
+			if (host_decides)
+				distributed_host_decides_refused++;
+			else if (distributed_wall_refusals[player_index].counted == NONE ||
 				now - distributed_wall_refusals[player_index].counted >= TICKS_PER_SECOND)
 			{
 				network_anticheat_violation(machine_index, _anticheat_move_wall,

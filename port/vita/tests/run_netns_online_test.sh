@@ -124,9 +124,10 @@
 #            multiplayer (netns_mcc_cases.sh has each): MCC-only machines play
 #            each other by System Link and from Classic+'s INTERNET browser;
 #            an MCC machine and an Xbox one are refused each other's game but on
-#            the maps whose files are one game, and Damnation with an Xbox
-#            host (mixed play: mixedmp; the other five Halo PC rebuilt stay
-#            refused: mixedrebuilt)
+#            the maps whose files are one game, and Damnation, Derelict and
+#            Hang 'Em High with an Xbox host (mixed play: mixedmp; Blood Gulch,
+#            Battle Creek and Sidewinder stay refused, and an MCC host's
+#            Derelict and Hang 'Em High: mixedrebuilt)
 #   pc       the host is a Vita build, the joiner a PC build: by code (it
 #            must find nothing: Vitas signal on their own topics) and on
 #            one LAN with the host (it must never list or join the game)
