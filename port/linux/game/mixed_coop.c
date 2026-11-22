@@ -379,9 +379,9 @@ char const *mixed_coop_multiplayer_refusal(
 	{
 		if (!mixed_coop_multiplayer_name_is(level_name, mixed_coop_rebuilt_maps[index].stem))
 			continue;
-		snprintf(text, sizeof(text), T("Halo PC rebuilt %s (%s), and MCC's files have Halo PC's. MCC's %s and the "
-			"Xbox's can't be played together; everyone needs the same files."), mixed_coop_rebuilt_maps[index].title,
-			mixed_coop_rebuilt_maps[index].why, mixed_coop_rebuilt_maps[index].title);
+		snprintf(text, sizeof(text), T("Halo PC rebuilt %s (%s), and MCC's files have Halo PC's. Mixed games on %s "
+			"will need an Xbox-files host and aren't ready yet: everyone needs the same files for now."),
+			mixed_coop_rebuilt_maps[index].title, mixed_coop_rebuilt_maps[index].why, mixed_coop_rebuilt_maps[index].title);
 		return text;
 	}
 	return NULL;
