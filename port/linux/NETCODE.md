@@ -243,7 +243,10 @@ with a message saying Halo PC rebuilt the map (`mixed_coop_multiplayer_refusal`)
   come into play only where a race can make one (race vehicle flags; none
   on these maps; always on a dedicated server, whose races give each player
   one); the player starts and equipment spawns are the host's alone (it
-  spawns every player and item; MCC's files have Halo PC's few more and moved);
+  spawns every player and item; Halo PC moved a few), but Halo PC's added
+  spawns are not spawned on an MCC machine (the flamethrowers, which the game
+  makes rocket launchers, and Boarding Action's plasma cannons, a weapon the
+  Xbox's files have not);
   the netgame flags are the host's: the dictionary (version 2) carries them,
   and a client takes the host's places for flags of the same types and teams
   (Halo PC moved the teleporters, race checkpoints and hills a little; a
