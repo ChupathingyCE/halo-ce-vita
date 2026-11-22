@@ -1173,11 +1173,21 @@ boolean cache_file_header_verify(
 	return TRUE;
 }
 
-/* port: the builds of the released maps, by region. Any build here plays
-multiplayer with the others; a map of another build may differ in what
+/* port: the builds of the released maps, by region. Any Xbox build here
+plays multiplayer with the others; a map of another build may differ in what
 machines send each other, so its players cannot open the multiplayer menu
 (ui_widget.c, ui_widget_launch_widget). A PAL build's maps are played as the
-NTSC maps are (port/linux/game/pal_tags.c) */
+NTSC maps are (port/linux/game/pal_tags.c).
+(port, 1.1.3) Halo: MCC's maps (Steam's halo1/maps: every one of them, ui.map,
+the campaign's and multiplayer's, is of the one build below) are a family of
+their own, CACHE_FILES_REGION_MCC: a machine whose menus are MCC's ui.map (an
+MCC-only install) opens the multiplayer menus, and plays MCC's maps by their
+own names (mcc_<map>, custom_edition_maps.c) with machines that have the
+host's very file (network_client_manager.c, network_game_client_map_check).
+An MCC file never stands for an Xbox level (cache_files_map_plays_multiplayer):
+its tag indices are not the Xbox map's. Whether an MCC machine and an Xbox one
+may share a game on one level is asked in one place,
+custom_edition_maps_family_mixed (for now: refused; mixed play extends it) */
 static struct
 {
 	char const *build;
@@ -1187,10 +1197,12 @@ static struct
 	{ "01.01.14.2342", "PAL" },
 	{ "01.10.12.2276", "NTSC" },
 	{ "01.08.15.1749", "NTSC" },
+	{ "01.03.43.0000", CACHE_FILES_REGION_MCC },
 };
 
-/* the region of a build's maps ("PAL" or "NTSC") if it is listed above, else
-NULL; build is a cache file header's (which need not end it) */
+/* the region of a build's maps ("PAL", "NTSC" or CACHE_FILES_REGION_MCC) if
+it is listed above, else NULL; build is a cache file header's (which need not
+end it) */
 char const *cache_files_build_region(
 	char const *build)
 {
@@ -1205,6 +1217,23 @@ char const *cache_files_build_region(
 	return NULL;
 }
 
+/* whether a region (cache_files_build_region's) is MCC's */
+boolean cache_files_region_is_mcc(
+	char const *region)
+{
+	return region && !csstrcmp(region, CACHE_FILES_REGION_MCC);
+}
+
+/* whether the loaded map (the menus' ui.map) is MCC's: this machine plays
+multiplayer as an MCC machine (MCC's maps alone, never an Xbox level) */
+boolean cache_files_multiplayer_family_is_mcc(
+	void)
+{
+	char build[0x20];
+
+	return cache_files_region_is_mcc(cache_files_multiplayer_region(build));
+}
+
 /* the region of the loaded map's build if it plays multiplayer, else NULL;
 build gets the build */
 char const *cache_files_multiplayer_region(
@@ -1217,8 +1246,10 @@ char const *cache_files_multiplayer_region(
 }
 
 /* whether the named map plays multiplayer with the others: FALSE only for
-a map whose header is of a build not listed above (a map whose header cannot
-be read is left to precaching, which tells of a missing map); build gets the
+a map whose header is of a build not listed above, or of MCC's (an MCC file
+in the maps folder: MCC's own maps are played by their mcc_ names, which
+custom_edition_maps.c answers above; a map whose header cannot be read is
+left to precaching, which tells of a missing map); build gets the
 map's build, empty if unread. The multiplayer menus check the loaded map's
 (ui.map's) build; this checks a multiplayer map's own, which may be of
 another build: the object and damage messages name definitions by tag
@@ -1231,6 +1262,7 @@ boolean cache_files_map_plays_multiplayer(
 	char path[256];
 	HANDLE file;
 	boolean result = TRUE;
+	char const *region;
 
 	build[0] = 0;
 	if (!map_name || !map_name[0])
@@ -1255,7 +1287,10 @@ boolean cache_files_map_plays_multiplayer(
 		{
 			csstrncpy(build, header.build, 0x20);
 			build[0x1F] = 0;
-			result = cache_files_build_region(header.build) != NULL;
+			region = cache_files_build_region(header.build);
+			/* (an Xbox build's: an MCC file here, named as an Xbox level or
+			as nothing listed, is not the map a host of that name plays) */
+			result = region != NULL && !cache_files_region_is_mcc(region);
 		}
 		CloseHandle(file);
 	}

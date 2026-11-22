@@ -469,7 +469,10 @@ For Halo PC's own maps and the PC community's servers, see
 **Vitas play only Vitas** (and the [PC version](#pc-version) of this port),
 and every Vita in a game needs the same version of this port and Xbox maps
 of a supported build (NTSC 01.10.12.2276 or 01.08.15.1749, PAL
-01.01.14.2342). Choose how your Vita connects in the settings panel
+01.01.14.2342), or Halo MCC's maps (build 01.03.43.0000, Steam's
+`halo1/maps`). For now MCC players play MCC players' games and Xbox
+players Xbox players' games; a game on the other kind of maps is refused
+with a message (mixed MCC + Xbox games are coming). Choose how your Vita connects in the settings panel
 (**SELECT + D-pad down**), **Multiplayer**, **Connection** (it applies after
 a restart):
 
