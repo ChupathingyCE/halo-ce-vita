@@ -142,6 +142,147 @@ A host's game advertisement says that it plays this netcode. A client does
 not join a host that does not (one of network version 4 built before the
 lockstep netcode was removed, set to play it): it tells the player why.
 
+## Mixed co-op: Xbox and MCC files in one game
+
+A co-op game on a stock campaign level may have machines playing the level
+from the Xbox's maps and others from Halo: The Master Chief Collection's
+(the Halo content folder), the host either (`port/linux/game/mixed_coop.c`,
+`mixed_coop.h`). Everywhere else the two families stay apart (MCC's
+multiplayer maps are `mcc_<name>`); campaign co-op is the one place they
+meet, because all ten levels' collision is the same in both and MCC's level
+is the Xbox's with things appended (the research of Nov 13 2026).
+
+- **The level's name** on the wire stays the Xbox's (`levels\a10\a10`). A
+  machine without the Xbox's file but with MCC's plays MCC's: in a network
+  game (its lobby too) the cache loader takes the name as MCC's file of the
+  level (`mixed_coop_mcc_alias`). Alone, MCC's levels stay `mods\mcc_a10`.
+- **The Xbox's level on MCC's files.** In network co-op a machine playing
+  MCC's file removes the scenario's MCC-only placements before anything is
+  placed (the scavenger hunt's Moa scenery: the placed objects take the
+  Xbox's object indices), makes MCC's own scripts static (breadcrumb and nav
+  point scripts: never started), and plays three of the Xbox's values in
+  code (the owner, Nov 14): the rocket launcher's movement penalty when
+  zoomed or reloading (0.25), the Warthog's ground friction (0.20), the
+  Banshee fuel rod's air damage range (30).
+- **The lobby.** The host of co-op on a stock campaign level says hello to
+  each machine that joins (`_message_server_mixed_coop`: its family and the
+  level) and a machine that plays mixed co-op answers with its own
+  (`_message_client_mixed_coop`). An MCC host gives the level an identity
+  no file has (`MIXED_COOP_MCC_IDENTITY`), which an older build with the
+  Xbox's file refuses as another copy; an Xbox host's stays 0, so older
+  Xbox builds join as before. A joiner with MCC's files alone whose host
+  never says hello (an older host) leaves with a message as the level loads.
+- **Digests and the dictionary.** Once a machine has loaded the level it
+  works out digests of what must match: the layout of the placed objects
+  (palettes by path, placements with their place on two grids half a step
+  apart, the flags the game reads), every gameplay tag that can come into
+  play (each walked through its group's tag schema: references by path,
+  blocks by their elements, the plain numbers and flags as bytes, with the
+  rules the ten levels' tags called for), and each structure BSP's
+  collision as it loads (on two grids). A client in a game where either
+  side plays MCC's files asks the host (`DISTRIBUTED_MESSAGE_MIXED_REQUEST`)
+  and the host sends its dictionary in pieces
+  (`DISTRIBUTED_MESSAGE_MIXED_DICTIONARY`): its digests, then every tag by a
+  hash of its group and path, its digest and its datum, then every
+  animation graph's animations by name hash; no data. The client compares,
+  and only then says it is ready: a level that differs is left with a
+  message naming the tag (never a desync). A structure BSP's digest goes
+  to the clients as the host first loads it (`DISTRIBUTED_MESSAGE_MIXED_BSP`).
+- **Translation.** The client translates the host's tag indices into its
+  own as each message comes in (objects' definitions, damage effects,
+  pickups, sounds, effects, actors' speech and animation graphs) and
+  animation indices by name (damage animations, actors' and the scripts'
+  custom animations); its hit reports' damage effects go out as the host's
+  datums. Object indices need none: the placed objects are at the same
+  indices, and the rest are the host's.
+- **The three gameplay differences, played mixed by default** (owner, Nov 22:
+  mixed play should just work; each one line in `mixed_coop_decisions`, its
+  TRUE made FALSE refuses it again, `HALO_MIXED_DECISIONS_OFF=<name>` for a
+  run): the flood carrier's autoaim width is the Xbox's 0 on MCC machines (a
+  fourth Xbox value; c20, c40, d20, d40); a50's medium granite boulder's
+  collision material type is the Xbox's 0 on MCC machines (a fifth; its
+  collision's float noise rounds equal, so the level matches outright); the
+  field generator's collision model (8 levels, Rat Race), which MCC rebuilt up
+  to 0.19 wu off, is played anyway: the host's simulation decides for every
+  machine and a client near one is corrected to it - an MCC host says in its
+  log that its field generators are MCC's. `network.mixed_coop_accept` names
+  tags a machine plays anyway (tests).
+
+Tests: `HALO_MIXED_COOP_HASH=1` logs the objects the map placed (by index,
+before the AI places its own) and each tick the state the netcode makes the
+same everywhere; `port/vita/tests/net_fuzz_mixed_coop.c` fuzzes the
+messages. Never on the crossplay wire.
+
+### Mixed multiplayer
+
+The same machinery plays the multiplayer maps whose collision the research
+found the same in both families: Chill Out, Longest, Prisoner, Chiron TL-34,
+Rat Race, Wizard and Boarding Action (its two ladders up to 10 cm apart, which
+the owner accepted: that BSP's two digests are listed, `mixed_coop_accepted_bsps`).
+Of the six maps Halo PC rebuilt, Damnation (only invisible surfaces added:
+masked on an MCC machine, the Xbox's collision exactly), Derelict and Hang 'Em
+High (their placements, flags and starts the Xbox's, only the collision
+rebuilt) play mixed in an Xbox-files host's game; Blood Gulch, Battle Creek and
+Sidewinder (other scenery or vehicles too) stay apart, and so do an MCC host's
+Derelict and Hang 'Em High: a machine of the other family is refused with a
+message saying Halo PC rebuilt the map and, for those two, that it needs an
+Xbox-files host (`mixed_coop_multiplayer_refusal`).
+
+- **The Xbox-host-decides mode** (Derelict, Hang 'Em High). The host's
+  collision decides where every player is: the host takes an MCC client's
+  prediction only within `MIXED_COOP_HOST_DECIDES_TOLERANCE` (0.75 wu, against
+  `HOST_ACCEPT_TOLERANCE`'s 3.5) of its own copy, which it runs from the
+  client's input as ever, and never across its walls (no `WALL_ESCAPE_TICKS`);
+  the client puts its own player at the host's copy past the same tolerance
+  (against `LOCAL_CORRECTION_TOLERANCE`'s 3.0). A shot through a gap only
+  MCC's files have is refused as ever but not counted toward a kick
+  (`mixed_coop_host_decides_machine`/`_here`; the counts in the network
+  test's log, "host decides at tick").
+
+- **The name.** An MCC machine with no Xbox file of the map hosting MCC's
+  copy (`levels\test\mcc_chillout\mcc_chillout`) names its game the Xbox's
+  (`levels\test\chillout\chillout`, `mixed_coop_host_map_name`) with the
+  identity `MIXED_COOP_MCC_IDENTITY`, and plays MCC's file under it as mixed
+  co-op does. MCC's names stay MCC's own game (a machine with both files
+  hosting MCC's copy beside the Xbox's).
+- **The lobby messages' version.** A message carries the lowest version that
+  can say its level: version 1 for the campaign's ten (byte for byte the
+  first builds'), version 2 for a multiplayer map (levels 10 to 16). A
+  version 1 build refuses a version 2 message at its version check before it
+  reads the level, and plays as it always did: its own family check refuses
+  the other family's map, and an older Xbox build refuses the MCC host's
+  identity as another copy. The network version (18) is not raised: nothing
+  any older build takes changed.
+- **What differs, and the rules.** Halo PC changed MCC's multiplayer tags;
+  of what can come into play on these maps only these differ, each handled
+  by what the game does with it: the globals' weapon list (MCC appends the
+  plasma cannon and `mp_needler`: compared as far as the Xbox's fourteen,
+  which is all the game engine reads; the flamethrower and gravity rifle
+  entries bring nothing into play, `game_engine_remap_weapon` makes no
+  flamethrower or gravity rifle - the gravity rifle fires the flamethrower's
+  flame, which Halo PC changed); the multiplayer vehicles (`ghost_mp`'s gun)
+  come into play only where a race can make one (race vehicle flags; none
+  on these maps; always on a dedicated server, whose races give each player
+  one); the player starts and equipment spawns are the host's alone (it
+  spawns every player and item; Halo PC moved a few), but Halo PC's added
+  spawns are not spawned on an MCC machine (the flamethrowers, which the game
+  makes rocket launchers, and Boarding Action's plasma cannons, a weapon the
+  Xbox's files have not);
+  the netgame flags are the host's: the dictionary (version 2) carries them,
+  and a client takes the host's places for flags of the same types and teams
+  (Halo PC moved the teleporters, race checkpoints and hills a little; a
+  client runs teleporters too).
+- **Pending, refused by default** (`mixed_coop_decisions`, one line each):
+  the flag stand and teleporter base have no collision in MCC's files (on all
+  seven maps: dropped for everyone in mixed games when decided); MCC's needler
+  item collection spawns Halo PC's `mp_needler` (Chill Out, Wizard: the Xbox's
+  needler on MCC machines when decided). Tests turn them on with
+  `HALO_MIXED_DECISIONS`. (The field generator's collision, Rat Race's too, is
+  played by default: above.)
+
+Tests: `run_netns_online_test.sh mixedmp` (`HALO_TEST_MIXED="HOST JOINER MAP
+GAME"`: the scoreboards and the state hashes agree) and `mixedrebuilt`.
+
 ## Versions
 
 The native builds' network code has a version, an unsigned 16-bit number

@@ -4932,8 +4932,8 @@ static void main_test_commands_update(
 			main_test_bsp_switch_trigger(commands[index].command + 5);
 		else if (!strcmp(commands[index].command, "@bsplist"))
 			main_test_bsp_switch_trigger("-2 -1");
-		/* "@pos P X Y Z": player P stands there */
-		else if (!strncmp(commands[index].command, "@pos ", 5))
+		/* "@pos P X Y Z": player P stands there ("@pos,P,X,Y,Z" too: a test runner's settings split at spaces) */
+		else if (!strncmp(commands[index].command, "@pos ", 5) || !strncmp(commands[index].command, "@pos,", 5))
 		{
 			long player_absolute_index = NONE;
 			real_point3d position;
@@ -4941,7 +4941,8 @@ static void main_test_commands_update(
 			struct player_datum *player;
 
 			if (sscanf(commands[index].command + 5, "%ld %f %f %f", &player_absolute_index, &position.x, &position.y,
-				&position.z) == 4)
+				&position.z) == 4 || sscanf(commands[index].command + 5, "%ld,%f,%f,%f", &player_absolute_index, &position.x,
+				&position.y, &position.z) == 4)
 			{
 				data_iterator_new(&iterator, player_data);
 				while ((player = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
@@ -5525,6 +5526,13 @@ void main_loop(
 			/* (an Infection game's lobby: the host asks each joiner whether
 			it plays Infection, port/linux/game/infection_net.c) */
 			game_rules_net_frame();
+			/* (mixed co-op's lobby: the host of co-op on a campaign level tells
+			each joiner which files it plays it from, port/linux/game/mixed_coop.c) */
+			{
+				void mixed_coop_frame(void);
+
+				mixed_coop_frame();
+			}
 			/* (the player models from Custom Edition maps: the maps folder
 			looked through once, the settings panel's choice taken:
 			player_models.c) */

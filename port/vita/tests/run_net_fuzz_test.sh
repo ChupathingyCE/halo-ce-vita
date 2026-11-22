@@ -34,6 +34,9 @@
 #              found and the slur filter's mask (port/linux/game/
 #              game_chat_protocol.c, port/linux/src/chat_filter.c, its words
 #              port/vita/app0/chat/filter.txt), mutes and rates
+#   mixed_coop mixed co-op's messages (port/linux/game/mixed_coop_protocol.c):
+#              the lobby's hello and answer, a client's request, the host's
+#              tag dictionary in pieces as a client reassembles and reads it
 #   netversions  the signed crossplay version table (port/linux/src/
 #              netversion_table.c) as fetched (any signature) and as signed
 #              (the form's reader), then what the network wire makes of a
@@ -76,7 +79,7 @@ out=${TMPDIR:-/tmp}/net_fuzz_test.$$
 test_out_begin "$out"
 clang=${CLANG:-$(sed -n 's/^linux_cc = //p' "$root/build.ninja" | head -1)}
 [ -n "$clang" ] || clang=clang
-targets=${NET_FUZZ_TARGETS:-"p2p signal messages map_share variant_options crossplay_maps lobby actor_table forge command chat netversions epoch workshop"}
+targets=${NET_FUZZ_TARGETS:-"p2p signal messages map_share variant_options crossplay_maps lobby actor_table forge command chat netversions epoch workshop mixed_coop"}
 seconds=${NET_FUZZ_SECONDS:-0}
 mkdir -p "$out"
 cd "$root"
@@ -149,6 +152,7 @@ for target in $targets; do
 	command) flags=$platform_flags; sources="port/vita/tests/net_fuzz_command.c" ;;
 	epoch) flags=$platform_flags; sources="port/vita/tests/net_fuzz_epoch.c port/linux/src/network_epoch.c" ;;
 	workshop) flags=$platform_flags; sources="port/vita/tests/net_fuzz_workshop.c port/linux/game/workshop_maps.c" ;;
+	mixed_coop) flags=$platform_flags; sources="port/vita/tests/net_fuzz_mixed_coop.c port/linux/game/mixed_coop_protocol.c" ;;
 	chat) flags=$platform_flags; sources="port/vita/tests/net_fuzz_chat.c" ;;
 	netversions) flags=$platform_flags; sources="port/vita/tests/net_fuzz_netversions.c port/linux/src/netversion_table.c
 		port/linux/src/p2p_crypto.c $monocypher" ;;

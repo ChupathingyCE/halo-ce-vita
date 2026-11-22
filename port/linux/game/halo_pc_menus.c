@@ -99,6 +99,7 @@ logs it).
 
 void platform_log(char const *format, ...);
 boolean custom_edition_cache_menus_are_mcc_ui(void);
+boolean menu_tags_halo_pc_files_missing(void);
 int halo_menu_style_original(void);
 void ui_widget_port_spinner_text(struct widget_instance *spinner, wchar_t const *text);
 void ui_widget_port_give_focus(struct widget_instance *list, struct widget_instance *child);
@@ -276,6 +277,12 @@ enum
 	NUMBER_OF_ROWS
 };
 
+/* (the multiplayer menu's network rows: why greyed, and what the player is told once) */
+#define MULTIPLAYER_NEEDS "network games need MCC's halo1\\maps\\custom_edition files (bitmaps.map, loc.map) beside its ui.map"
+#define MULTIPLAYER_NEEDS_TOLD "System Link and internet games need MCC's custom_edition folder: copy " \
+	"halo1\\maps\\custom_edition (bitmaps.map and loc.map) from your MCC install to the same place " \
+	"beside MCC's ui.map, then restart the game."
+
 static struct
 {
 	char const *leaf;
@@ -339,12 +346,14 @@ static struct
 	{ "refresh_spinner", _row_refresh, NULL },
 	{ "gamma_spinner", _row_gamma, NULL },
 	{ "video_options_menu", _row_video_help, NULL },
-	/* (MULTIPLAYER, were it reached: no network game with MCC's maps in 1.1.3) */
-	{ "multiplayer_type_join_internet_item", _row_greyed, "no network game with MCC's maps in this build" },
-	{ "multiplayer_type_join_lan_item", _row_greyed, "no network game with MCC's maps in this build" },
-	{ "multiplayer_type_join_direct_item", _row_greyed, "no network game with MCC's maps in this build" },
-	{ "multiplayer_type_create_internet_item", _row_greyed, "no network game with MCC's maps in this build" },
-	{ "multiplayer_type_create_lan_item", _row_greyed, "no network game with MCC's maps in this build" },
+	/* (MULTIPLAYER: Halo PC's own network rows can't play here. With MCC's Halo PC files beside ui.map
+	MULTIPLAYER opens OpenCE's Multiplayer screen, every Menu style, and these are never seen - mixed play
+	r3; without them, these say what is missing, menu_tags_halo_pc_files_missing) */
+	{ "multiplayer_type_join_internet_item", _row_greyed, MULTIPLAYER_NEEDS },
+	{ "multiplayer_type_join_lan_item", _row_greyed, MULTIPLAYER_NEEDS },
+	{ "multiplayer_type_join_direct_item", _row_greyed, MULTIPLAYER_NEEDS },
+	{ "multiplayer_type_create_internet_item", _row_greyed, MULTIPLAYER_NEEDS },
+	{ "multiplayer_type_create_lan_item", _row_greyed, MULTIPLAYER_NEEDS },
 };
 
 /* the screens' values, read as a screen opens and set by its OK */
@@ -381,6 +390,10 @@ static boolean halo_pc_menus_active(void)
 
 	if (!custom_edition_cache_menus_are_mcc_ui())
 		return FALSE;
+	/* (mixed play r3: without the Halo PC files the menus' sets need, Halo PC's are the menus in every
+	Menu style - the only ones there are -, so their functions run here whatever the style) */
+	if (menu_tags_halo_pc_files_missing())
+		return TRUE;
 	if (generation_seen != halo_settings_generation)
 	{
 		generation_seen = halo_settings_generation;
@@ -2520,6 +2533,18 @@ void halo_pc_menu_render(
 		{
 			pc_menus.said[entry] = TRUE;
 			platform_log("menus: Halo PC's %s greyed: %s", pc_rows[entry].leaf, pc_rows[entry].why);
+			/* (told once a run, as the multiplayer menu first shows its network rows) */
+			{
+				static boolean told;
+
+				if (!told && pc_rows[entry].why && !strcmp(pc_rows[entry].why, MULTIPLAYER_NEEDS) && menu_tags_halo_pc_files_missing())
+				{
+					void platform_show_message(const char *title, const char *message);
+
+					told = TRUE;
+					platform_show_message("Halo: multiplayer", MULTIPLAYER_NEEDS_TOLD);
+				}
+			}
 		}
 		break;
 	case _row_shown:

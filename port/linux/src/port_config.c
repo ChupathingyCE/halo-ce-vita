@@ -353,6 +353,14 @@ static const struct config_setting config_settings[] =
 		"next round the campaign's next level; empty hosts the lobby's\n"
 		"multiplayer game. For tests: the Vita hosts co-op from the Campaign\n"
 		"menu (Y on the difficulty screen)." },
+	{ "network.mixed_coop_accept", _config_string, "\"\"", "HALO_MIXED_COOP_ACCEPT", _environment_value, _platform_all,
+		"Mixed co-op (Xbox and MCC files in one co-op game): gameplay tags whose\n"
+		"Xbox and MCC versions differ that this machine plays together anyway, by\n"
+		"path, commas between (empty: none - such a level is refused with a\n"
+		"message naming the tag). Awaiting the owner's decision: the field\n"
+		"generator's collision (scenery\\c_field_generator\\c_field_generator), the\n"
+		"flood carrier's aim assist width (characters\\floodcarrier\\floodcarrier),\n"
+		"a50's medium granite boulder's material. Tests only until then." },
 	{ "network.coop_difficulty", _config_integer, "1", "HALO_NET_COOP_DIFFICULTY", _environment_value, _platform_all,
 		"The difficulty of the co-op games this machine hosts (network.coop_level):\n"
 		"0 easy, 1 normal, 2 heroic, 3 legendary." },

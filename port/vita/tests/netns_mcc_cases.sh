@@ -18,6 +18,21 @@
 #   xboxmcc   an Xbox host's System Link game on the Xbox's Blood Gulch, an MCC-only machine joins: refused the
 #             same way, stays up, never in the game
 #   xboxlan   the Xbox's maps on both, as before (the baseline: lan's game, the same scoreboard check)
+#   mixedmp   mixed multiplayer (mixed_coop.h): HALO_TEST_MIXED="HOST JOINER MAP GAME" (HOST, JOINER: xbox or
+#             mcc; MAP: one of the maps whose files are one game - chillout longest prisoner putput ratrace
+#             wizard boardingaction, and damnation (an MCC client of an Xbox host: its invisible surfaces
+#             collide with nothing), and carousel hangemhigh with an Xbox host and an MCC joiner (Halo PC
+#             rebuilt their collision alone: the host's decides, mixed_coop_host_decides_*); GAME: slayer, ctf ...). With no HALO_TEST_MIXED_DECISIONS an MCC host's
+#             Xbox joiner is refused, told the map needs an Xbox-files host, System Link: an MCC host hosts MCC's map, named the
+#             Xbox's on the wire; the joiner joins and plays 60 s at least with two players; a mixed joiner
+#             matched the host's dictionary (never refused); both scoreboards agree; the per-tick state
+#             hashes (HALO_MIXED_COOP_HASH) agree but for runs of 90 ticks at most, and at the end; the placed
+#             objects are the same. HALO_TEST_MIXED_DECISIONS: the owner's pending decisions turned on
+#             (HALO_MIXED_DECISIONS, mixed_coop.c)
+#   mixedrebuilt  a map Halo PC rebuilt (HALO_TEST_MIXED="HOST JOINER MAP": bloodgulch beavercreek
+#             sidewinder either way; carousel hangemhigh with an MCC host and an Xbox joiner, told they need an
+#             Xbox-files host), the other family joining: refused with the message naming the map as one
+#             Halo PC rebuilt, never in the game
 
 mcc_root=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
 # (MCC's own folder, as pcmapjoin takes HALO_TEST_MCC_ROOT, holding halo1: its halo1)
@@ -114,8 +129,99 @@ sys.exit(0 if samples >= 30 and agree >= 0.85 * samples and (not ended or host_o
 PY
 }
 
+# mixed_hashes: the host's and joiner's per-tick state hashes ("mixed hash <tick> <objects> <hash>",
+# debug.txt) differ for runs of 90 ticks at most (the host's word reaches the joiner ticks later) and agree at
+# the end; the objects the map placed ("mixed placed") are the same
+mixed_hashes() {
+	python3 -I - "$out/host/data/debug.txt" "$out/joiner/data/debug.txt" <<'PY' || fail "the host's and joiner's state hashes did not agree"
+import re, sys
+def load(path):
+    ticks, placed = {}, None
+    for line in open(path, errors='replace'):
+        m = re.search(r'mixed hash (\d+) (\d+) ([0-9a-f]{8})', line)
+        if m:
+            ticks.setdefault(int(m.group(1)), m.group(3))
+        m = re.search(r'mixed placed (\d+) ([0-9a-f]{8})', line)
+        if m and placed is None:
+            placed = (int(m.group(1)), m.group(2))
+    return ticks, placed
+(h, hp), (j, jp) = load(sys.argv[1]), load(sys.argv[2])
+ticks = sorted(set(h) & set(j))
+runs, start = [], None
+for index, tick in enumerate(ticks):
+    if h[tick] != j[tick]:
+        start = tick if start is None else start
+        if index + 1 == len(ticks) or h[ticks[index + 1]] == j[ticks[index + 1]] or ticks[index + 1] != tick + 1:
+            runs.append((start, tick)); start = None
+longest = max((b - a + 1 for a, b in runs), default=0)
+ends = bool(ticks) and h[ticks[-1]] != j[ticks[-1]]
+print('the state hashes: %d ticks in both, %d differing runs, longest %d ticks%s; placed objects host %s joiner %s' %
+      (len(ticks), len(runs), longest, ', ends differing' if ends else '', hp, jp))
+sys.exit(0 if len(ticks) >= 600 and longest <= 90 and not ends and hp and hp == jp else 1)
+PY
+}
+
+mixed_case() {
+	local host_family join_family map game host_name
+	set -- ${HALO_TEST_MIXED:-mcc xbox chillout slayer}
+	host_family=$1 join_family=$2 map=$3 game=${4:-slayer}
+	mcc_setup
+	local host_data=$data join_data=$data host_content=none join_content=none
+	[ $host_family = mcc ] && host_data=$out/mcc-none host_content=$out/mcc-content
+	[ $join_family = mcc ] && join_data=$out/mcc-none join_content=$out/mcc-content
+	host_name=$map
+	[ $host_family = mcc ] && host_name=mcc_$map
+	copy_data_host=$host_data
+	copy_data_joiner=$join_data
+	mcc_lan_machine
+	local decisions="HALO_MIXED_DECISIONS=${HALO_TEST_MIXED_DECISIONS:-}"
+	run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NET_ONLINE=false \
+		HALO_NETWORK_TEST=host:$host_name:$game HALO_CONTENT_ROOT="$host_content" HALO_MIXED_COOP_HASH=1 $decisions; host_pid=$last_pid
+	sleep 5
+	run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2 \
+		HALO_CONTENT_ROOT="$join_content" HALO_MIXED_COOP_HASH=1 $decisions; join_pid=$last_pid
+	wait $join_pid $host_pid 2>/dev/null
+	hl=$out/host/run.log
+	jl=$out/joiner/run.log
+	echo "--- host ($host_family, $host_name, $game)"; grep -aE "mixed play: hosting|mixed co-op: (hosting|machine|the dictionary)|network test: (hosting|map|starting)|mixed play: the owner" "$hl" | head -8
+	echo "--- joiner ($join_family)"; grep -aE "join: the host's map|mixed co-op: (the host plays|the host's dictionary|the host's level|refused|[0-9]+ of the host)|mixed play: |map: |platform: message|Halo: (map|co-op)" "$jl" | head -14
+	two=$(grep -a "network test: tick" "$jl" | grep -a "| playing" | grep -aEc "player [0-9]+:.* player [0-9]+:")
+	echo "joiner's seconds with two players playing: $two"
+	mcc_no_assertion host
+	mcc_no_assertion joiner
+	case $mode in
+	mixedmp)
+		# (r3: no decisions, an MCC host and an Xbox joiner: the map needs an Xbox-files host - the flag stand's
+		# and teleporter base's collision, which MCC's files have not: refused, said so)
+		if [ $host_family = mcc ] && [ $join_family = xbox ] && [ -z "${HALO_TEST_MIXED_DECISIONS:-}" ]; then
+			[ "$two" = 0 ] || fail "the Xbox joiner played the MCC host's game with no decision ($two s)"
+			grep -aq "this map needs an Xbox-files host" "$jl" || fail "the Xbox joiner was not told the map needs an Xbox-files host"
+			return
+		fi
+		[ "$two" -ge 60 ] || fail "the joiner played the host's game for $two s with two players"
+		grep -aq "Halo: co-op\|mixed co-op: refused\|platform: message" "$jl" &&
+			fail "the joiner was refused or told something ($(grep -a "Halo: co-op\|mixed co-op: refused\|platform: message" "$jl" | head -1))"
+		if [ $host_family = mcc ] || [ $join_family = mcc ]; then
+			grep -aq "mixed co-op: the host's level matches this machine's" "$jl" ||
+				fail "the joiner never matched the host's dictionary"
+		fi
+		[ $host_family = mcc ] && { grep -aq "mixed play: hosting levels.test.mcc_$map.mcc_$map from MCC's files under the Xbox's name" "$hl" ||
+			fail "the MCC host did not host its map under the Xbox's name"; }
+		mcc_scoreboards
+		mixed_hashes ;;
+	mixedrebuilt)
+		[ "$two" = 0 ] || fail "the joiner played the host's game on a map Halo PC rebuilt ($two s)"
+		grep -aq "a map Halo PC rebuilt: refused" "$jl" || fail "the joiner was not refused the rebuilt map"
+		grep -aq "Halo: map: Halo PC rebuilt " "$jl" || fail "the joiner was not told Halo PC rebuilt the map"
+		case $map in carousel|hangemhigh)
+			grep -aq "needs an Xbox-files host" "$jl" || fail "the joiner was not told the map needs an Xbox-files host" ;;
+		esac ;;
+	esac
+}
+
 mcc_case() {
 	local host_data=$data join_data=$data host_content=none join_content=none host_game=host:bloodgulch:slayer
+	case $mode in mixedmp|mixedrebuilt) mixed_case; return ;; esac
 	case $mode in
 	mcclan|mccmenus) host_data=$out/mcc-none join_data=$out/mcc-none host_content=$out/mcc-content
 		join_content=$out/mcc-content host_game=host:mcc_bloodgulch:slayer ;;
@@ -181,19 +287,20 @@ mcc_case() {
 	mccxbox)
 		mcc_unavailable host
 		[ "$two" = 0 ] || fail "the Xbox joiner played the MCC host's game ($two s)"
-		grep -aq "map: the host's mcc_bloodgulch is of another map family than this machine's (the Xbox's maps here): refused" "$jl" ||
+		# (Blood Gulch: one of the six maps Halo PC rebuilt, never mixed - mixed_coop.c)
+		grep -aq "map: the host's mcc_bloodgulch is of another map family than this machine's (the Xbox's maps here), a map Halo PC rebuilt: refused" "$jl" ||
 			fail "the Xbox joiner was not refused the MCC host's map"
-		grep -aq "Halo: map: This game's maps are a different version from yours; mixed games are coming." "$jl" ||
-			fail "the Xbox joiner was not told the game's maps are a different version"
+		grep -aq "Halo: map: Halo PC rebuilt Blood Gulch" "$jl" ||
+			fail "the Xbox joiner was not told Halo PC rebuilt Blood Gulch"
 		grep -aiq "download it from\|Download .*?" "$jl" && fail "the Xbox joiner was offered a download"
 		;;
 	xboxmcc)
 		mcc_unavailable joiner
 		[ "$two" = 0 ] || fail "the MCC joiner played the Xbox host's game ($two s)"
-		grep -aq "map: the host's bloodgulch is of another map family than this machine's (MCC's maps here): refused" "$jl" ||
+		grep -aq "map: the host's bloodgulch is of another map family than this machine's (MCC's maps here), a map Halo PC rebuilt: refused" "$jl" ||
 			fail "the MCC joiner was not refused the Xbox host's map"
-		grep -aq "Halo: map: This game's maps are a different version from yours; mixed games are coming." "$jl" ||
-			fail "the MCC joiner was not told the game's maps are a different version"
+		grep -aq "Halo: map: Halo PC rebuilt Blood Gulch" "$jl" ||
+			fail "the MCC joiner was not told Halo PC rebuilt Blood Gulch"
 		;;
 	esac
 }

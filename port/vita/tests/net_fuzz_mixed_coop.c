@@ -1,0 +1,525 @@
+/*
+NET_FUZZ_MIXED_COOP.C
+
+A fuzz target for mixed co-op's messages (port/linux/game/
+mixed_coop_protocol.c): what another machine sends in a mixed co-op game -
+the lobby's hello and answer, a client's request, the host's dictionary in
+pieces and a structure BSP's digest - as this machine takes them.
+
+An input's first byte chooses what the rest is:
+  0  a lobby message (16 bytes, zeros past the input's end)
+  1  a request (28 bytes)
+  2  pieces of a dictionary: each a fragment's 16-byte header and as many
+     bytes of data as the input has left (at most its bytes), taken in
+     order into one reassembly; a stream completed is read
+  3  a dictionary stream as it is (its check left as the input has it)
+  4  a dictionary stream with its check made right (so the reader goes past
+     the check into every count and length)
+Whatever the input:
+- a lobby message or request taken has a command, version, family and
+  level there are, the level one its version names (version 1: the
+  campaign's ten; version 2: the multiplayer maps too);
+- a reassembly never takes more bytes than a stream may have, nor a piece
+  twice, and a stream it completes has exactly the bytes its pieces said;
+- a dictionary read has its tags and graphs within its bytes: every tag
+  read, every graph walked (as many as it says, each animation's hash within
+  the bytes), never past its end; a version 2 one's netgame flags within its
+  bytes too, each place finite and within the limit; a version 1 one none.
+net_fuzz_checks: a dictionary written is read back as written (version 1,
+a campaign level's, and version 2, a multiplayer map's with its flags); one
+cut short, one with a byte changed (its check), a count past its limit, a
+flag's place not finite, a version 1 stream with flags or naming a
+multiplayer map, a version 2 one without them, another version - refused; a
+stream sent in pieces in any order is the stream; a version 1 lobby message
+naming a multiplayer map is refused, a version 2 one taken.
+Built as net_fuzz_map_share.c is, by run_net_fuzz_test.sh.
+*/
+
+#include "../../linux/game/mixed_coop_protocol.h"
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static struct mixed_coop_reassembly reassembly;
+static uint8_t stream[MIXED_COOP_DICTIONARY_MAXIMUM_BYTES];
+
+static void check_dictionary(uint8_t const *bytes, uint32_t length)
+{
+	struct mixed_coop_dictionary dictionary;
+	char why[96];
+	uint32_t index, offset = 0, graphs = 0;
+	uint16_t host_tag, count;
+	uint8_t const *hashes;
+
+	if (!mixed_coop_dictionary_read(bytes, length, &dictionary, why, (int)sizeof(why)))
+	{
+		if (!why[0] || strlen(why) >= sizeof(why))
+			abort();
+		return;
+	}
+	if (dictionary.tag_count == 0 || dictionary.tag_count > MIXED_COOP_MAXIMUM_TAGS ||
+		dictionary.bsp_count > MIXED_COOP_MAXIMUM_BSPS || dictionary.graph_count > MIXED_COOP_MAXIMUM_GRAPHS ||
+		!mixed_coop_version_names_level(dictionary.version, dictionary.level) ||
+		(dictionary.family != _mixed_coop_family_xbox && dictionary.family != _mixed_coop_family_mcc))
+	{
+		abort();
+	}
+	if (dictionary.tags < bytes || dictionary.tags + (size_t)dictionary.tag_count * 12 > bytes + length)
+		abort();
+	for (index = 0; index < dictionary.tag_count; index++)
+	{
+		struct mixed_coop_dictionary_tag tag;
+		volatile uint32_t sink;
+
+		mixed_coop_dictionary_tag_get(&dictionary, index, &tag);
+		sink = tag.path_hash ^ tag.digest ^ tag.datum;
+		(void)sink;
+	}
+	while (mixed_coop_dictionary_graph_next(&dictionary, &offset, &host_tag, &count, &hashes))
+	{
+		uint16_t animation;
+
+		if (host_tag >= dictionary.tag_count || count > MIXED_COOP_MAXIMUM_ANIMATIONS)
+			abort();
+		if (hashes < bytes || hashes + (size_t)count * 4 > bytes + length)
+			abort();
+		for (animation = 0; animation < count; animation++)
+		{
+			volatile uint32_t sink = mixed_coop_read_u32(hashes + animation * 4);
+
+			(void)sink;
+		}
+		if (++graphs > dictionary.graph_count)
+			abort();
+	}
+	if (graphs != dictionary.graph_count)
+		abort();
+	if (dictionary.version != MIXED_COOP_VERSION && (dictionary.netgame_flag_count || dictionary.netgame_flags))
+		abort();
+	if (dictionary.netgame_flag_count > MIXED_COOP_MAXIMUM_NETGAME_FLAGS ||
+		(dictionary.netgame_flag_count && (dictionary.netgame_flags < bytes ||
+			dictionary.netgame_flags + (size_t)dictionary.netgame_flag_count * MIXED_COOP_NETGAME_FLAG_BYTES > bytes + length)))
+	{
+		abort();
+	}
+	for (index = 0; index < dictionary.netgame_flag_count; index++)
+	{
+		struct mixed_coop_netgame_flag flag;
+		int value;
+
+		if (!mixed_coop_dictionary_netgame_flag_get(&dictionary, index, &flag))
+			abort();
+		for (value = 0; value < 4; value++)
+		{
+			float number = value < 3 ? flag.position[value] : flag.facing;
+
+			if (!(number >= -MIXED_COOP_NETGAME_FLAG_LIMIT && number <= MIXED_COOP_NETGAME_FLAG_LIMIT))
+				abort();
+		}
+	}
+}
+
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
+{
+	uint8_t mode;
+
+	if (size < 1)
+		return 0;
+	mode = data[0];
+	data++;
+	size--;
+	switch (mode % 5)
+	{
+	case 0:
+	{
+		struct mixed_coop_lobby_message message;
+
+		memset(&message, 0, sizeof(message));
+		memcpy(&message, data, size < sizeof(message) ? size : sizeof(message));
+		if (mixed_coop_lobby_valid(&message) &&
+			(message.command == 0 || message.command >= NUMBER_OF_MIXED_COOP_LOBBY_COMMANDS ||
+				!mixed_coop_version_names_level(message.version, message.level) ||
+				message.family >= NUMBER_OF_MIXED_COOP_FAMILIES || message.reserved || message.flags))
+		{
+			abort();
+		}
+		break;
+	}
+	case 1:
+	{
+		struct mixed_coop_request request;
+
+		memset(&request, 0, sizeof(request));
+		memcpy(&request, data, size < sizeof(request) ? size : sizeof(request));
+		if (mixed_coop_request_valid(&request) &&
+			(!mixed_coop_version_names_level(request.version, request.level) ||
+				(request.family != _mixed_coop_family_xbox && request.family != _mixed_coop_family_mcc)))
+		{
+			abort();
+		}
+		break;
+	}
+	case 2:
+	{
+		static struct mixed_coop_fragment fragment;
+		size_t at = 0;
+		uint32_t session = 0;
+
+		if (size >= 4)
+			memcpy(&session, data, 4);
+		mixed_coop_reassembly_begin(&reassembly, session);
+		while (at + 16 <= size)
+		{
+			size_t take;
+			int result;
+
+			memset(&fragment, 0, sizeof(fragment));
+			memcpy(&fragment, data + at, 16);
+			at += 16;
+			take = size - at;
+			if (take > fragment.bytes)
+				take = fragment.bytes;
+			if (take > MIXED_COOP_FRAGMENT_BYTES)
+				take = MIXED_COOP_FRAGMENT_BYTES;
+			memcpy(fragment.data, data + at, take);
+			at += take;
+			result = mixed_coop_reassembly_take(&reassembly, &fragment);
+			if (reassembly.received > reassembly.count || reassembly.total_bytes > MIXED_COOP_DICTIONARY_MAXIMUM_BYTES)
+				abort();
+			if (result == _mixed_coop_fragment_complete)
+			{
+				if (reassembly.received != reassembly.count || !reassembly.total_bytes)
+					abort();
+				check_dictionary(reassembly.bytes, reassembly.total_bytes);
+				break;
+			}
+		}
+		break;
+	}
+	case 3:
+		if (size <= sizeof(stream))
+		{
+			memcpy(stream, data, size);
+			check_dictionary(stream, (uint32_t)size);
+		}
+		break;
+	case 4:
+		if (size >= 4 && size <= sizeof(stream))
+		{
+			uint32_t check;
+
+			memcpy(stream, data, size);
+			check = mixed_coop_fnv(MIXED_COOP_FNV_BASIS, stream, (uint32_t)size - 4);
+			stream[size - 4] = (uint8_t)check;
+			stream[size - 3] = (uint8_t)(check >> 8);
+			stream[size - 2] = (uint8_t)(check >> 16);
+			stream[size - 1] = (uint8_t)(check >> 24);
+			check_dictionary(stream, (uint32_t)size);
+		}
+		break;
+	}
+	return 0;
+}
+
+/* a small dictionary: 3 tags, 2 BSPs, 2 graphs; of `version` and `level`,
+with `flags` netgame flags (-1: none, the section left out), the last
+one's x `last_x` */
+static uint32_t write_sample_of(uint8_t *bytes, uint32_t size, uint32_t tag_count, uint32_t graph_animations,
+	uint16_t version, uint8_t level, int flags, float last_x)
+{
+	struct mixed_coop_dictionary_writer writer;
+	uint32_t index;
+
+	mixed_coop_writer_begin(&writer, bytes, size);
+	mixed_coop_writer_u32(&writer, MIXED_COOP_DICTIONARY_MAGIC);
+	mixed_coop_writer_u16(&writer, version);
+	mixed_coop_writer_u8(&writer, _mixed_coop_family_mcc);
+	mixed_coop_writer_u8(&writer, level);
+	mixed_coop_writer_u32(&writer, tag_count);
+	mixed_coop_writer_u32(&writer, 0x11111111u);
+	mixed_coop_writer_u32(&writer, 0x22222222u);
+	mixed_coop_writer_u32(&writer, 0x33333333u);
+	mixed_coop_writer_u32(&writer, 0x44444444u);
+	mixed_coop_writer_u16(&writer, 2);
+	mixed_coop_writer_u16(&writer, 0);
+	for (index = 0; index < 4; index++)
+		mixed_coop_writer_u32(&writer, 0xB0000000u + index);
+	for (index = 0; index < tag_count; index++)
+	{
+		mixed_coop_writer_u32(&writer, mixed_coop_path_hash(0x77656170u /* 'weap' */, index ? "weapons\\pistol\\pistol" : "a"));
+		mixed_coop_writer_u32(&writer, index * 7u);
+		mixed_coop_writer_u32(&writer, 0xE1740000u + (index << 16) + index);
+	}
+	mixed_coop_writer_u32(&writer, 2);
+	for (index = 0; index < 2; index++)
+	{
+		uint32_t animation;
+
+		mixed_coop_writer_u16(&writer, (uint16_t)(index % tag_count));
+		mixed_coop_writer_u16(&writer, (uint16_t)graph_animations);
+		for (animation = 0; animation < graph_animations; animation++)
+			mixed_coop_writer_u32(&writer, mixed_coop_name_hash("stand rifle idle", 16) + animation);
+	}
+	if (flags >= 0)
+	{
+		mixed_coop_writer_u16(&writer, (uint16_t)flags);
+		mixed_coop_writer_u16(&writer, 0);
+		for (index = 0; index < (uint32_t)flags; index++)
+		{
+			float const values[4] = { index + 1 == (uint32_t)flags ? last_x : -3.699f, -0.415f, 2.785f, 1.5708f };
+			int value;
+
+			for (value = 0; value < 4; value++)
+			{
+				uint32_t word;
+
+				memcpy(&word, &values[value], sizeof(word));
+				mixed_coop_writer_u32(&writer, word);
+			}
+			mixed_coop_writer_u16(&writer, (uint16_t)(index % 9));
+			mixed_coop_writer_u16(&writer, (uint16_t)(index % 4));
+		}
+	}
+	return mixed_coop_writer_end(&writer);
+}
+
+/* the campaign's (version 1, a10 ... d40's second, no flags) */
+static uint32_t write_sample(uint8_t *bytes, uint32_t size, uint32_t tag_count, uint32_t graph_animations)
+{
+	return write_sample_of(bytes, size, tag_count, graph_animations, MIXED_COOP_VERSION_CAMPAIGN, 1, -1, 0.0f);
+}
+
+int net_fuzz_checks(void)
+{
+	static uint8_t bytes[MIXED_COOP_DICTIONARY_MAXIMUM_BYTES];
+	static struct mixed_coop_fragment fragment;
+	struct mixed_coop_dictionary dictionary;
+	struct mixed_coop_dictionary_tag tag;
+	char why[96];
+	int failures = 0;
+	uint32_t length = write_sample(bytes, sizeof(bytes), 3, 5), cut, offset, index;
+	uint16_t host_tag, count;
+	uint8_t const *hashes;
+	char *seeds = getenv("NET_FUZZ_SEEDS");
+
+	if (!length || !mixed_coop_dictionary_read(bytes, length, &dictionary, why, (int)sizeof(why)))
+	{
+		printf("FAIL mixed_coop: the sample dictionary does not read back (%s)\n", why);
+		return 1;
+	}
+	mixed_coop_dictionary_tag_get(&dictionary, 1, &tag);
+	if (dictionary.tag_count != 3 || dictionary.bsp_count != 2 || dictionary.bsp_digests[1][1] != 0xB0000003u ||
+		dictionary.digests.layout_offset != 0x44444444u || tag.digest != 7 || tag.datum != 0xE1750001u ||
+		tag.path_hash != mixed_coop_path_hash(0x77656170u, "WEAPONS/pistol/pistol") || dictionary.graph_count != 2)
+	{
+		printf("FAIL mixed_coop: the sample dictionary reads back otherwise than written\n");
+		failures++;
+	}
+	offset = 0;
+	index = 0;
+	while (mixed_coop_dictionary_graph_next(&dictionary, &offset, &host_tag, &count, &hashes))
+		index += count;
+	if (index != 10)
+	{
+		printf("FAIL mixed_coop: the sample's graphs walk %u animations, not 10\n", (unsigned)index);
+		failures++;
+	}
+	/* (cut short anywhere: refused) */
+	for (cut = 0; cut < length; cut++)
+	{
+		if (mixed_coop_dictionary_read(bytes, cut, &dictionary, why, (int)sizeof(why)))
+		{
+			printf("FAIL mixed_coop: a dictionary cut to %u of its %u bytes was taken\n", (unsigned)cut, (unsigned)length);
+			failures++;
+			break;
+		}
+	}
+	/* (a byte changed: its check refuses it) */
+	for (index = 0; index < length; index++)
+	{
+		bytes[index] ^= 0x40;
+		if (mixed_coop_dictionary_read(bytes, length, &dictionary, why, (int)sizeof(why)))
+		{
+			printf("FAIL mixed_coop: a dictionary with byte %u changed was taken\n", (unsigned)index);
+			failures++;
+			bytes[index] ^= 0x40;
+			break;
+		}
+		bytes[index] ^= 0x40;
+	}
+	/* (a graph's animations past the limit, its check right: refused) */
+	length = write_sample(bytes, sizeof(bytes), 3, MIXED_COOP_MAXIMUM_ANIMATIONS + 1);
+	if (length && mixed_coop_dictionary_read(bytes, length, &dictionary, why, (int)sizeof(why)))
+	{
+		printf("FAIL mixed_coop: a graph of %d animations was taken\n", MIXED_COOP_MAXIMUM_ANIMATIONS + 1);
+		failures++;
+	}
+	/* (version 2, a multiplayer map's: its flags read back; one whose flag
+	is not finite, or past the limit, refused; one without the section, a
+	version 1 one with it or naming a multiplayer map, another version:
+	refused) */
+	{
+		struct mixed_coop_netgame_flag flag;
+		float const nan = strtof("nan", NULL);
+
+		length = write_sample_of(bytes, sizeof(bytes), 3, 5, MIXED_COOP_VERSION, MIXED_COOP_CAMPAIGN_LEVELS + 2, 49, 1.25f);
+		if (!length || !mixed_coop_dictionary_read(bytes, length, &dictionary, why, (int)sizeof(why)) ||
+			dictionary.netgame_flag_count != 49 || !mixed_coop_dictionary_netgame_flag_get(&dictionary, 48, &flag) ||
+			flag.position[0] != 1.25f || flag.facing != 1.5708f || flag.type != 48 % 9 || flag.team != 48 % 4 ||
+			mixed_coop_dictionary_netgame_flag_get(&dictionary, 49, &flag))
+		{
+			printf("FAIL mixed_coop: a version 2 dictionary's flags do not read back (%s)\n", why);
+			failures++;
+		}
+		for (cut = 0; cut < length; cut++)
+		{
+			if (mixed_coop_dictionary_read(bytes, cut, &dictionary, why, (int)sizeof(why)))
+			{
+				printf("FAIL mixed_coop: a version 2 dictionary cut to %u of its %u bytes was taken\n", (unsigned)cut,
+					(unsigned)length);
+				failures++;
+				break;
+			}
+		}
+		struct { uint16_t version; uint8_t level; int flags; float last_x; char const *what; } const refused[] =
+		{
+			{ MIXED_COOP_VERSION, MIXED_COOP_CAMPAIGN_LEVELS + 2, 49, nan, "a flag at NaN" },
+			{ MIXED_COOP_VERSION, MIXED_COOP_CAMPAIGN_LEVELS + 2, 49, 1e9f, "a flag past the limit" },
+			{ MIXED_COOP_VERSION, MIXED_COOP_CAMPAIGN_LEVELS + 2, MIXED_COOP_MAXIMUM_NETGAME_FLAGS + 1, 0.0f, "too many flags" },
+			{ MIXED_COOP_VERSION, MIXED_COOP_CAMPAIGN_LEVELS + 2, -1, 0.0f, "version 2 without its flags" },
+			{ MIXED_COOP_VERSION_CAMPAIGN, 1, 3, 0.0f, "version 1 with flags" },
+			{ MIXED_COOP_VERSION_CAMPAIGN, MIXED_COOP_CAMPAIGN_LEVELS + 2, -1, 0.0f, "version 1 naming a multiplayer map" },
+			{ MIXED_COOP_VERSION, MIXED_COOP_LEVELS, 0, 0.0f, "a level past the table" },
+			{ MIXED_COOP_VERSION + 1, 1, 0, 0.0f, "version 3" },
+		};
+		for (index = 0; index < sizeof(refused) / sizeof(refused[0]); index++)
+		{
+			length = write_sample_of(bytes, sizeof(bytes), 3, 5, refused[index].version, refused[index].level,
+				refused[index].flags, refused[index].last_x);
+			if (length && mixed_coop_dictionary_read(bytes, length, &dictionary, why, (int)sizeof(why)))
+			{
+				printf("FAIL mixed_coop: a dictionary with %s was taken\n", refused[index].what);
+				failures++;
+			}
+		}
+	}
+	/* (the lobby: version 1 names the campaign alone, version 2 the
+	multiplayer maps too; no other version) */
+	{
+		struct mixed_coop_lobby_message message = { _mixed_coop_lobby_hello, MIXED_COOP_VERSION_CAMPAIGN, _mixed_coop_family_mcc,
+			MIXED_COOP_CAMPAIGN_LEVELS - 1, 0, 1, 0 };
+
+		if (!mixed_coop_lobby_valid(&message) || mixed_coop_version_for_level(MIXED_COOP_CAMPAIGN_LEVELS - 1) != MIXED_COOP_VERSION_CAMPAIGN)
+		{
+			printf("FAIL mixed_coop: a version 1 hello of d40 was refused\n");
+			failures++;
+		}
+		message.level = MIXED_COOP_CAMPAIGN_LEVELS;
+		if (mixed_coop_lobby_valid(&message))
+		{
+			printf("FAIL mixed_coop: a version 1 hello of a multiplayer map was taken\n");
+			failures++;
+		}
+		message.version = MIXED_COOP_VERSION;
+		if (!mixed_coop_lobby_valid(&message) || mixed_coop_version_for_level(MIXED_COOP_CAMPAIGN_LEVELS) != MIXED_COOP_VERSION)
+		{
+			printf("FAIL mixed_coop: a version 2 hello of a multiplayer map was refused\n");
+			failures++;
+		}
+		message.level = MIXED_COOP_LEVELS;
+		if (mixed_coop_lobby_valid(&message))
+		{
+			printf("FAIL mixed_coop: a hello of a level past the table was taken\n");
+			failures++;
+		}
+		message.level = 0;
+		message.version = MIXED_COOP_VERSION + 1;
+		if (mixed_coop_lobby_valid(&message))
+		{
+			printf("FAIL mixed_coop: a version 3 hello was taken\n");
+			failures++;
+		}
+	}
+	/* (a stream of three pieces sent last first: the stream) */
+	length = write_sample(bytes, sizeof(bytes), 700, 3);
+	mixed_coop_reassembly_begin(&reassembly, 99);
+	{
+		uint16_t pieces = (uint16_t)((length + MIXED_COOP_FRAGMENT_BYTES - 1) / MIXED_COOP_FRAGMENT_BYTES);
+		int piece, result = _mixed_coop_fragment_refused;
+
+		for (piece = pieces - 1; piece >= 0; piece--)
+		{
+			memset(&fragment, 0, sizeof(fragment));
+			fragment.session = 99;
+			fragment.total_bytes = length;
+			fragment.index = (uint16_t)piece;
+			fragment.count = pieces;
+			fragment.bytes = (uint16_t)(piece + 1 < pieces ? MIXED_COOP_FRAGMENT_BYTES :
+				length - (uint32_t)piece * MIXED_COOP_FRAGMENT_BYTES);
+			memcpy(fragment.data, bytes + piece * MIXED_COOP_FRAGMENT_BYTES, fragment.bytes);
+			result = mixed_coop_reassembly_take(&reassembly, &fragment);
+			if (piece && mixed_coop_reassembly_take(&reassembly, &fragment) != _mixed_coop_fragment_refused)
+			{
+				printf("FAIL mixed_coop: a piece taken twice\n");
+				failures++;
+			}
+		}
+		if (result != _mixed_coop_fragment_complete || reassembly.total_bytes != length ||
+			memcmp(reassembly.bytes, bytes, length) ||
+			!mixed_coop_dictionary_read(reassembly.bytes, length, &dictionary, why, (int)sizeof(why)) ||
+			dictionary.tag_count != 700)
+		{
+			printf("FAIL mixed_coop: a dictionary in %u pieces, last first, is not the dictionary\n", (unsigned)pieces);
+			failures++;
+		}
+	}
+	/* (seeds for a fuzzing run: NET_FUZZ_SEEDS=<folder>) */
+	if (seeds)
+	{
+		void net_fuzz_write_seed(const char *folder, const char *name, const void *data, unsigned long size);
+		static uint8_t seed[1 + MIXED_COOP_DICTIONARY_MAXIMUM_BYTES];
+		struct mixed_coop_lobby_message hello = { _mixed_coop_lobby_hello, MIXED_COOP_VERSION_CAMPAIGN, _mixed_coop_family_mcc, 0,
+			0, 0x12345678u, 0 };
+		struct mixed_coop_request request;
+
+		seed[0] = 0;
+		memcpy(seed + 1, &hello, sizeof(hello));
+		net_fuzz_write_seed(seeds, "lobby_hello", seed, 1 + sizeof(hello));
+		memset(&request, 0, sizeof(request));
+		request.version = MIXED_COOP_VERSION_CAMPAIGN;
+		request.family = _mixed_coop_family_xbox;
+		request.level = 9;
+		request.digests.tag_count = 3000;
+		seed[0] = 1;
+		memcpy(seed + 1, &request, sizeof(request));
+		net_fuzz_write_seed(seeds, "request", seed, 1 + sizeof(request));
+		length = write_sample(bytes, sizeof(bytes), 3, 5);
+		seed[0] = 3;
+		memcpy(seed + 1, bytes, length);
+		net_fuzz_write_seed(seeds, "dictionary", seed, 1 + length);
+		seed[0] = 4;
+		net_fuzz_write_seed(seeds, "dictionary_checked", seed, 1 + length);
+		seed[0] = 2;
+		memset(&fragment, 0, sizeof(fragment));
+		fragment.session = 0;
+		fragment.total_bytes = length;
+		fragment.count = 1;
+		fragment.bytes = (uint16_t)length;
+		memcpy(seed + 1, &fragment, 16);
+		memcpy(seed + 17, bytes, length);
+		net_fuzz_write_seed(seeds, "fragments", seed, 17 + length);
+		/* (version 2: a multiplayer map's, with flags) */
+		length = write_sample_of(bytes, sizeof(bytes), 3, 5, MIXED_COOP_VERSION, MIXED_COOP_CAMPAIGN_LEVELS + 2, 4, 2.0f);
+		seed[0] = 4;
+		memcpy(seed + 1, bytes, length);
+		net_fuzz_write_seed(seeds, "dictionary_v2", seed, 1 + length);
+		hello.version = MIXED_COOP_VERSION;
+		hello.level = MIXED_COOP_CAMPAIGN_LEVELS + 3;
+		seed[0] = 0;
+		memcpy(seed + 1, &hello, sizeof(hello));
+		net_fuzz_write_seed(seeds, "lobby_hello_v2", seed, 1 + sizeof(hello));
+	}
+	return failures;
+}

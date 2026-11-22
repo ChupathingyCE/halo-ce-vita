@@ -55,6 +55,7 @@ each one, and their vertices read from the file as they load
 #include "../src/lang.h"
 #include "custom_edition_mods.h"
 #include "mcc_content.h"
+#include "mixed_coop.h"
 #include "mcc_sound.h"
 #include "workshop_maps.h"
 #include "tag_relocate.h"
@@ -739,6 +740,13 @@ static int custom_edition_cache_name_stem(
 		snprintf(stem, MCC_CONTENT_STEM_BYTES, "ui");
 		return _mcc_content_menu;
 	}
+	/* (port: mixed co-op, mixed_coop.h: in a network game, a stock campaign
+	level's name - or a mixed multiplayer map's - with no Xbox file of it is
+	MCC's file of the level) */
+	if (mixed_coop_mcc_alias(map_name, stem))
+	{
+		return mcc_content_stem_kind(stem);
+	}
 
 	return mcc_content_name_stem(map_name, stem);
 }
@@ -1020,7 +1028,8 @@ static boolean custom_edition_map_path(
 	of this machine's own), as a mod's */
 	if (mcc_kind != _mcc_content_none)
 	{
-		if (!halo_content_library_found() || (mcc_kind == _mcc_content_campaign && !from_mods) ||
+		if (!halo_content_library_found() ||
+			(mcc_kind == _mcc_content_campaign && !from_mods && !mixed_coop_mcc_alias(map_name, NULL)) ||
 			!mcc_content_map_path(mcc_stem, path, MAP_PATH_SIZE) || !file_path_exists(path))
 		{
 			return FALSE;
@@ -1511,6 +1520,16 @@ static boolean custom_edition_cache_identify_file(
 	short index;
 	char mcc_stem[MCC_CONTENT_STEM_BYTES];
 	int mcc_kind = custom_edition_cache_name_stem(map_name, mcc_stem);
+	/* (mixed co-op's alias of a stock level's name to MCC's file, mixed_coop.h:
+	remembered as MCC's name, apart from the same name's answer outside a
+	network game) */
+	char alias_name[MCC_CONTENT_NAME_BYTES];
+
+	if (mixed_coop_mcc_alias(map_name, NULL))
+	{
+		snprintf(alias_name, sizeof(alias_name), "%s%s", MCC_CONTENT_NAME_PREFIX, mcc_stem);
+		name = alias_name;
+	}
 	boolean workshop = custom_edition_cache_workshop_name(map_name);
 
 	/* (port: a name of MCC's is no map with no Halo content folder,
@@ -1550,7 +1569,7 @@ static boolean custom_edition_cache_identify_file(
 				identity->format == _cache_file_format_mcc_cea_cache :
 			mcc_kind == _mcc_content_multiplayer || workshop ?
 				identity->format == _cache_file_format_mcc_cea_cache && identity->scenario_type == _scenario_type_multiplayer :
-			from_mods ?
+			from_mods || mcc_kind == _mcc_content_campaign ?
 				identity->format == _cache_file_format_mcc_cea_cache && identity->scenario_type == _scenario_type_solo :
 				identity->format == _cache_file_format_custom_edition_cache))
 		{
@@ -2325,6 +2344,10 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 		!(mcc_cea && from_mods && identity.scenario_type == _scenario_type_solo &&
 			game_connection() == _game_connection_local) &&
 		!(mcc_cea && mcc_kind == _mcc_content_menu && halo_content_library_found()) &&
+		/* (port: mixed co-op, mixed_coop.h: MCC's campaign level played in
+		network co-op by the Xbox level's name) */
+		!(mcc_cea && mcc_kind == _mcc_content_campaign && identity.scenario_type == _scenario_type_solo &&
+			mixed_coop_mcc_alias(map_name, NULL) && halo_content_library_found()) &&
 		!(mcc_cea && mcc_kind == _mcc_content_multiplayer && identity.scenario_type == _scenario_type_multiplayer &&
 			halo_content_library_found()) &&
 		/* (port: a Steam Workshop item's multiplayer map, for any game: its

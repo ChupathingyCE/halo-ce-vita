@@ -266,6 +266,7 @@ symbols in this file:
 #include "map_share.h"
 #include "forge.h"
 #include "infection_net.h"
+#include "mixed_coop.h"
 #include "party_net.h"
 #include "dedicated_server.h"
 #include "network_game_record.h"
@@ -1474,6 +1475,19 @@ boolean network_game_server_handle_client_message(
 								break;
 							}
 							party_net_server_handle_message(
+								server,
+								machine,
+								message,
+								message_buffer_size);
+							break;
+
+						case _message_client_mixed_coop:
+							if (network_wire_crossplay())
+							{
+								network_event("ignoring a mixed co-op answer on the crossplay wire");
+								break;
+							}
+							mixed_coop_server_handle_lobby(
 								server,
 								machine,
 								message,

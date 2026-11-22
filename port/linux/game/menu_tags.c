@@ -74,6 +74,7 @@ void menu_tags_loaded(char const *map_name);
 int halo_menu_style_halo3(void);
 void menu_tags_unloaded(void);
 long menu_tags_screen(long tag_index);
+boolean custom_edition_cache_menus_are_mcc_ui(void);
 boolean menu_tags_bitmap_fits_widget(long bitmap_tag_index);
 boolean pc_menu_tag(long tag_index);
 char const *pc_menu_function_name(long function_index);
@@ -609,6 +610,10 @@ static struct
 	screen for one, as 1.2.0 does, through the classic set's where it has one: menu_tags_screen) */
 	long stub_count;
 	long stub_tags[16];
+	/* (1.1.3, mixed play r3: an MCC-only install, Menu style Classic - the map has no Xbox network screens and
+	Halo PC's own cannot play a network game here -: the stand-ins above open Classic+'s screens for those, and
+	MULTIPLAYER opens OpenCE's Multiplayer screen, as Classic+ does; every screen the map has stays its own) */
+	boolean original_stand_ins;
 	/* (Classic+ on an MCC-only install, rc.9: the map's tags - the stand-ins above and Halo PC's
 	own screens of the Xbox's names - whose definition is the classic set's Xbox screen widget of
 	that name, cp/xb/<path under ui\shell\main_menu>: classic/xbox_screens.xml) */
@@ -2850,6 +2855,17 @@ void menu_tags_preload(
 	}
 }
 
+/* (mixed play r3) MCC's ui.map loaded without the Halo PC files the menus' sets need (MCC's
+halo1\maps\custom_edition bitmaps.map and loc.map): Halo PC's own menus, whatever the Menu style -
+the only menus there are; halo_pc_menus.c runs their functions and says what network games need */
+static boolean menu_tags_pc_files_missing;
+
+boolean menu_tags_halo_pc_files_missing(
+	void)
+{
+	return menu_tags_pc_files_missing;
+}
+
 /* (menu_functions.c: the tags it keeps the indices of, looked up again
 when this changes) the maps' tags loaded or let go since the start */
 static long menu_tags_changes;
@@ -2874,6 +2890,7 @@ void menu_tags_loaded(
 	menu_tags.classic_count = 0;
 	menu_tags.classic_applied = 0;
 	menu_tags.stub_count = 0;
+	menu_tags.original_stand_ins = FALSE;
 	/* (until they are added: the Xbox's menus) */
 	if (!ingame)
 		halo_pc_menus_state = -1;
@@ -2881,8 +2898,17 @@ void menu_tags_loaded(
 		return;
 	/* (the player's Halo PC data: only that the files are there; what they
 	are, when the screens first open) */
+	if (!ingame)
+		menu_tags_pc_files_missing = FALSE;
 	if (!menu_resource_files_present())
 	{
+		if (!ingame && custom_edition_cache_menus_are_mcc_ui())
+		{
+			menu_tags_pc_files_missing = TRUE;
+			platform_log("menus: MCC's ui.map without the Halo PC files beside it (halo1\\maps\\custom_edition: "
+				"bitmaps.map, loc.map): Halo PC's own menus in every Menu style; System Link and internet games need "
+				"those files");
+		}
 #if defined(HALO_STEAM_DOWNLOAD) || defined(HALO_STEAM_WORKSHOP)
 		/* (1.1.3-insider.4: an Xbox-only install - the Xbox's own menus, as ever - gets the Steam screens alone,
 		steam.txt, the port's own art and fonts: the settings panel's Download from Steam and Steam Workshop rows
@@ -2911,7 +2937,19 @@ void menu_tags_loaded(
 	its main menu rows on the map's list, and the Halo 3 set's screens - with Classic+'s own where
 	it has them - for the Xbox screens the map lacks, menu_tags_screen; the Online and Halo 3 styles
 	replace them. Menu style is read here, when the map loads) */
-	if (stub_count && !halo_menu_style_halo3() && !halo_menu_style_classic_plus())
+	/* (1.1.3, mixed play r3 - the owner: an MCC-only Vita must host and join from every Menu style. Halo PC's
+	own menus have no network lobby and their network rows can't play here, so Classic gets the stand-ins and
+	the network screens Classic+ has; its other screens stay Halo PC's own. One switch:
+	HALO_MENUS_CLASSIC_MCC_NETWORK=0 is the menus as before, no network game from Classic) */
+	if (stub_count && halo_menu_style_original() &&
+		!(getenv("HALO_MENUS_CLASSIC_MCC_NETWORK") && !strcmp(getenv("HALO_MENUS_CLASSIC_MCC_NETWORK"), "0")))
+	{
+		menu_tags.original_stand_ins = TRUE;
+		platform_log("menus: this ui.map is Halo PC's (no Xbox screens) and Menu style is Classic: Halo PC's own "
+			"menus, with Classic+'s screens for the network lobby, server list and profile pickers it has not, and "
+			"OpenCE's Multiplayer screen for its MULTIPLAYER");
+	}
+	if (stub_count && !halo_menu_style_halo3() && !halo_menu_style_classic_plus() && !menu_tags.original_stand_ins)
 	{
 		platform_log("menus: this ui.map is Halo PC's (no Xbox screens) and Menu style is Classic: "
 			"the game's own menus; Classic+, Online or Halo 3 style adds OpenCE's screens (restart after changing it)");
@@ -3377,7 +3415,7 @@ static long menu_tags_online(
 	long index;
 
 	/* (Menu style Classic+: the classic set's, for the screens it has) */
-	if (tag_index != NONE && menu_tags.classic_set_count && halo_menu_style_classic_plus())
+	if (tag_index != NONE && menu_tags.classic_set_count && (halo_menu_style_classic_plus() || menu_tags.original_stand_ins))
 	{
 		for (index = 0; index < menu_tags.classic_set_count; index++)
 		{
@@ -3435,7 +3473,7 @@ static boolean menu_tags_classic_plus_missing(
 {
 	long index;
 
-	if (tag_index == NONE || !menu_tags.stub_count || !halo_menu_style_classic_plus())
+	if (tag_index == NONE || !menu_tags.stub_count || (!halo_menu_style_classic_plus() && !menu_tags.original_stand_ins))
 		return FALSE;
 	/* (rc.9: one the classic set has the Xbox's look for, xbox_screen_widgets_apply: that one) */
 	for (index = 0; index < menu_tags.xbox_count; index++)
@@ -3534,8 +3572,15 @@ long menu_tags_screen(
 	}
 	/* (Menu style Classic: the Xbox's own screens, as they shipped - not
 	OpenCE's Multiplayer screen nor the screens its flows open) */
-	if (halo_menu_style_original())
+	if (halo_menu_style_original() && !menu_tags.original_stand_ins)
 		return tag_index;
+	/* (an MCC-only install's Classic, mixed play r3: Halo PC's MULTIPLAYER screen - whose network rows can't
+	play here - is OpenCE's, below; any other screen the map has, its own) */
+	if (halo_menu_style_original() && menu_tags.original_stand_ins &&
+		(tag_index == NONE || tag_index != menu_tags.xbox_root_tag))
+	{
+		return tag_index;
+	}
 	/* (a level's map has no Multiplayer screen: NONE) */
 	if (tag_index != NONE && tag_index == menu_tags.xbox_root_tag && menu_tags.art >= 0)
 	{

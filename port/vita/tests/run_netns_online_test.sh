@@ -120,10 +120,14 @@
 #            each: the joiner with the host's copy, without it - asked, it
 #            downloads the item from a fake Steam in its own namespace -, saying
 #            no, with another copy, and older builds joining)
-#   mcclan mccmenus mccxbox xboxmcc xboxlan   Halo: MCC's maps in
+#   mcclan mccmenus mccxbox xboxmcc xboxlan mixedmp mixedrebuilt   Halo: MCC's maps in
 #            multiplayer (netns_mcc_cases.sh has each): MCC-only machines play
 #            each other by System Link and from Classic+'s INTERNET browser;
-#            an MCC machine and an Xbox one are refused each other's game
+#            an MCC machine and an Xbox one are refused each other's game but on
+#            the maps whose files are one game, and Damnation, Derelict and
+#            Hang 'Em High with an Xbox host (mixed play: mixedmp; Blood Gulch,
+#            Battle Creek and Sidewinder stay refused, and an MCC host's
+#            Derelict and Hang 'Em High: mixedrebuilt)
 #   pc       the host is a Vita build, the joiner a PC build: by code (it
 #            must find nothing: Vitas signal on their own topics) and on
 #            one LAN with the host (it must never list or join the game)
@@ -6899,14 +6903,14 @@ workshop|workshopget|workshopno|workshopdiff|workshopold)
 	. "$here/netns_workshop_cases.sh"
 	workshop_case
 	;;
-mcclan|mccmenus|mccxbox|xboxmcc|xboxlan)
+mcclan|mccmenus|mccxbox|xboxmcc|xboxlan|mixedmp|mixedrebuilt)
 	# Halo: MCC's maps in multiplayer (1.1.3): an MCC-only machine's games with
 	# another, and kept apart from the Xbox's maps' (netns_mcc_cases.sh)
 	. "$here/netns_mcc_cases.sh"
 	mcc_case
 	;;
 *)
-	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b|command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|commandoff|commandmap|h3command|pcmapjoin|workshop|workshopget|workshopno|workshopdiff|workshopold|mcclan|mccmenus|mccxbox|xboxmcc|xboxlan" >&2
+	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b|command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|commandoff|commandmap|h3command|pcmapjoin|workshop|workshopget|workshopno|workshopdiff|workshopold|mcclan|mccmenus|mccxbox|xboxmcc|xboxlan|mixedmp|mixedrebuilt" >&2
 	exit 2
 	;;
 esac

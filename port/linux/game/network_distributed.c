@@ -77,6 +77,7 @@ machine (their datum identifiers need not be).
 #include "physics/collisions.h"
 #include "network_coop.h"
 #include "network_distributed.h"
+#include "mixed_coop.h"
 #include "network_anticheat.h"
 #include "network_wire.h"
 #include "forge.h"
@@ -324,6 +325,11 @@ had it on the ground it may be (world units: steps climbed in the ticks a
 prediction is late, where the host and the client have the ground) */
 #define PREDICTED_RISE_TOLERANCE 1.0f
 
+/* (mixed play, the Xbox-host-decides mode: mixed_coop_host_decides_machine/_here) the host's refused
+predictions of such clients, a client's own corrections */
+static long distributed_host_decides_refused;
+static long distributed_host_decides_corrected;
+
 /* how far players are from a client's own (world units) before the host
 sends them to it (their units and their input) every second tick, every
 third, and every fourth; one no cluster of the client's players' can see
@@ -450,6 +456,22 @@ struct distributed_pickup
 };
 
 typedef char distributed_pickup_size_assert[sizeof(struct distributed_pickup) == 8 ? 1 : -1];
+
+/* (mixed_coop.c) a mixed client's host pickups: their tags its own */
+boolean network_distributed_mixed_translate(
+	byte type,
+	void *entries,
+	short count)
+{
+	struct distributed_pickup *pickups = entries;
+	short index;
+
+	if (type != _distributed_message_pickups)
+		return TRUE;
+	for (index = 0; index < count; index++)
+		pickups[index].definition_index = mixed_coop_tag_from_host(pickups[index].definition_index);
+	return TRUE;
+}
 
 struct distributed_player_statistics
 {
@@ -1268,6 +1290,9 @@ void distributed_send(
 	short destination)
 {
 	distributed_fill_header(message, type, count, size);
+	/* (a mixed co-op client's to the host: its tags the host's, mixed_coop.c) */
+	if (destination == _distributed_to_host || destination == _distributed_to_host_reliably)
+		mixed_coop_translate_outgoing(type, (byte *)message + sizeof(struct distributed_message_header), count);
 	switch (destination)
 	{
 	case _distributed_to_clients:
@@ -2464,10 +2489,19 @@ static void distributed_correct_own_unit(
 			{
 				error.k = 0.0f;
 			}
-			if (!(error.i * error.i + error.j * error.j + error.k * error.k >
-				LOCAL_CORRECTION_TOLERANCE * LOCAL_CORRECTION_TOLERANCE))
+			/* (mixed play, a map Halo PC rebuilt, this MCC machine in an Xbox-files host's game: the host's
+			collision decides, its copy put here past a small tolerance - mixed_coop_host_decides_here) */
 			{
-				return;
+				real tolerance = mixed_coop_host_decides_here() ? MIXED_COOP_HOST_DECIDES_TOLERANCE :
+					LOCAL_CORRECTION_TOLERANCE;
+
+				if (!(error.i * error.i + error.j * error.j + error.k * error.k > tolerance * tolerance))
+					return;
+				if (tolerance != LOCAL_CORRECTION_TOLERANCE && distributed_host_decides_corrected++ < 400)
+				{
+					platform_log("mixed play: the host decides: corrected at %.2f %.2f %.2f by %.2f %.2f %.2f",
+						own->position.x, own->position.y, own->position.z, error.i, error.j, error.k);
+				}
 			}
 			{
 				real_point3d before = object->object.position;
@@ -2893,6 +2927,15 @@ static struct
 	long counted;
 } distributed_wall_refusals[MAXIMUM_TRACKED_PLAYERS];
 
+/* (network_test.c) the Xbox-host-decides mode's counts */
+void network_distributed_host_decides_statistics(
+	long *refused,
+	long *corrected)
+{
+	*refused = distributed_host_decides_refused;
+	*corrected = distributed_host_decides_corrected;
+}
+
 enum
 {
 	WALL_ESCAPE_TICKS = 3 * TICKS_PER_SECOND,
@@ -2929,7 +2972,8 @@ static boolean distributed_take_prediction(
 	struct distributed_unit_state const *state = predicted;
 	struct object_datum *object = object_get(unit_index);
 	long now = game_time_get();
-	real dx, dy, dz;
+	real dx, dy, dz, tolerance;
+	boolean host_decides;
 
 	/* (OpenCE's 30, spec 3.2: a unit riding an elevator keeps the height the
 	host's own carry gives it, the client's word taken across, not up) */
@@ -2943,8 +2987,16 @@ static boolean distributed_take_prediction(
 	dy = state->position.y - object->object.position.y;
 	dz = state->position.z - object->object.position.z;
 
-	if (!(dx * dx + dy * dy + dz * dz <= HOST_ACCEPT_TOLERANCE * HOST_ACCEPT_TOLERANCE))
+	/* (mixed play, a map Halo PC rebuilt: an MCC client of this Xbox-files host is taken close to the host's
+	copy alone, the host's collision deciding - mixed_coop_host_decides_machine) */
+	host_decides = mixed_coop_host_decides_machine(distributed_player_machine(player_index));
+	tolerance = host_decides ? MIXED_COOP_HOST_DECIDES_TOLERANCE : HOST_ACCEPT_TOLERANCE;
+	if (!(dx * dx + dy * dy + dz * dz <= tolerance * tolerance))
+	{
+		if (host_decides)
+			distributed_host_decides_refused++;
 		return FALSE;
+	}
 	if (distributed_accepted[player_index].valid)
 	{
 		long ticks = MIN(distributed_predictions[player_index].time - distributed_accepted[player_index].time,
@@ -2982,7 +3034,7 @@ static boolean distributed_take_prediction(
 	once parted across a wall - one thrown by a blast the client hears of a
 	round trip late - is never held there, nor dropped; a walk through a
 	wall stalls that long each time) */
-	if (distributed_wall_refusals[player_index].since == NONE ||
+	if (host_decides || distributed_wall_refusals[player_index].since == NONE ||
 		now - distributed_wall_refusals[player_index].last > PREDICTION_JITTER_TICKS ||
 		now - distributed_wall_refusals[player_index].since < WALL_ESCAPE_TICKS)
 	{
@@ -2997,7 +3049,9 @@ static boolean distributed_take_prediction(
 				distributed_wall_refusals[player_index].counted = NONE;
 			}
 			distributed_wall_refusals[player_index].last = now;
-			if (distributed_wall_refusals[player_index].counted == NONE ||
+			if (host_decides)
+				distributed_host_decides_refused++;
+			else if (distributed_wall_refusals[player_index].counted == NONE ||
 				now - distributed_wall_refusals[player_index].counted >= TICKS_PER_SECOND)
 			{
 				network_anticheat_violation(machine_index, _anticheat_move_wall,
@@ -4457,6 +4511,8 @@ void network_distributed_tick(
 		network_damage_client_tick();
 		network_coop_client_tick();
 	}
+	/* (tests: the state both machines must agree on, mixed_coop.c) */
+	mixed_coop_tick_hash();
 	/* (when this tick was sent: the round trips that name it are timed by
 	it) */
 	distributed_tick_sent_times[game_time_get() & (TICK_SENT_TIMES - 1)].time = game_time_get();
@@ -5383,6 +5439,34 @@ static void distributed_handle_message(
 		distributed_handle_shield_effects(machine_index, message, size);
 		return;
 	}
+	/* (mixed co-op's, mixed_coop.c: over a connection's stream alone, a
+	client's request to the host, the host's to a client) */
+	if (header.type >= DISTRIBUTED_MESSAGE_MIXED_REQUEST && header.type <= DISTRIBUTED_MESSAGE_MIXED_BSP)
+	{
+		word entries_size = (word)(size - sizeof(header));
+
+		if (network_wire_crossplay() || distributed_handling_batch || header.count < 1 ||
+			(machine_index != NONE ? !distributed_handling_stream_message : network_connection_last_read_was_unreliable()))
+		{
+			return;
+		}
+		if (header.type == DISTRIBUTED_MESSAGE_MIXED_REQUEST)
+		{
+			if (machine_index != NONE && game_connection() == _game_connection_network_server &&
+				entries_size >= sizeof(struct mixed_coop_request))
+			{
+				mixed_coop_handle_request(machine_index, entries, header.count);
+			}
+		}
+		else if (machine_index == NONE && game_connection() == _game_connection_network_client)
+		{
+			if (header.type == DISTRIBUTED_MESSAGE_MIXED_DICTIONARY)
+				mixed_coop_handle_dictionary(entries, header.count, entries_size);
+			else if (entries_size >= sizeof(struct mixed_coop_bsp_digest))
+				mixed_coop_handle_bsp_digest(entries, header.count);
+		}
+		return;
+	}
 	/* (the in-game chat's, OpenCE's kinds 87-89, on either wire:
 	game_chat.c checks each, taken only over a connection's stream, never
 	a datagram or a batch) */
@@ -5557,6 +5641,14 @@ static void distributed_handle_message(
 		}
 	}
 
+	/* (a mixed co-op client: the host's tag and animation indices made this
+	machine's, mixed_coop.c; a message naming tags dropped while the host's
+	dictionary is not yet in) */
+	if (machine_index == NONE &&
+		!mixed_coop_translate_incoming(header.type, (void *)entries, header.count, (unsigned short)(size - sizeof(header))))
+	{
+		return;
+	}
 	switch (header.type)
 	{
 	case _distributed_message_player_prediction:

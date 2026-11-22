@@ -1612,6 +1612,13 @@ long scenario_tags_load(
 			them, and its Ogg Vorbis sounds' sound cache file opened on the
 			decoding thread: custom_edition_sounds.c) */
 			custom_edition_sounds_map_loaded();
+			/* (port: mixed co-op, mixed_coop.c: an MCC campaign level of
+			network co-op made the Xbox's, and its digests) */
+			{
+				extern void mixed_coop_tags_loaded(long scenario_index, int custom_edition);
+
+				mixed_coop_tags_loaded(result, TRUE);
+			}
 			/* (port: MCC's own ui.map as the menus' map: the PC menus' XML
 			screens are built into its tags as an Xbox ui.map's are. A
 			multiplayer map - the header's type 1 - gets the in-game set as
@@ -1781,6 +1788,13 @@ long scenario_tags_load(
 				extern void menu_tags_loaded(char const *map_name);
 
 				menu_tags_loaded(stripped_scenario_name);
+			}
+			/* port: mixed co-op (port/linux/game/mixed_coop.c): an Xbox
+			campaign level's digests for network co-op */
+			{
+				extern void mixed_coop_tags_loaded(long scenario_index, int custom_edition);
+
+				mixed_coop_tags_loaded(result, FALSE);
 			}
 			/* port: Forge (port/linux/game/forge.c): a Forge game asked
 			for on this map starts; anything of the last map's is gone */

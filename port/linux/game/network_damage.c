@@ -56,6 +56,7 @@ being hit looks and feels like on the clients).
 #include "scenario/scenario.h"
 #include "units/units.h"
 #include "network_distributed.h"
+#include "mixed_coop.h"
 #include "network_anticheat.h"
 #include "network_wire.h"
 #include "physics/collisions.h"
@@ -496,6 +497,33 @@ static long damage_replaying_killer;
 static long damage_replaying_killer_score;
 
 /* ---------- common */
+
+/* (mixed_coop.c) a mixed client's damage: the host's events' damage effects
+its own tags, its own hit reports' the host's */
+boolean network_damage_mixed_translate(
+	byte type,
+	void *entries,
+	short count,
+	boolean outgoing)
+{
+	short index;
+
+	if (type == _distributed_message_damage_events && !outgoing)
+	{
+		struct distributed_damage_event *events = entries;
+
+		for (index = 0; index < count; index++)
+			events[index].damage.definition_index = mixed_coop_tag_from_host(events[index].damage.definition_index);
+	}
+	else if (type == _distributed_message_hit_reports && outgoing)
+	{
+		struct distributed_hit_report *reports = entries;
+
+		for (index = 0; index < count; index++)
+			reports[index].damage.definition_index = mixed_coop_tag_to_host(reports[index].damage.definition_index);
+	}
+	return TRUE;
+}
 
 word network_damage_entry_size(
 	byte type)
@@ -2106,6 +2134,20 @@ static boolean distributed_report_stamp_taken(
 	return (unsigned long)now - (unsigned long)stamp <= (unsigned long)maximum_age;
 }
 
+/* (HALO_ANTICHEAT_TRACE=1, tests: which check refused a client's hit, by
+its line here, in debug.txt) */
+static int distributed_hit_refused(
+	int line)
+{
+	static int trace = -1;
+
+	if (trace < 0)
+		trace = getenv("HALO_ANTICHEAT_TRACE") && getenv("HALO_ANTICHEAT_TRACE")[0] == '1';
+	if (trace)
+		error(_error_silent, "damage: a client's hit refused at network_damage.c:%d", line);
+	return _anticheat_hit_refused;
+}
+
 static short distributed_report_valid(
 	long machine_index,
 	struct distributed_hit_report const *report,
@@ -2148,7 +2190,7 @@ static short distributed_report_valid(
 	if (!target && static_target(report->object_index))
 		target = object_get(report->object_index);
 	if (!target)
-		return _anticheat_hit_refused;
+		return distributed_hit_refused(__LINE__);
 	/* numbers the game can take */
 	if (!distributed_damage_numbers_valid(&report->damage) ||
 		!distributed_point_valid(&report->target_position, REPORT_WORLD_BOUND) ||
@@ -2166,7 +2208,7 @@ static short distributed_report_valid(
 		return _anticheat_hit_forged;
 	/* (none: made before the client heard the host, at a game's start) */
 	if (!distributed_report_stamp_taken(now, report->host_time, REPORT_MAXIMUM_AGE_TICKS))
-		return report->host_time != NONE && report->host_time < 0 ? _anticheat_hit_forged : _anticheat_hit_refused;
+		return report->host_time != NONE && report->host_time < 0 ? _anticheat_hit_forged : distributed_hit_refused(__LINE__);
 	ticks = MIN(now - report->host_time + TARGET_HISTORY_SLACK_TICKS, TARGET_HISTORY_TICKS - 1);
 	/* damage that player could deal, and how they deal it (one of a grenade
 	the host did not see thrown: a poor link's; of a weapon not held in
@@ -2175,7 +2217,7 @@ static short distributed_report_valid(
 		EMPTY_WEAPON_GRACE_TICKS + (long)distributed_machine_round_trip_ticks(machine_index), &kinds, &fired_reach,
 		&grenade_type, &empty);
 	if (rate <= 0.0f)
-		return distributed_grenade_deals(report->damage.definition_index) ? _anticheat_hit_refused : _anticheat_hit_weapon;
+		return distributed_grenade_deals(report->damage.definition_index) ? distributed_hit_refused(__LINE__) : _anticheat_hit_weapon;
 	/* ... of its shape: at a point, else a melee blow, else a collision; and
 	area damage as the game deals it (the report's only when the damage is
 	dealt both ways) */
@@ -2225,7 +2267,7 @@ static short distributed_report_valid(
 	{
 		throw_index = distributed_grenade_throw(player_index, grenade_type);
 		if (throw_index == NONE)
-			return _anticheat_hit_refused;
+			return distributed_hit_refused(__LINE__);
 	}
 	/* no more than the weapon fires */
 	if (!distributed_report_paid(player_index, report, rate, area && !melee && !collision,
@@ -2249,12 +2291,12 @@ static short distributed_report_valid(
 	if (melee && (!distributed_player_was_near(player_index, &report->damage.epicenter, ticks) ||
 		!distributed_player_was_near(player_index, &report->damage.origin, ticks)))
 	{
-		return _anticheat_hit_refused;
+		return distributed_hit_refused(__LINE__);
 	}
 	if (collision && !distributed_player_drove_into(player_index, &report->damage.epicenter, &report->target_position,
 		target->object.bounding_sphere_radius, ticks))
 	{
-		return _anticheat_hit_refused;
+		return distributed_hit_refused(__LINE__);
 	}
 	/* what hits at a point (a shot, an explosion) within its reach of where
 	the host had the player since it was fired, where the tags bound that
@@ -2263,14 +2305,14 @@ static short distributed_report_valid(
 		!distributed_player_could_fire(machine_index, player_index, &report->damage.origin, &fired_reach,
 			report->host_time))
 	{
-		return _anticheat_hit_refused;
+		return distributed_hit_refused(__LINE__);
 	}
 	/* the target about where the host had it when the shooter saw it: a
 	player's unit or vehicle as far back as the report was made, else (what
 	no player has) about where it is */
 	seen = distributed_target_seen(report->object_index, &report->target_position, ticks);
 	if (seen == FALSE)
-		return _anticheat_hit_refused;
+		return distributed_hit_refused(__LINE__);
 	if (seen == NONE)
 	{
 		real_point3d origin;
@@ -2283,7 +2325,7 @@ static short distributed_report_valid(
 		tolerance = REPORT_TARGET_TOLERANCE + REPORT_TARGET_LEAD_TICKS *
 			(real)sqrt(velocity.i * velocity.i + velocity.j * velocity.j + velocity.k * velocity.k);
 		if (!(distributed_distance_squared(&report->target_position, &origin) <= tolerance * tolerance))
-			return _anticheat_hit_refused;
+			return distributed_hit_refused(__LINE__);
 	}
 	/* a shot's (what hits at a point, not an explosion) part of a biped
 	about where it hit, and the point seen from where the host had the
@@ -2315,7 +2357,10 @@ static short distributed_report_valid(
 			damage_players[player_index].unseen_time = now;
 			if (last != NONE && now - last <= UNSEEN_SHOT_TICKS)
 				return _anticheat_hit_wall;
-			network_anticheat_violation(machine_index, _anticheat_hit_wall, TRUE, 1.0f);
+			/* (mixed play, a map Halo PC rebuilt: an MCC client of this Xbox-files host sees through gaps its
+			files have and the host's not - refused as ever, never counted toward a kick) */
+			if (!mixed_coop_host_decides_machine(machine_index))
+				network_anticheat_violation(machine_index, _anticheat_hit_wall, TRUE, 1.0f);
 		}
 	}
 	/* the damage as the host deals it: what a client's hit can be, from the

@@ -114,6 +114,7 @@ index and tag, since the map placed them at the same index everywhere.
 #include "coop_spectate.h"
 #include "network_coop.h"
 #include "network_distributed.h"
+#include "mixed_coop.h"
 
 #include <stdlib.h>
 
@@ -3210,6 +3211,89 @@ word network_coop_presentation_entry_size(
 	return sizeof(struct distributed_coop_presentation);
 }
 
+/* (mixed_coop.c) a mixed client's host messages: their tags and animations
+its own (an object's definition, a sound's, an effect's, a graph's and its
+animation by name) */
+boolean network_coop_mixed_translate(
+	byte type,
+	void *entries,
+	short count)
+{
+	short index;
+
+	switch (type)
+	{
+	case _distributed_message_coop_events:
+	{
+		struct distributed_coop_event *events = entries;
+
+		for (index = 0; index < count; index++)
+		{
+			struct distributed_coop_event *event = &events[index];
+
+			switch (event->kind)
+			{
+			case _coop_event_sound:
+			case _coop_event_effect:
+				event->tag_index = mixed_coop_tag_from_host(event->tag_index);
+				event->definition_index = mixed_coop_tag_from_host(event->definition_index);
+				break;
+			case _coop_event_attach:
+				event->tag_index = mixed_coop_tag_from_host(event->tag_index);
+				event->definition_index = mixed_coop_tag_from_host(event->definition_index);
+				break;
+			case _coop_event_unit_animation:
+			case _coop_event_scenery_animation:
+				event->definition_index = mixed_coop_tag_from_host(event->definition_index);
+				if (event->tag_index != NONE)
+				{
+					event->tag_index = mixed_coop_tag_from_host(event->tag_index);
+					event->value = event->tag_index != NONE ?
+						mixed_coop_animation_from_host(event->tag_index, event->value) : NONE;
+				}
+				break;
+			default:
+				break;
+			}
+		}
+		return TRUE;
+	}
+	case _distributed_message_coop_device_groups:
+	{
+		struct distributed_coop_device_group *groups = entries;
+
+		for (index = 0; index < count; index++)
+			groups[index].definition_index = mixed_coop_tag_from_host(groups[index].definition_index);
+		return TRUE;
+	}
+	case _distributed_message_coop_object_transforms:
+	{
+		struct distributed_coop_object_transform *transforms = entries;
+
+		for (index = 0; index < count; index++)
+			transforms[index].definition_index = mixed_coop_tag_from_host(transforms[index].definition_index);
+		return TRUE;
+	}
+	case _distributed_message_coop_object_looks:
+	{
+		struct distributed_coop_object_look *looks = entries;
+
+		for (index = 0; index < count; index++)
+			looks[index].definition_index = mixed_coop_tag_from_host(looks[index].definition_index);
+		return TRUE;
+	}
+	case _distributed_message_coop_device_states:
+	{
+		struct distributed_coop_device_state *states = entries;
+
+		for (index = 0; index < count; index++)
+			states[index].definition_index = mixed_coop_tag_from_host(states[index].definition_index);
+		return TRUE;
+	}
+	}
+	return TRUE;
+}
+
 word network_coop_event_entry_size(
 	void)
 {
@@ -3429,16 +3513,25 @@ void network_coop_handle_object_names(
 {
 	struct distributed_coop_object_names const *names = entries;
 	short name_index;
+	short local_count = (short)MIN(global_scenario_get()->object_names.count, MAXIMUM_OBJECT_NAMES_PER_SCENARIO);
+	short name_count = names->name_count;
 
 	if (!coop_client())
 		return;
+	/* (a mixed co-op game, mixed_coop.h: MCC's level has the Xbox's names
+	and its extras' after them - a10's six sh_ names of the scavenger hunt's
+	Moas, which are not placed in network co-op - so the names both have are
+	the first of each, and the rest are no one's) */
+	if (mixed_coop_translating() && name_count >= 0)
+		name_count = MIN(name_count, local_count);
 	if (names->structure_bsp_index != global_structure_bsp_index_get() ||
-		names->name_count != MIN(global_scenario_get()->object_names.count, MAXIMUM_OBJECT_NAMES_PER_SCENARIO))
+		(name_count != local_count && !mixed_coop_translating()) || name_count < 0 ||
+		name_count > MAXIMUM_OBJECT_NAMES_PER_SCENARIO)
 	{
 		csmemset(client_names_differing, 0, sizeof(client_names_differing));
 		return;
 	}
-	for (name_index = 0; name_index < names->name_count; name_index++)
+	for (name_index = 0; name_index < name_count; name_index++)
 	{
 		byte *differing = &client_names_differing[name_index / 8];
 		byte bit = (byte)(1 << (name_index % 8));
