@@ -96,6 +96,9 @@ struct mixed_coop_digests
 	not refused) */
 	uint32_t host_only;
 	uint32_t tag_count;
+	/* the layout on the second grid (positions half a step over:
+	mixed_coop.c) */
+	uint32_t layout_offset;
 };
 
 /* a client's request for the host's dictionary (one entry, reliable) */
@@ -108,7 +111,7 @@ struct mixed_coop_request
 	struct mixed_coop_digests digests;
 };
 
-typedef char mixed_coop_request_size_assert[sizeof(struct mixed_coop_request) == 24 ? 1 : -1];
+typedef char mixed_coop_request_size_assert[sizeof(struct mixed_coop_request) == 28 ? 1 : -1];
 
 int mixed_coop_request_valid(struct mixed_coop_request const *request);
 
@@ -176,7 +179,8 @@ int mixed_coop_reassembly_take(struct mixed_coop_reassembly *reassembly, struct 
 /* ---------- the dictionary stream
 
 	u32 magic 'MXD1', u16 version, u8 family, u8 level
-	u32 tag count, digests (layout, gameplay, host_only)
+	u32 tag count, digests (layout, gameplay, host_only, layout on the second
+	    grid)
 	u16 structure BSP count, u16 0, then two u32 collision digests each (its
 	    two grids; 0: not loaded on the host yet)
 	tag count x { u32 path hash, u32 digest (0: not a gameplay tag) }

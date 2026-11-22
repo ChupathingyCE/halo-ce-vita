@@ -1519,6 +1519,16 @@ static boolean custom_edition_cache_identify_file(
 	short index;
 	char mcc_stem[MCC_CONTENT_STEM_BYTES];
 	int mcc_kind = custom_edition_cache_name_stem(map_name, mcc_stem);
+	/* (mixed co-op's alias of a stock level's name to MCC's file, mixed_coop.h:
+	remembered as MCC's name, apart from the same name's answer outside a
+	network game) */
+	char alias_name[MCC_CONTENT_NAME_BYTES];
+
+	if (mixed_coop_mcc_alias(map_name, NULL))
+	{
+		snprintf(alias_name, sizeof(alias_name), "%s%s", MCC_CONTENT_NAME_PREFIX, mcc_stem);
+		name = alias_name;
+	}
 	boolean workshop = custom_edition_cache_workshop_name(map_name);
 
 	/* (port: a name of MCC's is no map with no Halo content folder,
@@ -1558,7 +1568,7 @@ static boolean custom_edition_cache_identify_file(
 				identity->format == _cache_file_format_mcc_cea_cache :
 			mcc_kind == _mcc_content_multiplayer || workshop ?
 				identity->format == _cache_file_format_mcc_cea_cache && identity->scenario_type == _scenario_type_multiplayer :
-			from_mods ?
+			from_mods || mcc_kind == _mcc_content_campaign ?
 				identity->format == _cache_file_format_mcc_cea_cache && identity->scenario_type == _scenario_type_solo :
 				identity->format == _cache_file_format_custom_edition_cache))
 		{

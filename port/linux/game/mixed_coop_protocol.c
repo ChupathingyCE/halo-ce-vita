@@ -223,7 +223,7 @@ int mixed_coop_dictionary_read(uint8_t const *bytes, uint32_t length, struct mix
 	uint32_t at = 0, index, graphs_begin;
 
 	memset(dictionary, 0, sizeof(*dictionary));
-	if (!bytes || length < 4 + 4 + 4 + 12 + 4 + 4 + 4)
+	if (!bytes || length < 4 + 4 + 4 + 16 + 4 + 4 + 4)
 		return mixed_coop_refuse(why, why_size, "too short");
 	if (length > MIXED_COOP_DICTIONARY_MAXIMUM_BYTES)
 		return mixed_coop_refuse(why, why_size, "too long");
@@ -246,6 +246,7 @@ int mixed_coop_dictionary_read(uint8_t const *bytes, uint32_t length, struct mix
 	dictionary->digests.layout = mixed_coop_read_u32(bytes + at); at += 4;
 	dictionary->digests.gameplay = mixed_coop_read_u32(bytes + at); at += 4;
 	dictionary->digests.host_only = mixed_coop_read_u32(bytes + at); at += 4;
+	dictionary->digests.layout_offset = mixed_coop_read_u32(bytes + at); at += 4;
 	dictionary->digests.tag_count = dictionary->tag_count;
 	if (dictionary->tag_count == 0 || dictionary->tag_count > MIXED_COOP_MAXIMUM_TAGS)
 		return mixed_coop_refuse(why, why_size, "a tag count past the limit");

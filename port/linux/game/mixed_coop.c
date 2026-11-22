@@ -40,6 +40,7 @@ when what the game reads in them is alike.
 #include "game/game.h"
 #include "game/game_engine.h"
 #include "hs/hs_scenario_definitions.h"
+#include "ai/ai_scenario_definitions.h"
 #include "items/projectile_definitions.h"
 #include "items/weapon_definitions.h"
 #include "main/main.h"
@@ -70,6 +71,7 @@ when what the game reads in them is alike.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 /* the platform's and the game's */
 void platform_log(char const *format, ...);
@@ -282,6 +284,23 @@ static boolean mixed_coop_capable(
 	return !(setting && setting[0] == '0');
 }
 
+/* whether this machine hosts a network game, or is joined to one (its lobby
+too: the map is precached there, before the game's connection says so) -
+not the main menu's search for games */
+static boolean mixed_coop_in_network_game(
+	void)
+{
+	struct network_game_client *client;
+
+	if (game_connection() == _game_connection_network_client || game_connection() == _game_connection_network_server ||
+		global_network_game_server_get())
+	{
+		return TRUE;
+	}
+	client = global_network_game_client_get();
+	return client && network_game_client_get_state(client, NULL) >= 1 /* joining, pregame, in game, postgame */;
+}
+
 int mixed_coop_mcc_alias(
 	char const *map_name,
 	char *stem)
@@ -292,11 +311,8 @@ int mixed_coop_mcc_alias(
 		stem[0] = 0;
 	/* (a network game's alone: alone, the campaign's MCC levels are the mods
 	folder's mods\mcc_a10, saved apart) */
-	if (level < 0 || !mixed_coop_capable() ||
-		(game_connection() != _game_connection_network_client && game_connection() != _game_connection_network_server))
-	{
+	if (level < 0 || !mixed_coop_capable() || !mixed_coop_in_network_game())
 		return FALSE;
-	}
 	if (mixed_coop_xbox_file(level) || !mixed_coop_mcc_file(level))
 		return FALSE;
 	if (stem)
@@ -716,6 +732,8 @@ flamethrower of c20 and d20 - is not compared) */
 static char const *const mixed_coop_placement_blocks[9][2];
 static uint8_t *mixed_coop_reach;
 static long *mixed_coop_reach_queue;
+static long *mixed_coop_reach_parent;
+static long mixed_coop_reach_current = NONE;
 static long mixed_coop_reach_queued;
 
 static void mixed_coop_reach_tag(
@@ -729,6 +747,8 @@ static void mixed_coop_reach_tag(
 		return;
 	}
 	mixed_coop_reach[absolute_index] = 1;
+	if (mixed_coop_reach_parent)
+		mixed_coop_reach_parent[absolute_index] = mixed_coop_reach_current;
 	mixed_coop_reach_queue[mixed_coop_reach_queued++] = absolute_index;
 }
 
@@ -808,7 +828,7 @@ static long mixed_coop_compute_reach(
 {
 	static char const *const roots[] =
 	{
-		"ai_actor_palette", "starting_profiles", "scenario_starting_equipment", "hs_references", "ai_animation_references",
+		"starting_profiles", "scenario_starting_equipment", "hs_references", "ai_animation_references",
 		"device_groups",
 	};
 	short index;
@@ -816,6 +836,9 @@ static long mixed_coop_compute_reach(
 
 	mixed_coop_free(mixed_coop_reach);
 	mixed_coop_free(mixed_coop_reach_queue);
+	mixed_coop_free(mixed_coop_reach_parent);
+	mixed_coop_reach_parent = malloc(sizeof(long) * (size_t)MAX(1, halo_loaded_tag_count));
+	mixed_coop_reach_current = NONE;
 	mixed_coop_reach = calloc((size_t)MAX(1, halo_loaded_tag_count), 1);
 	mixed_coop_reach_queue = malloc(sizeof(long) * (size_t)MAX(1, halo_loaded_tag_count));
 	mixed_coop_reach_queued = 0;
@@ -855,6 +878,37 @@ static long mixed_coop_compute_reach(
 	}
 	for (index = 0; index < NUMBEROF(roots); index++)
 		mixed_coop_reach_scenario_block(scenario, scenario_schema, roots[index]);
+	/* (the AI's actor variants that a squad places: a palette entry no squad
+	names - c20's and d20's flood elite with a flamethrower - comes into play
+	only by a script's name, hs_references) */
+	{
+		long encounter;
+
+		for (encounter = 0; encounter < scenario->ai_encounters.count && scenario->ai_encounters.address; encounter++)
+		{
+			struct encounter_definition const *definition =
+				(struct encounter_definition const *)scenario->ai_encounters.address + encounter;
+			long squad;
+
+			for (squad = 0; squad < definition->squads.count && definition->squads.address; squad++)
+			{
+				struct squad_definition const *squad_definition = (struct squad_definition const *)definition->squads.address + squad;
+				short palette_index = squad_definition->actor_palette_index;
+				long location;
+
+				if (palette_index >= 0 && palette_index < scenario->ai_actor_palette.count && scenario->ai_actor_palette.address)
+					mixed_coop_reach_tag(((struct tag_reference const *)scenario->ai_actor_palette.address)[palette_index].index);
+				/* (a starting location's own actor variant) */
+				for (location = 0; location < squad_definition->starting_locations.count && squad_definition->starting_locations.address;
+					location++)
+				{
+					palette_index = ((struct actor_starting_location const *)squad_definition->starting_locations.address)[location].actor_variant_index;
+					if (palette_index >= 0 && palette_index < scenario->ai_actor_palette.count && scenario->ai_actor_palette.address)
+						mixed_coop_reach_tag(((struct tag_reference const *)scenario->ai_actor_palette.address)[palette_index].index);
+				}
+			}
+		}
+	}
 	/* (the globals) */
 	for (at = 0; at < halo_loaded_tag_count; at++)
 	{
@@ -871,7 +925,29 @@ static long mixed_coop_compute_reach(
 		if (!instance->base_address || !group || !group->definition)
 			continue;
 		mixed_coop_walk_budget = MIXED_COOP_WALK_BUDGET;
+		mixed_coop_reach_current = mixed_coop_reach_queue[at];
 		mixed_coop_reach_walk((byte const *)instance->base_address, group->definition, 0);
+	}
+	mixed_coop_reach_current = NONE;
+	/* (HALO_MIXED_COOP_REACH=<path part>: how a tag came into play) */
+	if (getenv("HALO_MIXED_COOP_REACH") && mixed_coop_reach_parent)
+	{
+		for (at = 0; at < halo_loaded_tag_count; at++)
+		{
+			struct cache_file_tag_instance_view *instance = &mixed_coop_instances()[at];
+			long step = at;
+			short guard = 0;
+
+			if (!mixed_coop_reach[at] || !instance->name || !strstr(instance->name, getenv("HALO_MIXED_COOP_REACH")))
+				continue;
+			while (step != NONE && guard++ < 16)
+			{
+				platform_log("mixed reach: %s <- %s", mixed_coop_instances()[step].name ? mixed_coop_instances()[step].name : "?",
+					mixed_coop_reach_parent[step] != NONE && mixed_coop_instances()[mixed_coop_reach_parent[step]].name ?
+						mixed_coop_instances()[mixed_coop_reach_parent[step]].name : "(a root)");
+				step = mixed_coop_reach_parent[step];
+			}
+		}
 	}
 	for (at = 0; at < halo_loaded_tag_count; at++)
 		reached += mixed_coop_reach[at] != 0;
@@ -889,8 +965,12 @@ static int mixed_coop_tag_kind(
 	/* (point physics: particles, contrails and flames only - the tools'
 	derived constants a float step apart in MCC's - and what only shows or
 	the host alone runs) */
-	case 'pphy': case 'effe': case 'antr': case 'actr': case 'actv': case 'mod2': case 'mode':
+	case 'pphy': case 'effe': case 'antr': case 'actr': case 'actv':
 		return _mixed_tag_told;
+	/* (models: drawn; a gbxmodel's runtime parts differ between two loads of
+	one file) */
+	case 'mod2': case 'mode':
+		return _mixed_tag_other;
 	case 'ssce': case 'lifi':
 		return _mixed_tag_other;
 	}
@@ -1190,7 +1270,8 @@ position and rotation */
 static uint32_t mixed_coop_placements_digest(
 	struct scenario const *scenario,
 	struct tag_schema_definition const *scenario_schema,
-	struct tag_schema_field const *field)
+	struct tag_schema_field const *field,
+	real offset)
 {
 	struct tag_block const *block = (struct tag_block const *)((byte const *)scenario + field->offset);
 	struct tag_schema_definition const *definition = field->definition;
@@ -1240,12 +1321,25 @@ static uint32_t mixed_coop_placements_digest(
 		cinematic props; and its place and rotation a float step or two off
 		on a few: rounded as the tools' floats) */
 		datum->placement_flags &= 0xF;
+		/* (which BSPs it stands in: the game's own, worked out as each BSP
+		connects, object_types.c; MCC's tools left theirs in the tag) */
+		datum->on_bsp_flags = 0;
+		/* (and its unused long, where MCC keeps something on a cinematic
+		prop or two) */
+		datum->unused = 0;
+		/* (its place on a grid of 1/64 of a unit, its rotation of 1/1024 of a
+		radian, the grid moved by offset steps: b40's small snow boulder
+		stands 0.001 units lower in MCC's) */
 		{
-			uint32_t *words = (uint32_t *)&datum->position;
-			short word;
+			real *values = &datum->position.x;
+			short value;
 
-			for (word = 0; word < 6; word++)
-				words[word] = mixed_coop_round_float(words[word]);
+			for (value = 0; value < 6; value++)
+			{
+				long step = (long)floorf(values[value] * (value < 3 ? 64.0f : 1024.0f) + offset);
+
+				csmemcpy(&values[value], &step, sizeof(step));
+			}
 		}
 		mixed_coop_walk_budget = MIXED_COOP_WALK_BUDGET;
 		mixed_coop_walk(&hash, element, definition, 1, field->name);
@@ -1284,7 +1378,7 @@ static void mixed_coop_scenario_digests(
 	struct tag_schema_definition const *scenario_schema)
 {
 	struct tag_schema_field const *field;
-	uint32_t layout = MIXED_COOP_FNV_BASIS, host_only = MIXED_COOP_FNV_BASIS;
+	uint32_t layout = MIXED_COOP_FNV_BASIS, host_only = MIXED_COOP_FNV_BASIS, layout_offset = MIXED_COOP_FNV_BASIS;
 	byte mask[1];
 
 	for (field = scenario_schema->fields; field && field->type != _tag_schema_terminator; field++)
@@ -1307,6 +1401,7 @@ static void mixed_coop_scenario_digests(
 				while (length < TAG_STRING_LENGTH && object_name->name[length])
 					length++;
 				layout = mixed_coop_fnv(layout, object_name->name, (uint32_t)length);
+				layout_offset = mixed_coop_fnv(layout_offset, object_name->name, (uint32_t)length);
 			}
 			continue;
 		}
@@ -1318,24 +1413,29 @@ static void mixed_coop_scenario_digests(
 			struct tag_block const *block = (struct tag_block const *)((byte const *)scenario + field->offset);
 
 			layout = mixed_coop_fnv(layout, &block->count, sizeof(block->count));
+			layout_offset = mixed_coop_fnv(layout_offset, &block->count, sizeof(block->count));
 			for (index = 0; index < block->count && block->address; index++)
 			{
 				uint32_t path = mixed_coop_tag_path_hash(
 					((struct scenario_structure_bsp_reference const *)block->address)[index].structure_bsp.index);
 
 				layout = mixed_coop_fnv(layout, &path, sizeof(path));
+				layout_offset = mixed_coop_fnv(layout_offset, &path, sizeof(path));
 			}
 			continue;
 		}
 		mixed_coop_walk_budget = MIXED_COOP_WALK_BUDGET;
 		if (mixed_coop_placement_block(field->name))
 		{
-			uint32_t alone = mixed_coop_placements_digest(scenario, scenario_schema, field);
+			uint32_t alone = mixed_coop_placements_digest(scenario, scenario_schema, field, 0.5f);
+			uint32_t alone_offset = mixed_coop_placements_digest(scenario, scenario_schema, field, 0.0f);
 
 			if (getenv("HALO_MIXED_COOP_DIGEST_DUMP"))
-				platform_log("mixed co-op: layout block %s (%ld) %08x", field->name,
-					((struct tag_block const *)((byte const *)scenario + field->offset))->count, (unsigned)alone);
+				platform_log("mixed co-op: layout block %s (%ld) %08x %08x", field->name,
+					((struct tag_block const *)((byte const *)scenario + field->offset))->count, (unsigned)alone,
+					(unsigned)alone_offset);
 			layout = mixed_coop_fnv(layout, &alone, sizeof(alone));
+			layout_offset = mixed_coop_fnv(layout_offset, &alone_offset, sizeof(alone_offset));
 		}
 		else if (mixed_coop_layout_block(field->name))
 		{
@@ -1349,7 +1449,13 @@ static void mixed_coop_scenario_digests(
 				platform_log("mixed co-op: layout block %s (%ld) %08x", field->name, count, (unsigned)alone);
 				mixed_coop_walk_budget = MIXED_COOP_WALK_BUDGET;
 			}
-			mixed_coop_walk_field(&layout, (byte const *)scenario, field, mask, 0, 0);
+			{
+				uint32_t alone = MIXED_COOP_FNV_BASIS;
+
+				mixed_coop_walk_field(&alone, (byte const *)scenario, field, mask, 0, 0);
+				layout = mixed_coop_fnv(layout, &alone, sizeof(alone));
+				layout_offset = mixed_coop_fnv(layout_offset, &alone, sizeof(alone));
+			}
 		}
 		else if (mixed_coop_host_only_block(field->name))
 		{
@@ -1357,6 +1463,7 @@ static void mixed_coop_scenario_digests(
 		}
 	}
 	mixed_coop.digests.layout = layout;
+	mixed_coop.digests.layout_offset = layout_offset;
 	mixed_coop.digests.host_only = host_only;
 }
 
@@ -1400,9 +1507,9 @@ static void mixed_coop_dump(
 
 	if (!path || !path[0])
 		return;
-	platform_log("mixed digest: level %d family %s tags %ld layout %08x gameplay %08x host_only %08x extras %ld scripts %ld rules %ld",
+	platform_log("mixed digest: level %d family %s tags %ld layout %08x/%08x gameplay %08x host_only %08x extras %ld scripts %ld rules %ld",
 		mixed_coop.level, mixed_coop_family_name(mixed_coop.family), mixed_coop.tag_count,
-		(unsigned)mixed_coop.digests.layout, (unsigned)mixed_coop.digests.gameplay, (unsigned)mixed_coop.digests.host_only,
+		(unsigned)mixed_coop.digests.layout, (unsigned)mixed_coop.digests.layout_offset, (unsigned)mixed_coop.digests.gameplay, (unsigned)mixed_coop.digests.host_only,
 		mixed_coop.extras_removed, mixed_coop.scripts_disabled, mixed_coop.rules_applied);
 	for (index = 0; index < mixed_coop.tag_count; index++)
 	{
@@ -1995,6 +2102,7 @@ static boolean mixed_coop_build_stream(
 	mixed_coop_writer_u32(&writer, mixed_coop.digests.layout);
 	mixed_coop_writer_u32(&writer, mixed_coop.digests.gameplay);
 	mixed_coop_writer_u32(&writer, mixed_coop.digests.host_only);
+	mixed_coop_writer_u32(&writer, mixed_coop.digests.layout_offset);
 	mixed_coop_writer_u16(&writer, (uint16_t)mixed_coop.bsp_count);
 	mixed_coop_writer_u16(&writer, 0);
 	for (index = 0; index < mixed_coop.bsp_count; index++)
@@ -2087,7 +2195,7 @@ void mixed_coop_handle_request(
 	/* (each structure BSP the host has loaded since the map loaded: as it
 	is now, the stream rebuilt) */
 	{
-		uint32_t at = 4 + 2 + 1 + 1 + 4 + 12 + 4;
+		uint32_t at = 4 + 2 + 1 + 1 + 4 + 16 + 4;
 
 		long index;
 		uint32_t check;
@@ -2272,6 +2380,34 @@ static void mixed_coop_tag_text(
 	snprintf(text, (size_t)size, "%s (%s)", instance->name ? instance->name : "?", kind);
 }
 
+/* whether network.mixed_coop_accept names this tag's path */
+static boolean mixed_coop_accepted(
+	long absolute_index)
+{
+	char const *setting = getenv("HALO_MIXED_COOP_ACCEPT") ? getenv("HALO_MIXED_COOP_ACCEPT") :
+		config_string("network.mixed_coop_accept");
+	char const *name = mixed_coop_instances()[absolute_index].name;
+	size_t length;
+
+	if (!setting || !setting[0] || !name)
+		return FALSE;
+	length = strlen(name);
+	while (*setting)
+	{
+		char const *end = strchr(setting, ',');
+		size_t part = end ? (size_t)(end - setting) : strlen(setting);
+
+		while (part && *setting == ' ')
+			setting++, part--;
+		if (part == length && !strncasecmp(setting, name, length))
+			return TRUE;
+		if (!end)
+			break;
+		setting = end + 1;
+	}
+	return FALSE;
+}
+
 static void mixed_coop_dictionary_take(
 	uint8_t const *bytes,
 	uint32_t length)
@@ -2302,7 +2438,8 @@ static void mixed_coop_dictionary_take(
 		(unsigned)mixed_coop.digests.layout, (unsigned)dictionary.digests.gameplay, (unsigned)mixed_coop.digests.gameplay,
 		(unsigned)dictionary.digests.host_only, (unsigned)mixed_coop.digests.host_only, (unsigned)dictionary.bsp_count,
 		(unsigned long)dictionary.graph_count);
-	if (dictionary.digests.layout != mixed_coop.digests.layout)
+	if (dictionary.digests.layout != mixed_coop.digests.layout &&
+		dictionary.digests.layout_offset != mixed_coop.digests.layout_offset)
 	{
 		mixed_coop_leave(T("The host's %s and yours place the level's objects differently: Xbox and MCC files can't "
 			"play this level together."), mixed_coop_level_stems[mixed_coop.level]);
@@ -2354,7 +2491,11 @@ static void mixed_coop_dictionary_take(
 			char text[160];
 
 			mixed_coop_tag_text((short)local, text, sizeof(text));
-			if (mixed_coop.tags[(short)local].kind == _mixed_tag_gameplay)
+			if (mixed_coop.tags[(short)local].kind == _mixed_tag_gameplay && mixed_coop_accepted((short)local))
+			{
+				platform_log("mixed co-op: gameplay differs, accepted (network.mixed_coop_accept): %s", text);
+			}
+			else if (mixed_coop.tags[(short)local].kind == _mixed_tag_gameplay)
 			{
 				if (!gameplay_differences++)
 					snprintf(first_difference, sizeof(first_difference), "%s", text);
