@@ -6,7 +6,8 @@ over whatever is on screen (any of the three menu sets, or a game in
 progress), the same in each. The first player opens it and it takes their
 input until it closes; the game keeps running under it, and pauses only
 where the pause menu would (a game on this machine alone). Desktop and
-Android; not on the consoles yet (HALO_CONSOLE_NO_GUIDE).
+Android, and a console that asks for it (HALO_CONSOLE_GUIDE); not on the
+other consoles yet (HALO_CONSOLE_NO_GUIDE).
 */
 
 #ifndef GUIDE_H

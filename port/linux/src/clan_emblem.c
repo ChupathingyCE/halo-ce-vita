@@ -7,7 +7,8 @@ pixel for smooth edges. The later parts cover the earlier: the background
 shape, then the foreground's.
 */
 
-#if defined(HALO_GAME_BROWSER) && !defined(HALO_CONSOLE_NO_DELTA_PROFILE)
+/* (the Delta Profile screen's and the Guide's CLAN: halo_console_features.h) */
+#if defined(HALO_GAME_BROWSER) && (!defined(HALO_CONSOLE_NO_DELTA_PROFILE) || defined(HALO_GUIDE))
 
 #include "clan_emblem.h"
 
