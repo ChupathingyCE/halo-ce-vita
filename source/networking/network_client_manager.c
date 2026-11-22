@@ -832,6 +832,25 @@ ask go at once, so that a quick join again is not taken for a repeat. */
 static unsigned long network_game_client_add_player_request_times[MAXIMUM_LOCAL_PLAYERS];
 static boolean network_game_client_add_player_requested[MAXIMUM_LOCAL_PLAYERS];
 
+#ifdef HALO_LINUX
+/* port (mixed co-op): a map of the other family this machine cannot play
+with the host's, named by the host's lobby after this machine was in it -
+a co-op lobby after a level names its last multiplayer game type's map for
+a moment before the next level (lastmpvr.txt) -: held for
+NETWORK_GAME_CLIENT_HELD_REFUSAL_MILLISECONDS, refused if the lobby still
+names it then (a game started on it is refused as it starts,
+map_share_client_game_starting) */
+#define NETWORK_GAME_CLIENT_HELD_REFUSAL_MILLISECONDS 5000
+static struct
+{
+	struct network_game_client const *client;
+	boolean held;
+	unsigned long since;
+	struct network_game_map map;
+	char build[0x20];
+} network_game_client_held_refusal;
+#endif
+
 /* since when the network has been down in a game (while
 network_game_client_link_down is set): network_game_client_network_lost */
 static unsigned long network_game_client_link_down_time;
@@ -1954,6 +1973,27 @@ boolean network_game_client_game_settings_updated(
 			/* port: a map this machine cannot play with the host's: said,
 			and the game left (the menu's error the join's, not the
 			connection lost that the failure would otherwise give) */
+#ifdef HALO_LINUX
+			else if (check == _network_game_client_map_family_mixed && client->state == _network_game_client_state_pregame &&
+				client->game.map.name[0])
+			{
+				void platform_log(char const *format, ...);
+
+				if (!network_game_client_held_refusal.held || network_game_client_held_refusal.client != client ||
+					csstrcmp(network_game_client_held_refusal.map.name, message_packet->map.name))
+				{
+					network_game_client_held_refusal.client = client;
+					network_game_client_held_refusal.held = TRUE;
+					network_game_client_held_refusal.since = system_milliseconds();
+					csmemcpy(&network_game_client_held_refusal.map, &message_packet->map, sizeof(message_packet->map));
+					csstrncpy(network_game_client_held_refusal.build, build, sizeof(network_game_client_held_refusal.build) - 1);
+					network_game_client_held_refusal.build[sizeof(network_game_client_held_refusal.build) - 1] = 0;
+					platform_log("map: the host's lobby names %s, another map family's this machine can't play with the "
+						"host's: held %d ms for the lobby to change it", message_packet->map.name,
+						NETWORK_GAME_CLIENT_HELD_REFUSAL_MILLISECONDS);
+				}
+			}
+#endif
 			else if (check != _network_game_client_map_playable)
 			{
 				network_game_client_map_refusal_show(&message_packet->map, check, build,
@@ -1963,6 +2003,16 @@ boolean network_game_client_game_settings_updated(
 			}
 			else
 			{
+#ifdef HALO_LINUX
+				if (network_game_client_held_refusal.held)
+				{
+					void platform_log(char const *format, ...);
+
+					platform_log("map: the host's lobby went on to %s: the held refusal of %s dropped", message_packet->map.name,
+						network_game_client_held_refusal.map.name);
+					network_game_client_held_refusal.held = FALSE;
+				}
+#endif
 				network_event("precaching map '%s'...", message_packet->map.name);
 				main_set_multiplayer_map_name(message_packet->map.name);
 			}
@@ -3894,6 +3944,21 @@ static boolean network_game_client_idle_pregame(
 			(boolean)network_connection_connected(client->connection))
 		{
 			network_game_client_update_precache_status(client);
+#ifdef HALO_LINUX
+			/* (mixed co-op: a held refusal the lobby still names) */
+			if (network_game_client_held_refusal.held && network_game_client_held_refusal.client == client &&
+				system_milliseconds() - network_game_client_held_refusal.since >= NETWORK_GAME_CLIENT_HELD_REFUSAL_MILLISECONDS)
+			{
+				network_game_client_held_refusal.held = FALSE;
+				if (!csstrcmp(client->game.map.name, network_game_client_held_refusal.map.name))
+				{
+					network_game_client_map_refusal_show(&network_game_client_held_refusal.map, _network_game_client_map_family_mixed,
+						network_game_client_held_refusal.build, "", "");
+					display_error_when_main_menu_loaded(_error_network_failed_to_join_game);
+					return FALSE;
+				}
+			}
+#endif
 
 			if (!(success = network_connection_idle(client->connection, 15000, NULL)))
 			{
