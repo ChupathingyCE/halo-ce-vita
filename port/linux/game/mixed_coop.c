@@ -58,12 +58,16 @@ when what the game reads in them is alike.
 #include "physics/collision_bsp_definitions.h"
 #include "physics/physics_definitions.h"
 #include "physics/collision_model_definitions.h"
+#include "physics/collision_bsp.h"
 #include "objects/damage_resistances.h"
 #include "scenario/scenario.h"
 #include "scenario/scenario_definitions.h"
 #include "structures/structure_bsp_definitions.h"
 
 #include "mcc_content.h"
+
+/* (collision_bsp.c) the collision BSP whose invisible surfaces collide with nothing, or NULL */
+extern struct collision_bsp const *collision_bsp_invisible_masked;
 #include "mixed_coop.h"
 #include "network_distributed.h"
 #include "network_wire.h"
@@ -129,11 +133,13 @@ static char const *const mixed_coop_mcc_only_script_prefixes[] =
 then the multiplayer maps whose collision the research (Nov 13 2026,
 mixmaps-runs/REPORT.md) found the same in MCC's files and the Xbox's - Chill
 Out, Longest, Prisoner, Chiron TL-34, Rat Race, Wizard, and Boarding Action
-(two ladders up to 10 cm apart: the owner accepted them, Nov 14) */
+(two ladders up to 10 cm apart: the owner accepted them, Nov 14); and Damnation (r3: Halo PC added only
+invisible two-sided surfaces to its collision - the research's PRIOR-ART.md -, which an MCC machine in an
+Xbox host's game makes collide with nothing: the Xbox's collision exactly) */
 static char const *const mixed_coop_level_stems[MIXED_COOP_LEVELS] =
 {
 	"a10", "a30", "a50", "b30", "b40", "c10", "c20", "c40", "d20", "d40",
-	"chillout", "longest", "prisoner", "putput", "ratrace", "wizard", "boardingaction",
+	"chillout", "longest", "prisoner", "putput", "ratrace", "wizard", "boardingaction", "damnation",
 };
 
 /* the multiplayer maps Halo PC rebuilt (the research: walls, ceilings,
@@ -149,7 +155,6 @@ static struct
 	{ "bloodgulch", "Blood Gulch", "rebuilt walls, a lower ceiling, invisible walls and other vehicles" },
 	{ "beavercreek", "Battle Creek", "rebuilt collision" },
 	{ "carousel", "Derelict", "rebuilt collision" },
-	{ "damnation", "Damnation", "rebuilt collision" },
 	{ "hangemhigh", "Hang 'Em High", "rebuilt collision" },
 	{ "sidewinder", "Sidewinder", "rebuilt collision" },
 };
@@ -2061,6 +2066,7 @@ void mixed_coop_tags_loaded(
 	struct mixed_coop_local_tag *sorted;
 
 	mixed_coop_free_tables();
+	collision_bsp_invisible_masked = NULL;
 	csmemset(mixed_coop.bsp_digests, 0, sizeof(mixed_coop.bsp_digests));
 	csmemset(mixed_coop.host_bsp_digests, 0, sizeof(mixed_coop.host_bsp_digests));
 	mixed_coop.loaded = FALSE;
@@ -2322,6 +2328,11 @@ static uint32_t mixed_coop_collision_digest(
 
 static void mixed_coop_leave(char const *format, ...);
 
+/* (the digests, mixed_coop_structure_bsp_loaded's: r3, measured) */
+#define DAMNATION_XBOX_0 0xb60e576bu
+#define DAMNATION_XBOX_1 0xc0d695a4u
+#define DAMNATION_MCC_0 0xc2699b27u
+#define DAMNATION_MCC_1 0xaf7f7ee2u
 /* the BSP collision differences the owner accepted, by level and BSP: both
 families' digests (either grid), the Xbox's then MCC's. Boarding Action's two
 ladders, up to 10 cm apart (Nov 14 2026) */
@@ -2334,7 +2345,95 @@ static struct
 } const mixed_coop_accepted_bsps[] =
 {
 	{ "boardingaction", 0, { 0x7c801536u, 0x82774102u }, { 0xd16ec4b6u, 0x5c96dbdeu } },
+	/* (Damnation: Halo PC recompiled the BSP and added invisible two-sided surfaces alone - with them
+	colliding with nothing, mixed_coop_invisible_mask, the Xbox's surfaces exactly: no owner's call) */
+	{ "damnation", 0, { DAMNATION_XBOX_0, DAMNATION_XBOX_1 }, { DAMNATION_MCC_0, DAMNATION_MCC_1 } },
 };
+
+/* the maps whose MCC collision is the Xbox's with its invisible surfaces colliding with nothing: on an MCC
+machine in an Xbox-files host's game, that machine's structure BSP's are (the host's simulation has none) */
+static char const *const mixed_coop_invisible_mask_maps[] = { "damnation" };
+
+/* (test: HALO_MIXED_COLLISION_PROBE=<step in wu>) the structure BSP's collision as a grid of rays (down from
+above the world bounds, and along x and along y at four heights): each ray's first hit distance (1/64 wu) and
+plane normal (1/256), from a 3-D grid of points six ways 8 wu each, hashed per row and written to the log, so two machines' logs compare surface for surface */
+static void mixed_coop_collision_probe(
+	void)
+{
+	char const *setting = getenv("HALO_MIXED_COLLISION_PROBE");
+	struct structure_bsp *structure_bsp = global_structure_bsp_get();
+	struct collision_bsp const *bsp = global_collision_bsp_get();
+	real step = setting ? (real)atof(setting) : 0.0f;
+	real_rectangle3d bounds;
+	long rays = 0, hits = 0;
+	real x, y, z;
+	static real const directions[6][3] = { { 8, 0, 0 }, { -8, 0, 0 }, { 0, 8, 0 }, { 0, -8, 0 }, { 0, 0, 8 }, { 0, 0, -8 } };
+
+	if (step <= 0.0f || !structure_bsp || !bsp)
+		return;
+	bounds = structure_bsp->world_bounds;
+	for (z = bounds.z0; z <= bounds.z1; z += step)
+	{
+		for (y = bounds.y0; y <= bounds.y1; y += step)
+		{
+			uint32_t row = MIXED_COOP_FNV_BASIS;
+
+			for (x = bounds.x0; x <= bounds.x1; x += step)
+			{
+				real_point3d point;
+				short direction;
+
+				point.x = x; point.y = y; point.z = z;
+				for (direction = 0; direction < 6; direction++)
+				{
+					real_vector3d vector;
+					struct collision_bsp_test_vector_result result;
+					int32_t sample[4] = { -1, 0, 0, 0 };
+
+					vector.i = directions[direction][0]; vector.j = directions[direction][1]; vector.k = directions[direction][2];
+					rays++;
+					if (collision_bsp_test_vector(0, bsp, 0, NULL, &point, &vector, 1.0f, &result))
+					{
+						hits++;
+						sample[0] = (int32_t)floor(result.t * 8.0f * 64.0f + 0.5f);
+						sample[1] = result.plane ? (int32_t)floor(result.plane->n.i * 256.0f + 0.5f) : 0;
+						sample[2] = result.plane ? (int32_t)floor(result.plane->n.j * 256.0f + 0.5f) : 0;
+						sample[3] = result.plane ? (int32_t)floor(result.plane->n.k * 256.0f + 0.5f) : 0;
+					}
+					row = mixed_coop_fnv(row, sample, sizeof(sample));
+				}
+			}
+			platform_log("mixed collision probe 3 %.3f/%.3f %08x", z, y, (unsigned)row);
+		}
+	}
+	platform_log("mixed collision probe: %ld rays, %ld hits (step %.3f)", rays, hits, step);
+}
+
+static void mixed_coop_invisible_mask(
+	void)
+{
+	short index;
+
+	collision_bsp_invisible_masked = NULL;
+	/* (HALO_MIXED_INVISIBLE_MASK=0: MCC's collision as it is - a mixed Damnation game then differs) */
+	if (getenv("HALO_MIXED_INVISIBLE_MASK") && !strcmp(getenv("HALO_MIXED_INVISIBLE_MASK"), "0"))
+		return;
+	if (mixed_coop.level < 0 || mixed_coop.family != _mixed_coop_family_mcc ||
+		mixed_coop.host_family != _mixed_coop_family_xbox)
+	{
+		return;
+	}
+	for (index = 0; index < NUMBEROF(mixed_coop_invisible_mask_maps); index++)
+	{
+		if (!csstrcasecmp(mixed_coop_level_stems[mixed_coop.level], mixed_coop_invisible_mask_maps[index]))
+		{
+			collision_bsp_invisible_masked = global_collision_bsp_get();
+			platform_log("mixed play: %s's invisible surfaces collide with nothing on this machine (Halo PC added "
+				"them; the Xbox host's %s has none)", mixed_coop_invisible_mask_maps[index],
+				mixed_coop_invisible_mask_maps[index]);
+		}
+	}
+}
 
 static boolean mixed_coop_bsp_accepted(
 	long bsp_index,
@@ -2380,6 +2479,9 @@ void mixed_coop_structure_bsp_loaded(
 	mixed_coop.bsp_digests[bsp_index][0] = digest;
 	mixed_coop.bsp_digests[bsp_index][1] = digest_offset;
 	platform_log("mixed co-op: structure BSP %d's collision %08x %08x", bsp_index, (unsigned)digest, (unsigned)digest_offset);
+	/* (the test's probe on the host: its BSP as it is; a client's once it matched, mixed_coop_dictionary_take) */
+	if (global_network_game_server_get())
+		mixed_coop_collision_probe();
 	/* (the host: to every client that asked for its dictionary) */
 	if (global_network_game_server_get() && mixed_coop.network_coop)
 	{
@@ -3286,6 +3388,8 @@ static void mixed_coop_dictionary_take(
 		platform_log("mixed play: %ld of %ld netgame flags placed as the host's", moved, scenario->netgame_flags.count);
 	}
 	mixed_coop.matched = TRUE;
+	mixed_coop_invisible_mask();
+	mixed_coop_collision_probe();
 	platform_log("mixed co-op: the host's level matches this machine's: playing it together");
 }
 

@@ -101,6 +101,18 @@ enum collision_surface_flags
 	_collision_surface_breakable_bit,
 };
 
+#ifdef HALO_LINUX
+/* port (mixed play, port/linux/game/mixed_coop.c): the collision BSP whose invisible surfaces collide with
+nothing - Halo PC's Damnation on an MCC machine in an Xbox host's game: every surface it has beyond the
+Xbox's is an invisible two-sided one, so without them its collision is the Xbox's. NULL: none */
+struct collision_bsp const *collision_bsp_invisible_masked;
+#define COLLISION_SURFACE_MASKED(bsp, surface) \
+	(collision_bsp_invisible_masked && (bsp) == collision_bsp_invisible_masked && \
+		TEST_FLAG((surface)->flags, _collision_surface_invisible_bit))
+#else
+#define COLLISION_SURFACE_MASKED(bsp, surface) FALSE
+#endif
+
 enum collision_leaf_flags
 {
 	_collision_leaf_contains_two_sided_bit,
@@ -1347,6 +1359,8 @@ static void collision_surface_test_sphere(
 	real radius_squared;
 	boolean hit_feature = FALSE;
 
+	if (COLLISION_SURFACE_MASKED(data->bsp, surface))
+		return;
 #ifdef HALO_LINUX
 	/* (perf/113-ce-fights) out of the surface's bounding sphere's reach: no
 	vertex within the radius, no edge the sphere meets, no interior point
@@ -1608,6 +1622,8 @@ static boolean collision_surface_test_point(
 		struct collision_surface);
 	long edge_index;
 
+	if (COLLISION_SURFACE_MASKED(bsp, surface))
+		return FALSE;
 	if (TEST_FLAG(surface->flags, _collision_surface_breakable_bit))
 	{
 		byte breakable_surface_index = surface->breakable_surface_index;
@@ -2325,7 +2341,8 @@ static boolean collision_bsp_test_vector_recursive(
 					surface_index,
 					struct collision_surface);
 
-				if ((!TEST_FLAG(surface->flags, _collision_surface_invisible_bit) ||
+				if (!COLLISION_SURFACE_MASKED(data->bsp, surface) &&
+					(!TEST_FLAG(surface->flags, _collision_surface_invisible_bit) ||
 						!TEST_FLAG(data->flags, _collision_test_ignore_invisible_surfaces_bit)) &&
 					(!TEST_FLAG(surface->flags, _collision_surface_breakable_bit) ||
 						!TEST_FLAG(data->flags, _collision_test_ignore_breakable_surfaces_bit)))

@@ -20,14 +20,16 @@
 #   xboxlan   the Xbox's maps on both, as before (the baseline: lan's game, the same scoreboard check)
 #   mixedmp   mixed multiplayer (mixed_coop.h): HALO_TEST_MIXED="HOST JOINER MAP GAME" (HOST, JOINER: xbox or
 #             mcc; MAP: one of the maps whose files are one game - chillout longest prisoner putput ratrace
-#             wizard boardingaction; GAME: slayer, ctf ...), System Link: an MCC host hosts MCC's map, named the
+#             wizard boardingaction, and damnation (an MCC client of an Xbox host: its invisible surfaces
+#             collide with nothing); GAME: slayer, ctf ...). With no HALO_TEST_MIXED_DECISIONS an MCC host's
+#             Xbox joiner is refused, told the map needs an Xbox-files host, System Link: an MCC host hosts MCC's map, named the
 #             Xbox's on the wire; the joiner joins and plays 60 s at least with two players; a mixed joiner
 #             matched the host's dictionary (never refused); both scoreboards agree; the per-tick state
 #             hashes (HALO_MIXED_COOP_HASH) agree but for runs of 90 ticks at most, and at the end; the placed
 #             objects are the same. HALO_TEST_MIXED_DECISIONS: the owner's pending decisions turned on
 #             (HALO_MIXED_DECISIONS, mixed_coop.c)
 #   mixedrebuilt  a map Halo PC rebuilt (HALO_TEST_MIXED="HOST JOINER MAP": bloodgulch beavercreek carousel
-#             damnation hangemhigh sidewinder), the other family joining: refused with the message naming the
+#             hangemhigh sidewinder), the other family joining: refused with the message naming the
 #             map as one Halo PC rebuilt, never in the game
 
 mcc_root=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
@@ -187,6 +189,13 @@ mixed_case() {
 	mcc_no_assertion joiner
 	case $mode in
 	mixedmp)
+		# (r3: no decisions, an MCC host and an Xbox joiner: the map needs an Xbox-files host - the flag stand's
+		# and teleporter base's collision, which MCC's files have not: refused, said so)
+		if [ $host_family = mcc ] && [ $join_family = xbox ] && [ -z "${HALO_TEST_MIXED_DECISIONS:-}" ]; then
+			[ "$two" = 0 ] || fail "the Xbox joiner played the MCC host's game with no decision ($two s)"
+			grep -aq "this map needs an Xbox-files host" "$jl" || fail "the Xbox joiner was not told the map needs an Xbox-files host"
+			return
+		fi
 		[ "$two" -ge 60 ] || fail "the joiner played the host's game for $two s with two players"
 		grep -aq "Halo: co-op\|mixed co-op: refused\|platform: message" "$jl" &&
 			fail "the joiner was refused or told something ($(grep -a "Halo: co-op\|mixed co-op: refused\|platform: message" "$jl" | head -1))"
