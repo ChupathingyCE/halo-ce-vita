@@ -540,7 +540,7 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     if mcc and not guide:
         raise SystemExit("--vita-mcc: with the Guide only")
     defines = [*console_defines(sln), *CONSOLE_FEATURES, *(GUIDE_FEATURES if guide else []),
-               *(["-DHALO_MCC=1"] if mcc else [])]
+               *(["-DHALO_MCC=1", "-DMCC_MAPS_MAXIMUM=256"] if mcc else [])]
     # a release build is the release-style build too: the debug decomp's
     # asserts compiled out as retail compiled them out, but for the memory
     # checks (configure.py --console-no-debug-asserts), and the busiest
