@@ -72,6 +72,7 @@ Forge page does (run_forge_test.sh panel).
 #include "forge.h"
 #include "map_checks.h"
 #include "command.h"
+#include "experimental_modes.h"
 #include "../src/lang.h"
 #include "../src/port_config.h"
 #include "network_connection.h"
@@ -616,9 +617,20 @@ void system_link_shortcut_update(
 			layout, as the Firefight lobby's START FIREFIGHT: forge_modes.inc) */
 			boolean firefight = halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT;
 
-			if (command && !forge_map_command((short)halo_forge_request_map))
+			/* (1.1.3: Command and Firefight experimental - the setting on,
+			Blood Gulch alone: experimental_modes.h) */
+			if ((command || firefight) && !experimental_modes_on())
 			{
-				snprintf(why, sizeof(why), "%s", T("Command mode plays on Blood Gulch and the big team maps:\nchoose one under SELECT MAP."));
+				snprintf(why, sizeof(why), "%s", experimental_modes_off_text());
+				platform_log("experimental modes: %s refused (game.experimental_modes is off)", command ? "Command" : "Firefight");
+				answer = SYSTEM_LINK_ANSWER_UNAVAILABLE;
+			}
+			else if ((command && !forge_map_command((short)halo_forge_request_map)) ||
+				(firefight && !experimental_modes_map_ok(forge_map_short((short)halo_forge_request_map))))
+			{
+				snprintf(why, sizeof(why), "%s", experimental_modes_map_text());
+				platform_log("experimental modes: %s refused (not Blood Gulch: %s)", command ? "Command" : "Firefight",
+					forge_map_short((short)halo_forge_request_map));
 				answer = SYSTEM_LINK_ANSWER_UNAVAILABLE;
 			}
 			/* (1.1.4 polish: the mode's packs - its soldiers, dropships and

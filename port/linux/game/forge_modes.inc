@@ -2376,6 +2376,13 @@ static void forge_modes_map_loaded(
 		forge_modes.requested = _forge_mode_none;
 		return;
 	}
+	/* (1.1.3: experimental - the setting on, Blood Gulch alone - by every
+	path: the lobby, the panel, the console, the tests) */
+	if (experimental_modes_refused("Firefight", scenario_name))
+	{
+		forge_modes.requested = _forge_mode_none;
+		return;
+	}
 	forge_modes.pending = forge_modes.requested;
 	forge_modes.requested = _forge_mode_none;
 	/* (the map variant's Firefight zones, else the map's built-in layout:
@@ -2753,6 +2760,12 @@ boolean forge_modes_game_running(
 void forge_modes_game_request(
 	short mode)
 {
+	/* (1.1.3: experimental, behind game.experimental_modes) */
+	if (mode == FORGE_MODE_REQUEST_FIREFIGHT && experimental_modes_refused("Firefight", NULL))
+	{
+		forge_modes.requested = _forge_mode_none;
+		return;
+	}
 	forge_modes.requested = mode == FORGE_MODE_REQUEST_FIREFIGHT ? _forge_mode_firefight : _forge_mode_none;
 	if (mode == FORGE_MODE_REQUEST_FIREFIGHT)
 		platform_log("forge modes: the next Forge game a FIREFIGHT game");

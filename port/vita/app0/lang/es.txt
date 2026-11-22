@@ -3454,7 +3454,7 @@
 "A frozen valley, two bases facing each other across the ice." = "Un valle helado, dos bases enfrentadas a través del hielo."
 "A wide valley, two bases far apart and the sky between them." = "Un valle amplio, dos bases muy separadas y el cielo entre ellas."
 "A forest valley, two bases among the trees." = "Un valle boscoso, dos bases entre los árboles."
-"Command's map: Blood Gulch, or one of Halo MCC's PC-only big team maps" = "Mapa de Mando: Blood Gulch o un mapa grande solo de PC de Halo MCC"
+"Experimental: Command plays on Blood Gulch only for now" = "Experimental: Mando solo se juega en Blood Gulch por ahora"
 "PREPARING COMMAND" = "PREPARANDO EL MODO MANDO"
 "SIDE" = "BANDO"
 "Command with friends on the Internet." = "Mando con amigos por Internet."
@@ -3791,3 +3791,21 @@
 # (the main menu's PROFILES row's picture in Spanish: tools/classic_menu_art.py reads it here; on the
 # Xbox's ui.map in English the game's own letters, on MCC's Halo PC's own picture)
 "PROFILES" = "PERFILES"
+
+# 1.1.3: Command and Firefight experimental (the settings panel's Game: Experimental modes; experimental_modes.c)
+"Command and Firefight are experimental: turn them on in Settings (Game, Menus: Experimental modes)." = "Mando y Firefight son experimentales: actívalos en Ajustes (Juego, Menús: Modos experimentales)."
+"Command and Firefight are experimental: turn them on with game.experimental_modes = true in config.toml." = "Mando y Firefight son experimentales: actívalos con game.experimental_modes = true en config.toml."
+"Command and Firefight are experimental: they play on Blood Gulch only." = "Mando y Firefight son experimentales: solo se juegan en Blood Gulch."
+"Halo: experimental mode" = "Halo: modo experimental"
+"EXPERIMENTAL: survive waves of the Covenant on Blood Gulch." = "EXPERIMENTAL: resiste oleadas del Covenant en Blood Gulch."
+"EXPERIMENTAL: lead squads in battle on Blood Gulch." = "EXPERIMENTAL: dirige escuadras en Blood Gulch."
+"EXPERIMENTAL: unfinished, may have bugs. Blood Gulch only." = "EXPERIMENTAL: sin terminar, puede tener fallos. Solo Blood Gulch."
+"EXPERIMENTAL: Command on %s" = "EXPERIMENTAL: Mando en %s"
+"EXPERIMENTAL: Firefight on %s" = "EXPERIMENTAL: Firefight en %s"
+"EXPERIMENTAL: %s on %s" = "EXPERIMENTAL: %s en %s"
+"Experimental: command your squads from above on Blood Gulch (local)" = "Experimental: dirige tus escuadras desde arriba en Blood Gulch (local)"
+"Experimental: Blood Gulch only for now" = "Experimental: solo Blood Gulch por ahora"
+"Experimental modes" = "Modos experimentales"
+"Command + Firefight: unfinished, may have bugs, Blood Gulch only" = "Mando + Firefight: sin terminar, puede tener fallos, solo Blood Gulch"
+"Experimental: lead squads in battle on Blood Gulch" = "Experimental: dirige escuadras en Blood Gulch"
+"Experimental: survive waves of the Covenant on Blood Gulch" = "Experimental: resiste oleadas del Covenant en Blood Gulch"

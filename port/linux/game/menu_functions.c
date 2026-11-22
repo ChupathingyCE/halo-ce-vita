@@ -105,6 +105,7 @@ for a gamepad); a test build's HALO_TEST_TEXT_INPUT answers in its place,
 #include "../src/system_link_shortcut.h"
 #include "forge.h"
 #include "command.h"
+#include "experimental_modes.h"
 #include "forge_blocks.h"
 #include "mod_manager.h"
 #include "game_manager.h"
@@ -636,6 +637,8 @@ enum
 	_input_forge_leave_text,
 	/* (1.1.3: Menu style Classic+'s SETTINGS, classic/modes.xml) */
 	_input_ce_settings,
+	/* (1.1.3: Classic+'s GAME MODES, its experimental rows) */
+	_input_ce_modes,
 };
 
 /* what a line of typing is for */
@@ -3280,6 +3283,9 @@ static struct
 layout, or a saved layout with Firefight zones (h3_forge.firefight_maps) */
 static boolean h3_forge_firefight_map(short map)
 {
+	/* (1.1.3: experimental, Blood Gulch alone: experimental_modes.h) */
+	if (map < 0 || map >= forge_map_count() || !experimental_modes_map_ok(forge_map_short(map)))
+		return FALSE;
 	return forge_modes_builtin_of(forge_map_short(map)) != NONE ||
 		(map >= 0 && map < 32 && (h3_forge.firefight_maps & (1UL << map)));
 }
@@ -3526,10 +3532,13 @@ static void h3_forge_lobby_update(struct widget_instance *widget)
 			platform_log("menus: forge lobby note at %lu ms: %s", system_milliseconds(), line);
 		}
 	}
+	/* (1.1.3: Command and Firefight marked experimental in their lobbies) */
 	if (h3_forge.mode == H3_FORGE_MODE_COMMAND)
-		snprintf(text, sizeof(text), T("Command on %s"), T(forge_map_name(h3_forge.map)));
+		snprintf(text, sizeof(text), T("EXPERIMENTAL: Command on %s"), T(forge_map_name(h3_forge.map)));
 	else if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT && !h3_forge.variant_file[0])
-		snprintf(text, sizeof(text), T("Firefight on %s"), T(forge_map_name(h3_forge.map)));
+		snprintf(text, sizeof(text), T("EXPERIMENTAL: Firefight on %s"), T(forge_map_name(h3_forge.map)));
+	else if (h3_forge.mode == H3_FORGE_MODE_FIREFIGHT)
+		snprintf(text, sizeof(text), T("EXPERIMENTAL: %s on %s"), h3_forge.variant_title, T(forge_map_name(h3_forge.map)));
 	else if (h3_forge.variant_file[0])
 		snprintf(text, sizeof(text), T("%s on %s"), h3_forge.variant_title, T(forge_map_name(h3_forge.map)));
 	else
@@ -20877,9 +20886,16 @@ the lobby's note (a PC-exclusive map whose MCC copy is not here: the
 owner's note, forge_map_pc_exclusive_note) */
 static boolean h3_forge_command_startable(void)
 {
+	/* (1.1.3: experimental, behind game.experimental_modes: experimental_modes.h) */
+	if (!experimental_modes_on())
+	{
+		snprintf(h3_forge.note, sizeof(h3_forge.note), "%s", experimental_modes_off_text());
+		experimental_modes_refused("Command", NULL);
+		return FALSE;
+	}
 	if (!forge_map_command(h3_forge.map))
 	{
-		snprintf(h3_forge.note, sizeof(h3_forge.note), "%s", T("Command mode plays on Blood Gulch and the big team maps:\nchoose one under SELECT MAP."));
+		snprintf(h3_forge.note, sizeof(h3_forge.note), "%s", experimental_modes_map_text());
 		platform_log("menus: forge lobby: START COMMAND: %s is not one of Command's maps", forge_map_name(h3_forge.map));
 		return FALSE;
 	}
@@ -20914,6 +20930,13 @@ static boolean h3_forge_command_start(void)
 lobby's map and map variant that is the mode's (forge.c's forge_modes.inc) */
 static boolean h3_forge_firefight_start(void)
 {
+	/* (1.1.3: experimental, behind game.experimental_modes, Blood Gulch alone) */
+	if (experimental_modes_refused("Firefight", forge_map_short(h3_forge.map)))
+	{
+		snprintf(h3_forge.note, sizeof(h3_forge.note), "%s", experimental_modes_on() ? experimental_modes_map_text() :
+			experimental_modes_off_text());
+		return FALSE;
+	}
 	if (forge_map_state(h3_forge.map, h3_forge.note, sizeof(h3_forge.note)) != _map_check_playable)
 		return FALSE;
 	if (!h3_forge_firefight_layout_ok())
@@ -23527,11 +23550,64 @@ static struct
 {
 	{ "campaign", N_("Play the story of Halo CE.") },
 	{ "multiplayer", N_("Host a game, or browse games to join.") },
-	{ "firefight", N_("Survive waves of the Covenant together.") },
+	{ "firefight", N_("EXPERIMENTAL: survive waves of the Covenant on Blood Gulch.") },
 	{ "forge", N_("Change a map's objects, then play it.") },
-	{ "command", N_("Lead squads in battle on Blood Gulch and the big team maps.") },
+	{ "command", N_("EXPERIMENTAL: lead squads in battle on Blood Gulch.") },
 	{ "exit", N_("Close Halo CE.") },
 };
+
+/* (1.1.3: a list's COMMAND and FIREFIGHT rows - the main menus', Classic+'s
+GAME MODES -: hidden, out of the focus's way, with the experimental modes off
+- experimental_modes.h -, shown with them on; the rows shown take their
+places from the top, as far apart as the list's first two) */
+static void experimental_rows_update(struct widget_instance *list)
+{
+	static int said = -1;
+	boolean on = experimental_modes_on() != 0;
+	struct widget_instance *child, *first_shown = NULL;
+	short top, pitch, place = 0;
+
+	if (!list || !list->child || !list->child->next)
+		return;
+	top = list->child->vertical_offset;
+	pitch = (short)(list->child->next->vertical_offset - top);
+	for (child = list->child; child; child = child->next)
+	{
+		boolean experimental = child->name && (!strcmp(child->name, "command") || !strcmp(child->name, "firefight"));
+
+		if (experimental && child->disabled == on)
+		{
+			widget_instance_set_visibility_recursive(child, on);
+			child->disabled = !on;
+		}
+		if (child->disabled && (experimental || !child->visible))
+			continue;
+		if (!first_shown)
+			first_shown = child;
+		child->vertical_offset = (short)(top + pitch * place++);
+	}
+	if (first_shown && (!list->focused_child || list->focused_child->disabled))
+		ui_widget_port_give_focus(list, first_shown);
+	if (said != (int)on)
+	{
+		said = on;
+		platform_log("menus: COMMAND and FIREFIGHT %s (game.experimental_modes %s)", on ? "shown, experimental" : "hidden",
+			on ? "on" : "off");
+	}
+}
+
+/* (port ce modes, Classic+'s GAME MODES list) FORGE, COMMAND, FIREFIGHT
+(experimental: experimental_rows_update) and GAMETYPES PLUS; the line under
+the list says COMMAND and FIREFIGHT are experimental */
+static void ce_modes_update(struct widget_instance *list)
+{
+	struct widget_instance *focused;
+
+	experimental_rows_update(list);
+	focused = list->focused_child;
+	text_show(named(screen_of(list), "note"), focused && focused->name && (!strcmp(focused->name, "command") ||
+		!strcmp(focused->name, "firefight")) ? T("EXPERIMENTAL: unfinished, may have bugs. Blood Gulch only.") : "");
+}
 
 /* (port online main, the main menu's list) the focused row's line, the row
 kept for the menu's return */
@@ -23553,6 +23629,9 @@ static void online_main_list_update(struct widget_instance *list)
 		}
 	}
 #endif
+	/* (1.1.3: COMMAND and FIREFIGHT shown only with the experimental modes on) */
+	experimental_rows_update(list);
+	focused = list->focused_child;
 	if (focused)
 		online_main_row = h3_child_index(focused);
 	for (index = 0; index < (short)NUMBEROF(online_main_rows); index++)
@@ -25241,6 +25320,10 @@ boolean pc_menu_event_function_invoke(
 	it plays on for now. 1.1.5: FIREFIGHT's lobby the same way, a local game) */
 	case _function_firefight_lobby_init:
 	case _function_command_lobby_init:
+		/* (1.1.3: experimental - its rows hidden while the setting is off;
+		reached anyway, said, and nothing starts: h3_forge_command_startable,
+		h3_forge_firefight_start) */
+		experimental_modes_refused(function_index == _function_command_lobby_init ? "Command" : "Firefight", NULL);
 		{
 			short was = h3_forge.mode;
 
@@ -25299,6 +25382,22 @@ boolean pc_menu_event_function_invoke(
 			}
 		}
 		platform_log("menus: %s lobby", h3_forge.mode == H3_FORGE_MODE_COMMAND ? "command" : "firefight");
+		/* (1.1.3: experimental, its maps Blood Gulch alone - the SELECT MAP
+		list's, logged for the tests) */
+		{
+			char maps[256];
+			int group, groups = cascade_forge_groups();
+			size_t length = 0;
+
+			maps[0] = 0;
+			for (group = 0; group < groups && length + 1 < sizeof(maps); group++)
+			{
+				snprintf(maps + length, sizeof(maps) - length, "%s%s", group ? " " : "", forge_map_short(cascade_forge_maps[group]));
+				length = strlen(maps);
+			}
+			platform_log("menus: %s lobby: its maps: %s", h3_forge.mode == H3_FORGE_MODE_COMMAND ? "command" : "firefight",
+				maps[0] ? maps : "none");
+		}
 		/* (the mode's packs begun now, at the lobby's pace: START then
 		rarely waits) */
 		command_packs_prebuild(h3_forge.mode == H3_FORGE_MODE_FIREFIGHT);
@@ -25346,6 +25445,7 @@ boolean pc_menu_event_function_invoke(
 	their builds wanted now - the game started from it -) */
 	case _function_forge_firefight_prepare:
 		if (h3_forge.network != _h3_network_offline || !command_prepare_needed_for(TRUE) ||
+			experimental_modes_refused("Firefight", forge_map_short(h3_forge.map)) ||
 			forge_map_state(h3_forge.map, h3_forge.note, sizeof(h3_forge.note)) != _map_check_playable)
 		{
 			return FALSE;
@@ -26296,6 +26396,10 @@ void pc_menu_game_data_function_invoke(
 	case _input_ce_settings:
 		if (widget->type == _ui_widget_type_column_list)
 			ce_settings_update(widget);
+		break;
+	case _input_ce_modes:
+		if (widget->type == _ui_widget_type_column_list)
+			ce_modes_update(widget);
 		break;
 	case _input_forge_leave_text:
 		h3_forge_leave_text_update(widget);

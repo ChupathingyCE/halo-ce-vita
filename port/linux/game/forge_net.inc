@@ -281,6 +281,9 @@ static struct
 	/* (a joiner) the host's game is a Command game (its hello's
 	FORGE_NET_SESSION_COMMAND) */
 	boolean client_command;
+	/* (a joiner, 1.1.3) the host's Command game left: the experimental modes
+	off here, or its map not Blood Gulch (experimental_modes.h) */
+	boolean client_experimental_left;
 	/* (a joiner) its packs and blocks to be prebuilt in the lobby */
 	boolean prebuild_wanted;
 	/* (a joiner) each hello pack's own pack (NONE: not brought), the hello's
@@ -1269,6 +1272,7 @@ void forge_net_client_handle_lobby_message(
 		forge_net.hosting = FALSE;
 		forge_net.client_play = (hello.flags & FORGE_NET_SESSION_PLAY) != 0;
 		forge_net.client_command = (hello.flags & FORGE_NET_SESSION_COMMAND) != 0;
+		forge_net.client_experimental_left = FALSE;
 		forge_net.host_version = hello.version;
 		snprintf(forge_net.host_title, sizeof(forge_net.host_title), "%s", hello.title);
 		forge_globals.packs_session = 0;
@@ -1468,6 +1472,26 @@ void forge_net_frame(
 	{
 		forge_net.client_session = FALSE;
 		platform_log("forge net: the host's Forge game left");
+	}
+	/* (1.1.3: a Command game joined - the host's hello said so -, with the
+	experimental modes off here, or on another map than Blood Gulch: left,
+	the player told why; experimental_modes.h) */
+	if (forge_net.client_session && forge_net.client_command && !forge_net.client_experimental_left)
+	{
+		struct network_game *game = network_game_get_game();
+		char const *map = game && game->map.name[0] ? game->map.name : NULL;
+		boolean on = experimental_modes_on() != 0;
+
+		if (!on || (map && !experimental_modes_map_ok(map)))
+		{
+			forge_net.client_experimental_left = TRUE;
+			platform_log("forge net: the host's Command game left: %s", on ? "not on Blood Gulch" :
+				"game.experimental_modes is off");
+			platform_show_message(T("Halo: cannot join this game"), on ? experimental_modes_map_text() :
+				experimental_modes_off_text());
+			network_game_abort();
+			return;
+		}
 	}
 	/* (a joiner in the host's lobby: its packs and the map's blocks
 	prebuilt, once the lobby's map is known) */

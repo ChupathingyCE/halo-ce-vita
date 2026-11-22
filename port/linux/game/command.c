@@ -134,6 +134,7 @@ Each logs what it did ("command: ...").
 #include "units/vehicles.h"
 
 #include "command.h"
+#include "experimental_modes.h"
 #include "command_squads.h"
 #include "carnage_report.h"
 #include "command_hud.h"
@@ -8119,6 +8120,9 @@ static void command_game_begin(
 void command_game_request(
 	void)
 {
+	/* (1.1.3: experimental, behind game.experimental_modes: experimental_modes.h) */
+	if (experimental_modes_refused("Command", NULL))
+		return;
 	command_globals.game_requested = TRUE;
 	platform_log("command: a Command game asked for");
 }
@@ -8188,6 +8192,11 @@ void command_map_loaded(
 	if (!command_globals.game_requested)
 		return;
 	command_globals.game_requested = FALSE;
+	/* (1.1.3: experimental - the setting on, Blood Gulch alone - by every
+	path: the lobbies, the panel, the console, the tests, a network game's
+	hello) */
+	if (experimental_modes_refused("Command", scenario_name ? scenario_name : "?"))
+		return;
 	/* (1.1.4: Blood Gulch and the PC-exclusive big team maps, forge.c's
 	forge_map_command; MCC's copy of a map loads under its own level name) */
 	if (!forge_game || !scenario_name || !forge_map_command(forge_map_of_scenario(scenario_name)))
@@ -9005,6 +9014,8 @@ boolean command_active(
 void command_toggle_request(
 	void)
 {
+	if (!command_globals.active && experimental_modes_refused("Command", NULL))
+		return;
 	__atomic_store_n(&command_globals.toggle_requested, 1, __ATOMIC_RELEASE);
 	platform_log("command: %s asked from the Forge menu", command_globals.active ? "off" : "on");
 }
@@ -9015,6 +9026,9 @@ boolean command_command(
 	char word[32];
 	char const *text = arguments;
 
+	/* (1.1.3: experimental, behind game.experimental_modes) */
+	if (!command_globals.active && experimental_modes_refused("Command", NULL))
+		return TRUE;
 	if (!command_word(&text, word, sizeof(word)))
 	{
 		if (command_globals.active)

@@ -227,7 +227,8 @@ map not here, Death Island, says the note) */
 static const char *const test_pc_note = "PC-exclusive map from Halo MCC on Steam. It can't be downloaded or shared here: add your Steam copy of Halo MCC to play it.";
 static int test_pc_map_here;
 int forge_panel_map_count(void);
-int forge_panel_map_command(int map_index) { return map_index == 1 || map_index == 3; }
+/* (1.1.3: experimental, Blood Gulch alone - forge.c's forge_map_command) */
+int forge_panel_map_command(int map_index) { return map_index == 1; }
 int forge_panel_map_pc_exclusive(int map_index) { return map_index == 3; }
 int forge_panel_map_playable(int map_index, char *why, int why_size)
 {
@@ -997,6 +998,19 @@ int p2p_hosting_code(char *code, int size)
 int p2p_hosting_code_withheld(void)
 {
 	return 0;
+}
+
+/* (experimental_modes.c: the setting's variable, as the game reads it) */
+int experimental_modes_on(void)
+{
+	const char *value = getenv("HALO_EXPERIMENTAL_MODES");
+
+	return value && (!strcmp(value, "true") || !strcmp(value, "1"));
+}
+
+int experimental_modes_map_ok(const char *map)
+{
+	return map && strstr(map, "bloodgulch") != NULL;
 }
 int p2p_hosting_invite(char *invite, int size)
 {
@@ -3177,6 +3191,23 @@ static void test_forge_page(void)
 
 		snprintf(saved, sizeof(saved), "%s", setting_named("HALO_MENU_STYLE")->values[setting_named("HALO_MENU_STYLE")->choice]);
 		vita_settings_set("HALO_MENU_STYLE", "original");
+		/* (1.1.3: Command and Firefight experimental - Menus: Experimental modes,
+		off as shipped -: their page rows hidden while it is off) */
+		vita_settings_set("HALO_EXPERIMENTAL_MODES", "false");
+		press(VITA_BUTTON_R);
+		press(VITA_BUTTON_L);
+		check(to_tab("Game") && !strstr(menu, "\nCommand\x02  >") && !strstr(menu, "\nFirefight\x02  >"),
+			"Experimental modes off (as shipped): no Command or Firefight row, Menu style Halo CE too");
+		check(open_page("Menus") && strstr(menu, "\nExperimental modes\x02") != NULL &&
+			strstr(menu, "Command + Firefight: unfinished, may have bugs, Blood Gulch only") == NULL && menu_fits(),
+			"Menus: the Experimental modes row; it fits");
+		to_line("Experimental modes");
+		check(strstr(menu, "\n\x05" "Command + Firefight: unfinished, may have bugs, Blood Gulch only\n") != NULL,
+			"Experimental modes' help: unfinished, may have bugs, Blood Gulch only");
+		press(VITA_BUTTON_RIGHT);
+		check(getenv("HALO_EXPERIMENTAL_MODES") && !strcmp(getenv("HALO_EXPERIMENTAL_MODES"), "true"),
+			"Experimental modes: right, On (HALO_EXPERIMENTAL_MODES true)");
+		press(VITA_BUTTON_CIRCLE);
 		press(VITA_BUTTON_R);
 		press(VITA_BUTTON_L);
 		check(to_tab("Game") && strstr(menu, "\nCommand\x02  >") && open_page("Command") &&
@@ -3194,40 +3225,28 @@ static void test_forge_page(void)
 		press(VITA_BUTTON_RIGHT);
 		check(!strncmp(menu_line(3, line, sizeof(line)), "Layout\x02< Gulch A", 15), "Layout: right, Blood Gulch's first variant");
 		press(VITA_BUTTON_LEFT);
-		/* (1.1.4, Command on the big team maps) the Map row: right, Death
-		Island - a PC-exclusive map, its MCC copy not here: listed, marked, the
-		owner's note as its help, Start Command refused with it; here (MCC's
-		files), plain, Start Command takes it; left, Blood Gulch again (its
-		layouts: the map's own) */
+		/* (1.1.3: experimental, Blood Gulch alone - 1.1.4's big team maps not
+		offered, Death Island's MCC copy here or not) */
 		to_line("Map");
-		check(strstr(menu, "\n\x05" "Command's map: Blood Gulch, or one of Halo MCC's PC-only big team maps\n") != NULL &&
-			strstr(menu, "Left/right: change"), "Map: its help, left/right");
+		check(strstr(menu, "\n\x05" "Experimental: Command plays on Blood Gulch only for now\n") != NULL,
+			"Map: its help, Blood Gulch only");
 		press(VITA_BUTTON_RIGHT);
-		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Death Island (PC) >") &&
-			strstr(menu, "\n\x05" "From Halo MCC on Steam only: never downloaded or shared here\n") != NULL &&
-			!strcmp(menu_line(3, line, sizeof(line)), "Layout\x02  Command's own  ") && menu_fits(),
-			"Map: right, Death Island (PC), the note's first part as its help, no layouts of it; it fits");
-		to_line("Start Command");
-		press(VITA_BUTTON_CROSS);
-		check(menu_visible && strstr(menu, "Add your Steam copy of Halo MCC to play it") != NULL &&
-			halo_system_link_request == SYSTEM_LINK_REQUEST_NONE && menu_fits(),
-			"Start Command on Death Island without its MCC copy: the note's second part, nothing started");
+		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Blood Gulch >") && menu_fits(),
+			"Map: right, Blood Gulch still - no other Command map (experimental)");
 		test_pc_map_here = 1;
-		to_line("Map");
-		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Death Island >"), "Death Island here: plain");
+		press(VITA_BUTTON_RIGHT);
+		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Blood Gulch >"),
+			"Map: right with Death Island's MCC copy here, Blood Gulch still");
+		test_pc_map_here = 0;
 		to_line("Start Command");
 		press(VITA_BUTTON_CROSS);
-		check(!menu_visible && halo_system_link_request == SYSTEM_LINK_REQUEST_FORGE && halo_forge_request_map == 3 &&
+		check(!menu_visible && halo_system_link_request == SYSTEM_LINK_REQUEST_FORGE && halo_forge_request_map == 1 &&
 			halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_COMMAND && !halo_forge_request_network,
-			"Start Command on Death Island: asked for (map 3, Command, local); closed");
+			"Start Command: asked for on Blood Gulch (map 1, Command, local); closed");
 		halo_system_link_request = SYSTEM_LINK_REQUEST_NONE;
-		test_pc_map_here = 0;
 		frame(0);
 		open_panel();
 		check(to_tab("Game") && open_page("Command"), "the Command page again");
-		to_line("Map");
-		press(VITA_BUTTON_LEFT);
-		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Blood Gulch >"), "Map: left, Blood Gulch");
 		press(VITA_BUTTON_CIRCLE);
 		vita_settings_set("HALO_MENU_STYLE", saved);
 		press(VITA_BUTTON_R);
@@ -3282,25 +3301,10 @@ static void test_forge_page(void)
 				if (!strcmp(test_forge_entries[entry_index].file_name, "cold.hmv"))
 					test_forge_entries[entry_index].firefight_zones = 3;
 		}
-		check(to_tab("Game") && open_page("Firefight") && !strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Blood Gulch >"),
-			"a Chill Out layout with Firefight zones: Map offers another");
-		to_line("Map");
-		press(VITA_BUTTON_RIGHT);
-		check(!strcmp(menu_line(2, line, sizeof(line)), "Map\x02< Chill Out >") &&
-			!strncmp(menu_line(3, line, sizeof(line)), "Layout\x02< Cold", 13), "Map: right, Chill Out; Layout: Cold, the layout with zones");
-		to_line("Start Firefight");
-		press(VITA_BUTTON_CROSS);
-		check(halo_system_link_request == SYSTEM_LINK_REQUEST_FORGE && halo_forge_request_map == 2 &&
-			halo_forge_request_mode == HALO_FORGE_REQUEST_MODE_FIREFIGHT && !strcmp(halo_forge_request_variant, "cold.hmv"),
-			"Start Firefight: Chill Out, its layout Cold");
-		halo_system_link_request = SYSTEM_LINK_REQUEST_NONE;
-		halo_forge_request_mode = 0;
-		open_panel();
-		check(to_tab("Game") && open_page("Firefight"), "the Firefight page again");
-		to_line("Layout");
-		press(VITA_BUTTON_LEFT);
-		check(!strncmp(menu_line(3, line, sizeof(line)), "Layout\x02< Cold", 13),
-			"Layout: left keeps Cold (Firefight's own is none of a map's with no built-in layout)");
+		/* (1.1.3: experimental, Blood Gulch alone: a Chill Out layout with zones
+		does not make Chill Out a Firefight map) */
+		check(to_tab("Game") && open_page("Firefight") && !strcmp(menu_line(2, line, sizeof(line)), "Map\x02  Blood Gulch"),
+			"a Chill Out layout with Firefight zones: Map still Blood Gulch alone (experimental)");
 		{
 			int entry_index;
 
@@ -3314,6 +3318,7 @@ static void test_forge_page(void)
 		press(VITA_BUTTON_R);
 		press(VITA_BUTTON_L);
 		check(to_tab("Game") && !strstr(menu, "\nFirefight\x02  >"), "Firefight's page row: Menu style Halo CE's alone");
+		vita_settings_set("HALO_EXPERIMENTAL_MODES", "false");
 		check(open_page("Forge"), "the Forge page again");
 	}
 	/* Touch in Forge: on as shipped; off and on again (HALO_FORGE_TOUCH) */
@@ -3896,6 +3901,8 @@ static void test_tab_layouts(void)
 		{ PAGE_MENUS, "Scoreboard", "HALO_CLASSIC_SCOREBOARD", "classic|halo3", 0, "classic" },
 		/* (Forge and File Share, shown with Menu style Halo CE: under Menus) */
 		{ TAB_GAME, "Forge and File Share", NULL, NULL, 0, NULL, ACTION_PAGE, PAGE_FORGE },
+		/* (1.1.3: Command and Firefight experimental, off by default: the Menus page) */
+		{ PAGE_MENUS, "Experimental modes", "HALO_EXPERIMENTAL_MODES", "false|true", 0, "false" },
 		/* (1.1.4: Command's page, Menu style Halo CE's) */
 		{ TAB_GAME, "Command", NULL, NULL, 0, NULL, ACTION_PAGE, PAGE_COMMAND },
 		/* (1.1.5: Firefight's page, Menu style Halo CE's) */
@@ -4243,6 +4250,8 @@ static void test_variables_kept(void)
 		"HALO_CLASSIC_CARNAGE_REPORT", "HALO_CLASSIC_SCOREBOARD",
 		/* (1.1.3, 1.2.0's menu rework: the volumes) */
 		"HALO_VOLUME", "HALO_MUSIC_VOLUME", "HALO_EFFECTS_VOLUME", "HALO_DIALOGUE_VOLUME", "HALO_AMBIENCE_VOLUME",
+		/* (1.1.3: Command and Firefight experimental, the Menus page) */
+		"HALO_EXPERIMENTAL_MODES",
 	};
 	int index, all = 1, choices = 0;
 
@@ -5335,7 +5344,8 @@ static void test_carnage_report_row(void)
 	to_tab("Game");
 	check(open_page("Menus") && !strcmp(menu_line(2, line, sizeof(line)), "Menu style\x02< Halo 3 >") &&
 		!strcmp(menu_line(3, line, sizeof(line)), "Carnage report\x02< ElDewrito  ") &&
-		!strcmp(menu_line(4, line, sizeof(line)), "Scoreboard\x02< ElDewrito  ") && menu_rows() == 3 && menu_fits() &&
+		!strcmp(menu_line(4, line, sizeof(line)), "Scoreboard\x02< ElDewrito  ") &&
+		!strcmp(menu_line(5, line, sizeof(line)), "Experimental modes\x02  Off >") && menu_rows() == 4 && menu_fits() &&
 		menu_height_fits() && !strstr(menu, "Armor color") && !strstr(menu, "Visor color"),
 		"Game > Menus: Menu style, then Carnage report and Scoreboard (Halo 3); the armor and visor colors on Appearance");
 	check(to_line("Carnage report") &&
@@ -5352,7 +5362,7 @@ static void test_carnage_report_row(void)
 	press(VITA_BUTTON_LEFT);
 	/* (Halo CE: its own two rows, the original by default; Halo 3's an option) */
 	check(strstr(menu, "\nCarnage report\x02  Original >") && strstr(menu, "\nScoreboard\x02  Original >") &&
-		menu_rows() == 3 && !strcmp(getenv("HALO_MENU_STYLE"), "classic") && menu_fits(),
+		menu_rows() == 4 && !strcmp(getenv("HALO_MENU_STYLE"), "classic") && menu_fits(),
 		"Menu style Halo CE: Carnage report and Scoreboard rows, the original (Classic, Halo CE) as shipped");
 	check(to_line("Carnage report") && strstr(menu, "\n\x05" "A multiplayer game's end: the original, or ElDewrito's report\n"),
 		"Halo CE's Carnage report: its help");

@@ -268,6 +268,7 @@ Each logs what it did ("forge: ...").
 
 #include "command.h"
 #include "forge.h"
+#include "experimental_modes.h"
 #include "forge_modes.h"
 #include "command_squads.h"
 #include "command_hud.h"
@@ -5232,7 +5233,9 @@ boolean forge_map_command(
 {
 	if (map_index < 0 || map_index >= forge_map_count())
 		return FALSE;
-	return forge_map_pc_exclusive(map_index) || !strcmp(forge_map_short(map_index), "bloodgulch");
+	/* (1.1.3: experimental, Blood Gulch alone - experimental_modes.h; 1.1.4
+	added the PC-exclusive big team maps) */
+	return !strcmp(forge_map_short(map_index), "bloodgulch");
 }
 
 /* how many of Command's maps, and the nth of them (0 the first; NONE past

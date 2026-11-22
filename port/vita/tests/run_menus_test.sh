@@ -464,6 +464,14 @@
 #           menu; PROFILES and QUIT made of the game's own letters; QUIT asks, B keeps the game, A
 #           closes it; Start asks for the settings panel; Menu style Halo 3: the map's own list, its
 #           main menu the Halo 3 one
+#   experimental  (1.1.3, the owner Nov 21) Command and Firefight behind game.experimental_modes
+#           (HALO_EXPERIMENTAL_MODES; the other cases run with it on, HALO_TEST_EXPERIMENTAL): off,
+#           Classic+'s GAME MODES lists FORGE and GAMETYPES PLUS alone (down once from FORGE opens
+#           GAMETYPES PLUS), the Halo 3 and ElDewrito main menus no FIREFIGHT or COMMAND (down twice:
+#           FORGE), the console's "command" and a Firefight game asked for refused with the
+#           setting's words; on, GAME MODES' COMMAND and FIREFIGHT open their lobbies, each marked
+#           EXPERIMENTAL, their maps Blood Gulch alone; a Firefight game asked for on Chill Out
+#           refused (Blood Gulch only)
 #   ceplusmp  Menu style Classic+'s Multiplayer (OpenCE's): GAME MODES, the ninth row, its
 #           GAMETYPES PLUS opens the Halo 3 GAME TYPES (Infection's rules too), B back to GAME
 #           MODES; Create Game Internet's Server Setup (internet play on, TEST-NET brokers) has BOTS:
@@ -535,7 +543,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -599,7 +607,8 @@ run() { # NAME DATA SECONDS PAD [VAR=value...]
 	(cd "$out/$name" && exec env SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=offscreen HALO_DATA_ROOT="$out/$name/data" \
 		HALO_SAVE_ROOT="$out/$name/save" HALO_NO_VSYNC=1 HALO_FRAME_CAP=30 HALO_EXIT_AFTER="$seconds" HALO_FULLSCREEN=0 \
 		HALO_HIDDEN_WINDOW=1 HALO_NO_AUDIO=1 HALO_TICK_THREAD=1 HALO_UPDATE_AUTO=false HALO_NET_ONLINE=false \
-		HALO_UI_LOG=1 HALO_MENU_STYLE=classic "HALO_TEST_PAD=$pad" "${shots[@]}" "$@" timeout -k 5 $((seconds + 90)) "$binary" > "$out/$name/run.log" 2>&1)
+		HALO_UI_LOG=1 HALO_MENU_STYLE=classic HALO_EXPERIMENTAL_MODES=${HALO_TEST_EXPERIMENTAL:-true} "HALO_TEST_PAD=$pad" \
+		"${shots[@]}" "$@" timeout -k 5 $((seconds + 90)) "$binary" > "$out/$name/run.log" 2>&1)
 	echo $? > "$out/$name/exit"
 }
 
@@ -3936,6 +3945,74 @@ PY
 		grep -aqE "menus: Menu style Halo 3: the Xbox screens' [0-9]+ widgets as the map has them" "$log" ||
 			fail ceplusmain "Menu style Halo 3: the Xbox screens kept the port's rows"
 		grep -aq "ui: screen pc.h3.main.screen" "$log" || fail ceplusmain "Menu style Halo 3: not the Halo 3 main menu" ;;
+	experimental)
+		d="down:150:500"
+		modes="$d a:150:3000 $d $d $d $d $d $d $d $d a:150:3000"
+		off=HALO_EXPERIMENTAL_MODES=false
+		# (off, as shipped: Classic+'s GAME MODES - FORGE, GAMETYPES PLUS -; down once from FORGE, A:
+		# GAMETYPES PLUS; the console's "command on" refused)
+		run experimental_off "$menus_data" 34 "wait:150:3000 $modes $d a:150:4000 b:150:3000 b:150:3000 b:150:3000" \
+			HALO_SCENE_PACKS=0 $off "HALO_TEST_COMMANDS=200:command on"
+		log=$out/experimental_off/run.log
+		echo "--- experimental (off: Classic+'s GAME MODES)"
+		grep -aE "ui: screen|menus: COMMAND and FIREFIGHT|experimental modes:" "$log" | head -10
+		[ "$(cat "$out/experimental_off/exit")" = 0 ] || fail experimental "off: exit $(cat "$out/experimental_off/exit")"
+		grep -aqiE "assert|exception|halt_and_catch_fire" "$log" && fail experimental "off: an assertion, exception or halt"
+		grep -aq "menus: COMMAND and FIREFIGHT hidden (game.experimental_modes off)" "$log" ||
+			fail experimental "off: GAME MODES did not hide COMMAND and FIREFIGHT"
+		grep -aq "ui: screen pc.ce.modes.screen" "$log" || fail experimental "off: GAME MODES did not open"
+		grep -aq "ui: screen pc.cp.gametypes.screen" "$log" || fail experimental "off: down once from FORGE was not GAMETYPES PLUS"
+		grep -aqE "ui: screen pc.cp.(command|firefight).lobby" "$log" && fail experimental "off: a Command or Firefight lobby opened"
+		grep -aq "experimental modes: Command refused (game.experimental_modes is off)" "$log" ||
+			fail experimental "off: the console's command on was not refused"
+		# (off, Menu style Halo 3 and ElDewrito: CAMPAIGN, MULTIPLAYER, FORGE - down twice, A: the Forge lobby)
+		# (ElDewrito's title screen first: A)
+		for style in halo3 online; do
+			title=""
+			[ "$style" = online ] && title="a:150:3000"
+			run "experimental_off_$style" "$menus_data" 26 "wait:150:3000 $title $d $d a:150:4000 b:150:3000" HALO_SCENE_PACKS=0 $off \
+				HALO_MENU_STYLE=$style
+			log=$out/experimental_off_$style/run.log
+			echo "--- experimental (off: Menu style $style's main menu)"
+			grep -aE "ui: screen|menus: COMMAND and FIREFIGHT|menus: (forge|command|firefight) lobby" "$log" | head -6
+			[ "$(cat "$out/experimental_off_$style/exit")" = 0 ] || fail experimental "off $style: exit $(cat "$out/experimental_off_$style/exit")"
+			grep -aq "menus: COMMAND and FIREFIGHT hidden (game.experimental_modes off)" "$log" ||
+				fail experimental "off $style: the main menu did not hide COMMAND and FIREFIGHT"
+			grep -aqE "menus: (command|firefight) lobby" "$log" && fail experimental "off $style: a Command or Firefight lobby opened"
+			grep -aqE "ui: screen pc.(h3|online).forge.lobby|menus: forge lobby" "$log" ||
+				fail experimental "off $style: down twice was not FORGE"
+		done
+		# (Start Firefight / Start Command as the settings panel asks - HALO_SYSTEM_LINK_TEST -: off, refused
+		# on Blood Gulch with the setting's words; on, Firefight on Chill Out refused, Blood Gulch only)
+		for case in "ff_off|$off|firefight:9|Firefight refused (game.experimental_modes is off)" 			"cmd_off|$off|command:9|Command refused (game.experimental_modes is off)" 			"ff_chillout|HALO_EXPERIMENTAL_MODES=true|firefight:6|Firefight refused (not Blood Gulch: chillout)"; do
+			IFS='|' read -r name setting request why <<< "$case"
+			run "experimental_$name" "$menus_data" 26 "wait:150:1000" HALO_SCENE_PACKS=0 "$setting" "HALO_SYSTEM_LINK_TEST=$request"
+			log=$out/experimental_$name/run.log
+			echo "--- experimental (the panel's start: $name)"
+			grep -aE "experimental modes:|system link: the settings panel's|forge modes:|command: " "$log" | head -4
+			grep -aqF "experimental modes: $why" "$log" || fail experimental "$name: not refused ($why)"
+			grep -aqE "system link: the settings panel's (Command|Firefight): not started" "$log" ||
+				fail experimental "$name: the panel's start was not refused"
+			grep -aqE "forge modes: .* loaded for a FIREFIGHT game|command: .* loaded for a Command game" "$log" &&
+				fail experimental "$name: the game was built out"
+		done
+		# (on: GAME MODES' COMMAND and FIREFIGHT - down once and twice from FORGE - open their lobbies,
+		# each EXPERIMENTAL, its maps Blood Gulch alone)
+		for row in "command|$modes $d|pc.cp.command.lobby|EXPERIMENTAL: Command on Blood Gulch" \
+			"firefight|$modes $d $d|pc.cp.firefight.lobby|EXPERIMENTAL: Firefight on Blood Gulch"; do
+			IFS='|' read -r name presses screen caption <<< "$row"
+			run "experimental_on_$name" "$menus_data" 44 "wait:150:3000 $presses a:150:5000 b:150:3000 b:150:3000 b:150:3000" \
+				HALO_SCENE_PACKS=0 HALO_EXPERIMENTAL_MODES=true
+			log=$out/experimental_on_$name/run.log
+			echo "--- experimental (on: GAME MODES' $name)"
+			grep -aE "ui: screen|menus: COMMAND and FIREFIGHT|lobby: its maps|forge lobby caption" "$log" | head -8
+			[ "$(cat "$out/experimental_on_$name/exit")" = 0 ] || fail experimental "on $name: exit $(cat "$out/experimental_on_$name/exit")"
+			grep -aq "menus: COMMAND and FIREFIGHT shown, experimental (game.experimental_modes on)" "$log" ||
+				fail experimental "on $name: GAME MODES did not show COMMAND and FIREFIGHT"
+			grep -aq "ui: screen $screen" "$log" || fail experimental "on $name: the row did not open its lobby ($screen)"
+			grep -aq "menus: $name lobby: its maps: bloodgulch$" "$log" || fail experimental "on $name: its maps were not Blood Gulch alone"
+			grep -aq "menus: forge lobby caption: $caption" "$log" || fail experimental "on $name: the lobby was not marked EXPERIMENTAL"
+		done ;;
 	ceoriginal)
 		run ceoriginal "$menus_data" 18 "wait:150:3000 down:150:800 a:150:3000 b:150:3000" HALO_SCENE_PACKS=0 HALO_MENU_STYLE=original
 		log=$out/ceoriginal/run.log

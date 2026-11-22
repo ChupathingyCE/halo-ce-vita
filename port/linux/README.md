@@ -284,6 +284,7 @@ the setting for one start of the game. It has priority over the file.
 | `input.invert_mouse` | `false` | `HALO_MOUSE_INVERT=1` sets `true` | `true`: the vertical mouse aim is inverted. |
 | `input.raw_mouse` | `true` | `HALO_MOUSE_RAW` | `true`: the mouse's own movement aims (raw input). `false`: with the system's pointer speed and acceleration (SDL's `SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE`). |
 | `controls.keyboard.<action>` | MCC's (see "Controls") | `HALO_KEY_<ACTION>` | The keys of each action, separated by commas ("Controls"). The KEYBOARD & MOUSE page writes them. |
+| `game.experimental_modes` | `false` | `HALO_EXPERIMENTAL_MODES` | Experimental: Command and Firefight (unfinished, may have bugs, Blood Gulch only). Off: their rows are hidden in every menu style and nothing starts or joins them. On: COMMAND and FIREFIGHT in the menus (Classic+: MULTIPLAYER > GAME MODES), marked EXPERIMENTAL, Blood Gulch alone. The Vita's settings panel: Game, Menus, Experimental modes. Read live. |
 | `game.language` | `""` | `HALO_LANGUAGE` | The language of the menus: `ja`, `de`, `fr`, `es` or `it`. Empty: English. |
 | `paths.data` | `""` | `HALO_DATA_ROOT` | The data root. Refer to "Start the game". |
 | `paths.saves` | `""` | `HALO_SAVE_ROOT` | The save root. Refer to "Files and folders". |

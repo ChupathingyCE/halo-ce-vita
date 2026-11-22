@@ -284,6 +284,11 @@ Multiplayer tab's way.
 #include "vita_update_verify.h"
 #include "vita_version.h"
 
+/* (port/linux/game/experimental_modes.c: Command and Firefight behind
+game.experimental_modes, Blood Gulch alone) */
+int experimental_modes_on(void);
+int experimental_modes_map_ok(const char *map);
+
 /* the wire of the game the Vita hosts or joins (port/linux/src/network_wire.c):
 nonzero on the crossplay wire (a PC's game, or one hosted for Vitas and PC) */
 int network_wire_crossplay(void);
@@ -681,11 +686,17 @@ static struct setting settings[] = {
 	last row, under Updates, insider.21), shown with Menu style Halo CE; the
 	Halo 3 main menu has FORGE and FILE SHARE: setting_shown) */
 	PAGE_ROW("Forge and File Share", "Forge a map; your map variants (File Share)", TAB_GAME, PAGE_FORGE),
+	/* (1.1.3: Command and Firefight experimental, the owner Nov 21 2026 -
+	game.experimental_modes, experimental_modes.h -: off by default, their
+	rows hidden in every menu style and nothing starts or joins them; on,
+	shown marked EXPERIMENTAL, Blood Gulch alone. Live) */
+	{ "Experimental modes", "HALO_EXPERIMENTAL_MODES", 0, 2, { "false", "true" }, { "Off", "On" },
+		"Command + Firefight: unfinished, may have bugs, Blood Gulch only", 0, PAGE_MENUS },
 	/* (1.1.4: Command mode for the original menus - the Halo 3 and ElDewrito
-	main menus have COMMAND, Classic+ its EXTRAS -, at the menus) */
-	PAGE_ROW("Command", "Lead squads in battle on Blood Gulch and the big team maps", TAB_GAME, PAGE_COMMAND),
+	main menus have COMMAND, Classic+ its GAME MODES -, at the menus) */
+	PAGE_ROW("Command", "Experimental: lead squads in battle on Blood Gulch", TAB_GAME, PAGE_COMMAND),
 	/* (1.1.5: Firefight for the original menus, at the menus) */
-	PAGE_ROW("Firefight", "Survive waves of the Covenant together", TAB_GAME, PAGE_FIREFIGHT),
+	PAGE_ROW("Firefight", "Experimental: survive waves of the Covenant on Blood Gulch", TAB_GAME, PAGE_FIREFIGHT),
 	/* (File Share with friends, for the original menus: p2p_fileshare.h) */
 	PAGE_ROW("Share with friends", "Share your variants, send one, a friend's File Share", PAGE_FORGE,
 		PAGE_FSFRIENDS),
@@ -1949,7 +1960,7 @@ static int setting_shown(const struct setting *setting)
 	have COMMAND, Classic+ its EXTRAS -, at the menus - a game played has its
 	own rows) */
 	if (setting->action == ACTION_PAGE && (setting->opens == PAGE_COMMAND || setting->opens == PAGE_FIREFIGHT))
-		return original_style() && !forge_panel_ai_counts(NULL, NULL);
+		return original_style() && !forge_panel_ai_counts(NULL, NULL) && experimental_modes_on();
 	/* (the Halo 3 menus' report: with Menu style Halo 3) */
 	if (setting->variable && (!strcmp(setting->variable, "HALO_CARNAGE_REPORT") ||
 		!strcmp(setting->variable, "HALO_SCOREBOARD")))
@@ -3887,7 +3898,7 @@ static const char *command_map_help(void)
 		if (why[0])
 			return why;
 	}
-	return T("Command's map: Blood Gulch, or one of Halo MCC's PC-only big team maps");
+	return T("Experimental: Command plays on Blood Gulch only for now");
 }
 
 /* (the Firefight page) the map chosen (forge.c's index; -1 none with a
@@ -3924,6 +3935,9 @@ static int firefight_map_layouts(int map)
 
 static int firefight_map_is(int map)
 {
+	/* (1.1.3: experimental, Blood Gulch alone: experimental_modes.h) */
+	if (!experimental_modes_map_ok(forge_panel_map_short(map)))
+		return 0;
 	return forge_panel_map_available(map) && (forge_panel_map_firefight(map) || firefight_map_layouts(map));
 }
 
@@ -5370,8 +5384,8 @@ static void help_line(char *text, int size, const struct line *line)
 			line->index == FORGE_LINE_COMMAND_LAYOUT ? T("Command's own layout, or a layout of the map you saved or got") :
 			line->index == FORGE_LINE_COMMAND_OBJECTIVE ? T("Command: what wins - territories, the flag, or both") :
 			line->index == FORGE_LINE_COMMAND_AI ? T("Command: how well the AI commander plays the other side") :
-			line->index == FORGE_LINE_START_COMMAND ? T("Command your squads from above on Blood Gulch or a big team map (local)") :
-			line->index == FORGE_LINE_FIREFIGHT_MAP ? T("Blood Gulch, Battle Creek, Hang 'Em High: each has a Firefight layout") :
+			line->index == FORGE_LINE_START_COMMAND ? T("Experimental: command your squads from above on Blood Gulch (local)") :
+			line->index == FORGE_LINE_FIREFIGHT_MAP ? T("Experimental: Blood Gulch only for now") :
 			line->index == FORGE_LINE_FIREFIGHT_LAYOUT ? T("Firefight's own layout, or one of this map you saved or got") :
 			line->index == FORGE_LINE_START_FIREFIGHT ? T("Co-op against the Covenant's waves on this map (local)") :
 			line->index == FORGE_LINE_NUDGE ? T("Each nudge's move: hold L, click the right stick, flick") :

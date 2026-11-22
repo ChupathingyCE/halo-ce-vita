@@ -21,6 +21,11 @@
 #   commandfuzz  1v1, the joiner sends the host a volley of bad requests
 #                (malformed, another side's, off the map, replayed, a burst):
 #                dropped and counted, the host plays on
+#   commandoff   (1.1.3: Command experimental, game.experimental_modes) a joiner with the
+#                setting off joins the host's Command game of Blood Gulch: it leaves, told the
+#                setting's words, and never commands
+#   commandmap   (1.1.3: Blood Gulch only) a host asked for a Command game of Chill Out
+#                (host:chillout:command): refused, no Command game hosted
 #   commandold   a joiner that does not play network Command (HALO_FORGE_NET=0,
 #                an older build's stand-in) is refused from the game
 #   h3command    the Command lobby by the controller (Menu style Halo 3, HALO_TEST_PROFILE):
@@ -37,7 +42,8 @@ command_shots() { # NAME: the copy's screenshots at the Vita's picture, in $out/
 command_host() { # command_host COMMANDS [ENV...]
 	local commands=$1
 	shift
-	run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false HALO_NETWORK_TEST=host:bloodgulch:command \
+	run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false \
+		HALO_NETWORK_TEST=${HALO_TEST_COMMAND_HOST_GAME:-host:bloodgulch:command} HALO_EXPERIMENTAL_MODES=true \
 		HALO_NETWORK_TEST_START=${HALO_TEST_COMMAND_START:-20} HALO_TEST_FORGE_PACKS=none "HALO_TEST_COMMANDS=$commands" "$@"
 	host_pid=$last_pid
 }
@@ -46,7 +52,7 @@ command_joiner() { # command_joiner NAME NETNS COMMANDS [ENV...]
 	local name=$1 ns=$2 commands=$3
 	shift 3
 	run_copy "$name" "$ns" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_FORGE_PACKS=none \
-		"HALO_TEST_COMMANDS=$commands" "$@"
+		HALO_EXPERIMENTAL_MODES=true "HALO_TEST_COMMANDS=$commands" "$@"
 	join_pid=$last_pid
 }
 
@@ -230,6 +236,27 @@ command_case() {
 		grep -aq "command net: hosting the Command game (red human, blue human)" "$hl" || fail "the host's Command game did not have both sides human"
 		grep -aq "command: the host's Command game on .*, commanding blue" "$jl" || fail "the joiner did not command blue"
 		grep -aq "command net: machine 1 (blue) buys grunts" "$hl" || fail "the joiner's buy did not reach the host"
+		;;
+	commandoff)
+		host_cmds="L90:command net"
+		command_host "$host_cmds"
+		sleep 5
+		command_joiner joiner "$lan" "L120:command net" HALO_EXPERIMENTAL_MODES=false
+		wait $join_pid $host_pid 2>/dev/null
+		command_check_clean "$hl" "$jl"
+		grep -aE "forge net: the host's (game is|Command game left)|experimental modes:" "$jl" | head -4
+		grep -aq "forge net: the host's Command game left: game.experimental_modes is off" "$jl" ||
+			fail "the joiner with the experimental modes off did not leave the Command game"
+		grep -aq "command: .* loaded for a Command game" "$jl" && fail "the joiner with the setting off played the Command game"
+		grep -aq "command: .* loaded for a Command game" "$hl" || fail "the host (the setting on) did not host its Command game"
+		;;
+	commandmap)
+		HALO_TEST_COMMAND_HOST_GAME=host:chillout:command command_host ""
+		wait $host_pid 2>/dev/null
+		command_check_clean "$hl"
+		grep -aE "experimental modes:|command: .* loaded" "$hl" | head -3
+		grep -aq "experimental modes: Command refused (not Blood Gulch" "$hl" || fail "a Command game of Chill Out was not refused"
+		grep -aq "command: .* loaded for a Command game" "$hl" && fail "a Command game of Chill Out was hosted"
 		;;
 	commandold)
 		host_cmds="L90:command net"

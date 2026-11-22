@@ -224,6 +224,11 @@ static const struct config_setting config_settings[] =
 		"Anniversary maps in the data folder's mods folder are offered after the\n"
 		"campaign's levels and played alone, offline (docs/mcc_cea_maps.md). Needs\n"
 		"game.custom_edition. Never on any network." },
+	{ "game.experimental_modes", _config_boolean, "false", "HALO_EXPERIMENTAL_MODES", _environment_value, _platform_all,
+		"Experimental: Command and Firefight (unfinished, may have bugs, Blood Gulch\n"
+		"only). Off: their rows are hidden and nothing starts or joins them. On:\n"
+		"COMMAND and FIREFIGHT in the menus, marked EXPERIMENTAL. The Vita's\n"
+		"settings panel (Game, Menus: Experimental modes) sets it. Read live." },
 	{ "game.pc_map_vehicles", _config_string, "\"xbox\"", "HALO_PC_MAP_VEHICLES", _environment_value, _platform_all,
 		"A Custom Edition map's vehicles in a game of this machine's alone (split\n"
 		"screen or offline, with or without bots): \"xbox\" the Warthogs, Ghosts and\n"

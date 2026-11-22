@@ -173,7 +173,11 @@
 		<on event="a start" open="h3/gametypes/screen"/>
 		<child widget="ce/modes/gametypes/row_name"/>
 	</widget>
+	<!-- (1.1.3: COMMAND and FIREFIGHT experimental - shown only with the setting on, Settings, Game:
+	     Experimental modes; port ce modes hides them and says so in the note under the list) -->
+	<widget name="ce/modes/note" type="text" left="51" top="222" width="420" height="40" font="ui\small_ui" color="#FF2896FF"/>
 	<widget name="ce/modes/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<data input="port ce modes"/>
 		<child widget="ce/modes/forge" x="51" y="78"/>
 		<child widget="ce/modes/command" x="51" y="110"/>
 		<child widget="ce/modes/firefight" x="51" y="142"/>
@@ -183,6 +187,7 @@
 		<on event="b back" back="true"/>
 		<child widget="ce/modes/header"/>
 		<child widget="ce/modes/list"/>
+		<child widget="ce/modes/note"/>
 		<child widget="cp/key/b_butn"/>
 		<child widget="cp/key/back"/>
 		<child widget="cp/key/a_butn"/>
