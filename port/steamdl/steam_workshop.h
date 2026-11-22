@@ -208,6 +208,8 @@ int steam_workshop_install(const char *root, uint64_t id, steam_workshop_map_che
 	size_t why_size);
 /* a folder and everything in it removed (only plain names; never follows a link): 1 */
 int steam_workshop_remove_tree(const char *path);
+/* the bytes of every file in a folder (plain names; never follows a link; a failed item's kept part, for the log) */
+uint64_t steam_workshop_tree_bytes(const char *path);
 
 /* (the browser) the item is in the mods folder (mods/<id>, a folder): 1 with the version the Workshop installed
 (<root>/workshop/installed/<id>.gid: the manifest's gid; 0 if the folder came another way) */

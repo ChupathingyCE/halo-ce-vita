@@ -177,6 +177,66 @@ flow drop drop_once 1 ok
 flow cancel normal 1 cancel 13
 flow resume normal 1 ok "" cancel
 grep -q "resumed" "$out/flow-resume/log.txt" || { echo "FAIL resume: nothing resumed"; status=1; }
+# (1.1.3, the owner: "If the download fails it needs to cache it." A server error mid-download - every chunk 404 after
+# the fourth - ends it failed, not cancelled: what it got stays (the .part files and their journals), the next run
+# (a new process, as after the game is closed and started again) resumes from it and finishes; a journalled chunk
+# damaged on the card meanwhile is found by its hash and fetched again)
+flow gone chunk_gone 1 fail
+w=$out/flow-gone
+parts=$(find "$w/card" -name '*.part' | wc -l)
+kept=$(find "$w/card" \( -name '*.part' -o -name '*.part.journal' \) -printf '%s\n' | awk '{ s += $1 } END { print s + 0 }')
+journalled=$(find "$w/card" -name '*.part.journal' -exec sh -c 'tail -n +6 "$1"' sh {} \; | wc -l)
+finished=$(find "$w/card/haloce-vita/mcc/halo1" -type f ! -name '*.part' ! -name '*.part.journal' | wc -l)
+echo "  gone: $finished files finished, $parts partial with $journalled chunks journalled, $kept bytes kept"
+[ "$parts" -ge 1 ] && [ "$journalled" -ge 1 ] || { echo "FAIL gone: nothing of the failed download kept"; status=1; }
+grep -q "a chunk could not be downloaded" "$w/line" || { echo "FAIL gone: not the server's failure"; status=1; }
+flow gone-resume normal 1 ok "" gone
+w=$out/flow-gone-resume
+grep -q "resumed (" "$w/log.txt" || { echo "FAIL gone-resume: nothing resumed"; status=1; }
+left=$(find "$w/card" -name '*.part*' | wc -l)
+n=$(find "$w/card/haloce-vita/mcc/halo1" -type f | wc -l)
+echo "  gone-resume: $n files, $left partial"
+[ "$n" = 20 ] && [ "$left" = 0 ] || { echo "FAIL gone-resume: $n files, $left partial left"; status=1; }
+# (every file the same bytes as a download that never failed)
+diff -r "$out/flow-ce/card/haloce-vita/mcc" "$w/card/haloce-vita/mcc" > /dev/null || { echo "FAIL gone-resume: files differ"; status=1; }
+# (the same failed card, a journalled chunk damaged on it meanwhile: the resume finds it by its hash and fetches it again)
+cp -r "$out/flow-gone" "$out/flow-gonedmg"
+w=$out/flow-gonedmg
+damaged=
+for j in $(find "$w/card" -name '*.part.journal' | sort); do
+	[ "$(tail -n +6 "$j" | wc -l)" -ge 1 ] || continue
+	part=${j%.journal}
+	index=$(tail -n +6 "$j" | head -1 | cut -d' ' -f1)
+	damaged=$part
+	python3 -I - "$part" "$index" "$j" "$here/steam_fake_server.py" <<'PY'
+import sys
+part, index = sys.argv[1], int(sys.argv[2])
+# (the chunk's offset: the fake cuts every file in chunks of its CHUNK bytes, the last one shorter)
+expression = next(l.split("=")[1].split("#")[0] for l in open(sys.argv[4]) if l.startswith("CHUNK ="))
+step = 1
+for factor in expression.split("*"):
+    step *= int(factor)
+with open(part, "r+b") as f:
+    f.seek(index * step)
+    data = bytearray(f.read(64))
+    for i in range(len(data)):
+        data[i] ^= 0xA5
+    f.seek(index * step)
+    f.write(data)
+PY
+	break
+done
+[ -n "$damaged" ] || { echo "FAIL gone: no journalled chunk to damage"; status=1; }
+flow gonedmg-resume normal 1 ok "" gonedmg
+w=$out/flow-gonedmg-resume
+name=$(basename "${damaged%.part}")
+had=$(tail -n +6 "$damaged.journal" | wc -l)
+took=$(sed -n "s|.*$name: resumed (\([0-9]*\) of.*|\1|p" "$w/log.txt" | head -1)
+left=$(find "$w/card" -name '*.part*' | wc -l)
+echo "  gonedmg-resume: $name: $had chunks journalled, ${took:-0} taken from the card, $left partial left"
+[ "${took:-0}" -lt "$had" ] || { echo "FAIL gonedmg-resume: the damaged chunk was taken"; status=1; }
+[ "$left" = 0 ] && diff -r "$out/flow-ce/card/haloce-vita/mcc" "$w/card/haloce-vita/mcc" > /dev/null || \
+	{ echo "FAIL gonedmg-resume: files differ or partial left"; status=1; }
 flow logon-refused logon_refuse 1 fail
 flow qr-refused qr_refuse 1 fail
 flow not-owned not_owned 1 fail
@@ -313,6 +373,25 @@ flow ws-resume normal 2900000001 ok "" ws-cancel
 grep -q "resumed\|already there" "$out/flow-ws-resume/log.txt" && grep -q "installed=1" "$out/flow-ws-resume/line" || \
 	{ echo "FAIL ws-resume: nothing resumed or not installed"; status=1; }
 flow ws-update normal 2900000001 ok "" ws-resume
+# (1.1.3: a Workshop item that fails mid-download on a server error keeps its verified part in staging - as the
+# game's depot download does - and the next run resumes it and installs it; only an item whose data failed its checks
+# or that Steam refused loses it: ws-wrong-manifest below)
+flow ws-gone chunk_gone 2900000001 ok
+w=$out/flow-ws-gone
+grep -q "items=0 failed=1" "$w/line" || { echo "FAIL ws-gone: not one failed item"; status=1; }
+staged=$(find "$w/card/haloce-vita/workshop" \( -name '*.part' -o -name '*.part.journal' \) | wc -l)
+kept=$(find "$w/card/haloce-vita/workshop" -type f -printf '%s\n' | awk '{ s += $1 } END { print s + 0 }')
+echo "  ws-gone: $staged partial files staged, $kept bytes kept"
+[ "$staged" -ge 1 ] && grep -q "kept for the next try" "$w/log.txt" || { echo "FAIL ws-gone: nothing kept"; status=1; }
+[ ! -e "$w/card/haloce-vita/workshop/2900000001.done" ] || { echo "FAIL ws-gone: marked done"; status=1; }
+flow ws-gone-resume normal 2900000001 ok "" ws-gone
+w=$out/flow-ws-gone-resume
+grep -q "resumed\|already there" "$w/log.txt" && grep -q "installed=1" "$w/line" || \
+	{ echo "FAIL ws-gone-resume: nothing resumed or not installed"; status=1; }
+[ -z "$(find "$w/card/haloce-vita/workshop" -path "*/workshop/installed" -prune -o -type f -print 2>/dev/null)" ] || \
+	{ echo "FAIL ws-gone-resume: staging left"; status=1; }
+cmp -s "$w/card/haloce-vita/mods/2900000001/maps/a10.map" "$out/flow-ws-resume/card/haloce-vita/mods/2900000001/maps/a10.map" || \
+	{ echo "FAIL ws-gone-resume: the map differs"; status=1; }
 grep -q "installed=1" "$out/flow-ws-update/line" && [ -s "$out/flow-ws-update/card/haloce-vita/mods/2900000001/maps/a10.map" ] || \
 	{ echo "FAIL ws-update: the item not installed again"; status=1; }
 flow ws-not-owned ws_not_owned 2900000001 ok
@@ -320,6 +399,8 @@ grep -q "items=0 failed=1" "$out/flow-ws-not-owned/line" || { echo "FAIL ws-not-
 flow ws-wrong-manifest ws_wrong_manifest 2900000001 ok
 grep -q "items=0 failed=1" "$out/flow-ws-wrong-manifest/line" && \
 	grep -q "not the one asked for" "$out/flow-ws-wrong-manifest/log.txt" || { echo "FAIL ws-wrong-manifest"; status=1; }
+[ ! -e "$out/flow-ws-wrong-manifest/card/haloce-vita/workshop/2900000001" ] || \
+	{ echo "FAIL ws-wrong-manifest: its staging kept"; status=1; }
 flow ws-hostile-list ws_hostile_list 2900000001 ok
 grep -q "items=0 failed=0" "$out/flow-ws-hostile-list/line" && \
 	grep -q "malformed" "$out/flow-ws-hostile-list/log.txt" || { echo "FAIL ws-hostile-list"; status=1; }

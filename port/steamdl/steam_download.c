@@ -157,6 +157,8 @@ struct cdn
 	struct steam_session *session;
 	const struct steam_download_callbacks *callbacks;
 	struct steam_download_result *result;
+	/* (the last cdn_get that gave up: a server's 403/404 - a refusal, not the network) */
+	int refused;
 };
 
 /* waits ms in steps, the CM session pumped (its heartbeat): 0 if the session ended or the player cancelled */
@@ -197,6 +199,7 @@ static uint8_t *cdn_get(struct cdn *cdn, const char *path, size_t maximum, size_
 	static const int waits_ms[] = { 2000, 5000, 10000, 20000, 30000, 30000 };
 	int attempt, round, refused = 0;
 
+	cdn->refused = 0;
 	for (round = 0; round <= (int)(sizeof(waits_ms) / sizeof(waits_ms[0])) && !refused; round++)
 	{
 		if (round)
@@ -234,6 +237,7 @@ static uint8_t *cdn_get(struct cdn *cdn, const char *path, size_t maximum, size_
 				refused = 1;
 		}
 	}
+	cdn->refused = refused;
 	return NULL;
 }
 
@@ -462,6 +466,9 @@ static int download_file(struct steam_session *session, struct planned *planned,
 		{
 			if (job.stopped)
 				result->cancelled = 1;
+			/* (bad data, already removed: a Workshop item's staging goes with it) */
+			if (job.discarded)
+				result->item_dropped = 1;
 			fail(result, "%s", job.stopped ? "cancelled" : error);
 			goto stopped;
 		}
@@ -824,6 +831,8 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 	code = 0;
 	if (!zipped)
 	{
+		/* (a server's refusal drops the item; the network's failure keeps what is staged) */
+		result->item_dropped = cdn.refused;
 		fail(result, "item %s's manifest: %s", id_text, error);
 		goto done;
 	}
@@ -831,6 +840,7 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 		!(manifest = malloc(manifest_size + 1)) ||
 		!steam_zip_extract(zipped, zipped_size, manifest, manifest_size, error, sizeof(error)))
 	{
+		result->item_dropped = 1;
 		fail(result, "item %s's manifest is not a zip of one file", id_text);
 		goto done;
 	}
@@ -839,6 +849,7 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 	if (steam_manifest_parse(manifest, manifest_size, key, &metadata, collect_workshop, &collected, error,
 		sizeof(error)) != 0)
 	{
+		result->item_dropped = 1;
 		fail(result, "item %s's manifest refused: %s", id_text, error[0] ? error : "malformed");
 		goto done;
 	}
@@ -848,12 +859,14 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 		if (!manifest_is_asked(callbacks, "workshop item", STEAM_WORKSHOP_APP, STEAM_WORKSHOP_DEPOT, item->hcontent,
 			manifest, manifest_size, zipped_size, &metadata, &why))
 		{
+			result->item_dropped = 1;
 			fail(result, "item %s's manifest is not the one asked for: %s", id_text, why);
 			goto done;
 		}
 	}
 	if (collected.refused)
 	{
+		result->item_dropped = 1;
 		fail(result, "item %s refused: %s", id_text, collected.why);
 		goto done;
 	}
@@ -862,6 +875,7 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 	total = (uint64_t)planned_needed(&collected.base);
 	if (!collected.base.count || total > STEAM_WORKSHOP_ITEM_BYTES_MAXIMUM)
 	{
+		result->item_dropped = 1;
 		fail(result, "item %s: %s", id_text, collected.base.count ? "too large" : "no files to take");
 		goto done;
 	}
@@ -1191,6 +1205,7 @@ static int workshop_flow(struct steam_session *session, const struct steam_downl
 			continue;
 		}
 		result->error[0] = 0;
+		result->item_dropped = 0;
 		if (steam_download_workshop_item(session, item, options, callbacks, cdn, cdn_count, result))
 		{
 			result->items_done++;
@@ -1198,8 +1213,9 @@ static int workshop_flow(struct steam_session *session, const struct steam_downl
 				callbacks->item_end(callbacks->context, item, 1, "");
 			continue;
 		}
-		/* (a cancel or a lost session ends them all, its download kept for a resume; a refused or failed item: its
-		staging folder removed - nothing of it kept - and the next one goes on) */
+		/* (a cancel or a lost session ends them all, its download kept for a resume. A failed item: what it already
+		got (its verified chunks, journalled) kept in staging for the next try, as the depot download keeps it - only an
+		item whose data failed its checks or that Steam refused has its staging folder removed; the next one goes on) */
 		if (result->cancelled || result->session_lost || session->kicked)
 			return 0;
 		{
@@ -1207,8 +1223,20 @@ static int workshop_flow(struct steam_session *session, const struct steam_downl
 
 			if (steam_workshop_paths(options->ce_root, item->id, staging, gid_path, done_path, NULL, sizeof(staging)))
 			{
-				steam_workshop_remove_tree(staging);
-				remove(gid_path);
+				if (result->item_dropped)
+				{
+					steam_workshop_remove_tree(staging);
+					remove(gid_path);
+				}
+				else
+				{
+					uint64_t kept = steam_workshop_tree_bytes(staging);
+
+					result->items_kept++;
+					result->kept_bytes += kept;
+					say(callbacks, "workshop %llu: failed; %.1f MB of it kept for the next try", (unsigned long long)item->id,
+						kept / 1e6);
+				}
 				remove(done_path);
 			}
 		}

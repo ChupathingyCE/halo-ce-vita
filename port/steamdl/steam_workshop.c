@@ -964,6 +964,43 @@ static int remove_walk(const char *path, int depth)
 	return rmdir(path) == 0 && ok;
 }
 
+static uint64_t bytes_walk(const char *path, int depth)
+{
+	DIR *directory;
+	struct dirent *entry;
+	struct stat info;
+	int is_folder, seen = 0;
+	uint64_t total = 0;
+
+	if (depth > WALK_DEPTH + 2 || !is_directory(path, &is_folder))
+		return 0;
+	if (!is_folder)
+		return stat(path, &info) == 0 ? (uint64_t)info.st_size : 0;
+	directory = opendir(path);
+	if (!directory)
+		return 0;
+	while ((entry = readdir(directory)) != NULL)
+	{
+		char child[1024];
+
+		if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+			continue;
+		if (++seen > WALK_ENTRIES || strchr(entry->d_name, '/') ||
+			(size_t)snprintf(child, sizeof(child), "%s/%s", path, entry->d_name) >= sizeof(child))
+		{
+			break;
+		}
+		total += bytes_walk(child, depth + 1);
+	}
+	closedir(directory);
+	return total;
+}
+
+uint64_t steam_workshop_tree_bytes(const char *path)
+{
+	return bytes_walk(path, 0);
+}
+
 int steam_workshop_remove_tree(const char *path)
 {
 	int folder;
