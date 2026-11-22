@@ -269,10 +269,70 @@ void platform_input_read(struct platform_input_state *state, BOOL consume_motion
 	memset(state, 0, sizeof(*state));
 }
 
+/* ---------- the system's keyboard for the game's text fields (host/vita_ime.c)
+
+A field that takes typing (platform_text_field: Online Games' password)
+opens the system's keyboard; what is entered comes back as keystrokes, each
+character pressed and let go, then Enter; a cancel types nothing. While the
+keyboard is up the game gets no buttons (vita_xinput.c) */
+
+int vita_ime_active;
+static struct
+{
+	struct platform_keystroke queue[160];
+	int head, count;
+} typed;
+
+static void typed_key(BYTE virtual_key, CHAR ascii)
+{
+	struct platform_keystroke *keystroke;
+	int release;
+
+	for (release = 0; release < 2 && typed.count < (int)(sizeof(typed.queue) / sizeof(typed.queue[0])); release++)
+	{
+		keystroke = &typed.queue[(typed.head + typed.count++) % (sizeof(typed.queue) / sizeof(typed.queue[0]))];
+		keystroke->virtual_key = virtual_key;
+		keystroke->ascii = release ? 0 : ascii;
+		keystroke->flags = release ? 0x40 : 0;
+	}
+}
+
+static void ime_poll(void)
+{
+	char text[72];
+	int result, index;
+
+	if (!vita_ime_active)
+		return;
+	result = vita_ime_poll(text, sizeof(text));
+	if (!result)
+		return;
+	vita_ime_active = 0;
+	if (result > 0)
+	{
+		for (index = 0; text[index]; index++)
+		{
+			char c = text[index];
+			BYTE key = c >= 'a' && c <= 'z' ? (BYTE)(c - 32) : (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ?
+				(BYTE)c : c == ' ' ? 0x20 : 0;
+
+			typed_key(key, c);
+		}
+		typed_key(0x0D, '\r');
+	}
+	/* (cancelled: the field stays, and B closes it, as the desktop's
+	escape does not reach a field) */
+}
+
 BOOL platform_next_keystroke(struct platform_keystroke *keystroke)
 {
-	(void)keystroke;
-	return FALSE;
+	ime_poll();
+	if (!typed.count)
+		return FALSE;
+	*keystroke = typed.queue[typed.head];
+	typed.head = (typed.head + 1) % (int)(sizeof(typed.queue) / sizeof(typed.queue[0]));
+	typed.count--;
+	return TRUE;
 }
 
 void platform_test_keystroke(int scancode, int modifiers)
@@ -296,7 +356,10 @@ void platform_text_typing(int typing)
 
 void platform_text_field(int typing)
 {
-	(void)typing;
+	/* (a field opened: the keyboard, its text shown as dots, as the
+	field's own stars) */
+	if (typing && !vita_ime_active)
+		vita_ime_active = vita_ime_open("Password", "", 32, 1) == 0;
 }
 
 void platform_chat_typing(int typing)

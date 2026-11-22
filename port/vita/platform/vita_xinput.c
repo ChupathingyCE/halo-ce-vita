@@ -9,6 +9,11 @@ had: host/vita_input.c, vita_controls.c). There is no keyboard or mouse.
 
 #include "platform.h"
 #include "sdl_platform.h"
+#include "vita_host.h"
+#include "vita_controls.h"
+#ifdef HALO_GAME_BROWSER
+#include "guide_input.h"
+#endif
 
 #include <string.h>
 
@@ -50,7 +55,10 @@ int platform_input_scheme(void)
 
 int platform_prompt_scheme(void)
 {
-	return 0;
+	/* (the overlay's prompts, Online Games' and the Delta Guide's: the
+	Vita's own buttons, as a PlayStation pad's - halo_prompt_schemes.h's
+	PROMPT_SCHEME_PLAYSTATION) */
+	return 2;
 }
 
 unsigned long halo_keyboard_actions(short controller_index)
@@ -146,6 +154,152 @@ VOID WINAPI XInputClose(HANDLE device)
 		gamepad.open = FALSE;
 }
 
+#ifdef HALO_GAME_BROWSER
+/* ---------- the Delta Guide's input (guide_input.h)
+
+SELECT and START pressed together open the Guide and close it, anywhere (in
+the menus and in a game: Halo CE Vita's chord for its settings panel); the
+two stay away from the game and the Guide until both are let go. While the
+Guide is open it has the Vita's buttons in the menus' fixed layout (Cross
+A, Circle B, Square X, Triangle Y, the d-pad or the left stick, START,
+SELECT as Back), L and R its LB and RB (the sections), and the rear touch
+pad's left and right halves, or SELECT held with L or R, its LT and RT (a
+section's pages); the game gets a controller at rest. What is still held as
+it closes stays up for the game until let go of. */
+
+/* (vita_pad.c) */
+extern int vita_guide_capturing;
+extern unsigned long vita_pad_raw_buttons, vita_pad_raw_touch;
+
+static int guide_capture, guide_confirm_swap, guide_toggles;
+static unsigned int guide_held;
+/* the chord's buttons, kept from everything until both are up */
+static int chord_down;
+/* the buttons held as the Guide closed (the pad's, by bit), up for the
+game until let go of */
+static WORD released_buttons;
+static unsigned char released_analog;
+
+void platform_guide_capture(int capture)
+{
+	guide_capture = capture != 0;
+	vita_guide_capturing = guide_capture;
+	guide_confirm_swap = 0;
+	if (!guide_capture)
+		guide_held = 0;
+}
+
+void platform_guide_confirm_swap(int swap)
+{
+	guide_confirm_swap = swap != 0;
+}
+
+unsigned int platform_guide_held(void)
+{
+	return guide_capture ? guide_held : 0;
+}
+
+int platform_guide_toggles(void)
+{
+	int toggles = guide_toggles;
+
+	guide_toggles = 0;
+	return toggles;
+}
+
+void platform_guide_buzz(void)
+{
+	/* (the Vita has no rumble) */
+}
+
+/* the pad as the game will see it, after vita_pad_state: the chord, and
+the Guide's share while it has the input */
+static void guide_take(XINPUT_GAMEPAD *pad)
+{
+	unsigned long raw = vita_pad_raw_buttons;
+	int chord = (raw & VITA_BUTTON_SELECT) && (raw & VITA_BUTTON_START);
+	int index;
+
+	if (chord && !chord_down)
+		guide_toggles++;
+	if (chord)
+		chord_down = 1;
+	else if (!(raw & (VITA_BUTTON_SELECT | VITA_BUTTON_START)))
+		chord_down = 0;
+	if (chord_down)
+		pad->wButtons &= (WORD)~(VITA_PAD_START | VITA_PAD_BACK);
+	if (guide_capture)
+	{
+		unsigned int held = 0;
+		int select = (raw & VITA_BUTTON_SELECT) && !chord_down;
+
+		if ((pad->wButtons & XINPUT_GAMEPAD_DPAD_UP) || pad->sThumbLY > 16000) held |= GUIDE_INPUT_UP;
+		if ((pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN) || pad->sThumbLY < -16000) held |= GUIDE_INPUT_DOWN;
+		if ((pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT) || pad->sThumbLX < -16000) held |= GUIDE_INPUT_LEFT;
+		if ((pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) || pad->sThumbLX > 16000) held |= GUIDE_INPUT_RIGHT;
+		if (pad->wButtons & XINPUT_GAMEPAD_START) held |= GUIDE_INPUT_START;
+		if (pad->bAnalogButtons[guide_confirm_swap ? XINPUT_GAMEPAD_B : XINPUT_GAMEPAD_A] > 30) held |= GUIDE_INPUT_A;
+		if (pad->bAnalogButtons[guide_confirm_swap ? XINPUT_GAMEPAD_A : XINPUT_GAMEPAD_B] > 30) held |= GUIDE_INPUT_B;
+		if (pad->bAnalogButtons[XINPUT_GAMEPAD_X] > 30) held |= GUIDE_INPUT_X;
+		if (pad->bAnalogButtons[XINPUT_GAMEPAD_Y] > 30) held |= GUIDE_INPUT_Y;
+		/* (L and R: the bumpers, or with SELECT held the triggers) */
+		if (select)
+		{
+			if (raw & VITA_BUTTON_L) held |= GUIDE_INPUT_LEFT_TRIGGER;
+			if (raw & VITA_BUTTON_R) held |= GUIDE_INPUT_RIGHT_TRIGGER;
+		}
+		else
+		{
+			if (raw & VITA_BUTTON_L) held |= GUIDE_INPUT_LEFT_BUMPER;
+			if (raw & VITA_BUTTON_R) held |= GUIDE_INPUT_RIGHT_BUMPER;
+			/* (SELECT alone: Back, once let go of without L or R) */
+		}
+		if (vita_pad_raw_touch & (1UL << VITA_ZONE_REAR_LEFT)) held |= GUIDE_INPUT_LEFT_TRIGGER;
+		if (vita_pad_raw_touch & (1UL << VITA_ZONE_REAR_RIGHT)) held |= GUIDE_INPUT_RIGHT_TRIGGER;
+		{
+			/* (SELECT's Back: on its release, unless it was a shift for L or R) */
+			static int select_was, select_shifted;
+
+			if (select && (raw & (VITA_BUTTON_L | VITA_BUTTON_R)))
+				select_shifted = 1;
+			if (!select && select_was && !select_shifted && !chord_down)
+				held |= GUIDE_INPUT_BACK;
+			if (!select)
+				select_shifted = 0;
+			select_was = select;
+		}
+		guide_held = held;
+		released_buttons = pad->wButtons;
+		released_analog = 0;
+		for (index = 0; index < 8; index++)
+		{
+			if (pad->bAnalogButtons[index])
+				released_analog |= (unsigned char)(1u << index);
+		}
+		memset(pad, 0, sizeof(*pad));
+		return;
+	}
+	/* (what was held as the Guide closed: up until let go of) */
+	released_buttons &= pad->wButtons;
+	pad->wButtons &= (WORD)~released_buttons;
+	for (index = 0; index < 8; index++)
+	{
+		if (!(released_analog & (1u << index)))
+			continue;
+		if (pad->bAnalogButtons[index])
+			pad->bAnalogButtons[index] = 0;
+		else
+			released_analog &= (unsigned char)~(1u << index);
+	}
+}
+
+/* (the Guide's battery line) 1 on the battery, 2 charging */
+int platform_power_state(int *percent)
+{
+	return vita_host_power_state(percent);
+}
+#endif
+
 DWORD WINAPI XInputGetState(HANDLE device, PXINPUT_STATE state)
 {
 	memset(state, 0, sizeof(*state));
@@ -154,6 +308,16 @@ DWORD WINAPI XInputGetState(HANDLE device, PXINPUT_STATE state)
 	platform_pump_events();
 	state->dwPacketNumber = ++gamepad.packet;
 	vita_pad_state(&state->Gamepad);
+#ifdef HALO_GAME_BROWSER
+	guide_take(&state->Gamepad);
+#endif
+	{
+		/* (the system's keyboard is up: it reads the pad itself) */
+		extern int vita_ime_active;
+
+		if (vita_ime_active)
+			memset(&state->Gamepad, 0, sizeof(state->Gamepad));
+	}
 	return ERROR_SUCCESS;
 }
 
@@ -174,6 +338,14 @@ DWORD WINAPI XInputDebugInitKeyboardQueue(PXINPUT_DEBUG_KEYQUEUE_PARAMETERS para
 
 DWORD WINAPI XInputDebugGetKeystroke(PXINPUT_DEBUG_KEYSTROKE keystroke)
 {
+	struct platform_keystroke next;
+
+	/* (what the system's keyboard typed into a field: vita_platform.c) */
 	memset(keystroke, 0, sizeof(*keystroke));
-	return ERROR_HANDLE_EOF;
+	if (!platform_next_keystroke(&next))
+		return ERROR_HANDLE_EOF;
+	keystroke->VirtualKey = next.virtual_key;
+	keystroke->Ascii = next.ascii;
+	keystroke->Flags = next.flags;
+	return ERROR_SUCCESS;
 }

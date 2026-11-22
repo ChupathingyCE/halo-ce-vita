@@ -165,3 +165,14 @@ void vita_host_battery_log(void)
 	last = now;
 	last_capacity = capacity;
 }
+
+/* (the Delta Guide's battery, platform_power_state) 1 on the battery, 2
+charging (or on the charger, full), and the charge in percent (-1 when the
+system does not say) */
+int vita_host_power_state(int *percent)
+{
+	int life = scePowerGetBatteryLifePercent();
+
+	*percent = life >= 0 && life <= 100 ? life : -1;
+	return scePowerIsBatteryCharging() || scePowerIsPowerOnline() ? 2 : 1;
+}

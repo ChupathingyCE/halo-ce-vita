@@ -1262,9 +1262,10 @@ static const struct config_setting config_settings[] =
 		"Put the Delta Guide in the pause menu of a multiplayer game or a\n"
 		"network co-op game, in every menu set. A campaign played on one\n"
 		"machine has none." },
-#ifdef HALO_ANDROID
+#if defined(HALO_ANDROID) || defined(HALO_VITA_CONSOLE)
 	/* (a touch screen has no Guide button, and its controls hide in the
-	menus: the rows are the way in there) */
+	menus: the rows are the way in there. The Vita: no Guide button either;
+	SELECT with START opens it too, vita_xinput.c) */
 	{ "delta.menu_item", _config_boolean, "true", "HALO_DELTA_MENU_ITEM", _environment_value, _platform_all,
 		"Put the Delta Guide on the main menu and the Multiplayer menu, in\n"
 		"every menu set. On by default on Android, where a touch screen has no\n"

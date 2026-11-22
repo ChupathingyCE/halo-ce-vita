@@ -114,6 +114,16 @@ void vita_host_clocks_set(int level);
 /* (the heartbeat thread) the battery's charge in halo.log once a minute,
 when HALO_BATTERY_LOG asks (unset: in a pre-release build) */
 void vita_host_battery_log(void);
+/* the system's keyboard (vita_ime.c): opened over the game with a title and
+text (UTF-8), at most maximum_length characters, its text shown as dots
+for a password; 0 when it opened. Polled once a frame: 0 while it is up, 1
+and the text typed (printable ASCII) when it was entered, -1 when it was
+cancelled or is not open */
+int vita_ime_open(const char *title, const char *text, int maximum_length, int password);
+int vita_ime_poll(char *text, int size);
+/* (the Delta Guide's battery) 1 on the battery, 2 charging or on the
+charger; the charge in percent, -1 when not known */
+int vita_host_power_state(int *percent);
 
 /* ---------- movies (port/vita/host/vita_movie.c): the Vita's video player
 for the game's Bink movies, from H.264 copies */

@@ -39,6 +39,12 @@ long halo_screen_width(void);
 
 /* set while the game's menus are up (halo_ui_pointer_update, d3d8_gxm.c) */
 int vita_menus_active;
+/* set while the Delta Guide has the first player's input (vita_xinput.c's
+platform_guide_capture): the menus' fixed layout, no gyro, no touch zones */
+int vita_guide_capturing;
+/* the Vita's buttons and touch zones as last read (VITA_BUTTON_* bits, a
+bit per VITA_ZONE_*), before any layout (vita_xinput.c: the Guide's chord) */
+unsigned long vita_pad_raw_buttons, vita_pad_raw_touch;
 
 /* (Warthog) Halo CE Vita's Command mode and Forge are not in the game:
 their menus' layout and the monitor's flight never hold */
@@ -210,10 +216,12 @@ void vita_pad_state(XINPUT_GAMEPAD *gamepad)
 		icons_playstation = vita_button_icons_playstation();
 	}
 	vita_host_pad_read(&pad);
+	vita_pad_raw_buttons = pad.buttons;
+	vita_pad_raw_touch = pad.touch;
 	/* the gyro, in play: in hold mode its button only aims */
 	vita_gyro_accumulate(&gyro_state, &gyro_config, pad.gyro,
-		vita_gyro_active(&gyro_config, pad.buttons, vita_menus_active));
-	if (gyro_config.mode == VITA_GYRO_HOLD && !vita_menus_active)
+		vita_gyro_active(&gyro_config, pad.buttons, vita_menus_active || vita_guide_capturing));
+	if (gyro_config.mode == VITA_GYRO_HOLD && !vita_menus_active && !vita_guide_capturing)
 		pad.buttons &= ~gyro_config.button;
 	/* the buttons and the touch zones held as the Xbox's buttons
 	(vita_controls.c): crouch is the left stick's click, which the Vita
@@ -231,7 +239,8 @@ void vita_pad_state(XINPUT_GAMEPAD *gamepad)
 		vita_controls_map(&flying, &controls_state, pad.buttons, 0, vita_menus_active, &output);
 	}
 	else
-		vita_controls_map(&controls, &controls_state, pad.buttons, pad.touch, vita_menus_active || command_menu_pad, &output);
+		vita_controls_map(&controls, &controls_state, pad.buttons, pad.touch,
+			vita_menus_active || command_menu_pad || vita_guide_capturing, &output);
 	gamepad->wButtons |= (WORD)output.digital;
 	for (index = 0; index < 8; index++)
 		gamepad->bAnalogButtons[index] = output.analog[index];
