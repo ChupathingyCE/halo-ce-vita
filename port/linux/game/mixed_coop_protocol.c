@@ -265,10 +265,10 @@ int mixed_coop_dictionary_read(uint8_t const *bytes, uint32_t length, struct mix
 		dictionary->bsp_digests[index][0] = mixed_coop_read_u32(bytes + at);
 		dictionary->bsp_digests[index][1] = mixed_coop_read_u32(bytes + at + 4);
 	}
-	if (dictionary->tag_count > (length - at) / 8)
+	if (dictionary->tag_count > (length - at) / 12)
 		return mixed_coop_refuse(why, why_size, "cut short (tags)");
 	dictionary->tags = bytes + at;
-	at += dictionary->tag_count * 8;
+	at += dictionary->tag_count * 12;
 	if (length - at < 4)
 		return mixed_coop_refuse(why, why_size, "cut short (graphs)");
 	dictionary->graph_count = mixed_coop_read_u32(bytes + at);
@@ -307,10 +307,12 @@ void mixed_coop_dictionary_tag_get(struct mixed_coop_dictionary const *dictionar
 	{
 		tag->path_hash = 0;
 		tag->digest = 0;
+		tag->datum = 0xFFFFFFFFu;
 		return;
 	}
-	tag->path_hash = mixed_coop_read_u32(dictionary->tags + index * 8);
-	tag->digest = mixed_coop_read_u32(dictionary->tags + index * 8 + 4);
+	tag->path_hash = mixed_coop_read_u32(dictionary->tags + index * 12);
+	tag->digest = mixed_coop_read_u32(dictionary->tags + index * 12 + 4);
+	tag->datum = mixed_coop_read_u32(dictionary->tags + index * 12 + 8);
 }
 
 int mixed_coop_dictionary_graph_next(struct mixed_coop_dictionary const *dictionary, uint32_t *offset,

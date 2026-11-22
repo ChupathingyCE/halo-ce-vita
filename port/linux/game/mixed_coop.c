@@ -192,6 +192,8 @@ static struct
 	long host_tag_count;
 	long *host_to_local;
 	long *local_to_host;
+	/* the host's tags' datums, by the host's absolute index */
+	long *host_datums;
 	/* animations: per this machine's graph (absolute tag index), the host's
 	animation index -> this machine's, in a pool */
 	long *graph_offsets;
@@ -1489,6 +1491,8 @@ static void mixed_coop_free_tables(
 	mixed_coop.host_to_local = NULL;
 	mixed_coop_free(mixed_coop.local_to_host);
 	mixed_coop.local_to_host = NULL;
+	mixed_coop_free(mixed_coop.host_datums);
+	mixed_coop.host_datums = NULL;
 	mixed_coop_free(mixed_coop.graph_offsets);
 	mixed_coop.graph_offsets = NULL;
 	mixed_coop_free(mixed_coop.graph_counts);
@@ -2114,6 +2118,7 @@ static boolean mixed_coop_build_stream(
 	{
 		mixed_coop_writer_u32(&writer, mixed_coop.tags[index].path_hash);
 		mixed_coop_writer_u32(&writer, mixed_coop.tags[index].digest);
+		mixed_coop_writer_u32(&writer, (uint32_t)mixed_coop_instances()[index].tag_index);
 	}
 	graph_count_at = writer.length;
 	mixed_coop_writer_u32(&writer, 0);
@@ -2451,10 +2456,11 @@ static void mixed_coop_dictionary_take(
 	lookups = malloc(sizeof(*lookups) * (size_t)MAX(1, mixed_coop.tag_count));
 	mixed_coop.host_to_local = malloc(sizeof(long) * dictionary.tag_count);
 	mixed_coop.local_to_host = malloc(sizeof(long) * (size_t)MAX(1, mixed_coop.tag_count));
+	mixed_coop.host_datums = malloc(sizeof(long) * dictionary.tag_count);
 	mixed_coop.graph_offsets = malloc(sizeof(long) * (size_t)MAX(1, mixed_coop.tag_count));
 	mixed_coop.graph_counts = malloc(sizeof(short) * (size_t)MAX(1, mixed_coop.tag_count));
 	mixed_coop.animation_pool = malloc(sizeof(short) * 65536);
-	if (!lookups || !mixed_coop.host_to_local || !mixed_coop.local_to_host || !mixed_coop.graph_offsets ||
+	if (!lookups || !mixed_coop.host_to_local || !mixed_coop.local_to_host || !mixed_coop.host_datums || !mixed_coop.graph_offsets ||
 		!mixed_coop.graph_counts || !mixed_coop.animation_pool)
 	{
 		mixed_coop_free(lookups);
@@ -2477,6 +2483,7 @@ static void mixed_coop_dictionary_take(
 		long local;
 
 		mixed_coop_dictionary_tag_get(&dictionary, (uint32_t)index, &tag);
+		mixed_coop.host_datums[index] = (long)tag.datum;
 		local = mixed_coop_find(lookups, mixed_coop.tag_count, tag.path_hash);
 		mixed_coop.host_to_local[index] = local;
 		if (local == NONE)
@@ -2674,15 +2681,9 @@ long mixed_coop_tag_to_host(
 		return NONE;
 	}
 	host_index = mixed_coop.local_to_host[absolute_index];
-	/* (the host's datum: a cache's tag's salt goes up with its index from the
-	same first salt in every map, 0xE174 in the game's, so the host's is this
-	one's moved by the indices' difference) */
-	{
-		unsigned long salt = ((unsigned long)local_tag_index >> 16) - (unsigned long)(unsigned short)absolute_index +
-			(unsigned long)host_index;
-
-		return (long)(((salt & 0xFFFFUL) << 16) | ((unsigned long)host_index & 0xFFFFUL));
-	}
+	/* (the host's datum, salt and all: a host checks a tag index whole,
+	tag_index_is_group) */
+	return host_index >= 0 && host_index < mixed_coop.host_tag_count ? mixed_coop.host_datums[host_index] : NONE;
 }
 
 short mixed_coop_animation_from_host(

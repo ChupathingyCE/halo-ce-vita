@@ -183,7 +183,9 @@ int mixed_coop_reassembly_take(struct mixed_coop_reassembly *reassembly, struct 
 	    grid)
 	u16 structure BSP count, u16 0, then two u32 collision digests each (its
 	    two grids; 0: not loaded on the host yet)
-	tag count x { u32 path hash, u32 digest (0: not a gameplay tag) }
+	tag count x { u32 path hash, u32 digest (0: not a gameplay tag), u32 the
+	    host's tag index (its datum: the index with its salt, which a host
+	    checks a client's whole) }
 	u32 graph count, then each { u16 host tag index, u16 animation count,
 	    animation count x u32 name hash }
 	u32 check (FNV-1a of every byte before it)
@@ -199,6 +201,7 @@ struct mixed_coop_dictionary_tag
 {
 	uint32_t path_hash;
 	uint32_t digest;
+	uint32_t datum;
 };
 
 /* a stream read: views into its bytes (which must outlive it) */
