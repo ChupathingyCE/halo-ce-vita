@@ -186,6 +186,7 @@ symbols in this file:
 #include "infection_net.h"
 #include "flame_net.h"
 #include "party_net.h"
+#include "mixed_coop_protocol.h"
 
 /* cseries_windows.c's */
 unsigned long system_milliseconds(void);
@@ -293,6 +294,10 @@ struct network_game_message_packet_definitions
 	struct data_packet_definition server_flame;
 	struct data_packet_field client_party_fields[3];
 	struct data_packet_definition client_party;
+	struct data_packet_field client_mixed_coop_fields[5];
+	struct data_packet_definition client_mixed_coop;
+	struct data_packet_field server_mixed_coop_fields[5];
+	struct data_packet_definition server_mixed_coop;
 	struct data_packet_entry packets[NUMBER_OF_NETWORK_GAME_MESSAGE_TYPES];
 	struct data_packet_group_definition group;
 };
@@ -365,6 +370,10 @@ DEFINE_NETWORK_GAME_MESSAGE(message_server_flame, sizeof(struct flame_net_messag
 /* (port) a joiner's party's team token (port/linux/game/party_net.h:
 struct party_net_message) */
 DEFINE_NETWORK_GAME_MESSAGE(message_client_party, sizeof(struct party_net_message));
+/* (port) mixed co-op's lobby (port/linux/game/mixed_coop_protocol.h: struct
+mixed_coop_lobby_message, both ways) */
+DEFINE_NETWORK_GAME_MESSAGE(message_client_mixed_coop, sizeof(struct mixed_coop_lobby_message));
+DEFINE_NETWORK_GAME_MESSAGE(message_server_mixed_coop, sizeof(struct mixed_coop_lobby_message));
 
 #undef DEFINE_NETWORK_GAME_MESSAGE
 
@@ -659,6 +668,22 @@ static struct network_game_message_packet_definitions data_0030aa68 =
 	},
 	NETWORK_GAME_MESSAGE_DEFINITION(client_party, "message_client_party_packet", message_client_party),
 	{
+		DATA_PACKET_FIELD(_data_packet_field_shorts, 2),
+		DATA_PACKET_FIELD(_data_packet_field_bytes, 2),
+		DATA_PACKET_FIELD(_data_packet_field_shorts, 1),
+		DATA_PACKET_FIELD(_data_packet_field_longs, 2),
+		DATA_PACKET_FIELD_END,
+	},
+	NETWORK_GAME_MESSAGE_DEFINITION(client_mixed_coop, "message_client_mixed_coop_packet", message_client_mixed_coop),
+	{
+		DATA_PACKET_FIELD(_data_packet_field_shorts, 2),
+		DATA_PACKET_FIELD(_data_packet_field_bytes, 2),
+		DATA_PACKET_FIELD(_data_packet_field_shorts, 1),
+		DATA_PACKET_FIELD(_data_packet_field_longs, 2),
+		DATA_PACKET_FIELD_END,
+	},
+	NETWORK_GAME_MESSAGE_DEFINITION(server_mixed_coop, "message_server_mixed_coop_packet", message_server_mixed_coop),
+	{
 		{ 0, 0, &data_0030aa68.client_broadcast_game_search },
 		{ 0, 0, &data_0030aa68.client_ping },
 		{ 1, 0, &data_0030aa68.server_game_advertise },
@@ -704,6 +729,8 @@ static struct network_game_message_packet_definitions data_0030aa68 =
 		{ 3, 0, &data_0030aa68.client_flame },
 		{ 2, 0, &data_0030aa68.server_flame },
 		{ 3, 0, &data_0030aa68.client_party },
+		{ 3, 0, &data_0030aa68.client_mixed_coop },
+		{ 2, 0, &data_0030aa68.server_mixed_coop },
 	},
 	{
 		"network_game_messages_group",
@@ -746,6 +773,7 @@ static short const network_game_message_structure_sizes[NUMBER_OF_NETWORK_GAME_M
 	sizeof(message_server_map_download_data), sizeof(message_client_forge), sizeof(message_server_forge),
 	sizeof(message_client_game_rules), sizeof(message_server_game_rules),
 	sizeof(message_client_flame), sizeof(message_server_flame), sizeof(message_client_party),
+	sizeof(message_client_mixed_coop), sizeof(message_server_mixed_coop),
 };
 
 /* port: whether a type's packet definition holds more than its structure
@@ -1033,6 +1061,12 @@ static void *create_network_game_message_with_zeros(
 		break;
 	case _message_client_party:
 		match_assert(__FILE__, __LINE__, message_struct_size==sizeof(message_client_party));
+		break;
+	case _message_client_mixed_coop:
+		match_assert(__FILE__, __LINE__, message_struct_size==sizeof(message_client_mixed_coop));
+		break;
+	case _message_server_mixed_coop:
+		match_assert(__FILE__, __LINE__, message_struct_size==sizeof(message_server_mixed_coop));
 		break;
 	default:
 #line 213 "c:\\halo\\SOURCE\\networking\\network_messages.c"

@@ -142,6 +142,15 @@ NETWORK_RULES_SHIELD_EFFECTS_*, network_rules_shield_effects_read): checked
 and drawn as stock, this build having no other look */
 #define DISTRIBUTED_MESSAGE_SHIELD_EFFECTS 91
 #define DISTRIBUTED_SHIELD_EFFECTS_SIZE 12
+/* port: mixed co-op (port/linux/game/mixed_coop.h): a client's request for
+the host's tag dictionary, the host's dictionary in pieces, and a structure
+BSP's collision digest as the host loads it; reliable, over a connection's
+stream alone, never on the crossplay wire. Numbers of their own past
+OpenCE's (handled before every other check, as 90 and 91): a build without
+them drops them as kinds it does not know */
+#define DISTRIBUTED_MESSAGE_MIXED_REQUEST 120
+#define DISTRIBUTED_MESSAGE_MIXED_DICTIONARY 121
+#define DISTRIBUTED_MESSAGE_MIXED_BSP 122
 
 /* where a message goes */
 enum

@@ -56,6 +56,7 @@ being hit looks and feels like on the clients).
 #include "scenario/scenario.h"
 #include "units/units.h"
 #include "network_distributed.h"
+#include "mixed_coop.h"
 #include "network_anticheat.h"
 #include "network_wire.h"
 #include "physics/collisions.h"
@@ -496,6 +497,33 @@ static long damage_replaying_killer;
 static long damage_replaying_killer_score;
 
 /* ---------- common */
+
+/* (mixed_coop.c) a mixed client's damage: the host's events' damage effects
+its own tags, its own hit reports' the host's */
+boolean network_damage_mixed_translate(
+	byte type,
+	void *entries,
+	short count,
+	boolean outgoing)
+{
+	short index;
+
+	if (type == _distributed_message_damage_events && !outgoing)
+	{
+		struct distributed_damage_event *events = entries;
+
+		for (index = 0; index < count; index++)
+			events[index].damage.definition_index = mixed_coop_tag_from_host(events[index].damage.definition_index);
+	}
+	else if (type == _distributed_message_hit_reports && outgoing)
+	{
+		struct distributed_hit_report *reports = entries;
+
+		for (index = 0; index < count; index++)
+			reports[index].damage.definition_index = mixed_coop_tag_to_host(reports[index].damage.definition_index);
+	}
+	return TRUE;
+}
 
 word network_damage_entry_size(
 	byte type)

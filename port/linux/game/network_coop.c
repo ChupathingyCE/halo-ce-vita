@@ -114,6 +114,7 @@ index and tag, since the map placed them at the same index everywhere.
 #include "coop_spectate.h"
 #include "network_coop.h"
 #include "network_distributed.h"
+#include "mixed_coop.h"
 
 #include <stdlib.h>
 
@@ -3208,6 +3209,89 @@ word network_coop_presentation_entry_size(
 	void)
 {
 	return sizeof(struct distributed_coop_presentation);
+}
+
+/* (mixed_coop.c) a mixed client's host messages: their tags and animations
+its own (an object's definition, a sound's, an effect's, a graph's and its
+animation by name) */
+boolean network_coop_mixed_translate(
+	byte type,
+	void *entries,
+	short count)
+{
+	short index;
+
+	switch (type)
+	{
+	case _distributed_message_coop_events:
+	{
+		struct distributed_coop_event *events = entries;
+
+		for (index = 0; index < count; index++)
+		{
+			struct distributed_coop_event *event = &events[index];
+
+			switch (event->kind)
+			{
+			case _coop_event_sound:
+			case _coop_event_effect:
+				event->tag_index = mixed_coop_tag_from_host(event->tag_index);
+				event->definition_index = mixed_coop_tag_from_host(event->definition_index);
+				break;
+			case _coop_event_attach:
+				event->tag_index = mixed_coop_tag_from_host(event->tag_index);
+				event->definition_index = mixed_coop_tag_from_host(event->definition_index);
+				break;
+			case _coop_event_unit_animation:
+			case _coop_event_scenery_animation:
+				event->definition_index = mixed_coop_tag_from_host(event->definition_index);
+				if (event->tag_index != NONE)
+				{
+					event->tag_index = mixed_coop_tag_from_host(event->tag_index);
+					event->value = event->tag_index != NONE ?
+						mixed_coop_animation_from_host(event->tag_index, event->value) : NONE;
+				}
+				break;
+			default:
+				break;
+			}
+		}
+		return TRUE;
+	}
+	case _distributed_message_coop_device_groups:
+	{
+		struct distributed_coop_device_group *groups = entries;
+
+		for (index = 0; index < count; index++)
+			groups[index].definition_index = mixed_coop_tag_from_host(groups[index].definition_index);
+		return TRUE;
+	}
+	case _distributed_message_coop_object_transforms:
+	{
+		struct distributed_coop_object_transform *transforms = entries;
+
+		for (index = 0; index < count; index++)
+			transforms[index].definition_index = mixed_coop_tag_from_host(transforms[index].definition_index);
+		return TRUE;
+	}
+	case _distributed_message_coop_object_looks:
+	{
+		struct distributed_coop_object_look *looks = entries;
+
+		for (index = 0; index < count; index++)
+			looks[index].definition_index = mixed_coop_tag_from_host(looks[index].definition_index);
+		return TRUE;
+	}
+	case _distributed_message_coop_device_states:
+	{
+		struct distributed_coop_device_state *states = entries;
+
+		for (index = 0; index < count; index++)
+			states[index].definition_index = mixed_coop_tag_from_host(states[index].definition_index);
+		return TRUE;
+	}
+	}
+	return TRUE;
 }
 
 word network_coop_event_entry_size(

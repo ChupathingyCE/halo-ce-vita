@@ -5525,6 +5525,13 @@ void main_loop(
 			/* (an Infection game's lobby: the host asks each joiner whether
 			it plays Infection, port/linux/game/infection_net.c) */
 			game_rules_net_frame();
+			/* (mixed co-op's lobby: the host of co-op on a campaign level tells
+			each joiner which files it plays it from, port/linux/game/mixed_coop.c) */
+			{
+				void mixed_coop_frame(void);
+
+				mixed_coop_frame();
+			}
 			/* (the player models from Custom Edition maps: the maps folder
 			looked through once, the settings panel's choice taken:
 			player_models.c) */

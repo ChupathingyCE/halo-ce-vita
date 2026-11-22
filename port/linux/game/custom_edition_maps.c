@@ -74,6 +74,8 @@ in lines of about 20 characters.
 #include "cache_file_formats.h"
 #include "custom_edition_mods.h"
 #include "mcc_content.h"
+#include "mixed_coop.h"
+#include "networking/network_game_globals.h"
 #include "workshop_maps.h"
 #include "text/unicode.h"
 #include "../src/lang.h"
@@ -1532,6 +1534,14 @@ unsigned long custom_edition_maps_network_identity(
 		return local.file == _crossplay_map_file_custom_edition ? local.version : 0;
 	}
 	name = tag_name_strip_path(level_name);
+	/* (mixed co-op, mixed_coop.h: a stock campaign level this machine hosts
+	from MCC's files says so, an identity no file has: an older build with
+	the Xbox's file refuses it as another copy) */
+	if (global_network_game_server_get() && mixed_coop_level_index(level_name) >= 0 &&
+		mixed_coop_local_family(mixed_coop_level_index(level_name)) == _mixed_coop_family_mcc)
+	{
+		return MIXED_COOP_MCC_IDENTITY;
+	}
 	/* (a Halo PC map named as an Xbox level, which this machine plays with
 	PC maps on, custom_edition_cache.c: not the Xbox level, and said, so that
 	a player with the Xbox map does not load another map than the host's;
@@ -1554,6 +1564,13 @@ boolean custom_edition_maps_host_copy_matches(
 	char const *name = level_name ? tag_name_strip_path(level_name) : "";
 
 	*missing = FALSE;
+	/* (mixed co-op, mixed_coop.h: a stock campaign level an MCC host plays,
+	or an Xbox one's this machine has MCC's files of: either family's file
+	here plays it, the digests compared once it is loaded) */
+	if (mixed_coop_host_level_acceptable(level_name, host_identity))
+	{
+		return TRUE;
+	}
 	/* (an Xbox level the host plays as one: its copies differ by region,
 	and are never compared; this machine's file is checked by
 	custom_edition_maps_stock_problem) */
@@ -1678,6 +1695,12 @@ boolean custom_edition_maps_stock_problem(
 
 	why[0] = 0;
 	if (!xbox_level_stock(name) || host_identity)
+	{
+		return FALSE;
+	}
+	/* (mixed co-op, mixed_coop.h: a campaign level this machine plays from
+	MCC's files, the host's game looked at as it loads) */
+	if (mixed_coop_host_level_acceptable(level_name, host_identity))
 	{
 		return FALSE;
 	}

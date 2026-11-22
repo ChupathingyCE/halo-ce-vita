@@ -1278,6 +1278,15 @@ boolean scenario_switch_structure_bsp(
 #endif
 			scenario_globals->structure_bsp_index = structure_bsp_index;
 			global_structure_bsp_index = structure_bsp_index;
+#ifdef HALO_LINUX
+			/* port: mixed co-op's collision digest of it
+			(port/linux/game/mixed_coop.c) */
+			{
+				extern void mixed_coop_structure_bsp_loaded(short bsp_index, struct structure_bsp const *structure_bsp);
+
+				mixed_coop_structure_bsp_loaded(structure_bsp_index, global_structure_bsp);
+			}
+#endif
 
 			if (had_old_structure_bsp)
 			{

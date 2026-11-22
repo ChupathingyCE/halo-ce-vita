@@ -405,6 +405,7 @@ symbols in this file:
 #include "network_crossplay_guard.h"
 #include "../src/crossplay_guard.h"
 #include "map_share.h"
+#include "mixed_coop.h"
 #include "party_net.h"
 #include "net_fuzz_twin.h"
 #include "player_cosmetics.h"
@@ -1004,6 +1005,7 @@ void network_game_client_dispose(
 #ifdef HALO_LINUX
 	/* port: a download of the host's map stops with the client (map_share.c) */
 	map_share_client_dispose(client);
+	mixed_coop_client_dispose();
 #endif
 	if (client)
 	{
@@ -1377,6 +1379,14 @@ boolean network_game_client_idle(
 	one the player turned down, cancelled, or that failed, leaves the game
 	as a map the joiner cannot play always did */
 	if (!map_share_client_update(client))
+	{
+		display_error_when_main_menu_loaded(_error_network_failed_to_join_game);
+		return FALSE;
+	}
+	/* port: a mixed co-op game whose level differs here, or whose host
+	cannot play it with this machine's files, is left, the player told why
+	(port/linux/game/mixed_coop.c) */
+	if (!mixed_coop_client_update(client))
 	{
 		display_error_when_main_menu_loaded(_error_network_failed_to_join_game);
 		return FALSE;

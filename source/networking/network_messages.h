@@ -88,6 +88,13 @@ enum network_game_message_type
 	bots puts a party's members on one team. A build without it drops it as
 	an unknown packet type. Never sent on the crossplay wire */
 	_message_client_party,
+	/* port: mixed co-op (port/linux/game/mixed_coop_protocol.h): the host of
+	co-op on a stock campaign level says hello and the files it plays it
+	from (the Xbox's or MCC's) to each machine that joins; a machine that
+	plays mixed co-op answers with its own. A build without them drops them
+	as unknown packet types. Never sent on the crossplay wire */
+	_message_client_mixed_coop,
+	_message_server_mixed_coop,
 	NUMBER_OF_NETWORK_GAME_MESSAGE_TYPES,
 };
 

@@ -203,6 +203,7 @@ symbols in this file:
 #include "map_share.h"
 #include "forge.h"
 #include "infection_net.h"
+#include "mixed_coop.h"
 #include "network_game_record.h"
 #include "flame_net.h"
 #include "network_wire.h"
@@ -778,6 +779,21 @@ boolean network_game_client_handle_message(
 						else
 						{
 							network_event("ignoring a game rules message from a system that is not the host");
+						}
+						break;
+
+					case _message_server_mixed_coop:
+						if (network_wire_crossplay())
+						{
+							network_event("ignoring a mixed co-op message on the crossplay wire");
+						}
+						else if (network_game_client_address_matches_server(client, source_address))
+						{
+							mixed_coop_client_handle_lobby(client, message, message_size);
+						}
+						else
+						{
+							network_event("ignoring a mixed co-op message from a system that is not the host");
 						}
 						break;
 

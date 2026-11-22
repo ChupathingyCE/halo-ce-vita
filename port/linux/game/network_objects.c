@@ -68,6 +68,7 @@ same datum index (identifier and all), so that any message can name one:
 #include "cutscene/cinematics.h"
 #include "network_coop.h"
 #include "network_distributed.h"
+#include "mixed_coop.h"
 #include "network_anticheat.h"
 #include "network_wire.h"
 #include "forge.h"
@@ -1061,6 +1062,39 @@ static void distributed_host_send_damage_animations(
 		distributed_send(&message, _distributed_message_damage_animations, count,
 			(word)(sizeof(message.header) + count * sizeof(message.animations[0])), _distributed_to_clients);
 	}
+}
+
+/* (mixed_coop.c) a mixed client's host messages: an object's definition its
+own tag, a damage animation its unit's graph's of that name */
+boolean network_objects_mixed_translate(
+	byte type,
+	void *entries,
+	short count)
+{
+	short index;
+
+	if (type == _distributed_message_object_changes)
+	{
+		struct distributed_object_change *changes = entries;
+
+		for (index = 0; index < count; index++)
+			changes[index].definition_index = mixed_coop_tag_from_host(changes[index].definition_index);
+	}
+	else if (type == _distributed_message_damage_animations)
+	{
+		struct distributed_damage_animation *animations = entries;
+
+		for (index = 0; index < count; index++)
+		{
+			struct object_datum *unit = distributed_object_index_valid(animations[index].unit_index) ?
+				object_try_and_get_and_verify_type(animations[index].unit_index, _object_mask_unit) : NULL;
+
+			animations[index].animation_index = unit ?
+				mixed_coop_animation_from_host(unit->object.animation.animation_graph_index, animations[index].animation_index) :
+				NONE;
+		}
+	}
+	return TRUE;
 }
 
 word network_objects_damage_animation_entry_size(
@@ -3301,7 +3335,9 @@ void network_objects_client_tick(
 	/* (loaded: the host's objects, please; flagged when one of them failed
 	since it last asked) */
 	if (!objects_client_synchronized &&
-		(objects_client_ready_time == NONE || game_time_get() - objects_client_ready_time >= objects_client_ready_interval))
+		(objects_client_ready_time == NONE || game_time_get() - objects_client_ready_time >= objects_client_ready_interval) &&
+		/* (a mixed co-op client: once the host's dictionary matched, mixed_coop.c) */
+		mixed_coop_client_ready_allowed())
 	{
 		struct distributed_message_header message;
 

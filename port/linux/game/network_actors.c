@@ -45,6 +45,7 @@ an AI unit the same way it kills a player's.
 #include "network_coop.h"
 #include "network_actor_table.h"
 #include "network_distributed.h"
+#include "mixed_coop.h"
 #include "network_wire.h"
 
 #include <math.h>
@@ -985,6 +986,28 @@ void network_actors_handle_damage(
 		damage.recent_body_damage = distributed_vitality_unpack(units[index].recent_body_damage);
 		damage_set_network_state(units[index].unit_index, &damage);
 	}
+}
+
+/* (mixed_coop.c) a mixed client's host actor states: their speech and user
+animation graph its own tags, the animation the graph's of that name */
+boolean network_actors_mixed_translate(
+	void *entries,
+	short count)
+{
+	struct distributed_actor_state *states = entries;
+	short index;
+
+	for (index = 0; index < count; index++)
+	{
+		states[index].speech_sound = mixed_coop_tag_from_host(states[index].speech_sound);
+		if (states[index].user_animation_graph != NONE)
+		{
+			states[index].user_animation_graph = mixed_coop_tag_from_host(states[index].user_animation_graph);
+			states[index].user_animation = states[index].user_animation_graph != NONE ?
+				mixed_coop_animation_from_host(states[index].user_animation_graph, states[index].user_animation) : NONE;
+		}
+	}
+	return TRUE;
 }
 
 word network_actors_entry_size(

@@ -77,6 +77,7 @@ machine (their datum identifiers need not be).
 #include "physics/collisions.h"
 #include "network_coop.h"
 #include "network_distributed.h"
+#include "mixed_coop.h"
 #include "network_anticheat.h"
 #include "network_wire.h"
 #include "forge.h"
@@ -450,6 +451,22 @@ struct distributed_pickup
 };
 
 typedef char distributed_pickup_size_assert[sizeof(struct distributed_pickup) == 8 ? 1 : -1];
+
+/* (mixed_coop.c) a mixed client's host pickups: their tags its own */
+boolean network_distributed_mixed_translate(
+	byte type,
+	void *entries,
+	short count)
+{
+	struct distributed_pickup *pickups = entries;
+	short index;
+
+	if (type != _distributed_message_pickups)
+		return TRUE;
+	for (index = 0; index < count; index++)
+		pickups[index].definition_index = mixed_coop_tag_from_host(pickups[index].definition_index);
+	return TRUE;
+}
 
 struct distributed_player_statistics
 {
@@ -1268,6 +1285,9 @@ void distributed_send(
 	short destination)
 {
 	distributed_fill_header(message, type, count, size);
+	/* (a mixed co-op client's to the host: its tags the host's, mixed_coop.c) */
+	if (destination == _distributed_to_host || destination == _distributed_to_host_reliably)
+		mixed_coop_translate_outgoing(type, (byte *)message + sizeof(struct distributed_message_header), count);
 	switch (destination)
 	{
 	case _distributed_to_clients:
@@ -4457,6 +4477,8 @@ void network_distributed_tick(
 		network_damage_client_tick();
 		network_coop_client_tick();
 	}
+	/* (tests: the state both machines must agree on, mixed_coop.c) */
+	mixed_coop_tick_hash();
 	/* (when this tick was sent: the round trips that name it are timed by
 	it) */
 	distributed_tick_sent_times[game_time_get() & (TICK_SENT_TIMES - 1)].time = game_time_get();
@@ -5383,6 +5405,34 @@ static void distributed_handle_message(
 		distributed_handle_shield_effects(machine_index, message, size);
 		return;
 	}
+	/* (mixed co-op's, mixed_coop.c: over a connection's stream alone, a
+	client's request to the host, the host's to a client) */
+	if (header.type >= DISTRIBUTED_MESSAGE_MIXED_REQUEST && header.type <= DISTRIBUTED_MESSAGE_MIXED_BSP)
+	{
+		word entries_size = (word)(size - sizeof(header));
+
+		if (network_wire_crossplay() || distributed_handling_batch || header.count < 1 ||
+			(machine_index != NONE ? !distributed_handling_stream_message : network_connection_last_read_was_unreliable()))
+		{
+			return;
+		}
+		if (header.type == DISTRIBUTED_MESSAGE_MIXED_REQUEST)
+		{
+			if (machine_index != NONE && game_connection() == _game_connection_network_server &&
+				entries_size >= sizeof(struct mixed_coop_request))
+			{
+				mixed_coop_handle_request(machine_index, entries, header.count);
+			}
+		}
+		else if (machine_index == NONE && game_connection() == _game_connection_network_client)
+		{
+			if (header.type == DISTRIBUTED_MESSAGE_MIXED_DICTIONARY)
+				mixed_coop_handle_dictionary(entries, header.count, entries_size);
+			else if (entries_size >= sizeof(struct mixed_coop_bsp_digest))
+				mixed_coop_handle_bsp_digest(entries, header.count);
+		}
+		return;
+	}
 	/* (the in-game chat's, OpenCE's kinds 87-89, on either wire:
 	game_chat.c checks each, taken only over a connection's stream, never
 	a datagram or a batch) */
@@ -5557,6 +5607,14 @@ static void distributed_handle_message(
 		}
 	}
 
+	/* (a mixed co-op client: the host's tag and animation indices made this
+	machine's, mixed_coop.c; a message naming tags dropped while the host's
+	dictionary is not yet in) */
+	if (machine_index == NONE &&
+		!mixed_coop_translate_incoming(header.type, (void *)entries, header.count, (unsigned short)(size - sizeof(header))))
+	{
+		return;
+	}
 	switch (header.type)
 	{
 	case _distributed_message_player_prediction:
