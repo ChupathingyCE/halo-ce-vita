@@ -57,6 +57,8 @@ when what the game reads in them is alike.
 #include "objects/object_definitions.h"
 #include "physics/collision_bsp_definitions.h"
 #include "physics/physics_definitions.h"
+#include "physics/collision_model_definitions.h"
+#include "objects/damage_resistances.h"
 #include "scenario/scenario.h"
 #include "scenario/scenario_definitions.h"
 #include "structures/structure_bsp_definitions.h"
@@ -641,21 +643,27 @@ static struct mixed_coop_rule const mixed_coop_rules_table[] =
 	{ "netgame_equipment", 0x54, 0x84, _mixed_rule_skip, 0 },
 };
 
-/* ---------- the owner's decisions (Nov 22 2026: pending - each refused by
-default; a decision taken is its line's FALSE made TRUE. Tests turn them on
-with HALO_MIXED_DECISIONS=<name>,<name>...) */
+/* ---------- the owner's decisions (Nov 22 2026, 09:27 "All I want is the mcc maps to play with Xbox
+maps": mixed play by default. Each one line below: its TRUE made FALSE refuses that difference again, a
+mixed game naming the tag. Tests turn a FALSE one on with HALO_MIXED_DECISIONS=<name>,<name>..., and
+HALO_MIXED_DECISIONS_OFF=<name>,... turns a TRUE one off) */
 
 enum
 {
 	/* scenery\c_field_generator's collision model: MCC recompiled it, up
 	to 0.19 wu off the Xbox's (a10 a50 b30 b40 c10 d20 d40, c40 in play;
-	Rat Race). TRUE: played anyway, each machine its own */
+	Rat Race). TRUE: played anyway - the host's collision decides (its
+	simulation is the game's; a client's prediction near one is corrected
+	to it); an MCC host's is MCC's, which it says in its log (default, r3) */
 	_mixed_decision_field_generator,
 	/* the flood carrier's autoaim width: Xbox 0, MCC 0.001 (c20 c40 d20
-	d40). TRUE: a 4th Xbox value, 0 on MCC machines (mixed_coop_rules) */
+	d40). TRUE: a 4th Xbox value, 0 on MCC machines (mixed_coop_rules;
+	default, r3) */
 	_mixed_decision_flood_carrier_autoaim,
-	/* a50's medium granite boulder's collision material type (0 vs 2).
-	TRUE: played anyway */
+	/* a50's medium granite boulder's collision material type (Xbox 0 dirt,
+	MCC 2 stone). TRUE: a 5th Xbox value, 0 on MCC machines
+	(mixed_coop_rules), its collision's float noise played anyway (default,
+	r3) */
 	_mixed_decision_granite_boulder,
 	/* multiplayer: the flag stand and teleporter base have no collision in
 	MCC's files (the collision tag is nowhere in MCC). TRUE: dropped for
@@ -673,9 +681,9 @@ static struct
 	boolean decided;
 } const mixed_coop_decisions[NUMBER_OF_MIXED_DECISIONS] =
 {
-	{ "field_generator", FALSE },
-	{ "flood_carrier_autoaim", FALSE },
-	{ "granite_boulder", FALSE },
+	{ "field_generator", TRUE },
+	{ "flood_carrier_autoaim", TRUE },
+	{ "granite_boulder", TRUE },
 	{ "flag_stand", FALSE },
 	{ "needler", FALSE },
 };
@@ -686,6 +694,18 @@ static boolean mixed_coop_decided(
 	char const *setting = getenv("HALO_MIXED_DECISIONS");
 	size_t length = strlen(mixed_coop_decisions[decision].name);
 
+	char const *off = getenv("HALO_MIXED_DECISIONS_OFF");
+
+	/* (HALO_MIXED_DECISIONS_OFF: a default decision undone, for the tests and for anyone checking one) */
+	while (off && *off)
+	{
+		char const *end = strchr(off, ',');
+		size_t part = end ? (size_t)(end - off) : strlen(off);
+
+		if (part == length && !strncmp(off, mixed_coop_decisions[decision].name, length))
+			return FALSE;
+		off = end ? end + 1 : NULL;
+	}
 	if (mixed_coop_decisions[decision].decided)
 		return TRUE;
 	while (setting && *setting)
@@ -1626,6 +1646,37 @@ static void mixed_coop_rules(
 			platform_log("mixed co-op: Xbox rules: the flood carrier's autoaim width %.4f -> 0", biped->biped.autoaim_width);
 			biped->biped.autoaim_width = 0.0f;
 			mixed_coop.rules_applied++;
+		}
+		/* (the owner's decision, _mixed_decision_field_generator) the field generator's collision:
+		MCC's own, said - the host's decides for every machine */
+		else if (instance->group_tag == 'coll' &&
+			!csstrcasecmp(instance->name, "scenery\\c_field_generator\\c_field_generator") &&
+			mixed_coop_decided(_mixed_decision_field_generator))
+		{
+			platform_log("mixed play: the field generator's collision is MCC's on this machine (up to 0.19 wu off the "
+				"Xbox's): as host, its collision decides for every machine; joining an Xbox host, the host's decides "
+				"and a player near one is corrected to it");
+		}
+		/* (the owner's decision, _mixed_decision_granite_boulder) a50's medium granite boulder's
+		collision material type: the Xbox's (0, dirt; MCC's 2, stone - what a shot or grenade
+		against it does, its material's responses) */
+		else if (instance->group_tag == 'coll' &&
+			!csstrcasecmp(instance->name, "scenery\\rocks\\boulder_granite_medium\\boulder_granite_medium") &&
+			mixed_coop_decided(_mixed_decision_granite_boulder))
+		{
+			struct collision_model *collision = instance->base_address;
+			struct damage_resistance_material *materials = collision->resistance.materials.address;
+			long material;
+
+			for (material = 0; materials && material < collision->resistance.materials.count; material++)
+			{
+				if (materials[material].material_type == 2)
+				{
+					platform_log("mixed co-op: Xbox rules: the medium granite boulder's material %ld type 2 -> 0", material);
+					materials[material].material_type = 0;
+					mixed_coop.rules_applied++;
+				}
+			}
 		}
 	}
 }
@@ -3052,7 +3103,7 @@ static void mixed_coop_dictionary_take(
 			mixed_coop_tag_text((short)local, text, sizeof(text));
 			if (mixed_coop.tags[(short)local].kind == _mixed_tag_gameplay && mixed_coop_accepted((short)local))
 			{
-				platform_log("mixed co-op: gameplay differs, accepted (network.mixed_coop_accept): %s", text);
+				platform_log("mixed co-op: gameplay differs, accepted (the owner's decisions, or network.mixed_coop_accept): %s", text);
 			}
 			else if (mixed_coop.tags[(short)local].kind == _mixed_tag_gameplay)
 			{

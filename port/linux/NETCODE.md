@@ -195,13 +195,18 @@ is the Xbox's with things appended (the research of Nov 13 2026).
   custom animations); its hit reports' damage effects go out as the host's
   datums. Object indices need none: the placed objects are at the same
   indices, and the rest are the host's.
-- **Gameplay differences awaiting the owner** refuse a level by default:
-  the field generator's collision model (8 levels), the flood carrier's
-  autoaim width (c20, c40, d20, d40), a50's medium granite boulder's
-  material - each one line in `mixed_coop_decisions` (`HALO_MIXED_DECISIONS`
-  turns them on for tests; the flood carrier's, decided, is a fourth Xbox
-  value on MCC machines). `network.mixed_coop_accept` names tags a machine
-  plays anyway (tests).
+- **The three gameplay differences, played mixed by default** (owner, Nov 22:
+  mixed play should just work; each one line in `mixed_coop_decisions`, its
+  TRUE made FALSE refuses it again, `HALO_MIXED_DECISIONS_OFF=<name>` for a
+  run): the flood carrier's autoaim width is the Xbox's 0 on MCC machines (a
+  fourth Xbox value; c20, c40, d20, d40); a50's medium granite boulder's
+  collision material type is the Xbox's 0 on MCC machines (a fifth; its
+  collision's float noise rounds equal, so the level matches outright); the
+  field generator's collision model (8 levels, Rat Race), which MCC rebuilt up
+  to 0.19 wu off, is played anyway: the host's simulation decides for every
+  machine and a client near one is corrected to it - an MCC host says in its
+  log that its field generators are MCC's. `network.mixed_coop_accept` names
+  tags a machine plays anyway (tests).
 
 Tests: `HALO_MIXED_COOP_HASH=1` logs the objects the map placed (by index,
 before the AI places its own) and each tick the state the netcode makes the
@@ -255,10 +260,9 @@ with a message saying Halo PC rebuilt the map (`mixed_coop_multiplayer_refusal`)
   the flag stand and teleporter base have no collision in MCC's files (on all
   seven maps: dropped for everyone in mixed games when decided); MCC's needler
   item collection spawns Halo PC's `mp_needler` (Chill Out, Wizard: the Xbox's
-  needler on MCC machines when decided); the field generator's collision (Rat
-  Race, and the campaign's); and for co-op the flood carrier's autoaim width
-  (a fourth Xbox value when decided) and a50's boulder. Tests turn them on with
-  `HALO_MIXED_DECISIONS`.
+  needler on MCC machines when decided). Tests turn them on with
+  `HALO_MIXED_DECISIONS`. (The field generator's collision, Rat Race's too, is
+  played by default: above.)
 
 Tests: `run_netns_online_test.sh mixedmp` (`HALO_TEST_MIXED="HOST JOINER MAP
 GAME"`: the scoreboards and the state hashes agree) and `mixedrebuilt`.
