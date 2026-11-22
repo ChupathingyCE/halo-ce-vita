@@ -25,6 +25,9 @@ Three things go on the wire, none of them map data:
   then each animation graph's animations by a hash of their names; and a
   structure BSP's collision digest as the host first loads it.
 
+Version 2 (mixed multiplayer): the same on the multiplayer maps whose files
+are one game, and the host's netgame flags at the dictionary's end.
+
 Everything read here is another machine's: every count and length is
 checked against the bytes there are, before anything is taken.
 */
@@ -34,8 +37,16 @@ checked against the bytes there are, before anything is taken.
 
 #include <stdint.h>
 
-/* the protocol's version (a lobby message or stream of another is refused) */
-#define MIXED_COOP_VERSION 1
+/* the protocol's versions. 1: the campaign's ten levels (co-op). 2: the
+multiplayer maps too (MIXED_COOP_LEVELS). A message carries the lowest version
+that can say its level (mixed_coop_version_for_level): about a campaign level
+it is version 1, byte for byte what the first builds send and take; about a
+multiplayer map, version 2, which a version 1 build refuses at its version
+check before it reads the level (never misparsed: it then plays as it always
+did, and its own family check refuses the other family's map). A message of
+a version not listed here, or a level its version cannot name, is refused. */
+#define MIXED_COOP_VERSION_CAMPAIGN 1
+#define MIXED_COOP_VERSION 2
 
 /* the files a machine plays a level from */
 enum mixed_coop_family
@@ -48,8 +59,13 @@ enum mixed_coop_family
 	NUMBER_OF_MIXED_COOP_FAMILIES
 };
 
-/* the campaign's levels (a10 ... d40), by their index, as main.c names them */
-#define MIXED_COOP_LEVELS 10
+/* the levels by index: the campaign's ten (a10 ... d40, as main.c names
+them, 0 to 9: version 1), then the multiplayer maps whose MCC and Xbox files
+the research found to have the same collision (10 ...: version 2,
+mixed_coop.c's mixed_coop_level_stems) */
+#define MIXED_COOP_CAMPAIGN_LEVELS 10
+#define MIXED_COOP_MULTIPLAYER_LEVELS 7
+#define MIXED_COOP_LEVELS (MIXED_COOP_CAMPAIGN_LEVELS + MIXED_COOP_MULTIPLAYER_LEVELS)
 #define MIXED_COOP_NO_LEVEL 0xFF
 
 /* ---------- the lobby */
@@ -68,7 +84,7 @@ struct mixed_coop_lobby_message
 	uint16_t version;
 	/* the sender's family for the level (a joiner without the level: none) */
 	uint8_t family;
-	/* the level (0 to 9) */
+	/* the level (0 to 9; version 2: 0 to MIXED_COOP_LEVELS - 1) */
 	uint8_t level;
 	uint16_t flags;
 	/* the host's hosting (the hello's, echoed by the answer) */
@@ -81,6 +97,11 @@ typedef char mixed_coop_lobby_message_size_assert[sizeof(struct mixed_coop_lobby
 /* a lobby message checked: its command, version, family and level, no
 reserved bits; 1 when it can be taken */
 int mixed_coop_lobby_valid(struct mixed_coop_lobby_message const *message);
+/* the version a message about `level` carries (MIXED_COOP_VERSION_CAMPAIGN
+for a campaign level), and whether `version` can name `level` (1: a known
+version and a level it names) */
+int mixed_coop_version_for_level(unsigned level);
+int mixed_coop_version_names_level(unsigned version, unsigned level);
 
 /* ---------- after the load */
 
@@ -188,6 +209,11 @@ int mixed_coop_reassembly_take(struct mixed_coop_reassembly *reassembly, struct 
 	    checks a client's whole) }
 	u32 graph count, then each { u16 host tag index, u16 animation count,
 	    animation count x u32 name hash }
+	(version 2, a multiplayer map's: u16 netgame flag count, u16 0, then
+	    each { 4 x u32 float bits: x, y, z, facing; u16 type, u16 team } -
+	    the host's flags, whose places a client takes: Halo PC moved
+	    teleporters, race checkpoints and hills a little; a client runs the
+	    teleporters too)
 	u32 check (FNV-1a of every byte before it)
 */
 
@@ -196,6 +222,18 @@ int mixed_coop_reassembly_take(struct mixed_coop_reassembly *reassembly, struct 
 #define MIXED_COOP_MAXIMUM_BSPS 32
 #define MIXED_COOP_MAXIMUM_GRAPHS 1024
 #define MIXED_COOP_MAXIMUM_ANIMATIONS 2048
+#define MIXED_COOP_MAXIMUM_NETGAME_FLAGS 512
+#define MIXED_COOP_NETGAME_FLAG_BYTES 20
+/* the farthest a flag's coordinate is taken (world units) */
+#define MIXED_COOP_NETGAME_FLAG_LIMIT 100000.0f
+
+struct mixed_coop_netgame_flag
+{
+	float position[3];
+	float facing;
+	uint16_t type;
+	uint16_t team;
+};
 
 struct mixed_coop_dictionary_tag
 {
@@ -219,6 +257,11 @@ struct mixed_coop_dictionary
 	/* the graphs' part, unaligned: walked with mixed_coop_dictionary_graph_next */
 	uint8_t const *graphs;
 	uint32_t graphs_bytes;
+	/* (version 2) the host's netgame flags, unaligned: read with
+	mixed_coop_dictionary_netgame_flag_get */
+	uint16_t version;
+	uint32_t netgame_flag_count;
+	uint8_t const *netgame_flags;
 };
 
 /* the host's stream written into bytes (at most size): its length, or 0
@@ -248,6 +291,9 @@ animations' count and their name hashes (unaligned, count x u32), or 0 at
 the end */
 int mixed_coop_dictionary_graph_next(struct mixed_coop_dictionary const *dictionary, uint32_t *offset,
 	uint16_t *host_tag_index, uint16_t *animation_count, uint8_t const **name_hashes);
+/* the host's netgame flag `index` (0: past the count) */
+int mixed_coop_dictionary_netgame_flag_get(struct mixed_coop_dictionary const *dictionary, uint32_t index,
+	struct mixed_coop_netgame_flag *flag);
 uint32_t mixed_coop_read_u32(uint8_t const *bytes);
 
 /* ---------- hashes */

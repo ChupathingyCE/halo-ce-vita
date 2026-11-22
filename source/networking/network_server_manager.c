@@ -4277,6 +4277,15 @@ void network_game_server_change_map_name(
 			server->game.map.name[NETWORK_GAME_MAP_NAME_LENGTH - 1] = 0;
 		}
 	}
+	/* port: mixed play (port/linux/game/mixed_coop.h): a multiplayer map
+	whose MCC and Xbox files are one game, hosted from MCC's files, named as
+	the Xbox's (its identity then says MCC's: older builds refuse it) */
+	if (!network_wire_crossplay())
+	{
+		int mixed_coop_host_map_name(char *map_name, long size);
+
+		mixed_coop_host_map_name(server->game.map.name, NETWORK_GAME_MAP_NAME_LENGTH);
+	}
 	/* port: which copy of a custom map this is, for the players to compare
 	theirs with (port/linux/game/custom_edition_maps.c); 0, as January sent,
 	for the Xbox levels */

@@ -198,13 +198,67 @@ is the Xbox's with things appended (the research of Nov 13 2026).
 - **Gameplay differences awaiting the owner** refuse a level by default:
   the field generator's collision model (8 levels), the flood carrier's
   autoaim width (c20, c40, d20, d40), a50's medium granite boulder's
-  material. `network.mixed_coop_accept` names those a machine plays anyway
-  (tests).
+  material - each one line in `mixed_coop_decisions` (`HALO_MIXED_DECISIONS`
+  turns them on for tests; the flood carrier's, decided, is a fourth Xbox
+  value on MCC machines). `network.mixed_coop_accept` names tags a machine
+  plays anyway (tests).
 
 Tests: `HALO_MIXED_COOP_HASH=1` logs the objects the map placed (by index,
 before the AI places its own) and each tick the state the netcode makes the
 same everywhere; `port/vita/tests/net_fuzz_mixed_coop.c` fuzzes the
 messages. Never on the crossplay wire.
+
+### Mixed multiplayer
+
+The same machinery plays the multiplayer maps whose collision the research
+found the same in both families: Chill Out, Longest, Prisoner, Chiron TL-34,
+Rat Race, Wizard and Boarding Action (its two ladders up to 10 cm apart, which
+the owner accepted: that BSP's two digests are listed, `mixed_coop_accepted_bsps`).
+The six maps Halo PC rebuilt (Blood Gulch, Battle Creek, Derelict, Damnation,
+Hang 'Em High, Sidewinder) stay apart: a machine of the other family is refused
+with a message saying Halo PC rebuilt the map (`mixed_coop_multiplayer_refusal`).
+
+- **The name.** An MCC machine with no Xbox file of the map hosting MCC's
+  copy (`levels\test\mcc_chillout\mcc_chillout`) names its game the Xbox's
+  (`levels\test\chillout\chillout`, `mixed_coop_host_map_name`) with the
+  identity `MIXED_COOP_MCC_IDENTITY`, and plays MCC's file under it as mixed
+  co-op does. MCC's names stay MCC's own game (a machine with both files
+  hosting MCC's copy beside the Xbox's).
+- **The lobby messages' version.** A message carries the lowest version that
+  can say its level: version 1 for the campaign's ten (byte for byte the
+  first builds'), version 2 for a multiplayer map (levels 10 to 16). A
+  version 1 build refuses a version 2 message at its version check before it
+  reads the level, and plays as it always did: its own family check refuses
+  the other family's map, and an older Xbox build refuses the MCC host's
+  identity as another copy. The network version (18) is not raised: nothing
+  any older build takes changed.
+- **What differs, and the rules.** Halo PC changed MCC's multiplayer tags;
+  of what can come into play on these maps only these differ, each handled
+  by what the game does with it: the globals' weapon list (MCC appends the
+  plasma cannon and `mp_needler`: compared as far as the Xbox's fourteen,
+  which is all the game engine reads; the flamethrower and gravity rifle
+  entries bring nothing into play, `game_engine_remap_weapon` makes no
+  flamethrower or gravity rifle - the gravity rifle fires the flamethrower's
+  flame, which Halo PC changed); the multiplayer vehicles (`ghost_mp`'s gun)
+  come into play only where a race can make one (race vehicle flags; none
+  on these maps; always on a dedicated server, whose races give each player
+  one); the player starts and equipment spawns are the host's alone (it
+  spawns every player and item; MCC's files have Halo PC's few more and moved);
+  the netgame flags are the host's: the dictionary (version 2) carries them,
+  and a client takes the host's places for flags of the same types and teams
+  (Halo PC moved the teleporters, race checkpoints and hills a little; a
+  client runs teleporters too).
+- **Pending, refused by default** (`mixed_coop_decisions`, one line each):
+  the flag stand and teleporter base have no collision in MCC's files (on all
+  seven maps: dropped for everyone in mixed games when decided); MCC's needler
+  item collection spawns Halo PC's `mp_needler` (Chill Out, Wizard: the Xbox's
+  needler on MCC machines when decided); the field generator's collision (Rat
+  Race, and the campaign's); and for co-op the flood carrier's autoaim width
+  (a fourth Xbox value when decided) and a50's boulder. Tests turn them on with
+  `HALO_MIXED_DECISIONS`.
+
+Tests: `run_netns_online_test.sh mixedmp` (`HALO_TEST_MIXED="HOST JOINER MAP
+GAME"`: the scoreboards and the state hashes agree) and `mixedrebuilt`.
 
 ## Versions
 

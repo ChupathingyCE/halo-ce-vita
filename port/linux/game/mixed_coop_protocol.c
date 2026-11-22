@@ -86,21 +86,35 @@ int mixed_coop_lobby_valid(struct mixed_coop_lobby_message const *message)
 		return 0;
 	if (message->command == 0 || message->command >= NUMBER_OF_MIXED_COOP_LOBBY_COMMANDS)
 		return 0;
-	if (message->version != MIXED_COOP_VERSION || message->reserved != 0 || message->flags != 0)
+	if (message->reserved != 0 || message->flags != 0)
 		return 0;
 	if (message->family >= NUMBER_OF_MIXED_COOP_FAMILIES)
 		return 0;
 	/* (the host plays the level from its own files: never none) */
 	if (message->command == _mixed_coop_lobby_hello && message->family == _mixed_coop_family_none)
 		return 0;
-	return message->level < MIXED_COOP_LEVELS;
+	return mixed_coop_version_names_level(message->version, message->level);
+}
+
+int mixed_coop_version_for_level(unsigned level)
+{
+	return level < MIXED_COOP_CAMPAIGN_LEVELS ? MIXED_COOP_VERSION_CAMPAIGN : MIXED_COOP_VERSION;
+}
+
+int mixed_coop_version_names_level(unsigned version, unsigned level)
+{
+	if (version == MIXED_COOP_VERSION_CAMPAIGN)
+		return level < MIXED_COOP_CAMPAIGN_LEVELS;
+	if (version == MIXED_COOP_VERSION)
+		return level < MIXED_COOP_LEVELS;
+	return 0;
 }
 
 int mixed_coop_request_valid(struct mixed_coop_request const *request)
 {
-	return request && request->version == MIXED_COOP_VERSION &&
+	return request && mixed_coop_version_names_level(request->version, request->level) &&
 		(request->family == _mixed_coop_family_xbox || request->family == _mixed_coop_family_mcc) &&
-		request->level < MIXED_COOP_LEVELS && request->digests.tag_count <= MIXED_COOP_MAXIMUM_TAGS;
+		request->digests.tag_count <= MIXED_COOP_MAXIMUM_TAGS;
 }
 
 /* ---------- reassembly */
@@ -232,12 +246,12 @@ int mixed_coop_dictionary_read(uint8_t const *bytes, uint32_t length, struct mix
 	length -= 4;
 	if (mixed_coop_read_u32(bytes) != MIXED_COOP_DICTIONARY_MAGIC)
 		return mixed_coop_refuse(why, why_size, "not a dictionary");
-	if (mixed_coop_read_u16(bytes + 4) != MIXED_COOP_VERSION)
-		return mixed_coop_refuse(why, why_size, "another version");
 	dictionary->family = bytes[6];
 	dictionary->level = bytes[7];
+	if (mixed_coop_read_u16(bytes + 4) != MIXED_COOP_VERSION_CAMPAIGN && mixed_coop_read_u16(bytes + 4) != MIXED_COOP_VERSION)
+		return mixed_coop_refuse(why, why_size, "another version");
 	if ((dictionary->family != _mixed_coop_family_xbox && dictionary->family != _mixed_coop_family_mcc) ||
-		dictionary->level >= MIXED_COOP_LEVELS)
+		!mixed_coop_version_names_level(mixed_coop_read_u16(bytes + 4), dictionary->level))
 	{
 		return mixed_coop_refuse(why, why_size, "a family or level not known");
 	}
@@ -293,10 +307,42 @@ int mixed_coop_dictionary_read(uint8_t const *bytes, uint32_t length, struct mix
 			return mixed_coop_refuse(why, why_size, "cut short (a graph's animations)");
 		at += (uint32_t)count * 4;
 	}
-	if (at != length)
-		return mixed_coop_refuse(why, why_size, "bytes past its end");
 	dictionary->graphs = bytes + graphs_begin;
 	dictionary->graphs_bytes = at - graphs_begin;
+	dictionary->version = mixed_coop_read_u16(bytes + 4);
+	dictionary->netgame_flag_count = 0;
+	dictionary->netgame_flags = NULL;
+	if (dictionary->version == MIXED_COOP_VERSION)
+	{
+		if (length - at < 4)
+			return mixed_coop_refuse(why, why_size, "cut short (netgame flags)");
+		dictionary->netgame_flag_count = mixed_coop_read_u16(bytes + at);
+		if (mixed_coop_read_u16(bytes + at + 2) != 0)
+			return mixed_coop_refuse(why, why_size, "reserved bits (netgame flags)");
+		at += 4;
+		if (dictionary->netgame_flag_count > MIXED_COOP_MAXIMUM_NETGAME_FLAGS)
+			return mixed_coop_refuse(why, why_size, "a netgame flag count past the limit");
+		if (dictionary->netgame_flag_count * MIXED_COOP_NETGAME_FLAG_BYTES > length - at)
+			return mixed_coop_refuse(why, why_size, "cut short (a netgame flag)");
+		dictionary->netgame_flags = bytes + at;
+		for (index = 0; index < dictionary->netgame_flag_count; index++, at += MIXED_COOP_NETGAME_FLAG_BYTES)
+		{
+			int value;
+
+			for (value = 0; value < 4; value++)
+			{
+				uint32_t word = mixed_coop_read_u32(bytes + at + 4 * value);
+				float number;
+
+				memcpy(&number, &word, sizeof(number));
+				/* (finite and near: NaN fails both) */
+				if (!(number >= -MIXED_COOP_NETGAME_FLAG_LIMIT && number <= MIXED_COOP_NETGAME_FLAG_LIMIT))
+					return mixed_coop_refuse(why, why_size, "a netgame flag's place past the limits");
+			}
+		}
+	}
+	if (at != length)
+		return mixed_coop_refuse(why, why_size, "bytes past its end");
 	return 1;
 }
 
@@ -331,5 +377,25 @@ int mixed_coop_dictionary_graph_next(struct mixed_coop_dictionary const *diction
 		return 0;
 	*name_hashes = dictionary->graphs + at;
 	*offset = at + (uint32_t)*animation_count * 4;
+	return 1;
+}
+
+int mixed_coop_dictionary_netgame_flag_get(struct mixed_coop_dictionary const *dictionary, uint32_t index,
+	struct mixed_coop_netgame_flag *flag)
+{
+	uint8_t const *at;
+	int value;
+
+	if (!dictionary->netgame_flags || index >= dictionary->netgame_flag_count)
+		return 0;
+	at = dictionary->netgame_flags + index * MIXED_COOP_NETGAME_FLAG_BYTES;
+	for (value = 0; value < 4; value++)
+	{
+		uint32_t word = mixed_coop_read_u32(at + 4 * value);
+
+		memcpy(value < 3 ? &flag->position[value] : &flag->facing, &word, sizeof(word));
+	}
+	flag->type = mixed_coop_read_u16(at + 16);
+	flag->team = mixed_coop_read_u16(at + 18);
 	return 1;
 }

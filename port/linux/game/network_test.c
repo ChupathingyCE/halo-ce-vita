@@ -450,6 +450,19 @@ static void network_test_variant_map(
 		snprintf(map_name, size, "%.*s", (int)(variant + length - at - 1), at + 1);
 }
 
+/* whether `current` is `asked` as mixed play hosts it: MCC's mixed
+multiplayer map renamed the Xbox's (mixed_coop_host_map_name) */
+static boolean network_test_mixed_rename(
+	char const *current,
+	char const *asked)
+{
+	int mixed_coop_host_map_name_quiet(char *map_name, long size);
+	char renamed[128];
+
+	snprintf(renamed, sizeof(renamed), "%s", asked);
+	return mixed_coop_host_map_name_quiet(renamed, (long)sizeof(renamed)) && !strcmp(renamed, current);
+}
+
 static void network_test_read_settings(
 	void)
 {
@@ -2486,7 +2499,10 @@ void network_test_update(
 			else if (network_test.map_set && network_test.map_path[0] && global_network_game_server_get() &&
 				network_test.setup_seconds - network_test.map_checked_seconds >= 1.0f &&
 				(network_test.map_checked_seconds = network_test.setup_seconds,
-					strcmp(main_get_multiplayer_map_name(), network_test.map_path)))
+					strcmp(main_get_multiplayer_map_name(), network_test.map_path)) &&
+				/* (mixed play, mixed_coop.h: MCC's map hosted under the Xbox's
+				name is the map asked for) */
+				!network_test_mixed_rename(main_get_multiplayer_map_name(), network_test.map_path))
 			{
 				platform_log("network test: map %s again (the lobby changed it to %s)", network_test.map_path,
 					main_get_multiplayer_map_name());

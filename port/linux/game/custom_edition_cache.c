@@ -741,10 +741,11 @@ static int custom_edition_cache_name_stem(
 		return _mcc_content_menu;
 	}
 	/* (port: mixed co-op, mixed_coop.h: in a network game, a stock campaign
-	level's name with no Xbox file of it is MCC's file of the level) */
+	level's name - or a mixed multiplayer map's - with no Xbox file of it is
+	MCC's file of the level) */
 	if (mixed_coop_mcc_alias(map_name, stem))
 	{
-		return _mcc_content_campaign;
+		return mcc_content_stem_kind(stem);
 	}
 
 	return mcc_content_name_stem(map_name, stem);

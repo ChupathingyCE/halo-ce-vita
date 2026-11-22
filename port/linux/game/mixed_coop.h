@@ -43,6 +43,17 @@ as before, the other it never could (an MCC host's level carries an identity
 older builds refuse, custom_edition_maps.c; an Xbox host's a joiner of MCC's
 files is refused here for want of the hello).
 
+Mixed multiplayer (Nov 22 2026) is the same on the multiplayer maps whose
+collision is the same in both families' files (Chill Out, Longest, Prisoner,
+Chiron TL-34, Rat Race, Wizard, Boarding Action): an MCC host names MCC's
+copy the Xbox's (mixed_coop_host_map_name), the lobby's messages for those
+maps are version 2 (mixed_coop_protocol.h), the host's netgame flags go in
+its dictionary, and the rules of what can come into play follow what the
+multiplayer game engine makes (mixed_coop.c). The six maps Halo PC rebuilt
+stay apart (mixed_coop_multiplayer_refusal). What the owner has not decided
+yet is refused by default, one line each (mixed_coop.c's
+mixed_coop_decisions).
+
 Never on the crossplay wire (OpenCE hosts have none of it).
 */
 
@@ -64,12 +75,30 @@ struct structure_bsp;
 
 /* ---------- the level and its files */
 
-/* the campaign level a level name names (levels\a10\a10, a10), 0 to 9, or
--1 */
+/* the level a level name names: a campaign level (levels\a10\a10, a10), 0
+to 9; a mixed multiplayer map (chillout, levels\test\chillout\chillout, MCC's
+mcc_chillout), 10 on; or -1 */
 int mixed_coop_level_index(char const *level_name);
+/* whether a level index is a multiplayer map's (mixed multiplayer: the maps
+whose collision is the same in both families' files) */
+int mixed_coop_level_is_multiplayer(int level);
+/* whether mixed multiplayer is on */
+int mixed_coop_multiplayer_enabled(void);
+/* for a multiplayer map Halo PC rebuilt (Blood Gulch ...: never mixed), the
+text a player refused a mixed game of it is shown; else NULL */
+char const *mixed_coop_multiplayer_refusal(char const *level_name);
 /* the family this machine plays a stock campaign level from: the Xbox's
 file in the maps folder, else MCC's in the Halo content folder, else none */
 int mixed_coop_local_family(int level);
+/* (network_server_manager.c, the host's map chosen) a mixed multiplayer
+map MCC's name names (levels\test\mcc_chillout\mcc_chillout) on a machine
+with MCC's file of it and no Xbox file: renamed the Xbox's
+(levels\test\chillout\chillout), which the cache loader then takes as MCC's
+file (mixed_coop_mcc_alias), so that Xbox machines can join; TRUE when
+renamed */
+int mixed_coop_host_map_name(char *map_name, long size);
+/* the same, not logged (tests) */
+int mixed_coop_host_map_name_quiet(char *map_name, long size);
 /* (custom_edition_cache.c) whether the cache loader takes `map_name` (a stock
 campaign level's name, levels\a10\a10 or a10) as MCC's file of that level:
 in a network game, with no Xbox file of the level and MCC's there; its

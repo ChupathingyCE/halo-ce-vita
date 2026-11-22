@@ -43,6 +43,8 @@ when what the game reads in them is alike.
 #include "ai/ai_scenario_definitions.h"
 #include "items/projectile_definitions.h"
 #include "items/weapon_definitions.h"
+#include "items/item_definitions.h"
+#include "units/biped_definitions.h"
 #include "main/main.h"
 #include "models/model_animation_definitions.h"
 #include "networking/network_game_globals.h"
@@ -111,10 +113,33 @@ static char const *const mixed_coop_mcc_only_script_prefixes[] =
 	"breadcrumbs_", "bcs_", "improved_nav_points_", "revised_nav_points_", "crazy_marine_nav_point",
 };
 
-/* the levels by index, as main.c's campaign lists them */
+/* the levels by index: the campaign's, as main.c's campaign lists them;
+then the multiplayer maps whose collision the research (Nov 13 2026,
+mixmaps-runs/REPORT.md) found the same in MCC's files and the Xbox's - Chill
+Out, Longest, Prisoner, Chiron TL-34, Rat Race, Wizard, and Boarding Action
+(two ladders up to 10 cm apart: the owner accepted them, Nov 14) */
 static char const *const mixed_coop_level_stems[MIXED_COOP_LEVELS] =
 {
 	"a10", "a30", "a50", "b30", "b40", "c10", "c20", "c40", "d20", "d40",
+	"chillout", "longest", "prisoner", "putput", "ratrace", "wizard", "boardingaction",
+};
+
+/* the multiplayer maps Halo PC rebuilt (the research: walls, ceilings,
+invisible walls, spawns, vehicles - MCC has Halo PC's): never one mixed
+game, refused with this said (mixed_coop_multiplayer_refusal) */
+static struct
+{
+	char const *stem;
+	char const *title;
+	char const *why;
+} const mixed_coop_rebuilt_maps[] =
+{
+	{ "bloodgulch", "Blood Gulch", "rebuilt walls, a lower ceiling, invisible walls and other vehicles" },
+	{ "beavercreek", "Battle Creek", "rebuilt collision" },
+	{ "carousel", "Derelict", "rebuilt collision" },
+	{ "damnation", "Damnation", "rebuilt collision" },
+	{ "hangemhigh", "Hang 'Em High", "rebuilt collision" },
+	{ "sidewinder", "Sidewinder", "rebuilt collision" },
 };
 
 /* a tag's place in the digests */
@@ -214,6 +239,59 @@ static void mixed_coop_free(
 
 /* ---------- the level and its files */
 
+static boolean mixed_coop_has_mcc_prefix(
+	char const *name)
+{
+	char const *prefix = MCC_CONTENT_NAME_PREFIX;
+
+	for (; *prefix; prefix++, name++)
+	{
+		char character = *name >= 'A' && *name <= 'Z' ? (char)(*name + ('a' - 'A')) : *name;
+
+		if (character != *prefix)
+			return FALSE;
+	}
+	return TRUE;
+}
+
+/* whether mixed multiplayer is on (HALO_MIXED_MULTIPLAYER=0, tests: as a
+build of before it; the multiplayer maps are then never mixed_coop's) */
+int mixed_coop_multiplayer_enabled(
+	void)
+{
+	char const *setting = getenv("HALO_MIXED_MULTIPLAYER");
+
+	return !(setting && setting[0] == '0') && !(getenv("HALO_MIXED_COOP") && getenv("HALO_MIXED_COOP")[0] == '0');
+}
+
+/* a level name's stem as a stock multiplayer map's: chillout,
+levels\test\chillout\chillout, and MCC's names of it (mcc_chillout,
+levels\test\mcc_chillout\mcc_chillout: mcc_content.h) */
+static boolean mixed_coop_multiplayer_name_is(
+	char const *level_name,
+	char const *stem)
+{
+	char const *name = tag_name_strip_path(level_name);
+	char full[64];
+
+	if (mixed_coop_has_mcc_prefix(name))
+	{
+		name += sizeof(MCC_CONTENT_NAME_PREFIX) - 1;
+		if (csstrcasecmp(name, stem))
+			return FALSE;
+		if (name - (sizeof(MCC_CONTENT_NAME_PREFIX) - 1) == level_name)
+			return TRUE;
+		snprintf(full, sizeof(full), "levels\\test\\%s%s\\%s%s", MCC_CONTENT_NAME_PREFIX, stem, MCC_CONTENT_NAME_PREFIX, stem);
+		return !csstrcasecmp(level_name, full);
+	}
+	if (csstrcasecmp(name, stem))
+		return FALSE;
+	if (name == level_name)
+		return TRUE;
+	snprintf(full, sizeof(full), "levels\\test\\%s\\%s", stem, stem);
+	return !csstrcasecmp(level_name, full);
+}
+
 int mixed_coop_level_index(
 	char const *level_name)
 {
@@ -223,7 +301,7 @@ int mixed_coop_level_index(
 	if (!level_name || !level_name[0])
 		return -1;
 	name = tag_name_strip_path(level_name);
-	for (index = 0; index < MIXED_COOP_LEVELS; index++)
+	for (index = 0; index < MIXED_COOP_CAMPAIGN_LEVELS; index++)
 	{
 		char full[32];
 
@@ -236,7 +314,60 @@ int mixed_coop_level_index(
 		if (!csstrcasecmp(level_name, full))
 			return index;
 	}
+	if (!mixed_coop_multiplayer_enabled())
+		return -1;
+	/* (the Xbox's names alone: MCC's, mcc_chillout, are MCC's own game,
+	mixed_coop_host_map_name) */
+	if (mixed_coop_has_mcc_prefix(name))
+		return -1;
+	for (; index < MIXED_COOP_LEVELS; index++)
+	{
+		if (mixed_coop_multiplayer_name_is(level_name, mixed_coop_level_stems[index]))
+			return index;
+	}
 	return -1;
+}
+
+/* a mixed multiplayer map's index from MCC's name of it (mcc_chillout), or -1 */
+static int mixed_coop_level_index_mcc_name(
+	char const *level_name)
+{
+	int index;
+
+	if (!level_name || !mixed_coop_has_mcc_prefix(tag_name_strip_path(level_name)) || !mixed_coop_multiplayer_enabled())
+		return -1;
+	for (index = MIXED_COOP_CAMPAIGN_LEVELS; index < MIXED_COOP_LEVELS; index++)
+	{
+		if (mixed_coop_multiplayer_name_is(level_name, mixed_coop_level_stems[index]))
+			return index;
+	}
+	return -1;
+}
+
+int mixed_coop_level_is_multiplayer(
+	int level)
+{
+	return level >= MIXED_COOP_CAMPAIGN_LEVELS && level < MIXED_COOP_LEVELS;
+}
+
+char const *mixed_coop_multiplayer_refusal(
+	char const *level_name)
+{
+	static char text[256];
+	short index;
+
+	if (!level_name || !level_name[0])
+		return NULL;
+	for (index = 0; index < NUMBEROF(mixed_coop_rebuilt_maps); index++)
+	{
+		if (!mixed_coop_multiplayer_name_is(level_name, mixed_coop_rebuilt_maps[index].stem))
+			continue;
+		snprintf(text, sizeof(text), T("Halo PC rebuilt %s (%s), and MCC's files have Halo PC's. MCC's %s and the "
+			"Xbox's can't be played together; everyone needs the same files."), mixed_coop_rebuilt_maps[index].title,
+			mixed_coop_rebuilt_maps[index].why, mixed_coop_rebuilt_maps[index].title);
+		return text;
+	}
+	return NULL;
 }
 
 static boolean mixed_coop_path_exists(
@@ -320,6 +451,42 @@ int mixed_coop_mcc_alias(
 	if (stem)
 		csstrncpy(stem, mixed_coop_level_stems[level], MCC_CONTENT_STEM_BYTES - 1);
 	return TRUE;
+}
+
+static boolean mixed_coop_host_rename(
+	char *map_name,
+	long size,
+	boolean said)
+{
+	int level = mixed_coop_level_index_mcc_name(map_name);
+	char const *stem;
+
+	if (!mixed_coop_level_is_multiplayer(level) || !mixed_coop_capable() || network_wire_crossplay())
+		return FALSE;
+	stem = mixed_coop_level_stems[level];
+	/* (MCC's name, on a machine with no Xbox file of the map: else the
+	host chose MCC's copy beside the Xbox's, MCC's own game) */
+	if (!mixed_coop_has_mcc_prefix(tag_name_strip_path(map_name)) || mixed_coop_xbox_file(level) || !mixed_coop_mcc_file(level))
+		return FALSE;
+	if (said)
+		platform_log("mixed play: hosting %s from MCC's files under the Xbox's name (levels\\test\\%s\\%s): Xbox machines "
+			"can join", map_name, stem, stem);
+	snprintf(map_name, (size_t)size, "levels\\test\\%s\\%s", stem, stem);
+	return TRUE;
+}
+
+int mixed_coop_host_map_name(
+	char *map_name,
+	long size)
+{
+	return mixed_coop_host_rename(map_name, size, TRUE);
+}
+
+int mixed_coop_host_map_name_quiet(
+	char *map_name,
+	long size)
+{
+	return mixed_coop_host_rename(map_name, size, FALSE);
 }
 
 /* ---------- tags */
@@ -454,7 +621,102 @@ static struct mixed_coop_rule const mixed_coop_rules_table[] =
 	{ "real_plane3d", 0, 0x7FFFFFFF, _mixed_rule_floats, 0 },
 	/* (the AI's pathfinding spheres: the host's AI alone) */
 	{ "pathfinding_sphere", 0, 0x7FFFFFFF, _mixed_rule_skip, 0 },
+	/* (a multiplayer map's netgame flags and equipment - mixed
+	multiplayer's layout: their places and facings as the tools' floats;
+	their unused longs and the equipment's runtime item index not at all) */
+	{ "netgame_flag", 0x0, 0x10, _mixed_rule_floats, 0 },
+	{ "netgame_flag", 0x14, 0x94, _mixed_rule_skip, 0 },
+	{ "netgame_equipment", 0x10, 0x40, _mixed_rule_skip, 0 },
+	{ "netgame_equipment", 0x40, 0x50, _mixed_rule_floats, 0 },
+	{ "netgame_equipment", 0x54, 0x84, _mixed_rule_skip, 0 },
 };
+
+/* ---------- the owner's decisions (Nov 22 2026: pending - each refused by
+default; a decision taken is its line's FALSE made TRUE. Tests turn them on
+with HALO_MIXED_DECISIONS=<name>,<name>...) */
+
+enum
+{
+	/* scenery\c_field_generator's collision model: MCC recompiled it, up
+	to 0.19 wu off the Xbox's (a10 a50 b30 b40 c10 d20 d40, c40 in play;
+	Rat Race). TRUE: played anyway, each machine its own */
+	_mixed_decision_field_generator,
+	/* the flood carrier's autoaim width: Xbox 0, MCC 0.001 (c20 c40 d20
+	d40). TRUE: a 4th Xbox value, 0 on MCC machines (mixed_coop_rules) */
+	_mixed_decision_flood_carrier_autoaim,
+	/* a50's medium granite boulder's collision material type (0 vs 2).
+	TRUE: played anyway */
+	_mixed_decision_granite_boulder,
+	/* multiplayer: the flag stand and teleporter base have no collision in
+	MCC's files (the collision tag is nowhere in MCC). TRUE: dropped for
+	everyone in mixed multiplayer (the Xbox machines' too: a cut) */
+	_mixed_decision_flag_stand,
+	/* multiplayer (Chill Out, Wizard): MCC's needler item collection spawns
+	Halo PC's mp_needler. TRUE: the Xbox's needler on MCC machines */
+	_mixed_decision_needler,
+	NUMBER_OF_MIXED_DECISIONS
+};
+
+static struct
+{
+	char const *name;
+	boolean decided;
+} const mixed_coop_decisions[NUMBER_OF_MIXED_DECISIONS] =
+{
+	{ "field_generator", FALSE },
+	{ "flood_carrier_autoaim", FALSE },
+	{ "granite_boulder", FALSE },
+	{ "flag_stand", FALSE },
+	{ "needler", FALSE },
+};
+
+static boolean mixed_coop_decided(
+	int decision)
+{
+	char const *setting = getenv("HALO_MIXED_DECISIONS");
+	size_t length = strlen(mixed_coop_decisions[decision].name);
+
+	if (mixed_coop_decisions[decision].decided)
+		return TRUE;
+	while (setting && *setting)
+	{
+		char const *end = strchr(setting, ',');
+		size_t part = end ? (size_t)(end - setting) : strlen(setting);
+
+		if (part == length && !strncmp(setting, mixed_coop_decisions[decision].name, length))
+			return TRUE;
+		setting = end ? end + 1 : NULL;
+	}
+	return FALSE;
+}
+
+/* the tags a decision taken lets differ (played anyway, each machine its own) */
+static struct
+{
+	int decision;
+	char const *path;
+} const mixed_coop_decision_tags[] =
+{
+	{ _mixed_decision_field_generator, "scenery\\c_field_generator\\c_field_generator" },
+	{ _mixed_decision_granite_boulder, "scenery\\rocks\\boulder_granite_medium\\boulder_granite_medium" },
+};
+
+/* a multiplayer map's level is loaded (its rules: mixed_coop_tags_loaded) */
+static boolean mixed_coop_multiplayer_level;
+/* its scenario has race vehicle flags (the globals' multiplayer vehicles can
+come into play: game_engine_race.c) */
+static boolean mixed_coop_race_vehicle_flags;
+
+/* the Xbox's weapon list's length (game_engine.c's _weapon_list_*: the game
+reads no entry past it - MCC's Halo PC globals append the plasma cannon and
+mp_needler) and its flamethrower's entry (game_engine_remap_weapon makes
+every multiplayer flamethrower a rocket launcher): what the globals' list
+brings into play is what the game engine makes from it */
+#define MIXED_COOP_XBOX_WEAPON_LIST_COUNT 14
+#define MIXED_COOP_WEAPON_LIST_FLAMETHROWER 1
+/* (and its gravity rifle's: no weapon set, custom loadout or remap makes
+one - only a map's own item collection, reached as such) */
+#define MIXED_COOP_WEAPON_LIST_GRAVITY_RIFLE 2
 
 static struct mixed_coop_rule const *mixed_coop_rule_find(
 	char const *definition,
@@ -535,6 +797,10 @@ static void mixed_coop_walk_field(
 			struct tag_schema_definition const *element_definition = field->definition;
 			long count = block->count, index;
 
+			/* (multiplayer: the globals' weapon list as far as the game reads
+			it) */
+			if (mixed_coop_multiplayer_level && field->name && !strcmp(field->name, "weapon_list"))
+				count = MIN(count, MIXED_COOP_XBOX_WEAPON_LIST_COUNT);
 			*hash = mixed_coop_fnv(*hash, &count, sizeof(count));
 			if (mixed_coop_tracing)
 				platform_log("mixed co-op trace: %*s@block %s %ld", depth * 2, "", field->name ? field->name : "?", count);
@@ -788,11 +1054,34 @@ static void mixed_coop_reach_walk(
 				struct tag_schema_definition const *element_definition = field->definition;
 				long index;
 
+				long count = block->count;
+				boolean weapon_list = FALSE;
+
 				if (!element_definition || block->count <= 0 || !block->address || depth >= MIXED_COOP_WALK_DEPTH)
 					break;
-				for (index = 0; index < block->count && mixed_coop_walk_budget > 0; index++, mixed_coop_walk_budget--)
+				/* (multiplayer: the globals' weapons the game can make - not the
+				flamethrower, nor past the Xbox's list -, and their multiplayer
+				vehicles only where a race can make one) */
+				if (mixed_coop_multiplayer_level && field->name)
+				{
+					if (!strcmp(field->name, "weapon_list") && !strcmp(definition->name, "game_globals"))
+					{
+						weapon_list = TRUE;
+						count = MIN(count, MIXED_COOP_XBOX_WEAPON_LIST_COUNT);
+					}
+					else if (!strcmp(field->name, "vehicles") && !strcmp(definition->name, "game_globals_multiplayer_information") &&
+						!mixed_coop_race_vehicle_flags)
+					{
+						break;
+					}
+				}
+				for (index = 0; index < count && mixed_coop_walk_budget > 0; index++, mixed_coop_walk_budget--)
+				{
+					if (weapon_list && (index == MIXED_COOP_WEAPON_LIST_FLAMETHROWER || index == MIXED_COOP_WEAPON_LIST_GRAVITY_RIFLE))
+						continue;
 					mixed_coop_reach_walk((byte const *)block->address + index * element_definition->size, element_definition,
 						depth + 1);
+				}
 				break;
 			}
 			case _tag_schema_struct:
@@ -1172,6 +1461,75 @@ the Xbox's values in code on a machine playing MCC's files in a mixed game;
 any other gameplay field the digests find different is asked before it is
 added here) */
 
+static long mixed_coop_find_tag(
+	long group_tag,
+	char const *path)
+{
+	long index;
+
+	for (index = 0; index < halo_loaded_tag_count; index++)
+	{
+		struct cache_file_tag_instance_view *instance = &mixed_coop_instances()[index];
+
+		if (instance->group_tag == group_tag && instance->name && !csstrcasecmp(instance->name, path))
+			return index;
+	}
+	return NONE;
+}
+
+/* the owner's decisions taken that change a machine's tags (mixed_coop_decisions):
+the flag stand and teleporter base without collision (both families: MCC's
+have none), the Xbox's needler in MCC's needler item collection */
+static void mixed_coop_decisions_apply(
+	void)
+{
+	static char const *const collisionless[] =
+	{
+		"scenery\\flag_base\\flag_base", "scenery\\teleporter_base\\teleporter_base",
+	};
+	short index;
+
+	if (!mixed_coop_multiplayer_level)
+		return;
+	if (mixed_coop_decided(_mixed_decision_flag_stand))
+	{
+		for (index = 0; index < NUMBEROF(collisionless); index++)
+		{
+			long tag = mixed_coop_find_tag('scen', collisionless[index]);
+			struct object_definition *definition = tag != NONE ? mixed_coop_instances()[tag].base_address : NULL;
+
+			if (definition && definition->object.collision_model.index != NONE)
+			{
+				platform_log("mixed play: the owner's decision: %s without collision (as MCC's)", collisionless[index]);
+				definition->object.collision_model.index = NONE;
+				mixed_coop.rules_applied++;
+			}
+		}
+	}
+	if (mixed_coop.family == _mixed_coop_family_mcc && mixed_coop_decided(_mixed_decision_needler))
+	{
+		long collection = mixed_coop_find_tag('itmc', "item collections\\single weapons\\needler");
+		long xbox_needler = mixed_coop_find_tag('weap', "weapons\\needler\\needler");
+		struct item_collection_definition *definition = collection != NONE ? mixed_coop_instances()[collection].base_address : NULL;
+		long permutation;
+
+		for (permutation = 0; definition && xbox_needler != NONE && permutation < definition->permutations.count &&
+			definition->permutations.address; permutation++)
+		{
+			struct item_permutation_definition *entry = (struct item_permutation_definition *)definition->permutations.address +
+				permutation;
+
+			if (mixed_coop_tag_is(entry->item.index, "weapons\\needler\\mp_needler"))
+			{
+				platform_log("mixed play: the owner's decision: MCC's needler item collection spawns the Xbox's needler, "
+					"not mp_needler");
+				entry->item.index = mixed_coop_instances()[xbox_needler].tag_index;
+				mixed_coop.rules_applied++;
+			}
+		}
+	}
+}
+
 static void mixed_coop_rules(
 	void)
 {
@@ -1216,6 +1574,17 @@ static void mixed_coop_rules(
 			projectile->projectile.air_damage_range_upper_bound = 30.0f;
 			mixed_coop.rules_applied++;
 		}
+		/* (pending: the owner's decision, _mixed_decision_flood_carrier_autoaim)
+		the flood carrier's autoaim width */
+		else if (instance->group_tag == 'bipd' && !csstrcasecmp(instance->name, "characters\\floodcarrier\\floodcarrier") &&
+			mixed_coop_decided(_mixed_decision_flood_carrier_autoaim))
+		{
+			struct biped_definition *biped = instance->base_address;
+
+			platform_log("mixed co-op: Xbox rules: the flood carrier's autoaim width %.4f -> 0", biped->biped.autoaim_width);
+			biped->biped.autoaim_width = 0.0f;
+			mixed_coop.rules_applied++;
+		}
 	}
 }
 
@@ -1234,6 +1603,12 @@ static boolean mixed_coop_layout_block(
 	};
 	short index;
 
+	/* (multiplayer: its player starts and equipment spawns are the host's,
+	which spawns every player and item - MCC's files have Halo PC's few more
+	and moved; its flags the host's dictionary gives a client,
+	mixed_coop_dictionary_take) */
+	if (mixed_coop_multiplayer_level && (!strcmp(name, "players") || !strcmp(name, "netgame_equipment")))
+		return FALSE;
 	for (index = 0; index < NUMBEROF(names); index++)
 	{
 		if (!strcmp(names[index], name))
@@ -1371,6 +1746,7 @@ static boolean mixed_coop_host_only_block(
 	char const *name)
 {
 	return !strncmp(name, "ai_", 3) || !strncmp(name, "hs_", 3) || !strcmp(name, "recorded_animations") ||
+		(mixed_coop_multiplayer_level && (!strcmp(name, "players") || !strcmp(name, "netgame_equipment"))) ||
 		/* (tested by the scripts alone, which the host alone runs) */
 		!strcmp(name, "trigger_volumes");
 }
@@ -1467,6 +1843,30 @@ static void mixed_coop_scenario_digests(
 	mixed_coop.digests.layout = layout;
 	mixed_coop.digests.layout_offset = layout_offset;
 	mixed_coop.digests.host_only = host_only;
+	/* (tests: a multiplayer map's flags and equipment, one line each) */
+	if (getenv("HALO_MIXED_COOP_DIGEST_DUMP") && mixed_coop_multiplayer_level)
+	{
+		long index;
+
+		for (index = 0; index < scenario->netgame_flags.count && scenario->netgame_flags.address; index++)
+		{
+			struct scenario_netgame_flag const *flag = (struct scenario_netgame_flag const *)scenario->netgame_flags.address + index;
+
+			platform_log("mixed netgame: flag %ld type %d team %d at %.4f %.4f %.4f facing %.4f", index, (int)flag->type,
+				(int)flag->team_index, flag->position.x, flag->position.y, flag->position.z, flag->facing);
+		}
+		for (index = 0; index < scenario->netgame_equipment.count && scenario->netgame_equipment.address; index++)
+		{
+			struct scenario_netgame_equipment const *equipment =
+				(struct scenario_netgame_equipment const *)scenario->netgame_equipment.address + index;
+			struct cache_file_tag_instance_view *instance = mixed_coop_instance(equipment->item_collection.index);
+
+			platform_log("mixed netgame: equipment %ld flags %lx types %d %d %d %d team %d spawn %d at %.4f %.4f %.4f facing %.4f %s",
+				index, (unsigned long)equipment->flags, equipment->game_type[0], equipment->game_type[1], equipment->game_type[2],
+				equipment->game_type[3], (int)equipment->team_index, (int)equipment->spawn_time, equipment->position.x,
+				equipment->position.y, equipment->position.z, equipment->facing, instance && instance->name ? instance->name : "NONE");
+		}
+	}
 }
 
 static int mixed_coop_compare_tags(
@@ -1559,14 +1959,38 @@ void mixed_coop_tags_loaded(
 	mixed_coop.level = mixed_coop_level_index(scenario_instance->name);
 	if (mixed_coop.level < 0)
 		return;
-	/* (a network game on a campaign level, with no game engine: co-op) */
+	/* (a network game on a campaign level, with no game engine: co-op; or on
+	a mixed multiplayer map, whatever its game) */
 	game = network_game_get_game();
 	mixed_coop.network_coop = (game_connection() == _game_connection_network_client ||
 		game_connection() == _game_connection_network_server) && !network_wire_crossplay() && game &&
-		game->variant.game_engine_index == 0;
+		(mixed_coop_level_is_multiplayer(mixed_coop.level) || game->variant.game_engine_index == 0);
+	/* (a multiplayer map's scenario has one name in both families' files:
+	the game's name says which game - MCC's own, mcc_chillout, is not mixed) */
+	if (mixed_coop.network_coop && mixed_coop_level_is_multiplayer(mixed_coop.level) &&
+		mixed_coop_level_index(game->map.name) != mixed_coop.level)
+	{
+		mixed_coop.network_coop = FALSE;
+	}
 	if (!mixed_coop.network_coop && !dump && !force)
 		return;
 	mixed_coop.family = custom_edition ? _mixed_coop_family_mcc : _mixed_coop_family_xbox;
+	mixed_coop_multiplayer_level = mixed_coop_level_is_multiplayer(mixed_coop.level);
+	mixed_coop_race_vehicle_flags = FALSE;
+	if (mixed_coop_multiplayer_level)
+	{
+		struct scenario const *scenario = scenario_instance->base_address;
+		long flag;
+
+		for (flag = 0; flag < scenario->netgame_flags.count && scenario->netgame_flags.address; flag++)
+			mixed_coop_race_vehicle_flags |= ((struct scenario_netgame_flag const *)scenario->netgame_flags.address)[flag].type ==
+				_netgame_flag_race_vehicle;
+#ifdef HALO_DEDICATED_SERVER
+		/* (a dedicated server's race gives each player a vehicle where it
+		spawns: race_vehicles.c) */
+		mixed_coop_race_vehicle_flags = TRUE;
+#endif
+	}
 	mixed_coop.scenario_index = scenario_index;
 	mixed_coop.tag_count = halo_loaded_tag_count;
 	mixed_coop.bsp_count = 0;
@@ -1581,6 +2005,8 @@ void mixed_coop_tags_loaded(
 		mixed_coop_make_xbox_scenario((struct scenario *)scenario_instance->base_address, scenario_group->definition);
 		mixed_coop_rules();
 	}
+	if (mixed_coop.network_coop || force)
+		mixed_coop_decisions_apply();
 	{
 		struct scenario const *scenario = scenario_instance->base_address;
 
@@ -1775,6 +2201,49 @@ static uint32_t mixed_coop_collision_digest(
 
 static void mixed_coop_leave(char const *format, ...);
 
+/* the BSP collision differences the owner accepted, by level and BSP: both
+families' digests (either grid), the Xbox's then MCC's. Boarding Action's two
+ladders, up to 10 cm apart (Nov 14 2026) */
+static struct
+{
+	char const *stem;
+	short bsp_index;
+	uint32_t xbox_digests[2];
+	uint32_t mcc_digests[2];
+} const mixed_coop_accepted_bsps[] =
+{
+	{ "boardingaction", 0, { 0x7c801536u, 0x82774102u }, { 0xd16ec4b6u, 0x5c96dbdeu } },
+};
+
+static boolean mixed_coop_bsp_accepted(
+	long bsp_index,
+	uint32_t host_digest,
+	uint32_t host_digest_offset,
+	uint32_t digest,
+	uint32_t digest_offset)
+{
+	short index;
+
+	for (index = 0; index < NUMBEROF(mixed_coop_accepted_bsps); index++)
+	{
+		uint32_t const *xd = mixed_coop_accepted_bsps[index].xbox_digests, *md = mixed_coop_accepted_bsps[index].mcc_digests;
+
+		if (mixed_coop.level < 0 || csstrcasecmp(mixed_coop_level_stems[mixed_coop.level], mixed_coop_accepted_bsps[index].stem) ||
+			bsp_index != mixed_coop_accepted_bsps[index].bsp_index)
+		{
+			continue;
+		}
+		if ((host_digest == xd[0] && host_digest_offset == xd[1] && digest == md[0] && digest_offset == md[1]) ||
+			(host_digest == md[0] && host_digest_offset == md[1] && digest == xd[0] && digest_offset == xd[1]))
+		{
+			platform_log("mixed play: %s's BSP %ld: the Xbox's and MCC's collision differ as the owner accepted",
+				mixed_coop_accepted_bsps[index].stem, bsp_index);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 void mixed_coop_structure_bsp_loaded(
 	short bsp_index,
 	struct structure_bsp const *structure_bsp)
@@ -1817,7 +2286,9 @@ void mixed_coop_structure_bsp_loaded(
 	}
 	/* (a client: against the host's, when it has it) */
 	else if (mixed_coop.needs_dictionary && mixed_coop.host_bsp_digests[bsp_index][0] &&
-		mixed_coop.host_bsp_digests[bsp_index][0] != digest && mixed_coop.host_bsp_digests[bsp_index][1] != digest_offset)
+		mixed_coop.host_bsp_digests[bsp_index][0] != digest && mixed_coop.host_bsp_digests[bsp_index][1] != digest_offset &&
+		!mixed_coop_bsp_accepted(bsp_index, mixed_coop.host_bsp_digests[bsp_index][0], mixed_coop.host_bsp_digests[bsp_index][1],
+			digest, digest_offset))
 	{
 		mixed_coop_leave(T("The host's %s and yours differ in the level's collision (BSP %d): Xbox and MCC files "
 			"can't play this level together."), mixed_coop_level_stems[mixed_coop.level], bsp_index);
@@ -1836,9 +2307,12 @@ static struct network_game_server *mixed_coop_hosted_server(
 	if (!server || network_wire_crossplay() || network_game_is_splitscreen_local() || !mixed_coop_capable())
 		return NULL;
 	game = network_game_server_get_game(server);
-	if (!game || game->variant.game_engine_index != 0)
+	if (!game)
 		return NULL;
 	*level = mixed_coop_level_index(game->map.name);
+	/* (a campaign level: co-op alone, no game engine) */
+	if (*level >= 0 && !mixed_coop_level_is_multiplayer(*level) && game->variant.game_engine_index != 0)
+		*level = -1;
 	return *level >= 0 ? server : NULL;
 }
 
@@ -1876,7 +2350,8 @@ void mixed_coop_frame(
 		mixed_coop.hosting = TRUE;
 		mixed_coop.session = (uint32_t)now ^ ((uint32_t)rand() << 16) ^ 0x4D584350u;
 		csmemset(mixed_coop.machines, 0, sizeof(mixed_coop.machines));
-		platform_log("mixed co-op: hosting co-op on %s from the %s files: each machine joining is told",
+		platform_log(mixed_coop_level_is_multiplayer(level) ? "mixed play: hosting %s from the %s files: each machine joining is told" :
+			"mixed co-op: hosting co-op on %s from the %s files: each machine joining is told",
 			mixed_coop_level_stems[level], mixed_coop_family_name(mixed_coop_local_family(level)));
 	}
 	family = mixed_coop_local_family(level);
@@ -1920,7 +2395,7 @@ void mixed_coop_frame(
 
 			csmemset(&hello, 0, sizeof(hello));
 			hello.command = _mixed_coop_lobby_hello;
-			hello.version = MIXED_COOP_VERSION;
+			hello.version = (uint16_t)mixed_coop_version_for_level((unsigned)level);
 			hello.family = (uint8_t)family;
 			hello.level = (uint8_t)level;
 			hello.session = mixed_coop.session;
@@ -2009,7 +2484,7 @@ void mixed_coop_client_handle_lobby(
 	mixed_coop.host_session = hello.session;
 	csmemset(&answer, 0, sizeof(answer));
 	answer.command = _mixed_coop_lobby_answer;
-	answer.version = MIXED_COOP_VERSION;
+	answer.version = (uint16_t)mixed_coop_version_for_level(hello.level);
 	answer.family = (uint8_t)mixed_coop_local_family(hello.level);
 	answer.level = hello.level;
 	answer.session = hello.session;
@@ -2065,7 +2540,7 @@ int mixed_coop_client_update(
 	(void)client;
 	if (!mixed_coop.leaving)
 		return TRUE;
-	platform_show_message(T("Halo: co-op"), mixed_coop.leave_text);
+	platform_show_message(mixed_coop_level_is_multiplayer(mixed_coop.level) ? T("Halo: map") : T("Halo: co-op"), mixed_coop.leave_text);
 	mixed_coop.leaving = FALSE;
 	return FALSE;
 }
@@ -2099,7 +2574,7 @@ static boolean mixed_coop_build_stream(
 		return FALSE;
 	mixed_coop_writer_begin(&writer, mixed_coop.stream, MIXED_COOP_DICTIONARY_MAXIMUM_BYTES);
 	mixed_coop_writer_u32(&writer, MIXED_COOP_DICTIONARY_MAGIC);
-	mixed_coop_writer_u16(&writer, MIXED_COOP_VERSION);
+	mixed_coop_writer_u16(&writer, (uint16_t)mixed_coop_version_for_level((unsigned)mixed_coop.level));
 	mixed_coop_writer_u8(&writer, (uint8_t)mixed_coop.family);
 	mixed_coop_writer_u8(&writer, (uint8_t)mixed_coop.level);
 	mixed_coop_writer_u32(&writer, (uint32_t)mixed_coop.tag_count);
@@ -2148,6 +2623,32 @@ static boolean mixed_coop_build_stream(
 		uint8_t *at = mixed_coop.stream + graph_count_at;
 
 		at[0] = (uint8_t)graphs; at[1] = (uint8_t)(graphs >> 8); at[2] = (uint8_t)(graphs >> 16); at[3] = (uint8_t)(graphs >> 24);
+	}
+	/* (version 2, a multiplayer map's: its netgame flags) */
+	if (mixed_coop_version_for_level((unsigned)mixed_coop.level) == MIXED_COOP_VERSION)
+	{
+		struct scenario const *scenario = global_scenario_get();
+		long count = scenario && scenario->netgame_flags.address ? MIN(scenario->netgame_flags.count, MIXED_COOP_MAXIMUM_NETGAME_FLAGS) : 0;
+		long flag;
+
+		mixed_coop_writer_u16(&writer, (uint16_t)count);
+		mixed_coop_writer_u16(&writer, 0);
+		for (flag = 0; flag < count; flag++)
+		{
+			struct scenario_netgame_flag const *entry = (struct scenario_netgame_flag const *)scenario->netgame_flags.address + flag;
+			real const values[4] = { entry->position.x, entry->position.y, entry->position.z, entry->facing };
+			short value;
+
+			for (value = 0; value < 4; value++)
+			{
+				uint32_t word;
+
+				csmemcpy(&word, &values[value], sizeof(word));
+				mixed_coop_writer_u32(&writer, word);
+			}
+			mixed_coop_writer_u16(&writer, (uint16_t)entry->type);
+			mixed_coop_writer_u16(&writer, (uint16_t)entry->team_index);
+		}
 	}
 	length = mixed_coop_writer_end(&writer);
 	if (!length)
@@ -2292,7 +2793,7 @@ int mixed_coop_client_ready_allowed(
 		mixed_coop_client_session = mixed_coop.host_session;
 		mixed_coop_reassembly_begin(mixed_coop.reassembly, mixed_coop_client_session);
 		csmemset(&message, 0, sizeof(message));
-		message.request.version = MIXED_COOP_VERSION;
+		message.request.version = (uint16_t)mixed_coop_version_for_level((unsigned)mixed_coop.level);
 		message.request.family = (uint8_t)mixed_coop.family;
 		message.request.level = (uint8_t)mixed_coop.level;
 		message.request.session = mixed_coop_client_session;
@@ -2394,6 +2895,13 @@ static boolean mixed_coop_accepted(
 	char const *name = mixed_coop_instances()[absolute_index].name;
 	size_t length;
 
+	short decision;
+
+	for (decision = 0; name && decision < NUMBEROF(mixed_coop_decision_tags); decision++)
+	{
+		if (!csstrcasecmp(name, mixed_coop_decision_tags[decision].path) && mixed_coop_decided(mixed_coop_decision_tags[decision].decision))
+			return TRUE;
+	}
 	if (!setting || !setting[0] || !name)
 		return FALSE;
 	length = strlen(name);
@@ -2563,7 +3071,9 @@ static void mixed_coop_dictionary_take(
 		mixed_coop.host_bsp_digests[index][1] = dictionary.bsp_digests[index][1];
 		if (dictionary.bsp_digests[index][0] && mixed_coop.bsp_digests[index][0] &&
 			dictionary.bsp_digests[index][0] != mixed_coop.bsp_digests[index][0] &&
-			dictionary.bsp_digests[index][1] != mixed_coop.bsp_digests[index][1])
+			dictionary.bsp_digests[index][1] != mixed_coop.bsp_digests[index][1] &&
+			!mixed_coop_bsp_accepted(index, dictionary.bsp_digests[index][0], dictionary.bsp_digests[index][1],
+				mixed_coop.bsp_digests[index][0], mixed_coop.bsp_digests[index][1]))
 		{
 			mixed_coop_leave(T("The host's %s and yours differ in the level's collision (BSP %ld): Xbox and MCC files "
 				"can't play this level together."), mixed_coop_level_stems[mixed_coop.level], index);
@@ -2582,6 +3092,54 @@ static void mixed_coop_dictionary_take(
 			mixed_coop_leave(T("The host's %s and yours play differently (%s): Xbox and MCC files can't play this level "
 				"together."), mixed_coop_level_stems[mixed_coop.level], first_difference);
 		return;
+	}
+	/* (a multiplayer map: the host's netgame flags, the same ones - their
+	types and teams - in places Halo PC moved a little: this machine takes
+	the host's places) */
+	if (mixed_coop_level_is_multiplayer(mixed_coop.level))
+	{
+		struct scenario *scenario = global_scenario_get();
+		long flag, moved = 0;
+
+		if (!scenario || dictionary.netgame_flag_count != (uint32_t)scenario->netgame_flags.count)
+		{
+			mixed_coop_leave(T("The host's %s and yours have different flags (teleporters, CTF flags, hills): Xbox and MCC "
+				"files can't play this map together."), mixed_coop_level_stems[mixed_coop.level]);
+			return;
+		}
+		for (flag = 0; flag < scenario->netgame_flags.count; flag++)
+		{
+			struct scenario_netgame_flag const *entry = (struct scenario_netgame_flag const *)scenario->netgame_flags.address + flag;
+			struct mixed_coop_netgame_flag host;
+
+			if (!mixed_coop_dictionary_netgame_flag_get(&dictionary, (uint32_t)flag, &host) ||
+				host.type != (uint16_t)entry->type || host.team != (uint16_t)entry->team_index)
+			{
+				mixed_coop_leave(T("The host's %s and yours have different flags (teleporters, CTF flags, hills): Xbox and MCC "
+					"files can't play this map together."), mixed_coop_level_stems[mixed_coop.level]);
+				return;
+			}
+		}
+		for (flag = 0; flag < scenario->netgame_flags.count; flag++)
+		{
+			struct scenario_netgame_flag *entry = (struct scenario_netgame_flag *)scenario->netgame_flags.address + flag;
+			struct mixed_coop_netgame_flag host;
+
+			mixed_coop_dictionary_netgame_flag_get(&dictionary, (uint32_t)flag, &host);
+			if (entry->position.x != host.position[0] || entry->position.y != host.position[1] ||
+				entry->position.z != host.position[2] || entry->facing != host.facing)
+			{
+				platform_log("mixed play: netgame flag %ld (type %d) at the host's %.3f %.3f %.3f facing %.4f (this file's %.3f "
+					"%.3f %.3f facing %.4f)", flag, (int)entry->type, host.position[0], host.position[1], host.position[2],
+					host.facing, entry->position.x, entry->position.y, entry->position.z, entry->facing);
+				entry->position.x = host.position[0];
+				entry->position.y = host.position[1];
+				entry->position.z = host.position[2];
+				entry->facing = host.facing;
+				moved++;
+			}
+		}
+		platform_log("mixed play: %ld of %ld netgame flags placed as the host's", moved, scenario->netgame_flags.count);
 	}
 	mixed_coop.matched = TRUE;
 	platform_log("mixed co-op: the host's level matches this machine's: playing it together");
@@ -2631,7 +3189,9 @@ void mixed_coop_handle_bsp_digest(
 	mixed_coop.host_bsp_digests[entry.bsp_index][0] = entry.digest;
 	mixed_coop.host_bsp_digests[entry.bsp_index][1] = entry.digest_offset;
 	if (mixed_coop.bsp_digests[entry.bsp_index][0] && mixed_coop.bsp_digests[entry.bsp_index][0] != entry.digest &&
-		mixed_coop.bsp_digests[entry.bsp_index][1] != entry.digest_offset)
+		mixed_coop.bsp_digests[entry.bsp_index][1] != entry.digest_offset &&
+		!mixed_coop_bsp_accepted(entry.bsp_index, entry.digest, entry.digest_offset, mixed_coop.bsp_digests[entry.bsp_index][0],
+			mixed_coop.bsp_digests[entry.bsp_index][1]))
 	{
 		mixed_coop_leave(T("The host's %s and yours differ in the level's collision (BSP %d): Xbox and MCC files "
 			"can't play this level together."), mixed_coop_level_stems[mixed_coop.level], (int)entry.bsp_index);

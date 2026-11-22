@@ -1631,6 +1631,18 @@ static void network_game_client_map_refusal_show(
 		cache_files_show_multiplayer_unavailable(map->name, build);
 		return;
 	case _network_game_client_map_family_mixed:
+	{
+		char const *mixed_coop_multiplayer_refusal(char const *level_name);
+		char const *rebuilt = mixed_coop_multiplayer_refusal(map->name);
+
+		if (rebuilt)
+		{
+			length = snprintf(message, sizeof(message), "%s", rebuilt);
+			platform_log("map: the host's %s is of another map family than this machine's (%s maps here), a map Halo PC "
+				"rebuilt: refused", name, cache_files_multiplayer_family_is_mcc() ? "MCC's" : "the Xbox's");
+			break;
+		}
+	}
 		length = snprintf(message, sizeof(message), "%s",
 			T("This game's maps are a different version from yours; mixed games are coming."));
 		platform_log("map: the host's %s is of another map family than this machine's (%s maps here): refused, mixed games "
