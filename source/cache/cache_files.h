@@ -54,7 +54,12 @@ struct tag_iterator
 
 /* ---------- prototypes/CACHE_FILES.C */
 
+/* (port) the region of Halo: MCC's maps (cache_files.c's cache_file_builds) */
+#define CACHE_FILES_REGION_MCC "MCC"
+
 char const *cache_files_build_region(char const *build);
+boolean cache_files_region_is_mcc(char const *region);
+boolean cache_files_multiplayer_family_is_mcc(void);
 char const *cache_files_multiplayer_region(char build[0x20]);
 boolean cache_files_map_plays_multiplayer(char const *map_name, char build[0x20]);
 void cache_files_show_multiplayer_unavailable(char const *map_name, char const *build);

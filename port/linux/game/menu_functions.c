@@ -193,6 +193,7 @@ boolean transport_network_available(void);
 boolean menu_functions_forge_host(short map_index, char const *variant_file, char *why, int why_size);
 /* menu_tags.c's: a screen of the set by its widget's name (NONE: none) */
 long menu_tags_ingame_screen(char const *name);
+boolean menu_tags_empty_stand_in(long tag_index);
 /* (ui_widget.c: a screen held up over a player's view; the pointer) */
 struct widget_instance *ui_widget_port_held_screen_show(short local_player_index, long tag_index, short x, short y);
 void ui_widget_port_held_screen_hide(short local_player_index);
@@ -26965,6 +26966,23 @@ long pc_menu_functions_screen(
 			return lan;
 		}
 		platform_log("menus: no Halo 3 LAN browser: the System Link list");
+	}
+	/* (1.1.3: a ui.map with no System Link list of its own - MCC's, an
+	MCC-only install's, whose multiplayer opened then: its empty stand-in,
+	menu_tags.c - the Halo 3 LAN browser in its place, which starts the same
+	search and joins a game handed on to it once listed, as the Halo 3 lobby's
+	BROWSE GAMES has it: Classic+'s INTERNET browser's join went on to the
+	empty widget and never joined) */
+	if (tag_index != NONE && tag_index == tag_loaded(UI_WIDGET_DEFINITION_TAG, server_list_screen) &&
+		menu_tags_empty_stand_in(tag_index))
+	{
+		long lan = menu_tags_ingame_screen(lan_screen);
+
+		if (lan != NONE)
+		{
+			platform_log("menus: this ui.map has no System Link list: the Halo 3 LAN browser in its place");
+			return lan;
+		}
 	}
 	return tag_index;
 }

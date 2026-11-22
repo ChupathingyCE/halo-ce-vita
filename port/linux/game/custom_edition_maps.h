@@ -134,6 +134,22 @@ boolean custom_edition_maps_stock_problem(
 	char *why,
 	long why_size);
 
+/* (1.1.3) Map families: whether the host's level `level_name` (`host_identity`
+its copy, as custom_edition_maps_stock_problem takes it) is of another map
+family than this machine's maps - MCC's (Steam's halo1/maps, the menus from
+its ui.map: cache_files_multiplayer_family_is_mcc) and the Xbox's - so that
+the two would play one level from two different files, whose tag indices
+differ: a mixed game. TRUE refuses the join (network_client_manager.c,
+network_game_client_map_check, "This game's maps are a different version
+from yours"). The one place the families are compared: mixed play (MCC and
+Xbox machines in one game) extends it to answer FALSE when the two files'
+per-level digests match. FALSE for every other level (custom, Workshop,
+Halo PC's PC-exclusive maps) and for a level this machine plays from the
+host's own family of files. */
+boolean custom_edition_maps_family_mixed(
+	char const *level_name,
+	unsigned long host_identity);
+
 /* With crossplay on (a PC host's game: crossplay_maps.h), whether this
 machine plays the host's level `level_name` (the record's map name,
 `level_name_size` bytes, which need not be ended) of which the host sent
