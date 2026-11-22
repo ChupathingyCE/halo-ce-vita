@@ -362,6 +362,11 @@
 #            PC's own menus and the Steam screens alone) and both: DOWNLOAD FROM STEAM or STEAM WORKSHOP
 #            opens over the main menu, B goes back to that main menu, no assertion (a build with the
 #            Steam download alone; else SKIP)
+#   mccmp    (1.1.3) MCC's files alone (a data folder with no map, HALO_TEST_MCC_ROOT's halo1 linked into a
+#            content folder; SKIP without one): its ui.map's build, 01.03.43.0000, plays multiplayer
+#            (cache_files.c's MCC region) - Menu style Halo 3's MULTIPLAYER, BROWSE GAMES opens the LAN
+#            browser, Classic+'s MULTIPLAYER rows open their screens, the settings panel's join and host open
+#            the System Link screen in every Menu style; never "multiplayer unavailable" (insider.8d)
 #   steampanelget  (1.1.3-insider.4) the Xbox files alone, Menu style Classic, against steam_fake_server.py
 #            (a Steam Workshop test build alone; else SKIP): the panel's Download from Steam - SIGN IN, the
 #            QR, the fake's approval, Halo CE's 23 made-up files, the end's restart line, B back to the
@@ -543,7 +548,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -912,7 +917,11 @@ for case in $cases; do
 			fail h3pause "SAVE AND QUIT did not save"
 		grep -a "ui: screen" "$log" | tail -1 | grep -q 'pc.h3.main.screen' ||
 			fail h3pause "SAVE AND QUIT did not go back to the Halo 3 main menu"
-		grep -aqiE "assert|exception|halt" "$log" && fail h3pause "an assertion, exception or halt" ;;
+		# (the threaded render's "render assertion skipped (torn read?)" - a particle, contrail or colour read while the
+		# tick changes it, logged and passed over (render_epoch.c) - as the other cases take it: on a fast GPU about one
+		# run in three logs one, 1.1.3-insider.8c before the Classic+ menus as well as release-1.1.3, Nov 22)
+		grep -aiE "assert|exception|halt" "$log" | grep -av "render assertion skipped (torn read?)" | grep -q . &&
+			fail h3pause "an assertion, exception or halt" ;;
 	h3campaign)
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- h3campaign"; echo "SKIP: no HALO_TEST_PROFILE (a blam.sav with every level)"; continue
@@ -4173,6 +4182,64 @@ PY
 		grep -aq "forge net: hosting a Forge game of" "$log" || fail ceplusforge "the network Forge game was not hosted"
 		grep -a "ui: screen" "$log" | tail -1 | grep -q "connected_pregame_screen" ||
 			fail ceplusforge "the Xbox's pregame did not open" ;;
+	mccmp)
+		# (1.1.3, the owner's insider.8d: MCC's files alone - a data folder with no map, MCC's halo1 linked
+		# into a content folder, read only -, every multiplayer menu said "Your maps (build 01.03.43.0000)
+		# aren't supported for multiplayer yet")
+		mp_mcc=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
+		if [ ! -r "$mp_mcc/maps/ui.map" ] || [ ! -r "$mp_mcc/maps/custom_edition/bitmaps.map" ]; then
+			echo "--- mccmp"; echo "SKIP (mccmp): no MCC halo1 folder at $mp_mcc (HALO_TEST_MCC_ROOT)"; continue
+		fi
+		rm -rf "$out/mp-content" "$out/mp-none"
+		mkdir -p "$out/mp-content/halo1/maps" "$out/mp-none/maps"
+		for file in "$mp_mcc"/maps/*.map "$mp_mcc"/maps/custom_edition; do
+			ln -sfn "$file" "$out/mp-content/halo1/maps/"
+		done
+		for file in "$mp_mcc"/*; do
+			[ "$(basename "$file")" = maps ] || ln -sfn "$file" "$out/mp-content/halo1/"
+		done
+		d="down:150:500"
+		# Menu style Halo 3: MULTIPLAYER, down five to BROWSE GAMES (System Link), A: the profile, then the
+		# LAN browser (the owner's screen)
+		run mccmp_h3lan "$out/mp-none" 36 "$h3mppad $d $d $d $d $d a wait:150:3000 a wait:150:2000 a wait:150:2000 a wait:150:12000" \
+			HALO_MENU_STYLE=halo3 HALO_CONTENT_ROOT="$out/mp-content" &
+		# Classic+: MULTIPLAYER, then each of its first rows in turn (A, a while, B)
+		run mccmp_ceplus "$out/mp-none" 50 "wait:150:3000 down:150:800 a:150:3000 a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000" \
+			HALO_MENU_STYLE=classic HALO_CONTENT_ROOT="$out/mp-content" HALO_SCENE_PACKS=0 &
+		wait
+		# the settings panel's join and host (System Link) in every Menu style
+		for mp_style in original classic halo3 online; do
+			for mp_row in join host; do
+				run mccmp_panel_${mp_style}_$mp_row "$out/mp-none" 25 "wait:150:14000" HALO_MENU_STYLE=$mp_style \
+					HALO_CONTENT_ROOT="$out/mp-content" HALO_SYSTEM_LINK_TEST=$mp_row &
+			done
+			wait
+		done
+		for mp_name in mccmp_h3lan mccmp_ceplus $(for s in original classic halo3 online; do echo mccmp_panel_${s}_join mccmp_panel_${s}_host; done); do
+			log=$out/$mp_name/run.log
+			echo "--- $mp_name"
+			grep -aE "starting with|ui: screen|system link: the settings|multiplayer is unavailable|menus: h3 mp: browse|menus: the Halo 3 LAN" "$log" | head -12
+			[ "$(cat "$out/$mp_name/exit")" = 0 ] || fail $mp_name "exit $(cat "$out/$mp_name/exit")"
+			grep -av "render assertion skipped" "$log" | grep -aqiE "assert|exception|halt" && fail $mp_name "an assertion, exception or halt"
+			grep -aq "multiplayer is unavailable" "$log" && fail $mp_name "multiplayer unavailable: $(grep -a "multiplayer is unavailable" "$log" | head -1)"
+			case $mp_name in
+			mccmp_h3lan)
+				grep -aq "menus: h3 mp: browse the system link games; the profile, then the LAN browser" "$log" &&
+					grep -aq "ui: screen pc.h3.lan.screen" "$log" || fail $mp_name "BROWSE GAMES did not open the LAN browser" ;;
+			mccmp_ceplus)
+				# (MULTIPLAYER's rows: each opened a screen of its own over pc\mp\screen)
+				[ "$(grep -a "ui: screen" "$log" | grep -avc 'pc.mp.screen\|main_menu.main_menu')" -ge 3 ] ||
+					fail $mp_name "MULTIPLAYER's rows did not open their screens" ;;
+			mccmp_panel_original_*)
+				# (Menu style Halo CE on MCC's files alone is Halo PC's own ui.map, which has no Xbox System Link
+				# screens to open: told so, never "unavailable") ;;
+				;;
+			*)
+				grep -aq "system link: the settings panel's .*: the System Link screen opened" "$log" ||
+					fail $mp_name "the panel's row did not open the System Link screen" ;;
+			esac
+		done
+		;;
 	*)
 		echo "usage: $0 [$(echo $all_cases $pc_cases | tr ' ' '|')]..." >&2; exit 2 ;;
 	esac

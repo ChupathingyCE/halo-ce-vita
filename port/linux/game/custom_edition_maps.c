@@ -1713,6 +1713,35 @@ boolean custom_edition_maps_stock_problem(
 	return TRUE;
 }
 
+boolean custom_edition_maps_family_mixed(
+	char const *level_name,
+	unsigned long host_identity)
+{
+	char const *name = level_name ? tag_name_strip_path(level_name) : "";
+	char stem[MCC_CONTENT_STEM_BYTES];
+	char why[256];
+	boolean mcc_here = cache_files_multiplayer_family_is_mcc();
+
+	if (!name[0])
+	{
+		return FALSE;
+	}
+	/* (one of MCC's own levels, the host's MCC file: a machine of the Xbox's
+	maps alone, no MCC files to play it from. A PC-exclusive map has no Xbox
+	level: never a mixed game, its own refusal says why) */
+	if (mcc_content_name_stem(name, stem) != _mcc_content_none)
+	{
+		return !mcc_here && !halo_content_library_found() && !mcc_content_pc_exclusive(stem);
+	}
+	/* (an Xbox level, the host's Xbox file: a machine whose maps are MCC's,
+	with no Xbox file of that level to play it from) */
+	if (xbox_level_stock(name) && !host_identity)
+	{
+		return mcc_here && cache_files_xbox_map_problem(level_name, why, (long)sizeof(why));
+	}
+	return FALSE;
+}
+
 short custom_edition_maps_crossplay_check(
 	char const *level_name,
 	long level_name_size,

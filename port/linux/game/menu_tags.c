@@ -3413,6 +3413,21 @@ static long menu_tags_online(
 	return tag_index;
 }
 
+/* whether the tag is one of the empty widgets standing in for an Xbox screen this ui.map has
+not (an MCC-only install's, Halo PC's: menu_tags_loaded), in any Menu style */
+boolean menu_tags_empty_stand_in(
+	long tag_index)
+{
+	long index;
+
+	for (index = 0; tag_index != NONE && index < menu_tags.stub_count; index++)
+	{
+		if (menu_tags.stub_tags[index] == tag_index)
+			return TRUE;
+	}
+	return FALSE;
+}
+
 /* (Menu style Classic+) whether the screen is an Xbox one this ui.map has not (an MCC-only
 install's, Halo PC's: menu_tags_loaded's empty widget under its name) */
 static boolean menu_tags_classic_plus_missing(

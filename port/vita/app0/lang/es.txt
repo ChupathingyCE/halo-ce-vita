@@ -3811,3 +3811,4 @@
 "Experimental: lead squads in battle on Blood Gulch" = "Experimental: dirige escuadras en Blood Gulch"
 "Experimental: survive waves of the Covenant on Blood Gulch" = "Experimental: resiste oleadas del Covenant en Blood Gulch"
 "Forge;\nGAMETYPES PLUS: every gametype,\nInfection's too, and all its rules." = "Forja;\nTIPOS DE JUEGO+: todos los tipos\nde juego, Infección también, y sus reglas."
+"This game's maps are a different version from yours; mixed games are coming." = "Los mapas de esta partida son de otra versión que los tuyos; las partidas mixtas están en camino."

@@ -1504,6 +1504,10 @@ enum network_game_client_map_check
 	does not say which copy it plays */
 	_network_game_client_map_workshop_missing,
 	_network_game_client_map_workshop_different,
+	/* (1.1.3) the host's level of another map family than this machine's
+	maps (MCC's and the Xbox's: custom_edition_maps_family_mixed, which mixed
+	play extends) */
+	_network_game_client_map_family_mixed,
 };
 
 static short network_game_client_map_check(
@@ -1562,6 +1566,11 @@ static short network_game_client_map_check(
 			return _network_game_client_map_workshop_different;
 		}
 	}
+	/* port (1.1.3): map families - MCC's maps and the Xbox's never in one
+	game on one level yet (custom_edition_maps_family_mixed: the one check,
+	which mixed play extends) */
+	if (!global_network_game_server_get() && custom_edition_maps_family_mixed(map->name, (unsigned long)map->version))
+		return _network_game_client_map_family_mixed;
 	/* port: one of MCC's own maps (the Halo content folder,
 	mcc_content.h): this machine's own MCC file, the same as the host's
 	(its identity, as a custom map's, and one the host must give); never
@@ -1621,6 +1630,12 @@ static void network_game_client_map_refusal_show(
 	case _network_game_client_map_build_unsupported:
 		cache_files_show_multiplayer_unavailable(map->name, build);
 		return;
+	case _network_game_client_map_family_mixed:
+		length = snprintf(message, sizeof(message), "%s",
+			T("This game's maps are a different version from yours; mixed games are coming."));
+		platform_log("map: the host's %s is of another map family than this machine's (%s maps here): refused, mixed games "
+			"are coming", name, cache_files_multiplayer_family_is_mcc() ? "MCC's" : "the Xbox's");
+		break;
 	case _network_game_client_map_custom_missing:
 		length = snprintf(message, sizeof(message), T("The host is playing the custom map %s, which isn't in your maps folder."), name);
 		break;
@@ -1697,7 +1712,7 @@ static void network_game_client_map_refusal_show(
 	}
 	if (why && why[0] && length > 0 && length < (int)sizeof(message))
 		snprintf(message + length, sizeof(message) - (size_t)length, "\n\n%s", why);
-	platform_show_message(check == _network_game_client_map_stock_unloadable ? T("Halo: map") : T("Halo: custom map"), message);
+	platform_show_message(check == _network_game_client_map_stock_unloadable || check == _network_game_client_map_family_mixed ? T("Halo: map") : T("Halo: custom map"), message);
 
 	return;
 }
