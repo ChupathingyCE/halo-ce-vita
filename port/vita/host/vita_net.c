@@ -2100,3 +2100,11 @@ void vita_net_selftest(void)
 	if (thread >= 0)
 		sceKernelStartThread(thread, 0, NULL);
 }
+
+/* (the game's events, game_events.c: the bytes sent and received) not
+counted on the Vita */
+void posix_socket_traffic(unsigned long long *sent, unsigned long long *received)
+{
+	*sent = 0;
+	*received = 0;
+}

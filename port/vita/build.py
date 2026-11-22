@@ -189,6 +189,29 @@ CONSOLE_FEATURES = [
     "-DHALO_CONSOLE_TICK_OVERLAP_STACK_SIZE=0x800000UL",
 ]
 
+# the game list and the Delta Guide (the desktop's game browser, its Online
+# Games and Link Profile, and the Guide over any screen), sized for the Vita:
+# on unless configure.py --vita-no-guide
+GUIDE_FEATURES = [
+    "-DHALO_GAME_BROWSER",
+    "-DHALO_CONSOLE_GUIDE",
+    # the overlay drawn by the Vita's renderer (platform/vita_ui_overlay.c,
+    # host/vita_gxm.c), its buffers sized for the Vita: 4096 quads (1.2 MB
+    # of vertices, where the desktop's 16384 are 4.7 MB) and a 1024 square
+    # atlas (1 MB, the desktop's 4 MB) for text at 544 lines
+    "-DHALO_CONSOLE_OVERLAY_DRAW",
+    "-DHALO_UI_OVERLAY_QUADS=4096",
+    "-DHALO_UI_OVERLAY_ATLAS_SIZE=1024",
+    # the game list's requests over the consoles' HTTPS (the game's
+    # port/console/https/console_browser_http.c; host/vita_https.c)
+    "-DHALO_CONSOLE_BROWSER_HTTPS",
+    # without the medals' icons (a 64-pixel atlas) and DKrumpp's HD buttons
+    # (30 icons of 128 pixels, 2 MB): the Guide's prompts are the
+    # PlayStation font's, the medals the HUD's lines
+    "-DHALO_CONSOLE_NO_MEDAL_ICONS",
+    "-DHALO_CONSOLE_NO_HD_BUTTONS",
+]
+
 # the game's C89, as MSVC took it
 GAME_FLAGS = [
     "-std=gnu89",
@@ -246,6 +269,12 @@ REPLACED_PLATFORM_SOURCES = {
     # UPnP and the desktop game browser's HTTPS
     "posix_upnp.c", "posix_browser.c",
 }
+
+# with MCC maps (--vita-mcc): the Steam bridge's child processes and
+# library loading (posix_steam_bridge.c: steamcmd, Steam's own library) and
+# the MCC previews' descriptor-relative reads (posix_mcc_preview.c), which
+# the Vita answers its own way (host/vita_mcc.c)
+MCC_REPLACED_PLATFORM_SOURCES = {"posix_steam_bridge.c", "posix_mcc_preview.c"}
 
 # a profile that does not quite match the Vita's units (another platform's,
 # or older code): the functions it does not fit go without
@@ -354,6 +383,14 @@ def add_arguments(parser: Any) -> None:
                              "part of them (device, the default; its timing slows the device), or the steps and what "
                              "the tick's objects_update calls (objects; its timing slows the tick) "
                              "(platform/vita_frame_split.c; HALO_FRAME_TIMING=n in env.txt)")
+    parser.add_argument("--vita-no-guide", action="store_true",
+                        help="leave out the game list and the Delta Guide (GUIDE_FEATURES)")
+    parser.add_argument("--vita-mcc", action="store_true",
+                        help="MCC maps and the Delta Guide's WORKSHOP section (HALO_MCC=1; a work in progress on "
+                             "the Vita: MCC maps' textures are not drawn by its renderer yet)")
+    parser.add_argument("--vita-delta-standin", action="store_true",
+                        help="a dev build whose HTTPS can be pointed at a stand-in for the site in env.txt "
+                             "(HALO_DELTA_STANDIN, HALO_DELTA_STANDIN_PIN: host/vita_https.c); never with --release")
     parser.add_argument("--vita-build-number", metavar="N", type=int, default=1,
                         help="the Vita's build count after the game's version, \"0.9.2 (build N)\" (default 1)")
 
@@ -495,7 +532,15 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
                 implicit=(clang_implicit if rule == "vita_cc" else []) + list(implicit),
                 variables={"cflags": cflags + (" -flto" if rule == "vita_cc" and lto else "")})
 
-    defines = [*console_defines(sln), *CONSOLE_FEATURES]
+    guide = not getattr(sln.args, "vita_no_guide", False)
+    standin = bool(getattr(sln.args, "vita_delta_standin", False))
+    if standin and (release or not guide):
+        raise SystemExit("--vita-delta-standin: a dev build with the Guide only")
+    mcc = bool(getattr(sln.args, "vita_mcc", False))
+    if mcc and not guide:
+        raise SystemExit("--vita-mcc: with the Guide only")
+    defines = [*console_defines(sln), *CONSOLE_FEATURES, *(GUIDE_FEATURES if guide else []),
+               *(["-DHALO_MCC=1"] if mcc else [])]
     # a release build is the release-style build too: the debug decomp's
     # asserts compiled out as retail compiled them out, but for the memory
     # checks (configure.py --console-no-debug-asserts), and the busiest
@@ -547,6 +592,13 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
         add(override_of(source), "vita_cc", cflags)
     for source in sorted((game / LINUX_GAME).glob("*.c")):
         add(override_of(source), "vita_cc", game_cflags)
+    # the dedicated server's units, which the game list's builds share (its
+    # game type parser, the probe), as every build with the game list has them
+    if guide:
+        for source in sorted((game / "server" / "src").glob("*.c")):
+            if source.name == "main.c":
+                continue
+            add(override_of(source), "vita_cc", f"{game_cflags} -I{_quote(game / 'server' / 'src')}")
     for name in sorted(additions):
         overrides_left.discard(name)
         add(overrides_dir / name, "vita_cc", game_cflags)
@@ -580,7 +632,10 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
         f"-include {_quote(port_dir / 'include' / 'posix' / 'vita_posix.h')}",
     ])
     for source in sorted((game / LINUX_SRC).glob("*.c")):
-        if source.name in REPLACED_PLATFORM_SOURCES:
+        if source.name in REPLACED_PLATFORM_SOURCES or source.name in MCC_REPLACED_PLATFORM_SOURCES:
+            continue
+        # (with MCC maps, built with the Steam content client below)
+        if mcc and source.name == "steam_bridge_pipe.c":
             continue
         if source.name.startswith("posix_"):
             # (posix_*.c talk to the C library alone: the SDK's ABI, as the
@@ -595,6 +650,17 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
         add(override_of(source), "vita_cc", cflags)
     add(game / CONSOLE_LINK / "console_link.c", "vita_cc", f"{platform_cflags} -I{_quote(game / CONSOLE_LINK)}")
     add(hud_assets, "vita_cc", platform_cflags)
+    if guide:
+        # the overlay's fonts and button icons (posix_ui_font.c's) sized for
+        # the Vita: tools/vita_embed_fonts.py
+        ui_fonts = gen_dir / "ui_fonts.c"
+        fonts_tool = port_dir.parent.parent / "tools" / "vita_embed_fonts.py"
+        n.rule(name="vita_embed_fonts", command=f"$python {_quote(fonts_tool)} $out", description="VITA EMBED $out")
+        n.build(outputs=ui_fonts, rule="vita_embed_fonts", implicit=[game / "tools" / "embed_assets.py", fonts_tool])
+        add(ui_fonts, "vita_cc", platform_cflags)
+        # the game list's requests over the consoles' HTTPS
+        add(game / "port" / "console" / "https" / "console_browser_http.c", "vita_cc",
+            f"{platform_cflags} -I{_quote(game / 'port' / 'console' / 'https')}")
     # the port's units in the platform layer's terms: the Vita's Direct3D
     # device on GXM and its Cg translators, which read the game's xgpu.h
     # with the Vita's own pixel shader key (include/vita_xgpu_game.h)
@@ -612,9 +678,42 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
 
     # ---------- third-party libraries, with the platform layer's ABI
     third_party = " ".join([abi, "-std=gnu11", "-w"])
-    https_cflags = " ".join([*TARGET_FLAGS, *sysroot_flags, "-std=gnu11", "-w", "-Os", *console_https_flags(game)])
+    # (the consoles' Mbed TLS, with what the Workshop's Steam content client
+    # needs too in a --vita-mcc build: include/vita_mbedtls_config.h)
+    tls_flags = [flag.replace('\\"console_mbedtls_config.h\\"', '\\"vita_mbedtls_config.h\\"')
+                 for flag in console_https_flags(game)] + [f"-I{_quote(port_dir / 'include')}"]
+    if mcc:
+        tls_flags.append("-DVITA_STEAM_CONTENT")
+    https_cflags = " ".join([*TARGET_FLAGS, *sysroot_flags, "-std=gnu11", "-w", "-Os", *tls_flags])
+    # (a dev build's stand-in for the site: its key taken for the site's name,
+    # console_https_trust_for_tests; host/vita_https.c)
+    if standin:
+        https_cflags += " -DCONSOLE_HTTPS_TESTS"
     for source in console_https_sources():
         add(game / source, "vita_cc", https_cflags)
+    if mcc:
+        # the Workshop's own Steam content client (sign-in by QR, items from
+        # Steam's content servers: port/linux/src/steam_content), plugged in
+        # as the Steam bridge's installer (steam_bridge_pipe.c), with the
+        # consoles' Mbed TLS, zlib, Zstandard's decoder and the LZMA SDK's
+        # (the content client with the same flags as the Mbed TLS it shares
+        # structures with: the C library's ABI, not the game's; only plain
+        # types cross to steam_bridge_pipe.c, built as the platform layer)
+        add(game / LINUX_SRC / "steam_bridge_pipe.c", "vita_cc",
+            " ".join([platform_cflags, "-DHALO_STEAM_CONTENT", f"-I{_quote(game / QRCODEGEN_DIR)}"]))
+        steam_flags = " ".join([https_cflags, "-D_GNU_SOURCE", "-DHALO_MCC=1", "-DHALO_GAME_BROWSER", "-DHALO_STEAM_CONTENT",
+                                "-DSC_SECRET_FILE_ONLY", f"-I{_quote(game / LINUX_SRC)}", f"-I{_quote(game / ZLIB_DIR)}",
+                                f"-I{_quote(game / 'port' / 'third_party' / 'zstd' / 'lib')}",
+                                f"-I{_quote(game / 'port' / 'third_party' / 'lzma')}", *ZLIB_DEFINES])
+        for source in sorted((game / LINUX_SRC / "steam_content").glob("*.c")):
+            add(source, "vita_cc", steam_flags)
+        add(game / "port" / "third_party" / "lzma" / "LzmaDec.c", "vita_cc", third_party)
+        zstd_lib = game / "port" / "third_party" / "zstd" / "lib"
+        for name in ("common/debug.c", "common/entropy_common.c", "common/error_private.c", "common/fse_decompress.c", "common/xxhash.c",
+                     "common/zstd_common.c", "decompress/huf_decompress.c", "decompress/zstd_ddict.c",
+                     "decompress/zstd_decompress.c", "decompress/zstd_decompress_block.c"):
+            add(zstd_lib / name, "vita_cc", " ".join([third_party, "-DZSTD_DISABLE_ASM=1", "-DZSTD_LEGACY_SUPPORT=0", "-DZSTD_TRACE=0",
+                                                    "-DDEBUGLEVEL=0", f"-I{_quote(zstd_lib)}"]))
     add(game / TOML_DIR / "tomlc17.c", "vita_cc", third_party)
     for name in EXPAT_SOURCES:
         add(game / EXPAT_DIR / name, "vita_cc", f"{third_party} -I{_quote(game / EXPAT_DIR)}")
@@ -640,6 +739,9 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
         f"-I{_quote(port_dir / 'host')}",
         f"-I{_quote(game / LINUX_SRC)}",
         f"-I{_quote(game / MONOCYPHER_DIR)}",
+        f"-I{_quote(game / 'port' / 'console' / 'https')}",
+        *(["-DVITA_GAME_LIST"] if guide else []),
+        *(["-DVITA_DELTA_STANDIN", "-DCONSOLE_HTTPS_TESTS"] if standin else []),
     ])
     # the shader generator id (vita_gxm.c's shader cache): a hash of the
     # sources that write the Cg (tools/vita_shader_generator_id.py)
