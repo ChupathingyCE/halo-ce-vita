@@ -102,6 +102,16 @@ static char const *const mixed_coop_mcc_extra_objects[] =
 {
 	"scenery\\reach_moa\\reach_moa",
 };
+/* the equipment spawns Halo PC added to the multiplayer maps (MCC's files
+have them; the Xbox's none): the flamethrower's (every map: the game makes
+them rocket launchers, more than the Xbox's map has) and the plasma cannon's
+(Boarding Action: a weapon the Xbox's files have not, which an Xbox client
+could not make). Not spawned on a machine of MCC's files in mixed play */
+static char const *const mixed_coop_mcc_extra_item_collections[] =
+{
+	"item collections\\single weapons\\flame thrower",
+	"item collections\\single weapons\\plasma_cannon",
+};
 /* the object names those placements have (sh_<level>_...): left out of the
 layout's digest */
 #define MIXED_COOP_MCC_EXTRA_NAME_PREFIX "sh_"
@@ -1441,6 +1451,33 @@ static void mixed_coop_make_xbox_scenario(
 		if (removed)
 			platform_log("mixed co-op: %ld MCC-only %s not placed (the Xbox's placements, at the Xbox's object indices)",
 				removed, blocks[index].placements);
+		mixed_coop.extras_removed += removed;
+	}
+	/* (multiplayer: Halo PC's added equipment spawns) */
+	if (mixed_coop_multiplayer_level && scenario->netgame_equipment.address)
+	{
+		long read, write = 0, removed = 0;
+
+		for (read = 0; read < scenario->netgame_equipment.count; read++)
+		{
+			struct scenario_netgame_equipment *entry = (struct scenario_netgame_equipment *)scenario->netgame_equipment.address + read;
+			boolean extra = FALSE;
+
+			for (index = 0; index < NUMBEROF(mixed_coop_mcc_extra_item_collections); index++)
+				extra |= mixed_coop_tag_is(entry->item_collection.index, mixed_coop_mcc_extra_item_collections[index]);
+			if (extra)
+			{
+				removed++;
+				continue;
+			}
+			if (write != read)
+				memmove((struct scenario_netgame_equipment *)scenario->netgame_equipment.address + write, entry, sizeof(*entry));
+			write++;
+		}
+		scenario->netgame_equipment.count = write;
+		if (removed)
+			platform_log("mixed play: %ld equipment spawns Halo PC added not spawned (the flamethrower's, the plasma cannon's)",
+				removed);
 		mixed_coop.extras_removed += removed;
 	}
 	for (script_index = 0; script_index < scenario->hs_scripts.count && scenario->hs_scripts.address; script_index++)
