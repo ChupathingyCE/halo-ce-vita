@@ -9,7 +9,11 @@ GulchCE's mcc_maps is read when there is no maps_mcc (mcc_maps_directory) */
 #define MCC_MAPS_DIRECTORY mcc_maps_directory()
 #define MCC_MAPS_LEVEL_PREFIX "mcc_maps\\"
 #define MCC_MAPS_FIRST_DISPLAY_INDEX 0x1000
+/* the MCC maps listed at most: a console's build may hold fewer (their
+tables are held for the whole run) */
+#ifndef MCC_MAPS_MAXIMUM
 #define MCC_MAPS_MAXIMUM 1024
+#endif
 
 char const *mcc_maps_directory(void);
 char const *mcc_maps_folder(void);
