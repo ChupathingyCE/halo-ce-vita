@@ -41,8 +41,9 @@ It is not an emulator: the game's own code is compiled for the Vita's ARM
 processor, and its Direct3D rendering is translated to the Vita's GPU.
 
 > [!NOTE]
-> **[1.1.2](https://github.com/ChupathingyCE/halo-ce-vita/releases/latest) is the current release**, and this README describes it.
+> **[1.1.3](https://github.com/ChupathingyCE/halo-ce-vita/releases/latest) is the current release**, and this README describes it.
 > Install it over 1.0.3 or any 1.1.0 beta: maps, saves and settings carry over.
+> 1.1.3 is the last Halo CE Vita release; the next Vita update is Warthog Vita, from ChupathingyCE.
 
 > [!IMPORTANT]
 > **No game data is included.** You need your own **Xbox** copy of Halo:
