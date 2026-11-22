@@ -190,6 +190,14 @@ HALO_CONSOLE_HTTPS
 	fetched by the console itself (delta_legacy_refresh, port/linux/src/
 	delta.c, called on a thread of the port's) and cached beside
 	config.toml
+HALO_CONSOLE_BROWSER_HTTPS
+	a console with the game list (HALO_GAME_BROWSER) without the desktop's
+	TLS (port/linux/src/posix_browser.c): the game list's requests
+	(browser_http.h) go over port/console/https (HALO_CONSOLE_HTTPS's
+	client, its pinned hosts alone) by port/console/https/
+	console_browser_http.c, which the port builds; the key files'
+	posix_browser_private_key, posix_browser_device_key and
+	posix_browser_replace_key are the port's
 HALO_CONSOLE_DEBUG_CHANNEL
 	a console without a standard error: the platform layer's log lines and
 	OutputDebugStringA go to its debug channel (console_debug_print,
