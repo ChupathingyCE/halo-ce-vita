@@ -824,6 +824,15 @@ boolean forge_command_host_begin(
 	char *why,
 	int why_size)
 {
+	/* (1.1.3: Command experimental - the setting on, Blood Gulch alone:
+	experimental_modes.h) */
+	if (experimental_modes_refused("Command", map_path))
+	{
+		if (why && why_size > 0)
+			snprintf(why, (size_t)why_size, "%s", experimental_modes_on() ? experimental_modes_map_text() :
+				experimental_modes_off_text());
+		return FALSE;
+	}
 	return forge_net_host_begin_as(map_path, NULL, TRUE, TRUE, why, why_size);
 }
 

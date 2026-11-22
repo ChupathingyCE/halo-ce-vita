@@ -248,7 +248,8 @@ command_case() {
 		grep -aq "forge net: the host's Command game left: game.experimental_modes is off" "$jl" ||
 			fail "the joiner with the experimental modes off did not leave the Command game"
 		grep -aq "command: .* loaded for a Command game" "$jl" && fail "the joiner with the setting off played the Command game"
-		grep -aq "command: .* loaded for a Command game" "$hl" || fail "the host (the setting on) did not host its Command game"
+		grep -aq "forge net: hosting a Command game of levels.test.bloodgulch" "$hl" ||
+			fail "the host (the setting on) did not host its Command game"
 		;;
 	commandmap)
 		HALO_TEST_COMMAND_HOST_GAME=host:chillout:command command_host ""
@@ -256,7 +257,8 @@ command_case() {
 		command_check_clean "$hl"
 		grep -aE "experimental modes:|command: .* loaded" "$hl" | head -3
 		grep -aq "experimental modes: Command refused (not Blood Gulch" "$hl" || fail "a Command game of Chill Out was not refused"
-		grep -aq "command: .* loaded for a Command game" "$hl" && fail "a Command game of Chill Out was hosted"
+		grep -aqE "command: .* loaded for a Command game|forge net: hosting a Command game" "$hl" &&
+			fail "a Command game of Chill Out was hosted"
 		;;
 	commandold)
 		host_cmds="L90:command net"
