@@ -695,6 +695,9 @@ struct texture_entry
 	/* (Warthog, HALO_CONSOLE_HOST_ART) the menu art serial its art was
 	looked up at, and whether it is a menu art's PNG */
 	unsigned long art_serial;
+	/* (an MCC map's texture: its texels the MCC loader's own, not in the
+	Xbox window: mcc_texture_bridge.c xgpu_mcc_texture_source) */
+	int mcc;
 	int art;
 	/* (Warthog) hud_hires_settings() when it was last built: the high-res
 	HUD's settings changed since, it is looked up again */
@@ -2620,11 +2623,27 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 	struct xgpu_texture_description *description, int streamed)
 {
 	DWORD data = resource[1], format_word = resource[3], size_word = resource[4];
-	struct texture_entry **bucket = &texture_buckets[bucket_index(data, format_word, size_word)];
+	struct texture_entry **bucket;
 	struct texture_entry *entry, *oldest_variant = NULL;
 	unsigned long generation, variant_count = 0, drop;
 	BOOL palettized = ((format_word & D3DFORMAT_FORMAT_MASK) >> D3DFORMAT_FORMAT_SHIFT) == 0x0b;
 	unsigned long hash = palettized ? palette_hash(palette) : 0;
+#if defined(HALO_MCC) && HALO_MCC
+	/* (an MCC map's texture: its own description and texels, as the bgfx
+	renderer takes them; known by the texels' address, never the header's
+	Data word) */
+	struct xgpu_texture_description mcc_description;
+	const void *mcc_pixels = NULL;
+	unsigned long mcc_bytes = 0;
+	long mcc_hud = -1;
+
+	if (xgpu_mcc_texture_source(resource, &mcc_description, &mcc_pixels, &mcc_bytes, &mcc_hud) && mcc_pixels &&
+		mcc_bytes)
+		data = (DWORD)(unsigned long)mcc_pixels;
+	else
+		mcc_pixels = NULL;
+#endif
+	bucket = &texture_buckets[bucket_index(data, format_word, size_word)];
 
 #ifdef HALO_CONSOLE_HOST_ART
 	/* (the high-res text's atlas in its placeholder's place: d3d8_gxm.c
@@ -2667,6 +2686,16 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 		xgpu_texture_describe(format_word, size_word, &entry->description);
 		entry->address = (unsigned long)PLATFORM_PHYSICAL_TO_VIRTUAL(data);
 		entry->size = xgpu_texture_face_size(&entry->description) * (entry->description.cube_map ? 6 : 1);
+#if defined(HALO_MCC) && HALO_MCC
+		if (mcc_pixels)
+		{
+			entry->mcc = 1;
+			entry->description = mcc_description;
+			entry->address = (unsigned long)mcc_pixels;
+			entry->size = mcc_bytes;
+			entry->dynamic = 0;
+		}
+#endif
 		entry->dynamic = -1;
 		entry->segment = -1;
 		entry->next = *bucket;
@@ -2767,9 +2796,9 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 				free(texels);
 			}
 		}
-		if (!entry->valid && !entry->art && platform_is_contiguous((void *)entry->address) &&
+		if (!entry->valid && !entry->art && !entry->mcc && platform_is_contiguous((void *)entry->address) &&
 #else
-		if (platform_is_contiguous((void *)entry->address) &&
+		if (!entry->mcc && platform_is_contiguous((void *)entry->address) &&
 #endif
 			platform_is_contiguous((void *)(entry->address + entry->size - 1)) && streamed && decode_in_background(entry))
 		{
@@ -2780,8 +2809,8 @@ const struct vgxm_texture *vita_texture_get(const DWORD *resource, const D3DCOLO
 			vita_texture_build_us += vita_host_time_us() - before;
 			frame_decode_us += vita_host_time_us() - before;
 		}
-		if (!entry->valid && !entry->art && platform_is_contiguous((void *)entry->address) &&
-			platform_is_contiguous((void *)(entry->address + entry->size - 1)))
+		if (!entry->valid && !entry->art && (entry->mcc || (platform_is_contiguous((void *)entry->address) &&
+			platform_is_contiguous((void *)(entry->address + entry->size - 1)))))
 		{
 			{
 				unsigned long long before = vita_host_time_us();
