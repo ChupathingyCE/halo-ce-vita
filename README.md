@@ -1,4 +1,4 @@
-<p align="center"><img src="port/vita/sce_sys/icon0.png" width="120" alt=""></p>
+<p align="center"><img src="docs/logo.png" width="200" alt="Warthog Vita"></p>
 
 <h1 align="center">Warthog for Vita</h1>
 
