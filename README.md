@@ -159,6 +159,16 @@ Two kinds of game files, two folders. **Never mix them.**
 MCC's files in the Xbox `maps` folder don't work: since 1.1.3 the game says
 so and where to move them (1.1.2 showed a black screen with no sound).
 
+**SD2Vita as `uma0:`** (the official memory card staying `ux0:`): put the
+same `data/haloce-vita` folder on `uma0:` instead (`uma0:data/haloce-vita/maps`
+and so on). Since 1.1.3 the game finds it there by itself: at each start it
+uses the first of `ux0:`, `uma0:` and `imc0:` whose `data/haloce-vita` has the
+game's files, and keeps everything there (saves, settings, the shader cache,
+updates, the Steam download). Settings > Multiplayer > Modded maps >
+**Game folder** picks a card by hand (Auto, ux0, uma0, imc0; after a restart).
+Nothing is moved between cards. `halo.log` in the game folder says which one
+it picked and why.
+
 **Copying by hand** (the Windows tool does all this for you):
 
 1. On the Vita, open VitaShell and press SELECT to turn on FTP. It shows an
@@ -195,9 +205,13 @@ It's a normal Setup wizard: Next, Next, Finish.
 3. Give it the Vita's address, or a folder on PC, and press **Install**. One
    progress bar does the rest: the Vita gets everything over VitaShell's FTP
    plus the VPK, and a PC gets a real install with shortcuts and an uninstaller.
-4. On the Vita, then install that VPK from `ux0:data/` with VitaShell. Finish
-   tells you how. For PC, put `halo-ce-vita-<version>-pc-windows.zip` next to
-   the tool.
+   **No Wi-Fi?** On the Vita's Destination page pick **USB or a folder**: turn
+   on VitaShell's USB mode so the memory card shows up as a drive and choose
+   that drive (or any folder, to copy onto the card later). Setup writes
+   `data/haloce-vita/...` and the VPK there, with `README-what-to-do.txt`.
+4. On the Vita, then install that VPK with VitaShell (from `ux0:data/` over
+   FTP, from the card's root over USB). Finish tells you how. For PC, put
+   `halo-ce-vita-<version>-pc-windows.zip` next to the tool.
 
 The tool isn't signed: if Windows says "Windows protected your PC", click
 **More info**, then **Run anyway**. Details:
