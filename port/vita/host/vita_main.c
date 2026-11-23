@@ -805,6 +805,11 @@ static void stderr_early(void)
 	vita_host_stderr_open();
 }
 
+/* the first start's screens and the updater's hooks (vita_setup.c) */
+void console_setup_start(void);
+void console_setup_after_data(const char *data_root);
+int vita_setup_maps(void);
+
 int main(int argc, char **argv)
 {
 	SceAppUtilInitParam init;
@@ -850,33 +855,19 @@ int main(int argc, char **argv)
 	/* (debug) the folder a test's screenshots go to (debug.screenshot_directory) */
 	if (getenv("HALO_SCREENSHOT_DIR") && *getenv("HALO_SCREENSHOT_DIR"))
 		sceIoMkdir(getenv("HALO_SCREENSHOT_DIR"), 0777);
-	{
-		/* the maps: maps/ in the data folder; else the release's (for a dev
-		build), else Halo CE Vita's, read where they are (HALO_MAPS_ROOT, the
-		port's xbox_files.c override): its 1.1.x folder or 1.2.0's */
-		static const char *const others[] = { "ux0:data/warthog-vita/maps", "ux0:data/haloce-vita/maps",
-			"ux0:data/project-ark/maps" };
-		SceIoStat stat;
-		unsigned int index;
-
-		if (!getenv("HALO_MAPS_ROOT") && sceIoGetstat(VITA_DATA_DIRECTORY "/maps/ui.map", &stat) < 0)
-		{
-			for (index = 0; index < sizeof(others) / sizeof(*others); index++)
-			{
-				char path[128];
-
-				snprintf(path, sizeof(path), "%s/ui.map", others[index]);
-				if (sceIoGetstat(path, &stat) >= 0)
-				{
-					setenv("HALO_MAPS_ROOT", others[index], 1);
-					break;
-				}
-			}
-		}
-		snprintf(message, sizeof(message), "vita: maps from %s",
-			getenv("HALO_MAPS_ROOT") ? getenv("HALO_MAPS_ROOT") : VITA_DATA_DIRECTORY "/maps");
-		vita_host_log(message);
-	}
+	/* the maps: maps/ in the data folder; else the first start's screens
+	(host/vita_setup.c) find the player's game files on the card and offer
+	them: another app's maps folder read where it is (HALO_MAPS_ROOT, the
+	port's xbox_files.c override: the release's for a dev build, Halo CE
+	Vita's, Project Ark's), or a disc image's maps copied in. env.txt's
+	HALO_MAPS_ROOT goes first */
+	console_setup_start();
+	if (!getenv("HALO_MAPS_ROOT") || !*getenv("HALO_MAPS_ROOT"))
+		vita_setup_maps();
+	snprintf(message, sizeof(message), "vita: maps from %s",
+		getenv("HALO_MAPS_ROOT") ? getenv("HALO_MAPS_ROOT") : VITA_DATA_DIRECTORY "/maps");
+	vita_host_log(message);
+	console_setup_after_data(VITA_DATA_DIRECTORY);
 	snprintf(message, sizeof(message), "vita: arm %d MHz, bus %d MHz, gpu %d MHz, xbar %d MHz",
 		scePowerGetArmClockFrequency(), scePowerGetBusClockFrequency(), scePowerGetGpuClockFrequency(),
 		scePowerGetGpuXbarClockFrequency());

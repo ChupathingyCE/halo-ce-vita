@@ -77,10 +77,27 @@ build count: 0.9.2 (build 1).
    `WRTV00001`). It sits next to Halo CE Vita and doesn't touch it or its
    saves. Test builds are a separate app, **Warthog Dev** (`WRTD00001`), with
    their own folder, `ux0:data/warthog-vita-dev/`.
-2. Copy your disc's `maps` folder to `ux0:data/warthog-vita/maps/`.
-   If Halo CE Vita is installed, Warthog reads its maps where they are
-   (`ux0:data/haloce-vita/maps/`), so you don't need a second copy.
-3. Start Warthog.
+2. Put your game files on the memory card, one of these ways:
+   - your Halo: Combat Evolved disc image for the original Xbox (`.iso` or
+     `.xiso`) in `ux0:data/warthog-vita/`, `ux0:data/` or `ux0:`, or
+   - the disc's `maps` folder copied to `ux0:data/warthog-vita/maps/`.
+   If Halo CE Vita is installed, its maps work too (`ux0:data/haloce-vita/maps/`,
+   or Project Ark's `ux0:data/project-ark/maps/`): nothing to copy.
+3. Start Warthog. The first start shows what it found:
+   - **Copy the maps from <your image>**: Warthog checks it's Halo's Xbox
+     disc and that the card has room, then copies the maps folder (about
+     1.8 GB) into `ux0:data/warthog-vita/maps/`. Keep Warthog open while it
+     copies (the PS button is off until it's done); Circle cancels, and a
+     cancelled copy leaves nothing behind. Afterwards you can delete the
+     disc image.
+   - **Use Halo CE Vita's maps where they are**: Warthog reads them from
+     there, and remembers the choice (`maps_source.txt`).
+
+   With nothing found, Warthog says where the maps folder goes, which maps
+   it needs, and where a disc image can go. Triangle looks again.
+
+The game files are never shipped with Warthog, and Warthog only reads other
+apps' folders and your disc image: it writes to its own folder alone.
 
 The first start writes `config.toml`. The first load of each map takes a
 while: the game writes the map's cache file to the memory card. Later loads
@@ -94,6 +111,7 @@ Everything is in `ux0:data/warthog-vita/`:
 | --- | --- |
 | Settings | `config.toml` |
 | Retail maps | `maps/` (or Halo CE Vita's, read where they are) |
+| Where the maps are read from, when they aren't in `maps/` | `maps_source.txt` (delete it to choose again) |
 | Saves and the maps' cache files | `saves/` |
 | The game's log | `logs/debug.txt` |
 | The Vita side's log | `halo.log` (the run before: `halo-prev.log`) |

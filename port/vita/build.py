@@ -650,9 +650,23 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     n.build(outputs=generator_header, rule="vita_shader_generator_id",
             implicit=[generator_tool, port_dir / "platform" / "nv2a_psh_cg.c", port_dir / "platform" / "nv2a_vsh_cg.c",
                       port_dir / "include" / "vita_xgpu.h"])
-    host_cflags += f" -I{_quote(gen_dir)} -I{_quote(TLSF_DIR)}"
+    host_cflags += f" -I{_quote(gen_dir)} -I{_quote(TLSF_DIR)} -I{_quote(port_dir / 'setup')}"
     for source in sorted((port_dir / "host").glob("*.c")):
         add(source, "vita_host_cc", host_cflags, [generator_header] if source.name == "vita_gxm.c" else [])
+    # the first start's screens (setup/, host/vita_setup.c): the game's disc
+    # reader (xiso.h, the port's override until upstream has it) and
+    # stb_truetype, the faces from tools/vita_setup_fonts.py
+    setup_fonts = gen_dir / "setup_fonts.c"
+    fonts_tool = port_dir.parent.parent / "tools" / "vita_setup_fonts.py"
+    n.rule(name="vita_setup_fonts", command=f"$python {_quote(fonts_tool)} {_quote(game)} $out",
+           description="VITA SETUP FONTS $out", restat=True)
+    n.build(outputs=setup_fonts, rule="vita_setup_fonts", implicit=[fonts_tool])
+    # (the override's xiso.h before the game's)
+    setup_cflags = " ".join([f"-I{_quote(overrides_dir / 'port' / 'linux' / 'src')}", host_cflags,
+                             f"-I{_quote(game / STB_DIR)}"])
+    for source in sorted((port_dir / "setup").glob("*.c")):
+        add(source, "vita_host_cc", setup_cflags)
+    add(setup_fonts, "vita_host_cc", setup_cflags)
     # the shader compiler's heap (vita_gxm.c): TLSF (third_party/tlsf, BSD)
     add(TLSF_DIR / "tlsf.c", "vita_host_cc", " ".join(HOST_FLAGS + ["-DNDEBUG", "-w"]))
 

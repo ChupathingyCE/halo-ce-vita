@@ -61,12 +61,16 @@ which files wait on which pull request.
 | `host/vita_net.c` | sockets over SceNet |
 | `host/vita_clocks.c`, `vita_fourth_core.c`, `vita_cpu.c` | clocks, the fourth core, core load |
 | `platform/vita_platform.c` | the window and events the game asks of `sdl_platform.c` |
+| `setup/`, `host/vita_setup.c` | the first start's screens before the game (the game's `HALO_CONSOLE_SETUP_SCREENS` hooks): the maps found on the card, a disc image's maps copied in, the updater's screens; drawn by the processor into the display's own buffers, `tests/setup_test.c` and `tools/vita_setup_test.py` run them on Linux |
 | `platform/vita_glue.c` | what the renderer asked of Halo CE Vita's game, answered for Chupathingy's |
 | `overrides/` | game files the Vita needs fixed, until upstream has them (README there) |
 
 ## Debug switches (`env.txt`)
 
-`HALO_MAPS_ROOT` (a maps folder elsewhere), `HALO_HEARTBEAT_S` (a line every
+`HALO_MAPS_ROOT` (a maps folder elsewhere: no first start's screens),
+`HALO_SETUP_ONLY_OWN=1`, `HALO_SETUP_FREE_MB`, `HALO_SETUP_UPDATE_TEST=1`,
+`HALO_SETUP_PAD`, `HALO_SETUP_SHOTS=1` (the first start's tests:
+`host/vita_setup.c` says what each does), `HALO_HEARTBEAT_S` (a line every
 n seconds: frames presented, free memory, the game's heap), `HALO_EVENTS`
 (those lines written at once to `events.txt`), `HALO_UDP_LOG=a.b.c.d:port`
 (the same as datagrams to a listener, with the file calls, for a run whose

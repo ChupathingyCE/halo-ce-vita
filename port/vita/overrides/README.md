@@ -62,3 +62,16 @@ the port's (`tools/vita_menus.py`). Upstream PR candidate, prepared:
 "Settings: the Vita's own, for its port's rows" (branch
 `birchwood-vita-settings-rows`). The structure culling default this file
 held before is upstream now (#1572).
+
+## port/linux/src/xiso.c, xiso.h
+
+The first start's import (`port/vita/setup`) checks a disc image before
+anything is written (Halo's title ID in `default.xbe`, an Xbox `ui.map`;
+Halo PC's maps refused with a reason that says so), asks for the copy's size
+first (`xiso_check_image`), leaves the movies out (the Vita plays none yet)
+and lets the player cancel (`xiso_extract_maps_with`); a copy that fails or
+is cancelled removes what it wrote. The free space check is the Vita's own
+(`XISO_EXTRACT_NO_SPACE_CHECK`). Upstream PR candidate, prepared: "xiso:
+check the disc is Halo's Xbox disc and that there is room, and let a copy be
+cancelled" (branch `birchwood-xiso-import-checks`, with
+`tools/test_xiso_import.py`).

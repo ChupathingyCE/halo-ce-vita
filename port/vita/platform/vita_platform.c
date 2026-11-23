@@ -205,8 +205,9 @@ void platform_show_message(const char *title, const char *message)
 	platform_log("%s: %s", title, message);
 }
 
-/* the maps go in the data folder by hand (port/vita/README.md): nothing to
-offer on the Vita */
+/* nothing to offer here: the first start's screens find the player's game
+files and copy a disc image's maps before the game starts (host/vita_setup.c,
+port/vita/setup) */
 BOOL platform_offer_game_data(char *destination, unsigned long size)
 {
 	(void)destination;
