@@ -15,14 +15,18 @@
 #   mccxbox   an MCC-only host's System Link game, an Xbox machine (no MCC files) joins: refused as a mixed
 #             game (custom_edition_maps_family_mixed) with "This game's maps are a different version from
 #             yours; mixed games are coming", stays up, never in the game, no download offered
-#   xboxmcc   an Xbox host's System Link game on the Xbox's Blood Gulch, an MCC-only machine joins: refused the
-#             same way, stays up, never in the game
+#   xboxmcc   an Xbox host's System Link game on the Xbox's Blood Gulch, an MCC-only machine joins (mixed play
+#             r4, Nov 23 2026: the host's placements taken before the map loads): it plays 60 s at least with
+#             two players, placed as the host's layout, matched the host's dictionary
 #   xboxlan   the Xbox's maps on both, as before (the baseline: lan's game, the same scoreboard check)
 #   mixedmp   mixed multiplayer (mixed_coop.h): HALO_TEST_MIXED="HOST JOINER MAP GAME" (HOST, JOINER: xbox or
 #             mcc; MAP: one of the maps whose files are one game - chillout longest prisoner putput ratrace
 #             wizard boardingaction, and damnation (an MCC client of an Xbox host: its invisible surfaces
 #             collide with nothing), and carousel hangemhigh with an Xbox host and an MCC joiner (Halo PC
-#             rebuilt their collision alone: the host's decides, mixed_coop_host_decides_*); GAME: slayer, ctf ...). With no HALO_TEST_MIXED_DECISIONS an MCC host's
+#             rebuilt their collision alone: the host's decides, mixed_coop_host_decides_*), and (r4) bloodgulch
+#             beavercreek sidewinder with an Xbox host and an MCC joiner (Halo PC placed other scenery and vehicles
+#             too: the joiner takes the host's layout before it loads the map, mixed_coop.c's host_layout; the host's
+#             collision decides); GAME: slayer, ctf ...). With no HALO_TEST_MIXED_DECISIONS an MCC host's
 #             Xbox joiner is refused, told the map needs an Xbox-files host, System Link: an MCC host hosts MCC's map, named the
 #             Xbox's on the wire; the joiner joins and plays 60 s at least with two players; a mixed joiner
 #             matched the host's dictionary (never refused); both scoreboards agree; the per-tick state
@@ -30,9 +34,9 @@
 #             objects are the same. HALO_TEST_MIXED_DECISIONS: the owner's pending decisions turned on
 #             (HALO_MIXED_DECISIONS, mixed_coop.c)
 #   mixedrebuilt  a map Halo PC rebuilt (HALO_TEST_MIXED="HOST JOINER MAP": bloodgulch beavercreek
-#             sidewinder either way; carousel hangemhigh with an MCC host and an Xbox joiner, told they need an
-#             Xbox-files host), the other family joining: refused with the message naming the map as one
-#             Halo PC rebuilt, never in the game
+#             sidewinder carousel hangemhigh with an MCC host and an Xbox joiner), the Xbox joiner refused with
+#             the message naming the map as one Halo PC rebuilt and that it needs an Xbox-files host, never in
+#             the game
 #   mixedvitajoin  the dev Vita's MCC-only join (Nov 22 2026): an Xbox host's Longest CTF, an MCC-only joiner
 #             with only the files that Vita had (ui.map, bitmaps.map, a10.map, longest.map, custom_edition's
 #             bitmaps.map and loc.map), Menu style Halo 3, its game thread held 6.5 s as it enters the game
@@ -277,15 +281,21 @@ mixed_case() {
 		fi
 		[ $host_family = mcc ] && { grep -aq "mixed play: hosting levels.test.mcc_$map.mcc_$map from MCC's files under the Xbox's name" "$hl" ||
 			fail "the MCC host did not host its map under the Xbox's name"; }
+		# (r4: the maps whose placements an MCC joiner takes from an Xbox host)
+		case $map in bloodgulch|beavercreek|sidewinder)
+			if [ $join_family = mcc ]; then
+				grep -aq "mixed play: this host's layout of $map sent to machine" "$hl" || fail "the host never sent its layout"
+				grep -aq "mixed play: $map placed as the host's (Xbox) layout" "$jl" ||
+					fail "the MCC joiner did not place the host's layout"
+			fi ;;
+		esac
 		mcc_scoreboards
 		mixed_hashes ;;
 	mixedrebuilt)
 		[ "$two" = 0 ] || fail "the joiner played the host's game on a map Halo PC rebuilt ($two s)"
 		grep -aq "a map Halo PC rebuilt: refused" "$jl" || fail "the joiner was not refused the rebuilt map"
 		grep -aq "Halo: map: Halo PC rebuilt " "$jl" || fail "the joiner was not told Halo PC rebuilt the map"
-		case $map in carousel|hangemhigh)
-			grep -aq "needs an Xbox-files host" "$jl" || fail "the joiner was not told the map needs an Xbox-files host" ;;
-		esac ;;
+		grep -aq "needs an Xbox-files host" "$jl" || fail "the joiner was not told the map needs an Xbox-files host" ;;
 	esac
 }
 
@@ -365,12 +375,13 @@ mcc_case() {
 		grep -aiq "download it from\|Download .*?" "$jl" && fail "the Xbox joiner was offered a download"
 		;;
 	xboxmcc)
+		# (r4: an Xbox host's Blood Gulch plays mixed, its placements the MCC joiner's: mixed_coop.c)
 		mcc_unavailable joiner
-		[ "$two" = 0 ] || fail "the MCC joiner played the Xbox host's game ($two s)"
-		grep -aq "map: the host's bloodgulch is of another map family than this machine's (MCC's maps here), a map Halo PC rebuilt: refused" "$jl" ||
-			fail "the MCC joiner was not refused the Xbox host's map"
-		grep -aq "Halo: map: Halo PC rebuilt Blood Gulch" "$jl" ||
-			fail "the MCC joiner was not told Halo PC rebuilt Blood Gulch"
+		[ "$two" -ge 60 ] || fail "the MCC joiner played the Xbox host's game for $two s with two players"
+		grep -aq "mixed play: bloodgulch placed as the host's (Xbox) layout" "$jl" ||
+			fail "the MCC joiner did not place the Xbox host's layout"
+		grep -aq "mixed co-op: the host's level matches this machine's" "$jl" || fail "the MCC joiner never matched the host's dictionary"
+		grep -aq "Halo: map\|mixed co-op: refused" "$jl" && fail "the MCC joiner was refused ($(grep -a "Halo: map\|mixed co-op: refused" "$jl" | head -1))"
 		;;
 	esac
 }

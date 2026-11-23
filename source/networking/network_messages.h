@@ -95,6 +95,12 @@ enum network_game_message_type
 	as unknown packet types. Never sent on the crossplay wire */
 	_message_client_mixed_coop,
 	_message_server_mixed_coop,
+	/* port (r4): mixed play's host layout (mixed_coop_protocol.h: struct
+	mixed_coop_layout_message), a fragment each, to a machine that asked
+	for it before loading the map (Blood Gulch, Battle Creek, Sidewinder).
+	Sent only to a machine that asked: a build without it never does. Never
+	sent on the crossplay wire */
+	_message_server_mixed_layout,
 	NUMBER_OF_NETWORK_GAME_MESSAGE_TYPES,
 };
 

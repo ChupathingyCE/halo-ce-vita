@@ -126,8 +126,8 @@
 #            an MCC machine and an Xbox one are refused each other's game but on
 #            the maps whose files are one game, and Damnation, Derelict and
 #            Hang 'Em High with an Xbox host (mixed play: mixedmp; Blood Gulch,
-#            Battle Creek and Sidewinder stay refused, and an MCC host's
-#            Derelict and Hang 'Em High: mixedrebuilt)
+#            Battle Creek and Sidewinder too, r4; an MCC host's five
+#            rebuilt maps refuse an Xbox joiner: mixedrebuilt)
 #   pc       the host is a Vita build, the joiner a PC build: by code (it
 #            must find nothing: Vitas signal on their own topics) and on
 #            one LAN with the host (it must never list or join the game)

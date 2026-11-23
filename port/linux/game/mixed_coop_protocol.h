@@ -64,9 +64,11 @@ them, 0 to 9: version 1), then the multiplayer maps whose MCC and Xbox files
 the research found to have the same collision (10 ...: version 2,
 mixed_coop.c's mixed_coop_level_stems), Damnation (17), and two Halo PC
 rebuilt, Derelict and Hang 'Em High (18, 19: an Xbox-files host's game alone,
-mixed_coop_rebuilt_maps) */
+mixed_coop_rebuilt_maps), and (r4) Blood Gulch, Battle Creek and Sidewinder
+(20, 21, 22: an Xbox-files host's game alone, its placements the MCC machines'
+too) */
 #define MIXED_COOP_CAMPAIGN_LEVELS 10
-#define MIXED_COOP_MULTIPLAYER_LEVELS 10
+#define MIXED_COOP_MULTIPLAYER_LEVELS 13
 #define MIXED_COOP_LEVELS (MIXED_COOP_CAMPAIGN_LEVELS + MIXED_COOP_MULTIPLAYER_LEVELS)
 #define MIXED_COOP_NO_LEVEL 0xFF
 
@@ -76,6 +78,11 @@ enum
 {
 	_mixed_coop_lobby_hello = 1,
 	_mixed_coop_lobby_answer,
+	/* (r4, a joiner's, the host's game starting on a map whose placements
+	are the host's - mixed_coop.c's host_layout maps: its family MCC's) the
+	host's layout, please: answered with _message_server_mixed_layout's
+	fragments once the host's map is loaded */
+	_mixed_coop_lobby_layout_request,
 	NUMBER_OF_MIXED_COOP_LOBBY_COMMANDS
 };
 
@@ -104,6 +111,101 @@ for a campaign level), and whether `version` can name `level` (1: a known
 version and a level it names) */
 int mixed_coop_version_for_level(unsigned level);
 int mixed_coop_version_names_level(unsigned version, unsigned level);
+
+/* ---------- the host's layout (r4: Blood Gulch, Battle Creek, Sidewinder)
+
+Halo PC placed other scenery and vehicles on three of the maps it rebuilt, and
+MCC's files have Halo PC's. An MCC machine joining an Xbox-files host's game on
+one asks, as the game starts and before it loads the map
+(_mixed_coop_lobby_layout_request), for the host's layout, which the host sends
+once its own map is loaded, in fragments (the Bungie message
+_message_server_mixed_layout, a struct mixed_coop_layout_message each); the
+joiner then loads the map with the host's placements in place of its own
+(mixed_coop.c), naming the tags by group and path hash. The stream:
+
+	u32 magic 'MXL1', u16 version (1), u8 level, u8 block count
+	block count x { u8 kind (MIXED_COOP_LAYOUT_*), u8 0, u16 element bytes,
+	    u32 count, count x element } - a palette's element { u32 group, u32
+	    path hash, char path[128] NUL-padded }, a placement's the scenario's element as it is (its own
+	    palette's and the object names' indices; no pointer, no tag index), a
+	    netgame flag's { 4 x u32 float bits: x, y, z, facing; u16 type,
+	    u16 team }
+	u32 check (FNV-1a of every byte before it)
+*/
+
+#define MIXED_COOP_LAYOUT_MAGIC 0x314C584Du /* 'MXL1' little-endian */
+#define MIXED_COOP_LAYOUT_VERSION 1
+#define MIXED_COOP_LAYOUT_FRAGMENT_BYTES 2048
+#define MIXED_COOP_LAYOUT_MAXIMUM_BYTES (64 * 1024)
+#define MIXED_COOP_LAYOUT_MAXIMUM_FRAGMENTS \
+	((MIXED_COOP_LAYOUT_MAXIMUM_BYTES + MIXED_COOP_LAYOUT_FRAGMENT_BYTES - 1) / MIXED_COOP_LAYOUT_FRAGMENT_BYTES)
+#define MIXED_COOP_LAYOUT_MAXIMUM_PALETTE 256
+#define MIXED_COOP_LAYOUT_MAXIMUM_PLACEMENTS 1024
+#define MIXED_COOP_LAYOUT_MINIMUM_PLACEMENT_BYTES 0x24
+#define MIXED_COOP_LAYOUT_MAXIMUM_PLACEMENT_BYTES 0x200
+/* a palette element: u32 group, u32 path hash, the path (for the player, if this machine has no such tag),
+NUL-padded */
+#define MIXED_COOP_LAYOUT_PATH_BYTES 128
+#define MIXED_COOP_LAYOUT_PALETTE_BYTES (8 + MIXED_COOP_LAYOUT_PATH_BYTES)
+
+enum
+{
+	MIXED_COOP_LAYOUT_SCENERY_PALETTE = 1,
+	MIXED_COOP_LAYOUT_SCENERY,
+	MIXED_COOP_LAYOUT_VEHICLE_PALETTE,
+	MIXED_COOP_LAYOUT_VEHICLES,
+	MIXED_COOP_LAYOUT_NETGAME_FLAGS,
+	NUMBER_OF_MIXED_COOP_LAYOUT_BLOCKS
+};
+
+/* a fragment of the host's layout stream (the Bungie message's structure: 16
+bytes, then the data) */
+struct mixed_coop_layout_message
+{
+	uint32_t session;
+	uint32_t total_bytes;
+	uint16_t index;
+	uint16_t count;
+	uint16_t bytes;
+	uint8_t level;
+	uint8_t version;
+	uint8_t data[MIXED_COOP_LAYOUT_FRAGMENT_BYTES];
+};
+
+typedef char mixed_coop_layout_message_size_assert[
+	sizeof(struct mixed_coop_layout_message) == 16 + MIXED_COOP_LAYOUT_FRAGMENT_BYTES ? 1 : -1];
+
+/* the stream's reassembly (one session's and level's, each piece once) */
+struct mixed_coop_layout_reassembly
+{
+	uint32_t session;
+	uint8_t level;
+	uint32_t total_bytes;
+	uint16_t count;
+	uint16_t received;
+	uint8_t have[MIXED_COOP_LAYOUT_MAXIMUM_FRAGMENTS];
+	uint8_t bytes[MIXED_COOP_LAYOUT_MAXIMUM_BYTES];
+};
+
+void mixed_coop_layout_reassembly_begin(struct mixed_coop_layout_reassembly *reassembly, uint32_t session, uint8_t level);
+/* refused, taken or complete (_mixed_coop_fragment_*) */
+int mixed_coop_layout_reassembly_take(struct mixed_coop_layout_reassembly *reassembly,
+	struct mixed_coop_layout_message const *message);
+
+/* a layout stream read: each block's view (count 0, NULL: not in it) */
+struct mixed_coop_layout
+{
+	uint8_t level;
+	struct
+	{
+		uint32_t count;
+		uint16_t element_bytes;
+		uint8_t const *elements;
+	} blocks[NUMBER_OF_MIXED_COOP_LAYOUT_BLOCKS];
+};
+
+/* reads a layout stream: 1 and the views (into bytes), or 0 and why */
+int mixed_coop_layout_read(uint8_t const *bytes, uint32_t length, struct mixed_coop_layout *layout, char *why, int why_size);
 
 /* ---------- after the load */
 

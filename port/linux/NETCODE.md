@@ -222,11 +222,27 @@ the owner accepted: that BSP's two digests are listed, `mixed_coop_accepted_bsps
 Of the six maps Halo PC rebuilt, Damnation (only invisible surfaces added:
 masked on an MCC machine, the Xbox's collision exactly), Derelict and Hang 'Em
 High (their placements, flags and starts the Xbox's, only the collision
-rebuilt) play mixed in an Xbox-files host's game; Blood Gulch, Battle Creek and
-Sidewinder (other scenery or vehicles too) stay apart, and so do an MCC host's
-Derelict and Hang 'Em High: a machine of the other family is refused with a
-message saying Halo PC rebuilt the map and, for those two, that it needs an
+rebuilt) play mixed in an Xbox-files host's game, and so do Blood Gulch, Battle
+Creek and Sidewinder (r4, Nov 23 2026: Halo PC placed other scenery and vehicles
+on them too, so an MCC machine takes the host's layout before it loads the map,
+below). An MCC host's game on any of the five stays MCC's own: an Xbox machine
+is refused with a message saying Halo PC rebuilt the map and that it needs an
 Xbox-files host (`mixed_coop_multiplayer_refusal`).
+
+- **The host's layout** (Blood Gulch, Battle Creek, Sidewinder). An MCC machine
+  joining an Xbox-files host's game on one holds the game's start
+  (`mixed_coop_client_start_waits`) and asks the host for its layout in the
+  lobby (`_mixed_coop_lobby_layout_request`); the host sends it once its own
+  map is loaded and placed (`_message_server_mixed_layout`, 2 KB fragments of
+  an 'MXL1' stream: the scenery and vehicle palettes by group and path hash,
+  their placements as the host has them, its netgame flags). The MCC machine
+  then loads the map with the host's blocks in place of its own
+  (`mixed_coop_layout_apply`), keeps the host's word on which placements stand
+  in the BSP, and chooses its vehicles as the Xbox's game does. The Xbox tags
+  MCC's files have only under Halo PC's names play with stand-ins
+  (`mixed_coop_stand_ins`: the Warthog and the Ghost's gun made the Xbox's in
+  code, the pine trees Halo PC's, their collision the host's deciding); a tag
+  the host places that the machine has neither of is refused, named.
 
 - **The Xbox-host-decides mode** (Derelict, Hang 'Em High). The host's
   collision decides where every player is: the host takes an MCC client's

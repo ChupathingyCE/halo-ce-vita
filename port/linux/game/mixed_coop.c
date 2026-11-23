@@ -143,6 +143,10 @@ static char const *const mixed_coop_level_stems[MIXED_COOP_LEVELS] =
 	/* (r3, two of the maps Halo PC rebuilt whose placements, flags and starts are the Xbox's: an Xbox-files
 	host's game alone, its collision deciding - mixed_coop_rebuilt_maps) */
 	"carousel", "hangemhigh",
+	/* (round 4, Nov 23 2026: the three Halo PC rebuilt and placed other scenery and vehicles on - an Xbox-files
+	host's game alone, its placements sent to an MCC machine before it loads the map and its collision deciding:
+	mixed_coop_rebuilt_maps' host_layout) */
+	"bloodgulch", "beavercreek", "sidewinder",
 };
 
 /* the multiplayer maps Halo PC rebuilt (the research: walls, ceilings,
@@ -151,8 +155,9 @@ High (r3): MCC's placements, flags and starts are the Xbox's, only the
 collision differs - mixed in an Xbox-files host's game, the host's collision
 deciding (the Xbox-host-decides mode: mixed_coop_rebuilt_level), an MCC host's
 refused to an Xbox machine. Blood Gulch, Battle Creek and Sidewinder place
-other scenery or vehicles too: never one mixed game yet. Refused with this said
-(mixed_coop_multiplayer_refusal) */
+other scenery or vehicles too (r4): the same, with the host's layout taken by
+an MCC machine before it loads the map (host_layout). An Xbox machine refused
+an MCC host's game is told so (mixed_coop_multiplayer_refusal) */
 static struct
 {
 	char const *stem;
@@ -160,13 +165,16 @@ static struct
 	char const *why;
 	/* (one of mixed_coop_level_stems: an Xbox-files host's game mixed) */
 	boolean xbox_host_mixes;
+	/* (r4) the host's placements (scenery, vehicles, their palettes and the netgame flags) taken by an MCC machine
+	before it loads the map (mixed_coop_layout_*): MCC's files place Halo PC's */
+	boolean host_layout;
 } const mixed_coop_rebuilt_maps[] =
 {
-	{ "bloodgulch", "Blood Gulch", "rebuilt walls, a lower ceiling, invisible walls and other vehicles", FALSE },
-	{ "beavercreek", "Battle Creek", "rebuilt collision and other scenery", FALSE },
-	{ "carousel", "Derelict", "rebuilt collision", TRUE },
-	{ "hangemhigh", "Hang 'Em High", "rebuilt collision", TRUE },
-	{ "sidewinder", "Sidewinder", "rebuilt collision, other scenery and vehicles", FALSE },
+	{ "bloodgulch", "Blood Gulch", "rebuilt walls, a lower ceiling, invisible walls and other vehicles", TRUE, TRUE },
+	{ "beavercreek", "Battle Creek", "rebuilt collision and other scenery", TRUE, TRUE },
+	{ "carousel", "Derelict", "rebuilt collision", TRUE, FALSE },
+	{ "hangemhigh", "Hang 'Em High", "rebuilt collision", TRUE, FALSE },
+	{ "sidewinder", "Sidewinder", "rebuilt collision, other scenery and vehicles", TRUE, TRUE },
 };
 
 /* a tag's place in the digests */
@@ -220,6 +228,8 @@ static struct
 		boolean requested;
 		boolean mixed;
 		short hellos;
+		/* (r4) asked for the host's layout: 1 + the next fragment to send it (0: not asked) */
+		short layout_next;
 	} machines[HALO_PORT_MAXIMUM_NETWORK_MACHINES];
 	/* the host's dictionary stream (built once a map) */
 	uint8_t *stream;
@@ -254,6 +264,25 @@ static struct
 	long animation_pool_used;
 	long unmapped_tags;
 	long unmapped_animations;
+
+	/* --- (r4) the host's layout (Blood Gulch, Battle Creek, Sidewinder: mixed_coop_rebuilt_maps' host_layout) */
+	/* the level the host's hellos name */
+	int hello_level;
+	/* the host's stream (built as its map loads) */
+	uint8_t *layout_stream;
+	uint32_t layout_length;
+	/* a client's: the stream as it comes, whole once complete; the game's start held meanwhile */
+	struct mixed_coop_layout_reassembly *layout_reassembly;
+	boolean layout_complete;
+	struct network_game_client *start_pending;
+	unsigned long start_pending_since;
+	unsigned long layout_asked_time;
+	/* the scenario blocks made from it (freed at the next map's load) */
+	void *layout_blocks[8];
+	/* the Xbox tags this machine plays with its stand-ins (mixed_coop_stand_ins) */
+	long stand_ins;
+	/* this machine's map placed as the host's layout */
+	boolean layout_taken;
 } mixed_coop;
 
 /* the game's free asserts on NULL (debug_memory.c) */
@@ -388,6 +417,22 @@ static boolean mixed_coop_rebuilt_level(
 	{
 		if (!csstrcasecmp(mixed_coop_level_stems[level], mixed_coop_rebuilt_maps[index].stem))
 			return TRUE;
+	}
+	return FALSE;
+}
+
+/* (r4) whether the level is one whose placements an MCC machine takes from an Xbox-files host
+(mixed_coop_rebuilt_maps' host_layout) */
+static boolean mixed_coop_host_layout_level(
+	int level)
+{
+	short index;
+
+	for (index = 0; level >= MIXED_COOP_CAMPAIGN_LEVELS && level < MIXED_COOP_LEVELS &&
+		index < NUMBEROF(mixed_coop_rebuilt_maps); index++)
+	{
+		if (!csstrcasecmp(mixed_coop_level_stems[level], mixed_coop_rebuilt_maps[index].stem))
+			return mixed_coop_rebuilt_maps[index].host_layout;
 	}
 	return FALSE;
 }
@@ -1744,6 +1789,490 @@ static void mixed_coop_rules(
 	}
 }
 
+/* ---------- (r4) the host's layout: Blood Gulch, Battle Creek, Sidewinder
+
+Halo PC placed other scenery and vehicles on these three maps it rebuilt, and MCC's files have Halo PC's. In an
+Xbox-files host's game an MCC machine places the host's: the host's scenery, vehicles, their palettes and its
+netgame flags come to it before it loads the map (mixed_coop_client_start_waits ... mixed_coop_layout_apply), and
+its collision is the host's deciding (the Xbox-host-decides mode, as on Derelict and Hang 'Em High). A tag the
+host places that MCC's map file has not is played with its stand-in, below, or refused. */
+
+/* the Xbox tags these maps place that MCC's files have only under Halo PC's names: on an MCC machine in an Xbox
+host's game on one of them, the MCC tag takes the Xbox's name (so the host's placements, objects and messages name
+it). The Warthog and the Ghost's gun are made the Xbox's in what the game reads (mixed_coop_stand_in_rules: their
+digests then the Xbox's); the trees are Halo PC's models and collision (visual, and their collision the host's
+deciding as the level's is). A line made a comment refuses that map's mixed game again, naming the tag. */
+static struct
+{
+	long group_tag;
+	char const *xbox_path;
+	/* (MCC's: the end of its path) */
+	char const *mcc_ending;
+	/* (its gameplay differs, the host's deciding: told, not refused) */
+	boolean host_decides;
+} const mixed_coop_stand_ins[] =
+{
+	{ 'vehi', "vehicles\\warthog\\warthog", "\\warthog\\mp_warthog", FALSE },
+	{ 'weap', "vehicles\\ghost\\ghost gun", "\\ghost\\mp_ghost gun", FALSE },
+	{ 'scen', "scenery\\trees\\tree_pine\\tree_pine", "\\mp_tree_pine_small\\mp_tree_pine_small", TRUE },
+	{ 'scen', "scenery\\trees\\tree_pine_snow\\tree_pine_snow", "\\mp_tree_pine_snow_tall\\mp_tree_pine_snow_tall", TRUE },
+	{ 'scen', "scenery\\trees\\tree_pine_snowsmall\\tree_pine_snowsmall", "\\mp_tree_pine_snow_small\\mp_tree_pine_snow_small",
+		TRUE },
+};
+
+static boolean mixed_coop_name_ends_with(
+	char const *name,
+	char const *ending)
+{
+	size_t length = name ? strlen(name) : 0, ending_length = strlen(ending);
+
+	return length >= ending_length && !csstrcasecmp(name + length - ending_length, ending);
+}
+
+/* whether a tag is a stand-in whose gameplay the host decides (accepted) */
+static boolean mixed_coop_stand_in_host_decides(
+	char const *name)
+{
+	short index;
+
+	for (index = 0; name && index < NUMBEROF(mixed_coop_stand_ins); index++)
+	{
+		if (mixed_coop_stand_ins[index].host_decides && !csstrcasecmp(name, mixed_coop_stand_ins[index].xbox_path))
+			return mixed_coop.stand_ins != 0;
+	}
+	return FALSE;
+}
+
+/* the Xbox's values of the Warthog's and the Ghost gun's (the research's compare of the two families' tags, Nov 23
+2026: everything else the game reads in them is the same) */
+static void mixed_coop_stand_in_rules(
+	long absolute_index,
+	short stand_in)
+{
+	struct cache_file_tag_instance_view *instance = &mixed_coop_instances()[absolute_index];
+
+	if (mixed_coop_stand_ins[stand_in].group_tag == 'vehi')
+	{
+		/* the Warthog's speeds: Halo PC's mp_warthog is faster (0.275 0.12 0.0028) */
+		static uint32_t const xbox_speeds[3] = { 0x3E828F5Cu, 0x3DCCCCCDu, 0x3B343958u };
+
+		csmemcpy((byte *)instance->base_address + 0x2F8, xbox_speeds, sizeof(xbox_speeds));
+		platform_log("mixed play: Xbox rules: the Warthog's speeds the Xbox's (0.255, 0.100, 0.00275)");
+		mixed_coop.rules_applied++;
+	}
+	else if (mixed_coop_stand_ins[stand_in].group_tag == 'weap')
+	{
+		/* the Ghost's gun: the Xbox's has a magazine (300 rounds, 50 loaded, 2 s reload, one a shot), Halo PC's none */
+		static struct weapon_magazine_definition magazine;
+		struct weapon_definition *weapon = instance->base_address;
+		struct weapon_trigger_definition *triggers = weapon->weapon.triggers.address;
+		long trigger;
+
+		if (weapon->weapon.magazines.count != 0 || !triggers)
+			return;
+		csmemset(&magazine, 0, sizeof(magazine));
+		magazine.rounds_total_initial = 300;
+		magazine.rounds_total_maximum = 300;
+		magazine.rounds_loaded_maximum = 50;
+		magazine.reload_time = 2.0f;
+		magazine.rounds_reloaded = 50;
+		magazine.chamber_time = 0.3f;
+		magazine.reloading_effect.group_tag = 'effe';
+		magazine.reloading_effect.name = "";
+		magazine.reloading_effect.index = NONE;
+		magazine.chambering_effect.group_tag = 'effe';
+		magazine.chambering_effect.name = "";
+		magazine.chambering_effect.index = NONE;
+		weapon->weapon.magazines.address = &magazine;
+		weapon->weapon.magazines.count = 1;
+		for (trigger = 0; trigger < weapon->weapon.triggers.count; trigger++)
+		{
+			triggers[trigger].magazine_index = 0;
+			triggers[trigger].rounds_per_shot = 1;
+		}
+		platform_log("mixed play: Xbox rules: the Ghost's gun has the Xbox's magazine (300 rounds, 50 loaded, 2 s reload)");
+		mixed_coop.rules_applied++;
+	}
+}
+
+/* (an MCC machine in an Xbox host's game on a host_layout map) the stand-ins named the Xbox's */
+static void mixed_coop_stand_ins_apply(
+	void)
+{
+	static char names[NUMBEROF(mixed_coop_stand_ins)][128];
+	short stand_in;
+
+	mixed_coop.stand_ins = 0;
+	for (stand_in = 0; stand_in < NUMBEROF(mixed_coop_stand_ins); stand_in++)
+	{
+		long index;
+
+		if (mixed_coop_find_tag(mixed_coop_stand_ins[stand_in].group_tag, mixed_coop_stand_ins[stand_in].xbox_path) != NONE)
+			continue;
+		for (index = 0; index < halo_loaded_tag_count; index++)
+		{
+			struct cache_file_tag_instance_view *instance = &mixed_coop_instances()[index];
+
+			if (instance->group_tag != mixed_coop_stand_ins[stand_in].group_tag || !instance->base_address ||
+				!mixed_coop_name_ends_with(instance->name, mixed_coop_stand_ins[stand_in].mcc_ending))
+			{
+				continue;
+			}
+			platform_log("mixed play: %s stands in for the Xbox's %s on this machine", instance->name,
+				mixed_coop_stand_ins[stand_in].xbox_path);
+			snprintf(names[stand_in], sizeof(names[stand_in]), "%s", mixed_coop_stand_ins[stand_in].xbox_path);
+			instance->name = names[stand_in];
+			mixed_coop_stand_in_rules(index, stand_in);
+			mixed_coop.stand_ins++;
+			break;
+		}
+	}
+}
+
+/* the layout's blocks: its palette's and placements' kinds, the scenario's blocks */
+static struct
+{
+	int palette_kind;
+	int placements_kind;
+	size_t palette_offset;
+	size_t placements_offset;
+	char const *placements;
+	char const *what;
+} const mixed_coop_layout_blocks[] =
+{
+	{ MIXED_COOP_LAYOUT_SCENERY_PALETTE, MIXED_COOP_LAYOUT_SCENERY, offsetof(struct scenario, scenery_palette),
+		offsetof(struct scenario, scenery), "scenery", "scenery" },
+	{ MIXED_COOP_LAYOUT_VEHICLE_PALETTE, MIXED_COOP_LAYOUT_VEHICLES, offsetof(struct scenario, vehicle_palette),
+		offsetof(struct scenario, vehicles), "vehicles", "vehicle" },
+};
+
+
+/* (the host's) its layout's stream, as its map loads */
+static void mixed_coop_layout_build(
+	struct scenario const *scenario,
+	struct tag_schema_definition const *scenario_schema)
+{
+	struct mixed_coop_dictionary_writer writer;
+	short block;
+	long index;
+
+	mixed_coop_free(mixed_coop.layout_stream);
+	mixed_coop.layout_stream = malloc(MIXED_COOP_LAYOUT_MAXIMUM_BYTES);
+	mixed_coop.layout_length = 0;
+	if (!mixed_coop.layout_stream)
+		return;
+	mixed_coop_writer_begin(&writer, mixed_coop.layout_stream, MIXED_COOP_LAYOUT_MAXIMUM_BYTES);
+	mixed_coop_writer_u32(&writer, MIXED_COOP_LAYOUT_MAGIC);
+	mixed_coop_writer_u16(&writer, MIXED_COOP_LAYOUT_VERSION);
+	mixed_coop_writer_u8(&writer, (uint8_t)mixed_coop.level);
+	mixed_coop_writer_u8(&writer, (uint8_t)(2 * NUMBEROF(mixed_coop_layout_blocks) + 1));
+	for (block = 0; block < NUMBEROF(mixed_coop_layout_blocks); block++)
+	{
+		struct tag_block const *palette = (struct tag_block const *)((byte const *)scenario +
+			mixed_coop_layout_blocks[block].palette_offset);
+		struct tag_block const *placements = (struct tag_block const *)((byte const *)scenario +
+			mixed_coop_layout_blocks[block].placements_offset);
+		long element_size = mixed_coop_scenario_element_size(scenario_schema, mixed_coop_layout_blocks[block].placements);
+		long palette_count = palette->address ? palette->count : 0, count = placements->address ? placements->count : 0;
+
+		mixed_coop_writer_u8(&writer, (uint8_t)mixed_coop_layout_blocks[block].palette_kind);
+		mixed_coop_writer_u8(&writer, 0);
+		mixed_coop_writer_u16(&writer, MIXED_COOP_LAYOUT_PALETTE_BYTES);
+		mixed_coop_writer_u32(&writer, (uint32_t)palette_count);
+		for (index = 0; index < palette_count; index++)
+		{
+			struct scenario_object_palette_entry const *entry = (struct scenario_object_palette_entry const *)palette->address + index;
+			struct cache_file_tag_instance_view *instance = mixed_coop_instance(entry->reference.index);
+			char path[MIXED_COOP_LAYOUT_PATH_BYTES];
+			short at;
+
+			/* (its last byte NUL: a longer path is cut, for the player alone) */
+			csmemset(path, 0, sizeof(path));
+			if (instance && instance->name)
+				snprintf(path, sizeof(path), "%s", instance->name);
+			mixed_coop_writer_u32(&writer, instance ? (uint32_t)instance->group_tag : 0);
+			mixed_coop_writer_u32(&writer, instance && instance->name ? mixed_coop_tag_path_hash(entry->reference.index) : 0);
+			for (at = 0; at < MIXED_COOP_LAYOUT_PATH_BYTES; at++)
+				mixed_coop_writer_u8(&writer, (uint8_t)path[at]);
+		}
+		mixed_coop_writer_u8(&writer, (uint8_t)mixed_coop_layout_blocks[block].placements_kind);
+		mixed_coop_writer_u8(&writer, 0);
+		mixed_coop_writer_u16(&writer, (uint16_t)element_size);
+		mixed_coop_writer_u32(&writer, (uint32_t)count);
+		for (index = 0; index < count; index++)
+		{
+			long at;
+
+			for (at = 0; at < element_size; at++)
+				mixed_coop_writer_u8(&writer, ((byte const *)placements->address)[index * element_size + at]);
+		}
+	}
+	mixed_coop_writer_u8(&writer, MIXED_COOP_LAYOUT_NETGAME_FLAGS);
+	mixed_coop_writer_u8(&writer, 0);
+	mixed_coop_writer_u16(&writer, MIXED_COOP_NETGAME_FLAG_BYTES);
+	mixed_coop_writer_u32(&writer, (uint32_t)(scenario->netgame_flags.address ? scenario->netgame_flags.count : 0));
+	for (index = 0; scenario->netgame_flags.address && index < scenario->netgame_flags.count; index++)
+	{
+		struct scenario_netgame_flag const *flag = (struct scenario_netgame_flag const *)scenario->netgame_flags.address + index;
+		uint32_t words[4];
+
+		csmemcpy(&words[0], &flag->position.x, 4);
+		csmemcpy(&words[1], &flag->position.y, 4);
+		csmemcpy(&words[2], &flag->position.z, 4);
+		csmemcpy(&words[3], &flag->facing, 4);
+		mixed_coop_writer_u32(&writer, words[0]);
+		mixed_coop_writer_u32(&writer, words[1]);
+		mixed_coop_writer_u32(&writer, words[2]);
+		mixed_coop_writer_u32(&writer, words[3]);
+		mixed_coop_writer_u16(&writer, (uint16_t)flag->type);
+		mixed_coop_writer_u16(&writer, (uint16_t)flag->team_index);
+	}
+	mixed_coop.layout_length = mixed_coop_writer_end(&writer);
+	platform_log("mixed play: %s's layout for MCC machines: %lu bytes (scenery %ld, vehicles %ld, netgame flags %ld)",
+		mixed_coop_level_stems[mixed_coop.level], (unsigned long)mixed_coop.layout_length,
+		scenario->scenery.count, scenario->vehicles.count, scenario->netgame_flags.count);
+	if (!mixed_coop.layout_length)
+	{
+		mixed_coop_free(mixed_coop.layout_stream);
+		mixed_coop.layout_stream = NULL;
+	}
+}
+
+/* (an Xbox host's) the scenery and vehicle palettes' entries no placement names: no tag (their placements' digests
+then the MCC machine's, which has no such tag) */
+static void mixed_coop_layout_unplaced_entries(
+	struct scenario *scenario,
+	struct tag_schema_definition const *scenario_schema)
+{
+	short block;
+
+	for (block = 0; block < NUMBEROF(mixed_coop_layout_blocks); block++)
+	{
+		struct tag_block *palette = (struct tag_block *)((byte *)scenario + mixed_coop_layout_blocks[block].palette_offset);
+		struct tag_block const *placements = (struct tag_block const *)((byte const *)scenario +
+			mixed_coop_layout_blocks[block].placements_offset);
+		long element_size = mixed_coop_scenario_element_size(scenario_schema, mixed_coop_layout_blocks[block].placements);
+		long entry, index;
+
+		for (entry = 0; palette->address && entry < palette->count; entry++)
+		{
+			struct scenario_object_palette_entry *palette_entry = (struct scenario_object_palette_entry *)palette->address + entry;
+			boolean used = FALSE;
+
+			for (index = 0; placements->address && index < placements->count && !used; index++)
+				used = ((struct scenario_object_datum const *)((byte const *)placements->address + index * element_size))->
+					palette_entry_index == entry;
+			if (!used && palette_entry->reference.index != NONE)
+			{
+				struct cache_file_tag_instance_view *instance = mixed_coop_instance(palette_entry->reference.index);
+
+				platform_log("mixed play: the %s palette's %s places nothing: no tag in it (as on MCC machines)",
+					mixed_coop_layout_blocks[block].what, instance && instance->name ? instance->name : "?");
+				palette_entry->reference.index = NONE;
+			}
+		}
+	}
+}
+
+static void mixed_coop_leave(char const *format, ...);
+
+/* a path from another machine, as text for the player: printable, ends within its bytes */
+static void mixed_coop_layout_path_text(
+	uint8_t const *bytes,
+	char *text,
+	size_t size)
+{
+	size_t at;
+
+	for (at = 0; at + 1 < size && at < MIXED_COOP_LAYOUT_PATH_BYTES && bytes[at]; at++)
+		text[at] = bytes[at] >= 0x20 && bytes[at] < 0x7F ? (char)bytes[at] : '?';
+	text[at] = 0;
+}
+
+/* (an MCC client of an Xbox host, as its map loads) the host's layout in place of MCC's */
+static boolean mixed_coop_layout_apply(
+	struct scenario *scenario,
+	struct tag_schema_definition const *scenario_schema)
+{
+	struct mixed_coop_layout layout;
+	char why[96];
+	short block;
+	long index, allocation = 0;
+
+	if (!mixed_coop.layout_complete || !mixed_coop.layout_reassembly ||
+		!mixed_coop_layout_read(mixed_coop.layout_reassembly->bytes, mixed_coop.layout_reassembly->total_bytes, &layout, why,
+			sizeof(why)) || layout.level != (uint8_t)mixed_coop.level)
+	{
+		mixed_coop_leave(T("The host's placements of %s didn't come or couldn't be read: Xbox and MCC files play it "
+			"together only with them."), mixed_coop_level_stems[mixed_coop.level]);
+		return FALSE;
+	}
+	for (block = 0; block < NUMBEROF(mixed_coop_layout_blocks); block++)
+	{
+		long element_size = mixed_coop_scenario_element_size(scenario_schema, mixed_coop_layout_blocks[block].placements);
+		uint32_t palette_count = layout.blocks[mixed_coop_layout_blocks[block].palette_kind].count;
+		uint32_t count = layout.blocks[mixed_coop_layout_blocks[block].placements_kind].count;
+		uint8_t const *palette_bytes = layout.blocks[mixed_coop_layout_blocks[block].palette_kind].elements;
+		uint8_t const *placement_bytes = layout.blocks[mixed_coop_layout_blocks[block].placements_kind].elements;
+		struct scenario_object_palette_entry *palette;
+		byte *placements;
+
+		if (!palette_bytes || !placement_bytes ||
+			layout.blocks[mixed_coop_layout_blocks[block].palette_kind].element_bytes !=
+				MIXED_COOP_LAYOUT_PALETTE_BYTES ||
+			layout.blocks[mixed_coop_layout_blocks[block].placements_kind].element_bytes != (uint16_t)element_size ||
+			allocation + 2 > (long)NUMBEROF(mixed_coop.layout_blocks))
+		{
+			mixed_coop_leave(T("The host's placements of %s are another version's: Xbox and MCC files can't play it "
+				"together here."), mixed_coop_level_stems[mixed_coop.level]);
+			return FALSE;
+		}
+		palette = malloc(sizeof(*palette) * MAX(1, palette_count));
+		placements = malloc((size_t)element_size * MAX(1, count));
+		mixed_coop.layout_blocks[allocation++] = palette;
+		mixed_coop.layout_blocks[allocation++] = placements;
+		if (!palette || !placements)
+		{
+			mixed_coop_leave(T("Not enough memory to check the host's level."));
+			return FALSE;
+		}
+		csmemset(palette, 0, sizeof(*palette) * MAX(1, palette_count));
+		for (index = 0; index < (long)palette_count; index++)
+		{
+			uint8_t const *entry = palette_bytes + index * MIXED_COOP_LAYOUT_PALETTE_BYTES;
+			uint32_t group = mixed_coop_read_u32(entry), path_hash = mixed_coop_read_u32(entry + 4);
+			long local, found = NONE;
+
+			for (local = 0; local < mixed_coop.tag_count && found == NONE; local++)
+			{
+				struct cache_file_tag_instance_view *instance = &mixed_coop_instances()[local];
+
+				if ((uint32_t)instance->group_tag == group && instance->name && instance->base_address &&
+					mixed_coop_path_hash(group, instance->name) == path_hash)
+				{
+					found = local;
+				}
+			}
+			palette[index].reference.group_tag = (unsigned long)group;
+			/* (a tag this machine has not: refused below if a placement names it - a palette may list one
+			nothing places, as Sidewinder's landing beacon) */
+			if (found == NONE)
+			{
+				palette[index].reference.name = "";
+				palette[index].reference.name_length = 0;
+				palette[index].reference.index = NONE;
+				continue;
+			}
+			palette[index].reference.name = mixed_coop_instances()[found].name;
+			palette[index].reference.name_length = (long)strlen(mixed_coop_instances()[found].name);
+			palette[index].reference.index = mixed_coop_instances()[found].tag_index;
+		}
+		for (index = 0; index < (long)count; index++)
+		{
+			byte *element = placements + index * element_size;
+			struct scenario_object_datum const *datum = (struct scenario_object_datum const *)element;
+
+			csmemcpy(element, placement_bytes + index * element_size, (size_t)element_size);
+			if (datum->palette_entry_index < NONE || datum->palette_entry_index >= (long)palette_count ||
+				datum->name_index < NONE || datum->name_index >= scenario->object_names.count)
+			{
+				mixed_coop_leave(T("The host's placements of %s couldn't be read (an object past its lists)."),
+					mixed_coop_level_stems[mixed_coop.level]);
+				return FALSE;
+			}
+			if (datum->palette_entry_index != NONE && palette[datum->palette_entry_index].reference.index == NONE)
+			{
+				char path[MIXED_COOP_LAYOUT_PATH_BYTES + 1];
+
+				mixed_coop_layout_path_text(palette_bytes + datum->palette_entry_index * MIXED_COOP_LAYOUT_PALETTE_BYTES + 8, path,
+					sizeof(path));
+				mixed_coop_leave(T("The host's %s places a %s your MCC files don't have (%s): Xbox and MCC files can't play "
+					"it together."), mixed_coop_level_stems[mixed_coop.level], mixed_coop_layout_blocks[block].what, path);
+				return FALSE;
+			}
+		}
+		{
+			struct tag_block *palette_block = (struct tag_block *)((byte *)scenario + mixed_coop_layout_blocks[block].palette_offset);
+			struct tag_block *placements_block =
+				(struct tag_block *)((byte *)scenario + mixed_coop_layout_blocks[block].placements_offset);
+
+			platform_log("mixed play: the host's %s: %lu placements of %lu tags (this file's %ld of %ld)",
+				mixed_coop_layout_blocks[block].placements, (unsigned long)count, (unsigned long)palette_count,
+				placements_block->count, palette_block->count);
+			palette_block->address = palette;
+			palette_block->count = (long)palette_count;
+			placements_block->address = placements;
+			placements_block->count = (long)count;
+		}
+	}
+	/* (the netgame flags: the host's, its teleporters, CTF flags, hills and checkpoints) */
+	{
+		uint32_t count = layout.blocks[MIXED_COOP_LAYOUT_NETGAME_FLAGS].count;
+		uint8_t const *bytes = layout.blocks[MIXED_COOP_LAYOUT_NETGAME_FLAGS].elements;
+		struct scenario_netgame_flag *flags;
+
+		if (!bytes || allocation + 1 > (long)NUMBEROF(mixed_coop.layout_blocks))
+		{
+			mixed_coop_leave(T("The host's placements of %s are another version's: Xbox and MCC files can't play it "
+				"together here."), mixed_coop_level_stems[mixed_coop.level]);
+			return FALSE;
+		}
+		flags = malloc(sizeof(*flags) * MAX(1, count));
+		mixed_coop.layout_blocks[allocation++] = flags;
+		if (!flags)
+		{
+			mixed_coop_leave(T("Not enough memory to check the host's level."));
+			return FALSE;
+		}
+		csmemset(flags, 0, sizeof(*flags) * MAX(1, count));
+		for (index = 0; index < (long)count; index++)
+		{
+			uint8_t const *at = bytes + index * MIXED_COOP_NETGAME_FLAG_BYTES;
+			uint32_t words[4];
+			short type = (short)(at[16] | at[17] << 8), team = (short)(at[18] | at[19] << 8);
+			short value;
+
+			for (value = 0; value < 4; value++)
+				words[value] = mixed_coop_read_u32(at + 4 * value);
+			if (type < 0 || type >= NUMBER_OF_NETGAME_FLAG_TYPES || team < NONE || team >= 32)
+			{
+				mixed_coop_leave(T("The host's placements of %s couldn't be read (a netgame flag of no kind known)."),
+					mixed_coop_level_stems[mixed_coop.level]);
+				return FALSE;
+			}
+			csmemcpy(&flags[index].position.x, &words[0], 4);
+			csmemcpy(&flags[index].position.y, &words[1], 4);
+			csmemcpy(&flags[index].position.z, &words[2], 4);
+			csmemcpy(&flags[index].facing, &words[3], 4);
+			flags[index].type = type;
+			flags[index].team_index = team;
+		}
+		platform_log("mixed play: the host's netgame flags: %lu (this file's %ld)", (unsigned long)count,
+			scenario->netgame_flags.count);
+		scenario->netgame_flags.address = flags;
+		scenario->netgame_flags.count = (long)count;
+	}
+	mixed_coop.layout_complete = FALSE;
+	mixed_coop.layout_taken = TRUE;
+	platform_log("mixed play: %s placed as the host's (Xbox) layout", mixed_coop_level_stems[mixed_coop.level]);
+	return TRUE;
+}
+
+static void mixed_coop_layout_free(
+	void)
+{
+	short index;
+
+	for (index = 0; index < NUMBEROF(mixed_coop.layout_blocks); index++)
+	{
+		mixed_coop_free(mixed_coop.layout_blocks[index]);
+		mixed_coop.layout_blocks[index] = NULL;
+	}
+	mixed_coop_free(mixed_coop.layout_stream);
+	mixed_coop.layout_stream = NULL;
+	mixed_coop.layout_length = 0;
+}
+
 /* ---------- the digests of the level */
 
 static boolean mixed_coop_layout_block(
@@ -2100,6 +2629,9 @@ void mixed_coop_tags_loaded(
 	struct mixed_coop_local_tag *sorted;
 
 	mixed_coop_free_tables();
+	mixed_coop_layout_free();
+	mixed_coop.stand_ins = 0;
+	mixed_coop.layout_taken = FALSE;
 	collision_bsp_invisible_masked = NULL;
 	csmemset(mixed_coop.bsp_digests, 0, sizeof(mixed_coop.bsp_digests));
 	csmemset(mixed_coop.host_bsp_digests, 0, sizeof(mixed_coop.host_bsp_digests));
@@ -2160,6 +2692,18 @@ void mixed_coop_tags_loaded(
 	scenario_group = mixed_coop_schema_group('scnr', FALSE);
 	if (!scenario_group || !scenario_group->definition)
 		return;
+	/* (r4) an MCC machine in an Xbox-files host's game on Blood Gulch, Battle Creek or Sidewinder: the Xbox tags'
+	stand-ins named the Xbox's, then the host's placements in place of MCC's (mixed_coop_layout_apply) */
+	if (mixed_coop.family == _mixed_coop_family_mcc && mixed_coop_host_layout_level(mixed_coop.level))
+	{
+		boolean xbox_host = mixed_coop.network_coop && game_connection() == _game_connection_network_client &&
+			mixed_coop.host_said && mixed_coop.host_family == _mixed_coop_family_xbox;
+
+		if (xbox_host || force)
+			mixed_coop_stand_ins_apply();
+		if (xbox_host)
+			mixed_coop_layout_apply((struct scenario *)scenario_instance->base_address, scenario_group->definition);
+	}
 	/* (an MCC level played in network co-op: the Xbox's) */
 	if (mixed_coop.family == _mixed_coop_family_mcc && (mixed_coop.network_coop || force))
 	{
@@ -2168,6 +2712,14 @@ void mixed_coop_tags_loaded(
 	}
 	if (mixed_coop.network_coop || force)
 		mixed_coop_decisions_apply();
+	/* (r4, an Xbox-files host of Blood Gulch, Battle Creek or Sidewinder: its palettes' entries nothing places -
+	Sidewinder's landing beacon, which MCC's file has not - name no tag, on the host as on an MCC machine taking its
+	layout: their layouts' digests then alike) */
+	if (mixed_coop.family == _mixed_coop_family_xbox && mixed_coop_host_layout_level(mixed_coop.level) &&
+		((mixed_coop.network_coop && global_network_game_server_get()) || force))
+	{
+		mixed_coop_layout_unplaced_entries((struct scenario *)scenario_instance->base_address, scenario_group->definition);
+	}
 	{
 		struct scenario const *scenario = scenario_instance->base_address;
 
@@ -2392,6 +2944,8 @@ static char const *const mixed_coop_invisible_mask_maps[] =
 	/* (Derelict and Hang 'Em High, rebuilt: their Xbox BSPs have no invisible surface either, PRIOR-ART.md -
 	the mask takes Halo PC's invisible walls away; the rest of their collision differs, the host's deciding) */
 	"carousel", "hangemhigh",
+	/* (r4: Blood Gulch, Battle Creek, Sidewinder - Halo PC's invisible walls; their Xbox BSPs have none) */
+	"bloodgulch", "beavercreek", "sidewinder",
 };
 
 /* (test: HALO_MIXED_COLLISION_PROBE=<step in wu>) the structure BSP's collision as a grid of rays (down from
@@ -2597,16 +3151,23 @@ static boolean mixed_coop_server_send(
 	return encoded && network_game_server_port_send_to_machine(machine_index, encoded);
 }
 
+static void mixed_coop_client_start_update(void);
+static void mixed_coop_layout_send(long machine_index);
+
 void mixed_coop_frame(
 	void)
 {
 	int level;
-	struct network_game_server *server = mixed_coop_hosted_server(&level);
+	struct network_game_server *server;
 	long machines[HALO_PORT_MAXIMUM_NETWORK_MACHINES];
 	unsigned long now;
 	short count, index;
 	int family;
 
+	/* (r4, a joiner's: its game's start held for the host's layout) */
+	if (mixed_coop.start_pending)
+		mixed_coop_client_start_update();
+	server = mixed_coop_hosted_server(&level);
 	if (!server)
 	{
 		if (mixed_coop.hosting && !global_network_game_server_get())
@@ -2620,6 +3181,7 @@ void mixed_coop_frame(
 	if (!mixed_coop.hosting)
 	{
 		mixed_coop.hosting = TRUE;
+		mixed_coop.hello_level = NONE;
 		mixed_coop.session = (uint32_t)now ^ ((uint32_t)rand() << 16) ^ 0x4D584350u;
 		csmemset(mixed_coop.machines, 0, sizeof(mixed_coop.machines));
 		platform_log(mixed_coop_level_is_multiplayer(level) ? "mixed play: hosting %s from the %s files: each machine joining is told" :
@@ -2629,6 +3191,19 @@ void mixed_coop_frame(
 	family = mixed_coop_local_family(level);
 	if (family == _mixed_coop_family_none || network_game_client_get_local_machine_index() == NONE)
 		return;
+	/* (r4: another map chosen - a map cycle's next game -: each machine told again, its family for that one) */
+	if (level != mixed_coop.hello_level)
+	{
+		if (mixed_coop.hello_level != NONE)
+			platform_log("mixed play: the game's map is %s now: each machine told again", mixed_coop_level_stems[level]);
+		mixed_coop.hello_level = level;
+		for (index = 0; index < HALO_PORT_MAXIMUM_NETWORK_MACHINES; index++)
+		{
+			mixed_coop.machines[index].answered = FALSE;
+			mixed_coop.machines[index].hellos = 0;
+			mixed_coop.machines[index].hello_time = 0;
+		}
+	}
 	count = network_game_server_port_joined_machines(machines, (short)NUMBEROF(machines));
 	for (index = 0; index < HALO_PORT_MAXIMUM_NETWORK_MACHINES; index++)
 	{
@@ -2677,6 +3252,52 @@ void mixed_coop_frame(
 				mixed_coop.machines[machine_index].hellos++;
 			}
 		}
+		/* (r4) its layout to a machine that asked, once this host's map is loaded and its objects placed (its
+		placements' BSP flags this host's own: mixed_coop_layout_build), made at the first ask */
+		if (mixed_coop.machines[machine_index].layout_next && mixed_coop.loaded && mixed_coop.level == level &&
+			mixed_coop.family == _mixed_coop_family_xbox && mixed_coop_host_layout_level(level) && game_map_loaded())
+		{
+			struct tag_schema_group const *scenario_group = mixed_coop_schema_group('scnr', FALSE);
+
+			if (!mixed_coop.layout_stream && global_scenario_get() && scenario_group && scenario_group->definition)
+				mixed_coop_layout_build(global_scenario_get(), scenario_group->definition);
+			if (mixed_coop.layout_stream && mixed_coop.layout_length)
+				mixed_coop_layout_send(machine_index);
+		}
+	}
+}
+
+/* (r4) the host's layout to one machine, a few fragments a frame (the lobby's queue to it not crowded) */
+static void mixed_coop_layout_send(
+	long machine_index)
+{
+	static struct mixed_coop_layout_message fragment;
+	uint16_t count = (uint16_t)((mixed_coop.layout_length + MIXED_COOP_LAYOUT_FRAGMENT_BYTES - 1) / MIXED_COOP_LAYOUT_FRAGMENT_BYTES);
+	short sent;
+
+	for (sent = 0; sent < 4 && mixed_coop.machines[machine_index].layout_next; sent++)
+	{
+		uint16_t index = (uint16_t)(mixed_coop.machines[machine_index].layout_next - 1);
+		uint32_t offset = (uint32_t)index * MIXED_COOP_LAYOUT_FRAGMENT_BYTES;
+		void *encoded;
+
+		csmemset(&fragment, 0, sizeof(fragment));
+		fragment.session = mixed_coop.session;
+		fragment.total_bytes = mixed_coop.layout_length;
+		fragment.index = index;
+		fragment.count = count;
+		fragment.bytes = (uint16_t)MIN(MIXED_COOP_LAYOUT_FRAGMENT_BYTES, mixed_coop.layout_length - offset);
+		fragment.level = (uint8_t)mixed_coop.level;
+		fragment.version = MIXED_COOP_LAYOUT_VERSION;
+		csmemcpy(fragment.data, mixed_coop.layout_stream + offset, fragment.bytes);
+		encoded = create_network_game_message(_message_server_mixed_layout, &fragment, sizeof(fragment));
+		if (!encoded || !network_game_server_port_send_to_machine(machine_index, encoded))
+			return;
+		mixed_coop.machines[machine_index].layout_next = index + 1u < count ? (short)(index + 2) : 0;
+		if (!mixed_coop.machines[machine_index].layout_next)
+			platform_log("mixed play: this host's layout of %s sent to machine %ld (%lu bytes, %u fragments)",
+				mixed_coop_level_stems[mixed_coop.level], machine_index, (unsigned long)mixed_coop.layout_length,
+				(unsigned)count);
 	}
 }
 
@@ -2710,7 +3331,7 @@ void mixed_coop_server_handle_lobby(
 	long machine_index = NONE;
 
 	if (!mixed_coop_lobby_decode(message, message_size, _message_client_mixed_coop, MIXED_COOP_CLASS_CLIENT_PREGAME, &answer) ||
-		answer.command != _mixed_coop_lobby_answer)
+		(answer.command != _mixed_coop_lobby_answer && answer.command != _mixed_coop_lobby_layout_request))
 	{
 		network_event("mixed co-op: an answer that could not be decoded or checked");
 		return;
@@ -2719,6 +3340,21 @@ void mixed_coop_server_handle_lobby(
 	if (!mixed_coop.hosting || !VALID_INDEX(machine_index, HALO_PORT_MAXIMUM_NETWORK_MACHINES) ||
 		!mixed_coop.machines[machine_index].known || answer.session != mixed_coop.session)
 	{
+		return;
+	}
+	/* (r4) an MCC machine's ask for this host's layout (Blood Gulch ...), its game starting: sent once this
+	host's map is loaded (mixed_coop_frame) */
+	if (answer.command == _mixed_coop_lobby_layout_request)
+	{
+		int level;
+
+		if (mixed_coop_hosted_server(&level) && answer.level == (uint8_t)level && mixed_coop_host_layout_level(level) &&
+			mixed_coop_local_family(level) == _mixed_coop_family_xbox && !mixed_coop.machines[machine_index].layout_next)
+		{
+			platform_log("mixed play: machine %ld asks for this host's layout of %s", machine_index,
+				mixed_coop_level_stems[level]);
+			mixed_coop.machines[machine_index].layout_next = 1;
+		}
 		return;
 	}
 	if (!mixed_coop.machines[machine_index].answered)
@@ -2791,6 +3427,12 @@ int mixed_coop_host_level_acceptable(
 	return !host_identity && family == _mixed_coop_family_mcc;
 }
 
+int mixed_coop_xbox_layout_here(
+	void)
+{
+	return mixed_coop.layout_taken;
+}
+
 int mixed_coop_host_decides_here(
 	void)
 {
@@ -2845,6 +3487,149 @@ void mixed_coop_client_dispose(
 	mixed_coop.requested = FALSE;
 	mixed_coop_free(mixed_coop.reassembly);
 	mixed_coop.reassembly = NULL;
+	mixed_coop_free(mixed_coop.layout_reassembly);
+	mixed_coop.layout_reassembly = NULL;
+	mixed_coop.layout_complete = FALSE;
+	mixed_coop.start_pending = NULL;
+}
+
+/* ---------- (r4) a joiner's: the host's layout before the map loads */
+
+/* (network_client_manager.c's states: the lobby) */
+#define MIXED_COOP_CLIENT_STATE_PREGAME 2
+/* how long a joiner waits for the host's layout once the game starts, and between its asks */
+#define MIXED_COOP_LAYOUT_WAIT_MILLISECONDS 45000
+#define MIXED_COOP_LAYOUT_ASK_MILLISECONDS 2000
+
+static void mixed_coop_layout_ask(
+	struct network_game_client *client,
+	int level)
+{
+	struct mixed_coop_lobby_message ask;
+	void *encoded;
+	unsigned long now = system_milliseconds();
+
+	csmemset(&ask, 0, sizeof(ask));
+	ask.command = _mixed_coop_lobby_layout_request;
+	ask.version = (uint16_t)mixed_coop_version_for_level((unsigned)level);
+	ask.family = _mixed_coop_family_mcc;
+	ask.level = (uint8_t)level;
+	ask.session = mixed_coop.host_session;
+	encoded = create_network_game_message(_message_client_mixed_coop, &ask, sizeof(ask));
+	if (encoded && network_game_client_send_to_server(client, encoded))
+		mixed_coop.layout_asked_time = now ? now : 1;
+}
+
+int mixed_coop_client_start_waits(
+	struct network_game_client *client)
+{
+	struct network_game *game = client ? network_game_client_get_game(client) : NULL;
+	int level;
+
+	if (!game || !mixed_coop_capable() || global_network_game_server_get() || network_wire_crossplay())
+		return FALSE;
+	level = mixed_coop_level_index(game->map.name);
+	/* (the host's hello may name the map before this one - a map cycle's next game: the host's family as it said,
+	the map the game settings name; the host answers for the map it plays) */
+	if (!mixed_coop_host_layout_level(level) || !mixed_coop.host_said ||
+		mixed_coop.host_family != _mixed_coop_family_xbox || mixed_coop_local_family(level) != _mixed_coop_family_mcc)
+	{
+		return FALSE;
+	}
+	mixed_coop.host_level = level;
+	if (mixed_coop.layout_complete && mixed_coop.layout_reassembly &&
+		mixed_coop.layout_reassembly->session == mixed_coop.host_session && mixed_coop.layout_reassembly->level == (uint8_t)level)
+	{
+		return FALSE;
+	}
+	if (!mixed_coop.layout_reassembly)
+		mixed_coop.layout_reassembly = malloc(sizeof(*mixed_coop.layout_reassembly));
+	if (!mixed_coop.layout_reassembly)
+		return FALSE;
+	mixed_coop_layout_reassembly_begin(mixed_coop.layout_reassembly, mixed_coop.host_session, (uint8_t)level);
+	mixed_coop.layout_complete = FALSE;
+	mixed_coop.start_pending = client;
+	mixed_coop.start_pending_since = system_milliseconds();
+	platform_log("mixed play: the game starts on %s: the Xbox-files host's placements asked for before loading it",
+		mixed_coop_level_stems[level]);
+	mixed_coop_layout_ask(client, level);
+	return TRUE;
+}
+
+static void mixed_coop_client_start_update(
+	void)
+{
+	struct network_game_client *client = global_network_game_client_get();
+	unsigned long now = system_milliseconds();
+
+	if (!client || client != mixed_coop.start_pending ||
+		network_game_client_get_state(client, NULL) != MIXED_COOP_CLIENT_STATE_PREGAME)
+	{
+		platform_log("mixed play: the game left before the host's placements came");
+		mixed_coop.start_pending = NULL;
+		return;
+	}
+	if (mixed_coop.layout_complete)
+	{
+		mixed_coop.start_pending = NULL;
+		platform_log("mixed play: the host's placements here (%lu bytes, %lu ms): loading the map",
+			(unsigned long)mixed_coop.layout_reassembly->total_bytes, now - mixed_coop.start_pending_since);
+		if (!network_game_client_game_has_started(client))
+			network_event("network_game_client_game_has_started() failed");
+		return;
+	}
+	if (now - mixed_coop.start_pending_since >= MIXED_COOP_LAYOUT_WAIT_MILLISECONDS)
+	{
+		mixed_coop.start_pending = NULL;
+		mixed_coop_leave(T("The host didn't send its placements of %s: with Xbox and MCC files together it needs a "
+			"host of this version with the Xbox's maps."), mixed_coop_level_stems[mixed_coop.host_level]);
+		return;
+	}
+	if (now - mixed_coop.layout_asked_time >= MIXED_COOP_LAYOUT_ASK_MILLISECONDS)
+		mixed_coop_layout_ask(client, mixed_coop.host_level);
+}
+
+void mixed_coop_client_handle_layout(
+	struct network_game_client *client,
+	unsigned short *message,
+	short message_size)
+{
+	static struct mixed_coop_layout_message fragment;
+	struct mixed_coop_layout layout;
+	short packet_type = _message_server_mixed_layout;
+	short packet_version = HALO_PORT_NETWORK_GAME_MESSAGE_VERSION;
+	char why[96];
+	int result;
+
+	(void)client;
+	message_size -= sizeof(unsigned short);
+	csmemset(&fragment, 0, sizeof(fragment));
+	if (message_size <= 0 ||
+		!decode_network_game_message(&fragment, message + 1, &message_size, &packet_type, &packet_version,
+			MIXED_COOP_CLASS_SERVER_PREGAME) || packet_type != _message_server_mixed_layout)
+	{
+		network_event("mixed play: a host's layout fragment that could not be decoded");
+		return;
+	}
+	if (!mixed_coop.start_pending || !mixed_coop.layout_reassembly || mixed_coop.layout_complete)
+		return;
+	result = mixed_coop_layout_reassembly_take(mixed_coop.layout_reassembly, &fragment);
+	if (result == _mixed_coop_fragment_refused)
+	{
+		network_event("mixed play: a host's layout fragment refused");
+		return;
+	}
+	if (result != _mixed_coop_fragment_complete)
+		return;
+	if (!mixed_coop_layout_read(mixed_coop.layout_reassembly->bytes, mixed_coop.layout_reassembly->total_bytes, &layout, why,
+		sizeof(why)))
+	{
+		mixed_coop.start_pending = NULL;
+		mixed_coop_leave(T("The host's placements of %s couldn't be read (%s)."), mixed_coop_level_stems[mixed_coop.host_level],
+			why);
+		return;
+	}
+	mixed_coop.layout_complete = TRUE;
 }
 
 /* ---------- after the load: the host's dictionary */
@@ -3194,7 +3979,7 @@ static boolean mixed_coop_accepted(
 	}
 	/* (an Xbox-files host's game, this machine MCC's: the host decides) */
 	if (mixed_coop.host_family == _mixed_coop_family_xbox && mixed_coop.family == _mixed_coop_family_mcc &&
-		mixed_coop_xbox_host_decides_tag(name))
+		(mixed_coop_xbox_host_decides_tag(name) || mixed_coop_stand_in_host_decides(name)))
 	{
 		return TRUE;
 	}

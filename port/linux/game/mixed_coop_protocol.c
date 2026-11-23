@@ -93,6 +93,12 @@ int mixed_coop_lobby_valid(struct mixed_coop_lobby_message const *message)
 	/* (the host plays the level from its own files: never none) */
 	if (message->command == _mixed_coop_lobby_hello && message->family == _mixed_coop_family_none)
 		return 0;
+	/* (a layout is asked for by an MCC machine alone, of a multiplayer map) */
+	if (message->command == _mixed_coop_lobby_layout_request &&
+		(message->family != _mixed_coop_family_mcc || message->level < MIXED_COOP_CAMPAIGN_LEVELS))
+	{
+		return 0;
+	}
 	return mixed_coop_version_names_level(message->version, message->level);
 }
 
@@ -397,5 +403,165 @@ int mixed_coop_dictionary_netgame_flag_get(struct mixed_coop_dictionary const *d
 	}
 	flag->type = mixed_coop_read_u16(at + 16);
 	flag->team = mixed_coop_read_u16(at + 18);
+	return 1;
+}
+
+/* ---------- the host's layout (r4) */
+
+void mixed_coop_layout_reassembly_begin(struct mixed_coop_layout_reassembly *reassembly, uint32_t session, uint8_t level)
+{
+	reassembly->session = session;
+	reassembly->level = level;
+	reassembly->total_bytes = 0;
+	reassembly->count = 0;
+	reassembly->received = 0;
+	memset(reassembly->have, 0, sizeof(reassembly->have));
+}
+
+int mixed_coop_layout_reassembly_take(struct mixed_coop_layout_reassembly *reassembly,
+	struct mixed_coop_layout_message const *message)
+{
+	uint32_t expected_count, offset;
+
+	if (!message || message->session != reassembly->session || message->level != reassembly->level ||
+		message->version != MIXED_COOP_LAYOUT_VERSION)
+	{
+		return _mixed_coop_fragment_refused;
+	}
+	if (message->total_bytes == 0 || message->total_bytes > MIXED_COOP_LAYOUT_MAXIMUM_BYTES)
+		return _mixed_coop_fragment_refused;
+	expected_count = (message->total_bytes + MIXED_COOP_LAYOUT_FRAGMENT_BYTES - 1) / MIXED_COOP_LAYOUT_FRAGMENT_BYTES;
+	if (message->count != expected_count || message->index >= message->count)
+		return _mixed_coop_fragment_refused;
+	offset = (uint32_t)message->index * MIXED_COOP_LAYOUT_FRAGMENT_BYTES;
+	if (message->bytes != (message->index + 1u < message->count ? MIXED_COOP_LAYOUT_FRAGMENT_BYTES :
+		message->total_bytes - offset))
+	{
+		return _mixed_coop_fragment_refused;
+	}
+	if (reassembly->received == 0)
+	{
+		reassembly->total_bytes = message->total_bytes;
+		reassembly->count = message->count;
+	}
+	else if (reassembly->total_bytes != message->total_bytes || reassembly->count != message->count)
+	{
+		return _mixed_coop_fragment_refused;
+	}
+	if (reassembly->received >= reassembly->count)
+		return _mixed_coop_fragment_refused;
+	if (reassembly->have[message->index])
+		return _mixed_coop_fragment_refused;
+	memcpy(reassembly->bytes + offset, message->data, message->bytes);
+	reassembly->have[message->index] = 1;
+	reassembly->received++;
+	return reassembly->received == reassembly->count ? _mixed_coop_fragment_complete : _mixed_coop_fragment_taken;
+}
+
+static int mixed_coop_layout_float_ok(uint8_t const *at)
+{
+	uint32_t word = mixed_coop_read_u32(at);
+	float number;
+
+	memcpy(&number, &word, sizeof(number));
+	/* (finite and near: NaN fails both) */
+	return number >= -MIXED_COOP_NETGAME_FLAG_LIMIT && number <= MIXED_COOP_NETGAME_FLAG_LIMIT;
+}
+
+int mixed_coop_layout_read(uint8_t const *bytes, uint32_t length, struct mixed_coop_layout *layout, char *why, int why_size)
+{
+	uint32_t at, block, blocks;
+
+	memset(layout, 0, sizeof(*layout));
+	if (!bytes || length < 8 + 4)
+		return mixed_coop_refuse(why, why_size, "too short");
+	if (length > MIXED_COOP_LAYOUT_MAXIMUM_BYTES)
+		return mixed_coop_refuse(why, why_size, "too long");
+	if (mixed_coop_fnv(MIXED_COOP_FNV_BASIS, bytes, length - 4) != mixed_coop_read_u32(bytes + length - 4))
+		return mixed_coop_refuse(why, why_size, "its check does not match");
+	length -= 4;
+	if (mixed_coop_read_u32(bytes) != MIXED_COOP_LAYOUT_MAGIC)
+		return mixed_coop_refuse(why, why_size, "not a layout");
+	if (mixed_coop_read_u16(bytes + 4) != MIXED_COOP_LAYOUT_VERSION)
+		return mixed_coop_refuse(why, why_size, "another version");
+	layout->level = bytes[6];
+	if (layout->level < MIXED_COOP_CAMPAIGN_LEVELS || layout->level >= MIXED_COOP_LEVELS)
+		return mixed_coop_refuse(why, why_size, "a level not known");
+	blocks = bytes[7];
+	if (blocks == 0 || blocks >= NUMBER_OF_MIXED_COOP_LAYOUT_BLOCKS)
+		return mixed_coop_refuse(why, why_size, "a block count past the limit");
+	at = 8;
+	for (block = 0; block < blocks; block++)
+	{
+		uint8_t kind;
+		uint16_t element_bytes;
+		uint32_t count, index, maximum;
+
+		if (length - at < 8)
+			return mixed_coop_refuse(why, why_size, "cut short (a block)");
+		kind = bytes[at];
+		element_bytes = mixed_coop_read_u16(bytes + at + 2);
+		count = mixed_coop_read_u32(bytes + at + 4);
+		if (kind == 0 || kind >= NUMBER_OF_MIXED_COOP_LAYOUT_BLOCKS || bytes[at + 1] != 0)
+			return mixed_coop_refuse(why, why_size, "a block not known");
+		if (layout->blocks[kind].elements)
+			return mixed_coop_refuse(why, why_size, "a block twice");
+		at += 8;
+		switch (kind)
+		{
+		case MIXED_COOP_LAYOUT_SCENERY_PALETTE:
+		case MIXED_COOP_LAYOUT_VEHICLE_PALETTE:
+			if (element_bytes != MIXED_COOP_LAYOUT_PALETTE_BYTES)
+				return mixed_coop_refuse(why, why_size, "a palette's element size");
+			maximum = MIXED_COOP_LAYOUT_MAXIMUM_PALETTE;
+			break;
+		case MIXED_COOP_LAYOUT_NETGAME_FLAGS:
+			if (element_bytes != MIXED_COOP_NETGAME_FLAG_BYTES)
+				return mixed_coop_refuse(why, why_size, "a netgame flag's size");
+			maximum = MIXED_COOP_MAXIMUM_NETGAME_FLAGS;
+			break;
+		default:
+			if (element_bytes < MIXED_COOP_LAYOUT_MINIMUM_PLACEMENT_BYTES || element_bytes > MIXED_COOP_LAYOUT_MAXIMUM_PLACEMENT_BYTES)
+				return mixed_coop_refuse(why, why_size, "a placement's size");
+			maximum = MIXED_COOP_LAYOUT_MAXIMUM_PLACEMENTS;
+			break;
+		}
+		if (count > maximum)
+			return mixed_coop_refuse(why, why_size, "a count past the limit");
+		if (count > (length - at) / element_bytes)
+			return mixed_coop_refuse(why, why_size, "cut short (elements)");
+		for (index = 0; index < count; index++)
+		{
+			uint8_t const *element = bytes + at + index * element_bytes;
+			int value;
+
+			/* (a flag's place and facing; a placement's place and rotation, at 0x8: struct
+			scenario_object_datum) */
+			if (kind == MIXED_COOP_LAYOUT_NETGAME_FLAGS)
+			{
+				for (value = 0; value < 4; value++)
+					if (!mixed_coop_layout_float_ok(element + 4 * value))
+						return mixed_coop_refuse(why, why_size, "a netgame flag's place past the limits");
+			}
+			else if (kind == MIXED_COOP_LAYOUT_SCENERY_PALETTE || kind == MIXED_COOP_LAYOUT_VEHICLE_PALETTE)
+			{
+				/* (its path ends within its bytes) */
+				if (element[MIXED_COOP_LAYOUT_PALETTE_BYTES - 1] != 0)
+					return mixed_coop_refuse(why, why_size, "a palette's path not ended");
+			}
+			else if (kind == MIXED_COOP_LAYOUT_SCENERY || kind == MIXED_COOP_LAYOUT_VEHICLES)
+			{
+				for (value = 0; value < 6; value++)
+					if (!mixed_coop_layout_float_ok(element + 8 + 4 * value))
+						return mixed_coop_refuse(why, why_size, "a placement's place past the limits");
+			}
+		}
+		layout->blocks[kind].count = count;
+		layout->blocks[kind].element_bytes = element_bytes;
+		layout->blocks[kind].elements = bytes + at;
+		at += count * element_bytes;
+	}
+	if (at != length)
+		return mixed_coop_refuse(why, why_size, "bytes past its end");
 	return 1;
 }

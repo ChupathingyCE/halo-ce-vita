@@ -1289,6 +1289,18 @@ void object_types_place_objects(
 								&object_definition->object.bounding_offset,
 								&transformed_bounding_offset);
 
+#ifdef HALO_LINUX
+							/* port (mixed play r4, port/linux/game/mixed_coop.c): an MCC machine
+							placing an Xbox-files host's layout keeps the host's word on which
+							of them stand in its BSP (Halo PC rebuilt the BSP: a blocker the
+							Xbox places, Sidewinder's, stands outside MCC's) */
+							int mixed_coop_xbox_layout_here(void);
+
+							if (mixed_coop_xbox_layout_here())
+							{
+							}
+							else
+#endif
 							if (scenario_leaf_index_from_point(&scenario_object->position)==NONE &&
 								scenario_leaf_index_from_point(&transformed_bounding_offset)==NONE)
 							{

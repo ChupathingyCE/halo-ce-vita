@@ -797,6 +797,21 @@ boolean network_game_client_handle_message(
 						}
 						break;
 
+					case _message_server_mixed_layout:
+						if (network_wire_crossplay())
+						{
+							network_event("ignoring a mixed play layout on the crossplay wire");
+						}
+						else if (network_game_client_address_matches_server(client, source_address))
+						{
+							mixed_coop_client_handle_layout(client, message, message_size);
+						}
+						else
+						{
+							network_event("ignoring a mixed play layout from a system that is not the host");
+						}
+						break;
+
 					case _message_server_forge:
 						if (network_wire_crossplay())
 						{
@@ -1362,6 +1377,14 @@ static boolean network_game_client_handle_message_server_begin_game(
 				(port/linux/game/map_share.c) */
 				if (!map_share_client_game_starting(client, network_game_client_get_game(client)->map.name,
 					(unsigned long)network_game_client_get_game(client)->map.version))
+				{
+					result = TRUE;
+				}
+				/* port (r4): an MCC machine joining an Xbox-files host's game on a
+				map whose placements are the host's (Blood Gulch ...) loads it
+				once it has them: started by mixed_coop_frame
+				(port/linux/game/mixed_coop.c) */
+				else if (mixed_coop_client_start_waits(client))
 				{
 					result = TRUE;
 				}

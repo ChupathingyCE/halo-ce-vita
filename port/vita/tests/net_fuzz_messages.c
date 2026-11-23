@@ -71,7 +71,7 @@ static long const fuzz_structure_sizes[NUMBER_OF_NETWORK_GAME_MESSAGE_TYPES] =
 	sizeof(message_server_map_download_data), sizeof(message_client_forge), sizeof(message_server_forge),
 	sizeof(message_client_game_rules), sizeof(message_server_game_rules),
 	sizeof(message_client_flame), sizeof(message_server_flame), sizeof(message_client_party),
-	sizeof(message_client_mixed_coop), sizeof(message_server_mixed_coop),
+	sizeof(message_client_mixed_coop), sizeof(message_server_mixed_coop), sizeof(message_server_mixed_layout),
 };
 typedef char fuzz_structure_sizes_count_assert[
 	sizeof(fuzz_structure_sizes) / sizeof(fuzz_structure_sizes[0]) == NUMBER_OF_NETWORK_GAME_MESSAGE_TYPES ? 1 : -1];
