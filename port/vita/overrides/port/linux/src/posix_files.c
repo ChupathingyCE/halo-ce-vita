@@ -87,9 +87,40 @@ int posix_set_file_times(const char *path,
 	return utimensat(AT_FDCWD, path, times, 0);
 }
 
+#ifdef __vita__
+/* VitaSDK's newlib has a 32-bit off_t, and its lseek seeks with
+sceIoLseek32: a position past 2 GB (a disc image's maps, xiso.c) is set on
+the file's own handle instead, which the C library reads and writes from.
+Its descriptor table's entry starts with that handle and the entry's kind
+(0 a file), as the SDK's newlib lays it out */
+struct vita_descriptor
+{
+	int handle;
+	unsigned char kind;
+};
+struct vita_descriptor *__vita_fd_grab(int descriptor);
+int __vita_fd_drop(struct vita_descriptor *entry);
+long long sceIoLseek(int handle, long long offset, int whence);
+#endif
+
 int posix_seek(int descriptor, posix_long offset_low, posix_long offset_high, int whence,
 	posix_ulong *position_low, posix_ulong *position_high)
 {
+#ifdef __vita__
+	long long wide = (long long)(((unsigned long long)(posix_ulong)offset_high << 32) | (posix_ulong)offset_low);
+	struct vita_descriptor *entry = __vita_fd_grab(descriptor);
+	long long position = -1;
+
+	if (!entry)
+		return -1;
+	if (entry->kind == 0)
+		position = sceIoLseek(entry->handle, wide, whence);
+	__vita_fd_drop(entry);
+	if (position < 0)
+		return -1;
+	split64((unsigned long long)position, position_low, position_high);
+	return 0;
+#else
 	off_t offset = (off_t)(((unsigned long long)(posix_ulong)offset_high << 32) | (posix_ulong)offset_low);
 	off_t result = lseek(descriptor, offset, whence);
 
@@ -97,6 +128,7 @@ int posix_seek(int descriptor, posix_long offset_low, posix_long offset_high, in
 		return -1;
 	split64((unsigned long long)result, position_low, position_high);
 	return 0;
+#endif
 }
 
 int posix_truncate(int descriptor, posix_ulong size_low, posix_ulong size_high)

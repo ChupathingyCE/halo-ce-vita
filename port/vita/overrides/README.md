@@ -22,7 +22,9 @@ shows each one's change.
 VitaSDK's newlib `struct stat` has whole-second times only (`st_mtime`, no
 `st_mtim`), and there is no `dladdr`: the file times are read as seconds, and
 a code address is described by its value alone (the program's map file,
-`build/vita/warthog.map`, names it). `#ifdef __vita__` only; nothing changes
+`build/vita/warthog.map`, names it). `posix_seek` sets a position past 2 GB
+on the file's own handle (`sceIoLseek`), as newlib's `lseek` has a 32-bit
+`off_t` there: a disc image's maps lie past 2 GB (`xiso.c`). `#ifdef __vita__` only; nothing changes
 for the other builds. Upstream PR candidate: "posix_files.c: newlib without
 st_mtim or dladdr (the Vita)".
 
