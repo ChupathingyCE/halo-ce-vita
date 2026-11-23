@@ -388,7 +388,7 @@ static uint32_t write_layout_sample(uint8_t *bytes, uint32_t size, float last_x)
 			mixed_coop_writer_u32(&writer, 0x7363656Eu);
 			mixed_coop_writer_u32(&writer, 0x1234u + index);
 			for (at = 0; at < MIXED_COOP_LAYOUT_PATH_BYTES; at++)
-				mixed_coop_writer_u8(&writer, at < 8 ? (uint8_t)"scenery\"[at] : 0);
+				mixed_coop_writer_u8(&writer, at < 8 ? (uint8_t)"scenery\\"[at] : 0);
 		}
 		mixed_coop_writer_u8(&writer, (uint8_t)(block ? MIXED_COOP_LAYOUT_VEHICLES : MIXED_COOP_LAYOUT_SCENERY));
 		mixed_coop_writer_u8(&writer, 0);
@@ -739,7 +739,7 @@ int net_fuzz_checks(void)
 			printf("FAIL: a layout with a byte changed was read\n");
 			failures++;
 		}
-		layout_length = write_layout_sample(layout_bytes, sizeof(layout_bytes), 1.0f / 0.0f);
+		layout_length = write_layout_sample(layout_bytes, sizeof(layout_bytes), strtof("inf", NULL));
 		if (mixed_coop_layout_read(layout_bytes, layout_length, &layout, why, (int)sizeof(why)))
 		{
 			printf("FAIL: a layout with a flag's place not finite was read\n");
