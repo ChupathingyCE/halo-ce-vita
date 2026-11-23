@@ -45,6 +45,12 @@ int vita_guide_capturing;
 /* the Vita's buttons and touch zones as last read (VITA_BUTTON_* bits, a
 bit per VITA_ZONE_*), before any layout (vita_xinput.c: the Guide's chord) */
 unsigned long vita_pad_raw_buttons, vita_pad_raw_touch;
+/* the Delta Guide's chord, SELECT with D-pad down (Halo CE Vita's for its
+settings panel): the times it was pressed since vita_xinput.c last took
+them, and whether its buttons are kept from the game and the Guide (from
+the press until both are let go: a D-pad down after SELECT is no crouch, no
+Back and no step down) */
+int vita_guide_chord_presses, vita_guide_chord_held;
 
 /* (Warthog) Halo CE Vita's Command mode and Forge are not in the game:
 their menus' layout and the monitor's flight never hold */
@@ -216,6 +222,18 @@ void vita_pad_state(XINPUT_GAMEPAD *gamepad)
 		icons_playstation = vita_button_icons_playstation();
 	}
 	vita_host_pad_read(&pad);
+#ifdef HALO_GAME_BROWSER
+	if ((pad.buttons & VITA_BUTTON_SELECT) && (pad.buttons & VITA_BUTTON_DOWN))
+	{
+		if (!vita_guide_chord_held)
+			vita_guide_chord_presses++;
+		vita_guide_chord_held = 1;
+	}
+	else if (!(pad.buttons & (VITA_BUTTON_SELECT | VITA_BUTTON_DOWN)))
+		vita_guide_chord_held = 0;
+	if (vita_guide_chord_held)
+		pad.buttons &= ~(VITA_BUTTON_SELECT | VITA_BUTTON_DOWN);
+#endif
 	vita_pad_raw_buttons = pad.buttons;
 	vita_pad_raw_touch = pad.touch;
 	/* the gyro, in play: in hold mode its button only aims */

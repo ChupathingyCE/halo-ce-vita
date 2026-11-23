@@ -157,9 +157,10 @@ VOID WINAPI XInputClose(HANDLE device)
 #ifdef HALO_GAME_BROWSER
 /* ---------- the Delta Guide's input (guide_input.h)
 
-SELECT and START pressed together open the Guide and close it, anywhere (in
-the menus and in a game: Halo CE Vita's chord for its settings panel); the
-two stay away from the game and the Guide until both are let go. While the
+SELECT with D-pad down opens the Guide and closes it, anywhere (in the menus
+and in a game: Halo CE Vita's chord for its settings panel); the two stay
+away from the game and the Guide until both are let go (vita_pad.c), so it
+is no crouch, no Back and no step down. D-pad down alone moves as before. While the
 Guide is open it has the Vita's buttons in the menus' fixed layout (Cross
 A, Circle B, Square X, Triangle Y, the d-pad or the left stick, START,
 SELECT as Back), L and R its LB and RB (the sections), and the rear touch
@@ -170,6 +171,7 @@ it closes stays up for the game until let go of. */
 /* (vita_pad.c) */
 extern int vita_guide_capturing;
 extern unsigned long vita_pad_raw_buttons, vita_pad_raw_touch;
+extern int vita_guide_chord_presses, vita_guide_chord_held;
 
 static int guide_capture, guide_confirm_swap, guide_toggles;
 static unsigned int guide_held;
@@ -217,17 +219,12 @@ the Guide's share while it has the input */
 static void guide_take(XINPUT_GAMEPAD *pad)
 {
 	unsigned long raw = vita_pad_raw_buttons;
-	int chord = (raw & VITA_BUTTON_SELECT) && (raw & VITA_BUTTON_START);
 	int index;
 
-	if (chord && !chord_down)
-		guide_toggles++;
-	if (chord)
-		chord_down = 1;
-	else if (!(raw & (VITA_BUTTON_SELECT | VITA_BUTTON_START)))
-		chord_down = 0;
-	if (chord_down)
-		pad->wButtons &= (WORD)~(VITA_PAD_START | VITA_PAD_BACK);
+	/* (the chord, taken from the buttons already: vita_pad.c) */
+	guide_toggles += vita_guide_chord_presses;
+	vita_guide_chord_presses = 0;
+	chord_down = vita_guide_chord_held;
 	if (guide_capture)
 	{
 		unsigned int held = 0;
