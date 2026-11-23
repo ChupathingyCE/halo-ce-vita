@@ -4848,6 +4848,19 @@ static void main_test_commands_update(
 		run_gyro_assist_test.sh) */
 		else if (!strncmp(commands[index].command, "@aim ", 5))
 			player_control_aim_test_command(commands[index].command + 5);
+		/* ("@aim,look,yaw,pitch", "@aim,pad,lx,ly,rx,ry,rt,reads": a test runner's settings split at spaces) */
+		else if (!strncmp(commands[index].command, "@aim,", 5))
+		{
+			char arguments[96];
+			char *comma;
+
+			csstrncpy(arguments, commands[index].command + 5, sizeof(arguments) - 1);
+			arguments[sizeof(arguments) - 1] = 0;
+			for (comma = arguments; *comma; comma++)
+				if (*comma == ',')
+					*comma = ' ';
+			player_control_aim_test_command(arguments);
+		}
 #if !defined(HALO_RELEASE) && !defined(HALO_VITA)
 		/* (@mouse dx dy: a motion of the mouse, as SDL reports one, through
 		the desktop build's own event path: sdl_platform.c) */

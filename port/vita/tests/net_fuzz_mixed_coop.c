@@ -15,6 +15,11 @@ An input's first byte chooses what the rest is:
   3  a dictionary stream as it is (its check left as the input has it)
   4  a dictionary stream with its check made right (so the reader goes past
      the check into every count and length)
+  5  (r4) a host's layout stream as it is
+  6  a layout stream with its check made right
+  7  pieces of a layout (struct mixed_coop_layout_message's 16-byte header
+     and its data), taken in order into one reassembly; a stream completed is
+     read
 Whatever the input:
 - a lobby message or request taken has a command, version, family and
   level there are, the level one its version names (version 1: the
@@ -24,7 +29,10 @@ Whatever the input:
 - a dictionary read has its tags and graphs within its bytes: every tag
   read, every graph walked (as many as it says, each animation's hash within
   the bytes), never past its end; a version 2 one's netgame flags within its
-  bytes too, each place finite and within the limit; a version 1 one none.
+  bytes too, each place finite and within the limit; a version 1 one none;
+- (r4) a layout read has each block within its bytes, a palette's paths
+  ended, every place finite and within the limit, no count past its limit;
+  a layout reassembly never takes more bytes than a layout may have.
 net_fuzz_checks: a dictionary written is read back as written (version 1,
 a campaign level's, and version 2, a multiplayer map's with its flags); one
 cut short, one with a byte changed (its check), a count past its limit, a
@@ -43,6 +51,7 @@ Built as net_fuzz_map_share.c is, by run_net_fuzz_test.sh.
 #include <string.h>
 
 static struct mixed_coop_reassembly reassembly;
+static struct mixed_coop_layout_reassembly layout_reassembly;
 static uint8_t stream[MIXED_COOP_DICTIONARY_MAXIMUM_BYTES];
 
 static void check_dictionary(uint8_t const *bytes, uint32_t length)
@@ -121,6 +130,67 @@ static void check_dictionary(uint8_t const *bytes, uint32_t length)
 	}
 }
 
+static void check_layout(uint8_t const *bytes, uint32_t length)
+{
+	struct mixed_coop_layout layout;
+	char why[96];
+	int kind;
+
+	if (!mixed_coop_layout_read(bytes, length, &layout, why, (int)sizeof(why)))
+	{
+		if (!why[0] || strlen(why) >= sizeof(why))
+			abort();
+		return;
+	}
+	if (layout.level < MIXED_COOP_CAMPAIGN_LEVELS || layout.level >= MIXED_COOP_LEVELS)
+		abort();
+	for (kind = 1; kind < NUMBER_OF_MIXED_COOP_LAYOUT_BLOCKS; kind++)
+	{
+		uint32_t index;
+
+		if (!layout.blocks[kind].elements)
+		{
+			if (layout.blocks[kind].count)
+				abort();
+			continue;
+		}
+		if (layout.blocks[kind].count > MIXED_COOP_LAYOUT_MAXIMUM_PLACEMENTS || !layout.blocks[kind].element_bytes ||
+			layout.blocks[kind].elements < bytes ||
+			layout.blocks[kind].elements + (size_t)layout.blocks[kind].count * layout.blocks[kind].element_bytes > bytes + length)
+		{
+			abort();
+		}
+		for (index = 0; index < layout.blocks[kind].count; index++)
+		{
+			uint8_t const *element = layout.blocks[kind].elements + index * layout.blocks[kind].element_bytes;
+			int value, first = -1, count = 0;
+			float number;
+			uint32_t word;
+
+			if (kind == MIXED_COOP_LAYOUT_SCENERY_PALETTE || kind == MIXED_COOP_LAYOUT_VEHICLE_PALETTE)
+			{
+				if (layout.blocks[kind].element_bytes != MIXED_COOP_LAYOUT_PALETTE_BYTES ||
+					element[MIXED_COOP_LAYOUT_PALETTE_BYTES - 1] != 0)
+				{
+					abort();
+				}
+				continue;
+			}
+			if (kind == MIXED_COOP_LAYOUT_NETGAME_FLAGS)
+				first = 0, count = 4;
+			else
+				first = 8, count = 6;
+			for (value = 0; value < count; value++)
+			{
+				word = mixed_coop_read_u32(element + first + 4 * value);
+				memcpy(&number, &word, sizeof(number));
+				if (!(number >= -MIXED_COOP_NETGAME_FLAG_LIMIT && number <= MIXED_COOP_NETGAME_FLAG_LIMIT))
+					abort();
+			}
+		}
+	}
+}
+
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
 	uint8_t mode;
@@ -130,7 +200,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	mode = data[0];
 	data++;
 	size--;
-	switch (mode % 5)
+	switch (mode % 8)
 	{
 	case 0:
 	{
@@ -219,8 +289,130 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			check_dictionary(stream, (uint32_t)size);
 		}
 		break;
+	case 5:
+		if (size <= sizeof(stream))
+		{
+			memcpy(stream, data, size);
+			check_layout(stream, (uint32_t)size);
+		}
+		break;
+	case 6:
+		if (size >= 4 && size <= sizeof(stream))
+		{
+			uint32_t check;
+
+			memcpy(stream, data, size);
+			check = mixed_coop_fnv(MIXED_COOP_FNV_BASIS, stream, (uint32_t)size - 4);
+			stream[size - 4] = (uint8_t)check;
+			stream[size - 3] = (uint8_t)(check >> 8);
+			stream[size - 2] = (uint8_t)(check >> 16);
+			stream[size - 1] = (uint8_t)(check >> 24);
+			check_layout(stream, (uint32_t)size);
+		}
+		break;
+	case 7:
+	{
+		static struct mixed_coop_layout_message piece;
+		size_t at = 0;
+		uint32_t session = 0;
+		uint8_t level = 0;
+
+		if (size >= 16)
+		{
+			memcpy(&session, data, 4);
+			level = data[12];
+		}
+		mixed_coop_layout_reassembly_begin(&layout_reassembly, session, level);
+		while (at + 16 <= size)
+		{
+			size_t take;
+			int result;
+
+			memset(&piece, 0, sizeof(piece));
+			memcpy(&piece, data + at, 16);
+			at += 16;
+			take = size - at;
+			if (take > piece.bytes)
+				take = piece.bytes;
+			if (take > MIXED_COOP_LAYOUT_FRAGMENT_BYTES)
+				take = MIXED_COOP_LAYOUT_FRAGMENT_BYTES;
+			memcpy(piece.data, data + at, take);
+			at += take;
+			result = mixed_coop_layout_reassembly_take(&layout_reassembly, &piece);
+			if (layout_reassembly.received > layout_reassembly.count ||
+				layout_reassembly.total_bytes > MIXED_COOP_LAYOUT_MAXIMUM_BYTES ||
+				layout_reassembly.count > MIXED_COOP_LAYOUT_MAXIMUM_FRAGMENTS)
+			{
+				abort();
+			}
+			if (result == _mixed_coop_fragment_complete)
+			{
+				if (layout_reassembly.received != layout_reassembly.count || !layout_reassembly.total_bytes)
+					abort();
+				check_layout(layout_reassembly.bytes, layout_reassembly.total_bytes);
+				break;
+			}
+		}
+		break;
+	}
 	}
 	return 0;
+}
+
+/* (r4) a small layout: a scenery palette of 2, 3 scenery placements of 0x48 bytes, a vehicle palette of 1, 1
+vehicle placement of 0x78, 2 netgame flags; the last flag's x `last_x` */
+static uint32_t write_layout_sample(uint8_t *bytes, uint32_t size, float last_x)
+{
+	struct mixed_coop_dictionary_writer writer;
+	uint32_t index, word;
+	int block;
+	float x;
+
+	mixed_coop_writer_begin(&writer, bytes, size);
+	mixed_coop_writer_u32(&writer, MIXED_COOP_LAYOUT_MAGIC);
+	mixed_coop_writer_u16(&writer, MIXED_COOP_LAYOUT_VERSION);
+	mixed_coop_writer_u8(&writer, MIXED_COOP_CAMPAIGN_LEVELS + 10);
+	mixed_coop_writer_u8(&writer, 5);
+	for (block = 0; block < 2; block++)
+	{
+		uint32_t palette = block ? 1 : 2, count = block ? 1 : 3, element = block ? 0x78 : 0x48;
+
+		mixed_coop_writer_u8(&writer, (uint8_t)(block ? MIXED_COOP_LAYOUT_VEHICLE_PALETTE : MIXED_COOP_LAYOUT_SCENERY_PALETTE));
+		mixed_coop_writer_u8(&writer, 0);
+		mixed_coop_writer_u16(&writer, MIXED_COOP_LAYOUT_PALETTE_BYTES);
+		mixed_coop_writer_u32(&writer, palette);
+		for (index = 0; index < palette; index++)
+		{
+			uint32_t at;
+
+			mixed_coop_writer_u32(&writer, 0x7363656Eu);
+			mixed_coop_writer_u32(&writer, 0x1234u + index);
+			for (at = 0; at < MIXED_COOP_LAYOUT_PATH_BYTES; at++)
+				mixed_coop_writer_u8(&writer, at < 8 ? (uint8_t)"scenery\\"[at] : 0);
+		}
+		mixed_coop_writer_u8(&writer, (uint8_t)(block ? MIXED_COOP_LAYOUT_VEHICLES : MIXED_COOP_LAYOUT_SCENERY));
+		mixed_coop_writer_u8(&writer, 0);
+		mixed_coop_writer_u16(&writer, (uint16_t)element);
+		mixed_coop_writer_u32(&writer, count);
+		for (index = 0; index < count * element; index++)
+			mixed_coop_writer_u8(&writer, index % element < 2 ? 0 : (index % element >= 8 && index % element < 0x20 ? 0 : 7));
+	}
+	mixed_coop_writer_u8(&writer, MIXED_COOP_LAYOUT_NETGAME_FLAGS);
+	mixed_coop_writer_u8(&writer, 0);
+	mixed_coop_writer_u16(&writer, MIXED_COOP_NETGAME_FLAG_BYTES);
+	mixed_coop_writer_u32(&writer, 2);
+	for (index = 0; index < 2; index++)
+	{
+		x = index ? last_x : 1.0f;
+		memcpy(&word, &x, 4);
+		mixed_coop_writer_u32(&writer, word);
+		mixed_coop_writer_u32(&writer, 0);
+		mixed_coop_writer_u32(&writer, 0);
+		mixed_coop_writer_u32(&writer, 0);
+		mixed_coop_writer_u16(&writer, 1);
+		mixed_coop_writer_u16(&writer, 0);
+	}
+	return mixed_coop_writer_end(&writer);
 }
 
 /* a small dictionary: 3 tags, 2 BSPs, 2 graphs; of `version` and `level`,
@@ -520,6 +712,82 @@ int net_fuzz_checks(void)
 		seed[0] = 0;
 		memcpy(seed + 1, &hello, sizeof(hello));
 		net_fuzz_write_seed(seeds, "lobby_hello_v2", seed, 1 + sizeof(hello));
+	}
+	/* (r4) a layout written is read back; cut short, a byte changed, a flag's place not finite: refused; in
+	pieces, any order, the stream */
+	{
+		static uint8_t layout_bytes[MIXED_COOP_LAYOUT_MAXIMUM_BYTES];
+		struct mixed_coop_layout layout;
+		uint32_t layout_length = write_layout_sample(layout_bytes, sizeof(layout_bytes), 3.0f);
+		static struct mixed_coop_layout_message piece;
+
+		if (!layout_length || !mixed_coop_layout_read(layout_bytes, layout_length, &layout, why, (int)sizeof(why)) ||
+			layout.blocks[MIXED_COOP_LAYOUT_SCENERY].count != 3 || layout.blocks[MIXED_COOP_LAYOUT_VEHICLES].count != 1 ||
+			layout.blocks[MIXED_COOP_LAYOUT_NETGAME_FLAGS].count != 2)
+		{
+			printf("FAIL: a layout written was not read back (%s)\n", why);
+			failures++;
+		}
+		if (mixed_coop_layout_read(layout_bytes, layout_length - 5, &layout, why, (int)sizeof(why)))
+		{
+			printf("FAIL: a layout cut short was read\n");
+			failures++;
+		}
+		layout_bytes[20] ^= 1;
+		if (mixed_coop_layout_read(layout_bytes, layout_length, &layout, why, (int)sizeof(why)))
+		{
+			printf("FAIL: a layout with a byte changed was read\n");
+			failures++;
+		}
+		layout_length = write_layout_sample(layout_bytes, sizeof(layout_bytes), strtof("inf", NULL));
+		if (mixed_coop_layout_read(layout_bytes, layout_length, &layout, why, (int)sizeof(why)))
+		{
+			printf("FAIL: a layout with a flag's place not finite was read\n");
+			failures++;
+		}
+		layout_length = write_layout_sample(layout_bytes, sizeof(layout_bytes), 3.0f);
+		mixed_coop_layout_reassembly_begin(&layout_reassembly, 7, MIXED_COOP_CAMPAIGN_LEVELS + 10);
+		memset(&piece, 0, sizeof(piece));
+		piece.session = 7;
+		piece.total_bytes = layout_length;
+		piece.count = 1;
+		piece.bytes = (uint16_t)layout_length;
+		piece.level = MIXED_COOP_CAMPAIGN_LEVELS + 10;
+		piece.version = MIXED_COOP_LAYOUT_VERSION;
+		memcpy(piece.data, layout_bytes, layout_length);
+		if (layout_length > MIXED_COOP_LAYOUT_FRAGMENT_BYTES ||
+			mixed_coop_layout_reassembly_take(&layout_reassembly, &piece) != _mixed_coop_fragment_complete ||
+			memcmp(layout_reassembly.bytes, layout_bytes, layout_length) ||
+			mixed_coop_layout_reassembly_take(&layout_reassembly, &piece) != _mixed_coop_fragment_refused)
+		{
+			printf("FAIL: a layout in one piece was not the stream, or taken twice\n");
+			failures++;
+		}
+		piece.level = 3;
+		mixed_coop_layout_reassembly_begin(&layout_reassembly, 7, MIXED_COOP_CAMPAIGN_LEVELS + 10);
+		if (mixed_coop_layout_reassembly_take(&layout_reassembly, &piece) != _mixed_coop_fragment_refused)
+		{
+			printf("FAIL: a layout piece of another level was taken\n");
+			failures++;
+		}
+		{
+			void net_fuzz_write_seed(const char *folder, const char *name, const void *data, unsigned long size);
+			static uint8_t layout_seed[1 + MIXED_COOP_LAYOUT_MAXIMUM_BYTES];
+
+			if (seeds)
+			{
+				layout_seed[0] = 5;
+				memcpy(layout_seed + 1, layout_bytes, layout_length);
+				net_fuzz_write_seed(seeds, "layout", layout_seed, 1 + layout_length);
+				layout_seed[0] = 6;
+				net_fuzz_write_seed(seeds, "layout_checked", layout_seed, 1 + layout_length);
+				piece.level = MIXED_COOP_CAMPAIGN_LEVELS + 10;
+				layout_seed[0] = 7;
+				memcpy(layout_seed + 1, &piece, 16);
+				memcpy(layout_seed + 17, layout_bytes, layout_length);
+				net_fuzz_write_seed(seeds, "layout_pieces", layout_seed, 17 + layout_length);
+			}
+		}
 	}
 	return failures;
 }

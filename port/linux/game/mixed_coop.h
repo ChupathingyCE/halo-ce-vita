@@ -49,8 +49,11 @@ Chiron TL-34, Rat Race, Wizard, Boarding Action): an MCC host names MCC's
 copy the Xbox's (mixed_coop_host_map_name), the lobby's messages for those
 maps are version 2 (mixed_coop_protocol.h), the host's netgame flags go in
 its dictionary, and the rules of what can come into play follow what the
-multiplayer game engine makes (mixed_coop.c). The six maps Halo PC rebuilt
-stay apart (mixed_coop_multiplayer_refusal). What the owner has not decided
+multiplayer game engine makes (mixed_coop.c). Of the six maps Halo PC rebuilt,
+all six play mixed in an Xbox-files host's game (Damnation exactly; the other
+five its collision deciding, and Blood Gulch, Battle Creek and Sidewinder with
+its layout too, r4); an MCC host's game on one refuses an Xbox machine
+(mixed_coop_multiplayer_refusal). What the owner has not decided
 yet is refused by default, one line each (mixed_coop.c's
 mixed_coop_decisions).
 
@@ -131,6 +134,20 @@ player told why */
 int mixed_coop_client_update(struct network_game_client *client);
 /* (network_client_manager.c) the client's game gone */
 void mixed_coop_client_dispose(void);
+
+/* ---------- (r4) the host's layout (Blood Gulch, Battle Creek, Sidewinder) */
+
+/* (network_client_message_handler.c, the host's game starting) TRUE when this
+machine (MCC's files, an Xbox-files host) waits for the host's layout before
+it loads the map: mixed_coop_frame starts it once the layout is here */
+int mixed_coop_client_start_waits(struct network_game_client *client);
+/* (network_client_message_handler.c) a fragment of the host's layout */
+void mixed_coop_client_handle_layout(struct network_game_client *client, unsigned short *message, short message_size);
+
+/* (custom_edition_objects.c) TRUE when this machine's map (MCC's file) is
+placed as an Xbox-files host's layout: its vehicles chosen as the Xbox's
+game chooses them, not by Halo PC's placements' spawn flags */
+int mixed_coop_xbox_layout_here(void);
 
 /* ---------- after the load */
 

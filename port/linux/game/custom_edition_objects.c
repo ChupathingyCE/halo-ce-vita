@@ -170,6 +170,12 @@ static short pc_map_vehicles(
 boolean custom_edition_vehicles_by_placement(
 	void)
 {
+	/* (mixed play r4: an MCC machine placing an Xbox-files host's layout - Blood Gulch ... - chooses its
+	vehicles as the Xbox's game does, as the host does: mixed_coop.c) */
+	int mixed_coop_xbox_layout_here(void);
+
+	if (mixed_coop_xbox_layout_here())
+		return FALSE;
 	return custom_edition_cache_tags_loaded() &&
 		game_engine_running() &&
 		game_engine_get_variant()->universal_variant.vehicle_set != VEHICLE_SET_NONE &&

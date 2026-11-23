@@ -822,6 +822,19 @@ boolean network_game_create_game_objects(
 	}
 
 	game_precache_new_map(options.map_name, TRUE);
+#if defined(HALO_LINUX) && !defined(HALO_RELEASE)
+	/* (debug, the tests) HALO_TEST_LOAD_STALL=MS: a network game's map load
+	takes MS more milliseconds on the game thread, as the Vita's 11.5 s load of
+	MCC's a10 hosting a mixed game (Nov 22 2026) */
+	if (getenv("HALO_TEST_LOAD_STALL"))
+	{
+		void platform_log(char const *format, ...);
+		long milliseconds = atol(getenv("HALO_TEST_LOAD_STALL"));
+
+		platform_log("test: the network game's map load stalls %ld ms", milliseconds);
+		Sleep((DWORD)(milliseconds > 0 && milliseconds < 120000 ? milliseconds : 0));
+	}
+#endif
 	main_menu_unload();
 
 	/* port: and whenever a map is loaded. After a game the client is back in
