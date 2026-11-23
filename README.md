@@ -43,7 +43,7 @@ processor, and its Direct3D rendering is translated to the Vita's GPU.
 > [!NOTE]
 > **[1.1.3](https://github.com/ChupathingyCE/halo-ce-vita/releases/latest) is the current release**, and this README describes it.
 > Install it over 1.0.3 or any 1.1.0 beta: maps, saves and settings carry over.
-> 1.1.3 is the last Halo CE Vita release; the next Vita update is Warthog Vita, from ChupathingyCE.
+> 1.1.3 is the last Halo CE Vita release. Thank you to everyone who tested and played. The Vita version continues as Warthog Vita, the PS Vita build of Chupathingy.
 
 > [!IMPORTANT]
 > **No game data is included.** You need your own **Xbox** copy of Halo:
@@ -69,9 +69,29 @@ processor, and its Direct3D rendering is translated to the Vita's GPU.
 
 </div>
 
+## Thank you
+
+This is the last Halo CE Vita update, and I just want to say thank you.
+
+Everyone who tested the insiders, sent me their halo.log and crash dumps at 2am, reported the weird bugs and kept playing even when stuff broke: thank you so much. It only got here because of you.
+
+Big thanks to the OpenCE folks, and to Milenko and the ChupathingyCE crew for taking this project in.
+
+### What's next
+
+Halo CE Vita is heading in a new direction. The Vita version continues as **Warthog Vita**, the PS Vita build of [Chupathingy](https://github.com/ChupathingyCE/chupathingyce). It's the same Halo CE you've been playing, on Chupathingy's engine, so the Vita gets the Delta Guide, Online Games, the Workshop and every Chupathingy update.
+
+It's still in the works, so keep playing 1.1.3 until it's out. Your maps carry over, and you can keep Halo CE Vita installed next to it.
+
+See you online.
+
+\- BirchWood
+
+(1.1.3 shows this note once, the first time it reaches the main menu, and again from the settings panel: Game > **Thank you**.)
+
 ## Contents
 
-- [What's new in 1.1](#whats-new-in-11) · [What works](#what-works)
+- [Thank you](#thank-you) · [What's new in 1.1](#whats-new-in-11) · [What works](#what-works)
 - [Install](#install): [requirements](#requirements), [Windows tool](#easy-install-windows-tool), [manual install](#manual-install), [updating](#updating), [Halo PC files](#halo-pc-files), [movies](#movies-optional)
 - [PC version](#pc-version): [downloads](#pc-downloads), [game data](#pc-game-data), [first start](#first-start), [keyboard and mouse](#keyboard-and-mouse), [settings](#pc-settings), [playing with Vitas](#playing-with-vitas)
 - [Multiplayer](#multiplayer): [the menus](#the-multiplayer-menus), [co-op campaign](#co-op-campaign), [custom maps](#custom-maps-and-map-sharing), [dedicated servers](#dedicated-servers)
@@ -634,6 +654,8 @@ The settings panel's **General** tab:
 - **Advanced**: Stick deadzone, **Reset controls**, Show dev settings, and
   the **Update channel** Check for updates looks at (Stable, the default:
   releases only; Experimental: betas too).
+- **Thank you** (under Updates, 1.1.3) shows BirchWood's note again: the
+  last Halo CE Vita update, and Warthog Vita next.
 
 ## Settings panel
 

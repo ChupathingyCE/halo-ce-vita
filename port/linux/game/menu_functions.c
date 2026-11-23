@@ -27358,6 +27358,23 @@ static void menu_style_update(boolean main_menu_loaded)
 		platform_log("menus: Menu style changed: the main menu did not open");
 }
 
+/* (system_link_shortcut.c: 1.1.3's thank-you note waits for it) the main
+menu's own screen the one open, nothing over it: the Xbox's (Menu style Halo
+CE, Classic+) or the Halo 3 set's (Halo 3, ElDewrito) */
+boolean menu_functions_main_screen_up(
+	void)
+{
+	struct widget_instance *active = ui_widget_port_active_screen(0);
+	long h3_main;
+
+	if (!active || active->definition_tag_index == NONE)
+		return FALSE;
+	if (!strcmp(tag_get_name(active->definition_tag_index), "ui\\shell\\main_menu\\main_menu"))
+		return TRUE;
+	h3_main = menu_tags_ingame_screen("h3/main/screen");
+	return h3_main != NONE && active->definition_tag_index == h3_main;
+}
+
 void pc_menu_functions_update(
 	boolean main_menu_loaded)
 {

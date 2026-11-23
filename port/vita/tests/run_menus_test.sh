@@ -450,6 +450,13 @@
 #            Infection. Then alone (no bots): started (a Vita's build, --linux-net-vita: one
 #            player is enough) or, where a local game needs two, split screen's own lobby after
 #            5 s (HALO_TEST_SHOTS: the pictures)
+#   thankyou  1.1.3's thank-you note (port/linux/src/thank_you.c; the owner, Nov 23
+#            2026): a first start (HALO_TEST_THANK_YOU=1, as a player's) with Menu style
+#            Halo 3 shows it once the main menu is up three seconds, in the Halo 3
+#            dialog (THANK YOU), OK back to the main menu, thank_you.txt written; a
+#            second start with that thank_you.txt does not; Menu style Halo CE shows
+#            it as the platform's message; a test's run (no HALO_TEST_THANK_YOU)
+#            never (the settings panel's Thank you row: vita_settings_test.c)
 #   msgboxes  the Halo 3 dialog (menus/halo3/dialog.xml; the owner, Oct 21 2026: one
 #            Halo 3 look for every message box and prompt) with Menu style Halo 3: on the
 #            main menu error 6 (CONNECTION LOST: Circle closes it), error 31 (DAMAGED FILE:
@@ -549,7 +556,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -604,6 +611,8 @@ run() { # NAME DATA SECONDS PAD [VAR=value...]
 	# (a mods folder of the case's: mods_data's, copied with its links as links)
 	[ -n "${mods_from:-}" ] && cp -a "$mods_from" "$out/$name/data/mods"
 	[ -n "${init_line:-}" ] && printf '%s\n' "$init_line" > "$out/$name/data/init.txt"
+	# (1.1.3's thank-you note seen already: a thank_you.txt of the case's)
+	[ -n "${thank_you_from:-}" ] && cp "$thank_you_from" "$out/$name/data/thank_you.txt"
 	local shots=()
 	if [ -n "${HALO_TEST_SHOTS:-}" ]; then
 		rm -rf "$HALO_TEST_SHOTS/$name"
@@ -3878,6 +3887,47 @@ PY
 			fail msgboxes "campaign, Halo CE: Circle did not go back to the Xbox's pause"
 		grep -aq "h3 dialog\|pc.h3.dlg" "$log" && fail msgboxes "campaign, Halo CE: a Halo 3 dialog opened"
 		grep -aq "pause menu: restart at checkpoint" "$log" && fail msgboxes "campaign, Halo CE: Circle reverted" ;;
+	thankyou)
+		run thankyou "$menus_data" 40 "until/h3\\main:150:500 until/dlg\\message:150:1500 @thankyou a:150:1500 until/h3\\main:150:1500 wait:150:3000" \
+			HALO_MENU_STYLE=halo3 HALO_TEST_THANK_YOU=1 HALO_TEST_DIALOGS=1
+		log=$out/thankyou/run.log
+		echo "--- thankyou"
+		grep -aE "thank you|h3 dialog|ui: screen" "$log" | head -12
+		[ "$(cat "$out/thankyou/exit")" = 0 ] || fail thankyou "exit $(cat "$out/thankyou/exit")"
+		grep -aqiE "assert|exception|halt" "$log" && fail thankyou "an assertion, exception or halt"
+		[ "$(grep -ac 'thank you: the note shown (first start of 1.1.3)' "$log")" = 1 ] ||
+			fail thankyou "the first start did not show the note once"
+		grep -aq 'menus: h3 dialog: pc.h3.dlg.message.screen "THANK YOU"' "$log" || fail thankyou "no Halo 3 dialog THANK YOU"
+		grep -aq "menus: h3 dialog: message dismissed" "$log" || fail thankyou "OK did not dismiss the note"
+		awk '/thank you: the note shown/ { shown = 1 } shown && /ui: screen pc.h3.main.screen/ { back = 1 } END { exit !back }' "$log" ||
+			fail thankyou "not back at the main menu after the note"
+		# (shown at the main menu only: after the main menu's first screen)
+		awk '/ui: screen pc.h3.main.screen/ { main = 1 } /thank you: the note shown/ { exit !main }' "$log" ||
+			fail thankyou "the note came before the main menu"
+		[ "$(head -c 5 "$out/thankyou/data/thank_you.txt" 2>/dev/null)" = 1.1.3 ] || fail thankyou "thank_you.txt not written"
+		# (the second start: thank_you.txt there, no note)
+		thank_you_from=$out/thankyou/data/thank_you.txt run thankyou_again "$menus_data" 25 "until/h3\\main:150:500 wait:150:8000" \
+			HALO_MENU_STYLE=halo3 HALO_TEST_THANK_YOU=1 HALO_TEST_DIALOGS=1
+		log=$out/thankyou_again/run.log
+		echo "--- thankyou (the second start)"
+		[ "$(cat "$out/thankyou_again/exit")" = 0 ] || fail thankyou "second start: exit $(cat "$out/thankyou_again/exit")"
+		grep -aq "ui: screen pc.h3.main.screen" "$log" || fail thankyou "second start: no main menu"
+		grep -aq "thank you: the note shown\|THANK YOU" "$log" && fail thankyou "second start: the note shown again"
+		# (Menu style Halo CE: the platform's message - a hidden window's: halo.log alone)
+		run thankyou_classic "$menus_data" 25 "wait:150:9000" HALO_TEST_THANK_YOU=1
+		log=$out/thankyou_classic/run.log
+		echo "--- thankyou (Menu style Halo CE)"
+		grep -aE "thank you|Thank you" "$log" | cut -c1-120 | head -4
+		[ "$(cat "$out/thankyou_classic/exit")" = 0 ] || fail thankyou "Halo CE: exit $(cat "$out/thankyou_classic/exit")"
+		grep -aq "thank you: the note shown (first start of 1.1.3)" "$log" && grep -aq "Thank you: This is the last Halo CE Vita update." "$log" ||
+			fail thankyou "Halo CE: the note was not the platform's message"
+		grep -aq "h3 dialog" "$log" && fail thankyou "Halo CE: a Halo 3 dialog opened"
+		# (a test's run, as every other case: never)
+		run thankyou_test "$menus_data" 20 "wait:150:9000" HALO_MENU_STYLE=halo3 HALO_TEST_DIALOGS=1
+		log=$out/thankyou_test/run.log
+		grep -aq "thank you: not shown (a run nobody watches)" "$log" && ! grep -aq "thank you: the note shown" "$log" &&
+			[ ! -e "$out/thankyou_test/data/thank_you.txt" ] || fail thankyou "a test's run showed the note or wrote thank_you.txt"
+		;;
 	ceplusmain)
 		# (1.1.3, owner Nov 21: the main menu is Halo PC's five - CAMPAIGN, MULTIPLAYER, PROFILES, SETTINGS,
 		# QUIT -, as ChupathingyCE's. SETTINGS, the fourth row: on a PC GAME MANAGER, FILE SHARE and FRIENDS -

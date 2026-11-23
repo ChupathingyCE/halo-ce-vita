@@ -76,6 +76,7 @@ Forge page does (run_forge_test.sh panel).
 #include "../src/lang.h"
 #include "../src/port_config.h"
 #include "network_connection.h"
+#include "../src/thank_you.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -439,6 +440,40 @@ static short system_link_shortcut_command_prepare(
 	return 0;
 }
 
+#ifndef HALO_DEDICATED_SERVER
+/* (1.1.3's thank-you note, thank_you.c) the main menu up with nothing over
+it: no level, network game, lobby or join under way, no request of the
+panel's, the main menu's own screen the one open (no dialog, message or
+other screen over it), and on the Vita the settings panel and its boxes
+closed */
+static boolean system_link_thank_you_ready(
+	boolean main_menu_loaded,
+	int request)
+{
+	extern int halo_main_menu_idle(void);
+	extern int p2p_joined_host(unsigned char *identifier, int take);
+	extern boolean menu_functions_main_screen_up(void);
+	unsigned char host[6];
+
+	if (!main_menu_loaded || !halo_main_menu_idle() || request != SYSTEM_LINK_REQUEST_NONE ||
+		global_network_game_client_get() || global_network_game_server_get() || p2p_joined_host(host, FALSE) ||
+		halo_multiplayer_status[SYSTEM_LINK_STATUS_STATE] != SYSTEM_LINK_STATE_MENUS)
+	{
+		return FALSE;
+	}
+#ifdef HALO_VITA
+	{
+		extern int vita_settings_panel_open(void);
+		extern int vita_settings_box_open(void);
+
+		if (vita_settings_panel_open() || vita_settings_box_open())
+			return FALSE;
+	}
+#endif
+	return menu_functions_main_screen_up();
+}
+#endif
+
 void system_link_shortcut_update(
 	boolean main_menu_loaded)
 {
@@ -449,6 +484,11 @@ void system_link_shortcut_update(
 	system_link_shortcut_status(main_menu_loaded);
 	network_connection_update(main_menu_loaded);
 	system_link_shortcut_adhoc();
+#ifndef HALO_DEDICATED_SERVER
+	/* (1.1.3's thank-you note: once on each install, at the main menu with
+	nothing over it, thank_you.c) */
+	thank_you_update(system_link_thank_you_ready(main_menu_loaded, request), system_milliseconds());
+#endif
 	/* (the host an invite, a code or the server browser joined, once
 	reached: its game joined as soon as the System Link list shows it, as A
 	on its row would; tried once, the host then forgotten, so that a refusal
