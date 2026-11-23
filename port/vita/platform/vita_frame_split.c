@@ -113,6 +113,12 @@ enum
 	_split_physics,
 	_split_collision_vector,
 	_split_node_matrices,
+	_split_guide_update,
+	_split_guide_process,
+	_split_guide_render,
+	_split_overlay_present,
+	_split_font_glyph,
+	_split_font_advance,
 	NUMBER_OF_SPLITS
 };
 
@@ -128,6 +134,7 @@ static const char *const split_names[NUMBER_OF_SPLITS] = {
 	"interface", "ui_widgets", "frame_begin", "frame_end",
 	"type_update", "damage", "unit", "biped", "vehicle", "weapon", "item", "projectile", "device", "garbage",
 	"physics", "collision_vector", "node_matrices",
+	"guide_update", "guide_process", "guide_render", "overlay_present", "font_glyph", "font_advance",
 };
 
 static int split_enabled = -1;
@@ -224,6 +231,13 @@ typedef unsigned char boolean;
 /* the main loop (main.c) */
 WRAP_VOID(input_update, _split_input, (void), ())
 WRAP_VOID(process_ui_widgets, _split_ui, (void), ())
+/* (the Delta Guide and the overlay) */
+WRAP_VOID(guide_update, _split_guide_update, (boolean menu_open), (menu_open))
+WRAP_VOID(guide_process, _split_guide_process, (void), ())
+WRAP_VOID(guide_render, _split_guide_render, (void), ())
+WRAP_VOID(vita_ui_overlay_present, _split_overlay_present, (void), ())
+WRAP_RESULT(float, posix_ui_font_advance, _split_font_advance, (int font, float height, unsigned int codepoint,
+	unsigned int previous), (font, height, codepoint, previous))
 WRAP_RESULT(boolean, player_control_update, _split_player_control, (real seconds), (seconds))
 WRAP_VOID(game_time_update, _split_tick, (real seconds), (seconds))
 WRAP_VOID(director_update, _split_director, (real seconds), (seconds))

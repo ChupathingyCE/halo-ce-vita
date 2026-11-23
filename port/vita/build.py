@@ -330,6 +330,8 @@ FRAME_SPLIT_WRAPPED = (
     "rasterizer_transparent_geometry_draw", "rasterizer_decals_draw", "structure_render_detail_objects",
     "rasterizer_lens_flares_draw", "interface_draw_screen", "render_ui_widgets", "rasterizer_frame_begin",
     "rasterizer_frame_end",
+    # (the Delta Guide's and the overlay's)
+    "guide_update", "guide_process", "guide_render", "vita_ui_overlay_present", "posix_ui_font_advance",
 )
 # the platform layer's units that read nothing of the game's through a
 # pointer of no particular alignment, built without -fmax-type-align=1: the
@@ -783,7 +785,7 @@ def generate(n: Writer, sln: Any, port: ConsolePort) -> None:
     vpk = build_dir / "warthog.vpk"
     n.rule(name="vita_link",
            command=("$vita_sdk_bin/arm-vita-eabi-gcc -Wl,-q,--defsym=__sce_headroom=0x1000 "
-                    "-Wl,--no-enum-size-warning -Wl,--no-wchar-size-warning -Wl,--gc-sections -Wl,--wrap=exit,--wrap=abort,--wrap=_exit,--wrap=fork,--wrap=fopen,--wrap=open,--wrap=opendir,--wrap=stat,--wrap=sceKernelCreateThread,--wrap=sceKernelExitProcess,--wrap=D3DTexture_LockRect $wraps "
+                    "-Wl,--no-enum-size-warning -Wl,--no-wchar-size-warning -Wl,--gc-sections -Wl,--wrap=exit,--wrap=abort,--wrap=_exit,--wrap=fork,--wrap=fopen,--wrap=open,--wrap=opendir,--wrap=stat,--wrap=sceKernelCreateThread,--wrap=sceKernelExitProcess,--wrap=D3DTexture_LockRect" + (",--wrap=posix_ui_font_glyph" if guide else "") + " $wraps "
                     f"-Wl,-Map,{_quote(build_dir / 'warthog.map')} -o $out @$out.rsp $libs"),
            description="VITA LINK $out", rspfile="$out.rsp", rspfile_content="$in_newline")
     n.rule(name="vita_velf", command="$vita_sdk_bin/vita-elf-create $in $out", description="VITA VELF $out")

@@ -40,6 +40,10 @@ the game gave their surface, as in the OpenGL device.
 #include "vita_controls.h"
 #include "frame_timing.h"
 
+/* (debug: the named display screenshots, below: write_display_screenshot) */
+static char shot_names[4][64];
+static unsigned long shot_frames[4];
+
 void d3d8_surface_initialize(D3DSurface *surface, D3DFORMAT format, unsigned long width, unsigned long height);
 void d3d8_surface_resize(D3DSurface *surface, D3DFORMAT format, unsigned long width, unsigned long height);
 void *physical_memory_get_tag_cache_base_address(void);
@@ -4760,7 +4764,8 @@ static void execute_command(struct render_record *command)
 			platform_log("trace: worker present %lu", command->present.frame);
 		if (back_buffer)
 		{
-			if (command->present.screenshot)
+			if (command->present.screenshot &&
+				!(shot_frames[command->present.frame & 3] == command->present.frame && shot_names[command->present.frame & 3][0]))
 				write_screenshot(back_buffer);
 			if (command->present.still)
 			{
@@ -9613,6 +9618,44 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 				display saved as name<frame>.bmp */
 				extern char halo_screenshot_name[64];
 
+				/* (debug) HALO_SHOT_AT=<seconds>:<name>,...: the display
+				saved as <name><frame>.bmp at those seconds after the start,
+				and nothing else (a test's few clear screenshots, each a
+				stall of a few seconds) */
+				{
+					static char at_names[16][24];
+					static unsigned long at_seconds[16];
+					static int at_count = -1, at_next;
+
+					if (at_count < 0)
+					{
+						const char *list = getenv("HALO_SHOT_AT");
+
+						at_count = 0;
+						while (list && *list && at_count < 16)
+						{
+							unsigned long seconds = strtoul(list, (char **)&list, 10);
+							int length = 0;
+
+							if (*list != ':')
+								break;
+							list++;
+							while (*list && *list != ',' && length < 23)
+								at_names[at_count][length++] = *list++;
+							at_names[at_count][length] = 0;
+							at_seconds[at_count++] = seconds;
+							while (*list && *list != ',')
+								list++;
+							if (*list == ',')
+								list++;
+						}
+					}
+					if (at_next < at_count && vita_host_time_us() >= at_seconds[at_next] * 1000000ULL)
+					{
+						strncpy(halo_screenshot_name, at_names[at_next], sizeof(halo_screenshot_name) - 1);
+						at_next++;
+					}
+				}
 				shot_names[device.frame & 3][0] = 0;
 				if (halo_screenshot_name[0])
 				{
