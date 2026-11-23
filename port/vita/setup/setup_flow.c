@@ -365,6 +365,30 @@ static void scan(struct flow *flow)
 
 /* ---------- the screens */
 
+/* text in the face's size, cut short with "..." to fit width */
+static void draw_fitted(float size, float x, float baseline, float width, unsigned int color, const char *text)
+{
+	char line[512];
+	size_t length;
+
+	snprintf(line, sizeof(line), "%s", text);
+	length = strlen(line);
+	if (setup_text_width(SETUP_FONT_TEXT, size, line) > width)
+	{
+		while (length > 4)
+		{
+			/* (never inside a UTF-8 character) */
+			do
+				length--;
+			while (length > 4 && ((unsigned char)line[length] & 0xC0) == 0x80);
+			memcpy(line + length, "...", 4);
+			if (setup_text_width(SETUP_FONT_TEXT, size, line) <= width)
+				break;
+		}
+	}
+	setup_draw_text(SETUP_FONT_TEXT, size, x, baseline, SETUP_ALIGN_LEFT, color, line);
+}
+
 static void draw_notice(const struct setup_system *system, const char *title, const char *first, const char *second,
 	const int *glyph, const char *const *label, int count)
 {
@@ -423,7 +447,7 @@ static void draw_missing(struct flow *flow)
 	setup_draw_text(SETUP_FONT_TEXT, 22.0f, 64.0f, 208.0f, SETUP_ALIGN_LEFT, SETUP_COLOR_TEXT,
 		"Put the disc's maps folder here:");
 	snprintf(text, sizeof(text), "%s/maps", flow->places->data_folder);
-	setup_draw_text(SETUP_FONT_TEXT, 24.0f, 64.0f, 238.0f, SETUP_ALIGN_LEFT, SETUP_COLOR_LABEL, text);
+	draw_fitted(24.0f, 64.0f, 238.0f, SETUP_WIDTH - 128.0f, SETUP_COLOR_LABEL, text);
 	snprintf(text, sizeof(text), "It needs %s (NTSC 01.10.12.2276).", needed_maps);
 	baseline = setup_draw_wrapped(SETUP_FONT_TEXT, 18.0f, 64.0f, 266.0f, SETUP_WIDTH - 128, 23.0f,
 		SETUP_COLOR_STATUS, text);
@@ -452,7 +476,7 @@ static void draw_missing(struct flow *flow)
 
 		snprintf(text, sizeof(text), "%s: %s", candidate->kind == CANDIDATE_IMAGE ? file_name(candidate->path) :
 			candidate->path, candidate->reason);
-		setup_draw_text(SETUP_FONT_TEXT, 18.0f, 64.0f, baseline + 4.0f, SETUP_ALIGN_LEFT, SETUP_COLOR_BAD, text);
+		draw_fitted(18.0f, 64.0f, baseline + 4.0f, SETUP_WIDTH - 128.0f, SETUP_COLOR_BAD, text);
 		baseline += 23.0f;
 		shown++;
 	}
@@ -472,8 +496,11 @@ static void draw_choices(struct flow *flow)
 	setup_draw_title(60.0f, 120.0f, SETUP_ALIGN_LEFT, "SET UP WARTHOG");
 	setup_draw_text(SETUP_FONT_TEXT, 22.0f, 62.0f, 156.0f, SETUP_ALIGN_LEFT, SETUP_COLOR_TEXT_DIM,
 		"Warthog needs the maps from your Halo: Combat Evolved disc for the original Xbox.");
-	setup_draw_text(SETUP_FONT_TEXT, 22.0f, 62.0f, 182.0f, SETUP_ALIGN_LEFT, SETUP_COLOR_TEXT_DIM,
-		flow->count == 1 ? "This was found on the memory card:" : "These were found on the memory card:");
+	if (flow->note[0])
+		setup_draw_text(SETUP_FONT_TEXT, 22.0f, 62.0f, 182.0f, SETUP_ALIGN_LEFT, SETUP_COLOR_WARNING, flow->note);
+	else
+		setup_draw_text(SETUP_FONT_TEXT, 22.0f, 62.0f, 182.0f, SETUP_ALIGN_LEFT, SETUP_COLOR_TEXT_DIM,
+			flow->count == 1 ? "This was found on the memory card:" : "These were found on the memory card:");
 	setup_draw_panel(40, LIST_TOP, SETUP_WIDTH - 80, VISIBLE_ROWS * ROW_HEIGHT + 12);
 	if (flow->selected < flow->top)
 		flow->top = flow->selected;
@@ -490,9 +517,9 @@ static void draw_choices(struct flow *flow)
 		candidate = &flow->candidates[index];
 		if (index == flow->selected)
 			setup_draw_selection(48, y + 2, SETUP_WIDTH - 96, ROW_HEIGHT - 4);
-		setup_draw_text(SETUP_FONT_TEXT, 25.0f, 66.0f, (float)y + 30.0f, SETUP_ALIGN_LEFT,
+		draw_fitted(25.0f, 66.0f, (float)y + 30.0f, SETUP_WIDTH - 132.0f,
 			candidate->usable ? SETUP_COLOR_TEXT : SETUP_COLOR_FAINT, candidate->name);
-		setup_draw_text(SETUP_FONT_TEXT, 18.0f, 66.0f, (float)y + 54.0f, SETUP_ALIGN_LEFT,
+		draw_fitted(18.0f, 66.0f, (float)y + 54.0f, SETUP_WIDTH - 132.0f,
 			candidate->usable ? SETUP_COLOR_STATUS : SETUP_COLOR_BAD,
 			candidate->usable ? candidate->detail : candidate->reason);
 	}
@@ -502,8 +529,6 @@ static void draw_choices(struct flow *flow)
 	if (flow->top + VISIBLE_ROWS < flow->count)
 		setup_draw_text(SETUP_FONT_TEXT, 18.0f, SETUP_WIDTH - 60.0f, LIST_TOP + VISIBLE_ROWS * ROW_HEIGHT + 4.0f,
 			SETUP_ALIGN_RIGHT, SETUP_COLOR_FAINT, "MORE BELOW");
-	if (flow->note[0])
-		setup_draw_text(SETUP_FONT_TEXT, 20.0f, 62.0f, 474.0f, SETUP_ALIGN_LEFT, SETUP_COLOR_WARNING, flow->note);
 	prompts(system, 3, glyph, label);
 	present(system);
 }
