@@ -163,9 +163,10 @@ away from the game and the Guide until both are let go (vita_pad.c), so it
 is no crouch, no Back and no step down. D-pad down alone moves as before. While the
 Guide is open it has the Vita's buttons in the menus' fixed layout (Cross
 A, Circle B, Square X, Triangle Y, the d-pad or the left stick, START,
-SELECT as Back), L and R its LB and RB (the sections), and the rear touch
-pad's left and right halves, or SELECT held with L or R, its LT and RT (a
-section's pages); the game gets a controller at rest. What is still held as
+SELECT as Back), L and R its LB and RB (the sections), SELECT held with L or R its LT and
+RT (a section's pages); the rear touch pad does nothing there; the front
+screen is its pointer (d3d8_gxm.c halo_ui_pointer_update: a tap selects
+and presses, a drag scrolls); the game gets a controller at rest. What is still held as
 it closes stays up for the game until let go of. */
 
 /* (vita_pad.c) */
@@ -251,8 +252,6 @@ static void guide_take(XINPUT_GAMEPAD *pad)
 			if (raw & VITA_BUTTON_R) held |= GUIDE_INPUT_RIGHT_BUMPER;
 			/* (SELECT alone: Back, once let go of without L or R) */
 		}
-		if (vita_pad_raw_touch & (1UL << VITA_ZONE_REAR_LEFT)) held |= GUIDE_INPUT_LEFT_TRIGGER;
-		if (vita_pad_raw_touch & (1UL << VITA_ZONE_REAR_RIGHT)) held |= GUIDE_INPUT_RIGHT_TRIGGER;
 		{
 			/* (SELECT's Back: on its release, unless it was a shift for L or R) */
 			static int select_was, select_shifted;

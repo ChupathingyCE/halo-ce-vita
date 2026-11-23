@@ -307,6 +307,9 @@ long halo_screen_commit(void)
 
 extern int vita_menus_active;
 
+/* (the Delta Guide's drag: the menus' units a row step takes) */
+#define VITA_GUIDE_DRAG_STEP 24
+
 /* the menus' pointer: the front screen (vita_controls.h vita_touch_pointer):
 a finger highlights the item it is on, a tap presses A on it (or the button
 of a screen's key it is on); not while the settings panel is open. The
@@ -336,6 +339,36 @@ int halo_ui_pointer_update(int menus_active, struct halo_ui_pointer *pointer)
 	pointer->moved = (unsigned char)moved;
 	pointer->left_clicks = (unsigned char)tap;
 	pointer->left_down = (unsigned char)(touch.down != 0);
+	/* (the touchscreen: a finger's taps and drags, as the game's touch
+	menus take them - its rows' taller tap areas, a tap on the chosen row
+	its A) */
+	pointer->touch = 1;
+	{
+		static int was_down;
+		static short drag_y;
+		extern int vita_guide_capturing;
+
+		if (touch.down && !was_down)
+		{
+			pointer->downs = 1;
+			pointer->down_x = x;
+			pointer->down_y = y;
+			drag_y = y;
+		}
+		/* (the Delta Guide: a finger dragged up or down a list scrolls it,
+		a row a step, as the wheel does; a drag is no tap) */
+		if (touch.down && vita_guide_capturing && !touch.since)
+		{
+			int steps = (y - drag_y) / VITA_GUIDE_DRAG_STEP;
+
+			if (steps)
+			{
+				pointer->wheel_steps = (signed char)(steps > 8 ? 8 : steps < -8 ? -8 : steps);
+				drag_y = (short)(drag_y + steps * VITA_GUIDE_DRAG_STEP);
+			}
+		}
+		was_down = touch.down;
+	}
 	return 1;
 }
 
