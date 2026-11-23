@@ -2477,6 +2477,212 @@ VPK_INSTRUCTIONS = (
 
 
 # ---------------------------------------------------------------------------
+# a memory card or a folder instead of FTP (issue #54)
+#
+# VitaShell's USB mode shows the Vita's card (ux0:, or an SD2Vita's uma0:) as
+# a drive on the PC; any folder does too, to copy onto the card later. Setup
+# writes there what it would send over FTP, laid out as on the card:
+# data/haloce-vita/... (the game's folder), the VPK at the folder's root, and
+# README-what-to-do.txt. A folder that is a card's root (it has app/, data/,
+# id.dat ...) gets the game's folder straight in its data/. Files already
+# there at the right size are kept, as over FTP; the VPK is always written.
+
+CARD_README = "README-what-to-do.txt"
+# what a PS Vita memory card's root holds (VitaShell's USB mode shows it so)
+_CARD_ROOT_MARKERS = ("app", "data", "license", "appmeta", "user", "tai", "id.dat", "pspemu", "cache")
+
+
+def looks_like_card_root(folder: str) -> bool:
+    """Whether `folder` is a Vita memory card's root: its app folder or
+    id.dat, and another of the card's own folders."""
+    try:
+        names = {name.lower() for name in os.listdir(folder)}
+    except OSError:
+        return False
+    found = [marker for marker in _CARD_ROOT_MARKERS if marker in names]
+    return ("app" in found or "id.dat" in found) and len(found) >= 2
+
+
+def card_root_of(folder: str) -> str:
+    """The folder the card layout starts in: `folder` itself, or the card
+    root above it when the player chose the card's data or data/haloce-vita
+    folder."""
+    folder = os.path.normpath(os.path.abspath(os.path.expanduser(folder)))
+    game = VITA_GAME_FOLDER.partition(":")[2].split("/")  # ["data", "haloce-vita"]
+    parts = [part.lower() for part in folder.replace("\\", "/").split("/")]
+    for depth in (2, 1):
+        if len(parts) > depth and parts[-depth:] == [name.lower() for name in game[:depth]]:
+            above = folder
+            for _ in range(depth):
+                above = os.path.dirname(above)
+            if depth == 2 or looks_like_card_root(above):
+                return above
+    return folder
+
+
+def _system_folders() -> List[str]:
+    if sys.platform == "win32":
+        names = ("SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData",
+                 "CommonProgramFiles", "CommonProgramFiles(x86)")
+        return [os.environ[name] for name in names if os.environ.get(name)]
+    return ["/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/opt", "/proc", "/run", "/sbin", "/srv",
+            "/sys", "/usr", "/var", "/System", "/Library", "/Applications", "/private"]
+
+
+def _inside(path: str, folder: str) -> bool:
+    """Whether `path` is `folder` or in it (both resolved)."""
+    try:
+        path, folder = os.path.normcase(os.path.realpath(path)), os.path.normcase(os.path.realpath(folder))
+        return os.path.commonpath([path, folder]) == folder
+    except ValueError:  # another drive
+        return False
+
+
+def check_card_folder(folder: str, halo_folders: Sequence[str] = ()) -> str:
+    """The folder Setup may write the card layout in, as an absolute path;
+    InstallerError for none, a system folder or a system drive's root, or a
+    folder inside (or holding) the Halo files Setup reads or gathers
+    (`halo_folders`: the output folder, the Xbox game, MCC ...)."""
+    folder = os.path.expanduser((folder or "").strip())
+    if not folder or not os.path.isabs(folder) or any(ord(character) < 32 for character in folder):
+        raise InstallerError("Choose the memory card's drive, or a full folder path.")
+    folder = card_root_of(folder)
+    real = os.path.realpath(folder)
+    if os.path.exists(real) and not os.path.isdir(real):
+        raise InstallerError("%s is a file, not a folder." % folder)
+    parent = real
+    while not os.path.isdir(parent) and os.path.dirname(parent) != parent:
+        parent = os.path.dirname(parent)
+    if not os.path.isdir(parent):
+        raise InstallerError("%s cannot be made: its drive is not there." % folder)
+    system_drive = os.environ.get("SystemDrive", "C:") + "\\" if sys.platform == "win32" else "/"
+    if os.path.normcase(real) == os.path.normcase(os.path.realpath(system_drive)):
+        raise InstallerError("Choose the memory card's own drive or a folder, not the system drive itself (%s)."
+                             % system_drive)
+    for system in _system_folders():
+        if _inside(real, system):
+            raise InstallerError("%s is a system folder: choose the memory card's drive or a folder of your own."
+                                 % folder)
+    for halo in halo_folders:
+        if halo and (_inside(real, halo) or _inside(halo, os.path.join(real, *VITA_GAME_FOLDER.partition(":")[2]
+                                                                         .split("/")))):
+            raise InstallerError("%s is inside the Halo files Setup reads or gathers (%s): choose another folder."
+                                 % (folder, halo))
+    return folder
+
+
+def card_readme(card: bool, vpk: str) -> str:
+    """README-what-to-do.txt: the steps left, for a card written over USB or
+    a folder to copy onto one."""
+    lines = ["Halo CE for PS Vita - what to do next", ""]
+    if card:
+        lines += ["Setup wrote the game's files straight onto your Vita's memory card:",
+                  "    data/haloce-vita  (the game's folder)"]
+        step = 1
+    else:
+        lines += ["Setup wrote the game's files here, laid out as on the Vita's memory card:",
+                  "    data/haloce-vita  (the game's folder)", "",
+                  "1. Copy the data folder onto the card's root (VitaShell's USB mode shows the card",
+                  "   as a drive; or send it with VitaShell's FTP), so the card has data/haloce-vita.",
+                  "   Merge it with the data folder already there: nothing in it is replaced."]
+        step = 2
+    if vpk:
+        lines += ["%d. In VitaShell, open the card (ux0:, or uma0: for an SD2Vita), press Cross on" % step,
+                  "   %s and confirm the install. The bubble is called Halo CE." % vpk]
+        if not card:
+            lines.append("   (Copy %s onto the card first, next to the data folder.)" % vpk)
+        step += 1
+    else:
+        lines += ["%d. Install the VPK with VitaShell, if the game is not on the Vita yet." % step]
+        step += 1
+    lines += ["%d. Check that ur0:data/libshacccg.suprx is there (ShaRKF00D extracts it)." % step,
+              "%d. Start Halo CE from its bubble." % (step + 1), "",
+              "On an SD2Vita mounted as uma0: (the official memory card staying ux0:), put data/haloce-vita",
+              "on uma0: and the game finds it there by itself. Its settings, Multiplayer > Modded maps >",
+              "Game folder, pick a card by hand.", ""] + list(FOLDER_NOTE_LINES) + [""]
+    return "\n".join(lines).replace("\n", "\r\n")
+
+
+def copy_to_card(staging: str, folder: str, vpk: str = "", replace: bool = False, progress: Progress = _no_progress,
+                 log: Callable[[str], None] = print, cancel: Optional[threading.Event] = None,
+                 halo_folders: Sequence[str] = ()) -> Dict[str, object]:
+    """Steps 4 and 5 without FTP: the gathered files into `folder` (a card
+    VitaShell's USB mode shows as a drive, or any folder) as data/haloce-vita/...,
+    the VPK (checked: check_vpk) at its root, README-what-to-do.txt. Each file
+    is written beside its place, checked by its size and moved in; one there
+    at the right size is kept unless `replace`. Returns the counts, the VPK's
+    name there, the game folder and whether `folder` is a card's root."""
+    root = check_card_folder(folder, tuple(halo_folders) + (staging,))
+    items = staged_uploads(staging)
+    if not items:
+        raise InstallerError("Nothing to copy in %s: gather the files first." % staging)
+    vpk_name = ""
+    if vpk:
+        check_vpk(vpk)
+        vpk_name = os.path.basename(vpk)
+        try:
+            check_name(vpk_name)
+        except InstallerError:
+            vpk_name = "halo.vpk"
+    os.makedirs(root, exist_ok=True)
+    card = looks_like_card_root(root)
+    game_parts = VITA_GAME_FOLDER.partition(":")[2].split("/")
+
+    def target(item: UploadItem) -> Tuple[List[str], str]:
+        parts = game_parts + [part for part in item.folder[len(VITA_GAME_FOLDER):].split("/") if part]
+        return parts, safe_join(root, *(parts + [item.name]))
+
+    def kept(item: UploadItem, path: str) -> bool:
+        return not replace and os.path.isfile(path) and os.path.getsize(path) == item.size
+
+    places = [(item,) + target(item) for item in items]
+    if vpk:
+        places.append((UploadItem(vpk, "", vpk_name, os.path.getsize(vpk)), [], safe_join(root, vpk_name)))
+    needed = sum(item.size for item, parts, path in places if not (parts and kept(item, path)))
+    _check_space(root, needed + (64 << 10))
+    total = sum(item.size for item, _, _ in places)
+    done = copied = skipped = 0
+    log("Writing %d files (%s) to %s%s" % (len(places), human_size(total), root,
+                                          " (a Vita memory card)" if card else ""))
+    for item, parts, path in places:
+        if cancel is not None and cancel.is_set():
+            raise Cancelled()
+        label = "/".join(parts + [item.name])
+        if parts and kept(item, path):
+            log("%s: already there" % label)
+            skipped += 1
+        else:
+            directory = root
+            for part in parts:
+                directory = safe_join(directory, part)
+                os.makedirs(directory, exist_ok=True)
+            partial = path + ".part"
+            try:
+                with open(item.local, "rb") as reader, open(partial, "wb") as writer:
+                    _copy_range(reader, writer, 0, item.size, progress, item.name, done, total)
+                    writer.flush()
+                    os.fsync(writer.fileno())
+                if os.path.getsize(partial) != item.size:
+                    raise InstallerError("%s came out damaged (is the card full, or was it unplugged?)" % label)
+                os.replace(partial, path)
+            except BaseException:
+                if os.path.exists(partial):
+                    try:
+                        os.remove(partial)
+                    except OSError:
+                        pass
+                raise
+            log("%s: written (%s)" % (label, human_size(item.size)))
+            copied += 1
+        done += item.size
+        progress(item.name, done, total)
+    with open(safe_join(root, CARD_README), "w", encoding="utf-8", newline="") as readme:
+        readme.write(card_readme(card, vpk_name))
+    return {"copied": copied, "skipped": skipped, "vpk": vpk_name, "card": card, "root": root,
+            "game_folder": os.path.join(root, *game_parts)}
+
+
+# ---------------------------------------------------------------------------
 # the PC build's data folder
 #
 # The game's data root (port/linux/src/xbox_files.c): the folder of its
@@ -3745,6 +3951,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     step.add_argument("vpk", nargs="?", help="a VPK of yours, not signature-checked (default: the release's signed "
                                              "download)")
     step.add_argument("--port", type=int, default=FTP_PORT)
+    step = commands.add_parser("card", help="write the gathered files to the Vita's memory card over USB (VitaShell's "
+                                            "USB mode shows it as a drive) or to a folder, laid out as on the card: "
+                                            "data/haloce-vita, the VPK at its root, README-what-to-do.txt")
+    step.add_argument("folder", help="the card's drive (its root) or any folder")
+    which = step.add_mutually_exclusive_group()
+    which.add_argument("--vpk", help="a VPK of yours to put at its root, not signature-checked")
+    which.add_argument("--download-vpk", action="store_true",
+                       help="download the release's VPK, checked by its signature, and put it at its root")
+    step.add_argument("--replace", action="store_true", help="write files already there again")
     step = commands.add_parser("pc-copy", help="copy the gathered files into a PC build's data folder")
     step.add_argument("build", nargs="?", help="the unpacked PC build (default: one found next to this tool or in "
                                                "your Downloads, Desktop or Documents)")
@@ -3847,6 +4062,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     vpk = download_vpk(temporary, progress, _console_log)
                 name = upload_vpk(arguments.host, vpk, arguments.port, progress, _console_log)
             _console_log(VPK_INSTRUCTIONS.format(name=name))
+        elif arguments.command == "card":
+            status = pc_files_status(out)
+            if not status.complete:
+                _console_log("Warning: " + pc_files_help(status.missing))
+            with tempfile.TemporaryDirectory(prefix="halo-ce-setup-") as temporary:
+                vpk = ""
+                if arguments.vpk:
+                    vpk = arguments.vpk
+                    check_vpk(vpk)
+                    _console_log("Warning: " + NOT_SIGNATURE_CHECKED % os.path.basename(vpk))
+                    match_signed_vpk(vpk, _console_log)
+                elif arguments.download_vpk:
+                    vpk = download_vpk(temporary, progress, _console_log)
+                result = copy_to_card(out, arguments.folder, vpk, arguments.replace, progress, _console_log)
+            _console_log("Done: %d written, %d already there, in %s%s" % (
+                result["copied"], result["skipped"], result["game_folder"],
+                " (a Vita memory card)" if result["card"] else ""))
+            if result["vpk"]:
+                _console_log("Then, in VitaShell, open the card and press Cross on %s to install it." % result["vpk"])
+            _console_log("%s there says what is left." % os.path.join(str(result["root"]), CARD_README))
         elif arguments.command == "pc-copy":
             build = arguments.build or (find_pc_builds() or [None])[0]
             if not build:
@@ -4160,6 +4395,11 @@ class InstallerWindow:
         self.quality = var(value="baseline")
         self.movies = tkinter.BooleanVar(value=bool(find_ffmpeg()))
         self.host = var()
+        # (the Vita's files: over VitaShell's FTP, or written to its card over USB or to a folder: issue #54)
+        self.vita_via = var(value="ftp")
+        self.card_folder = var()
+        self.card_note = var()
+        self.card_result: Dict[str, object] = {}
         # (never a VPK found by itself: the signed download, or one the user chose)
         self.vpk = var()
         self.download_vpk_box = tkinter.BooleanVar(value=True)
@@ -4200,6 +4440,7 @@ class InstallerWindow:
         self.accepted.trace_add("write", lambda *ignored: self.update_buttons())
         self.mode.trace_add("write", lambda *ignored: self.update_fields())
         self.install_folder.trace_add("write", lambda *ignored: self.update_space())
+        self.card_folder.trace_add("write", lambda *ignored: self.update_card_note())
         self.package.trace_add("write", lambda *ignored: self.update_space())
         self.show(self.flow()[0])
         root.after(100, self.poll)
@@ -4624,18 +4865,37 @@ class InstallerWindow:
         else:
             self.destination_vita()
 
+    def to_card(self) -> bool:
+        """The Vita's files written to its memory card over USB or to a folder, not sent over FTP."""
+        return self.vita_via.get() == "folder"
+
     def destination_vita(self):
         ttk, px = self.ttk, self.px
-        self.text("On the Vita, open VitaShell and press SELECT. It shows an address like ftp://192.168.1.20:1337: "
-                  "type it here.", pady=(0, px(8)))
-        self.text("Vita's address:")
         row = ttk.Frame(self.body)
-        row.pack(fill="x", pady=(px(2), 0))
-        ttk.Entry(row, textvariable=self.host).pack(side="left", fill="x", expand=True)
-        self.test_button = ttk.Button(row, text="Test connection", command=self.test_connection)
-        self.test_button.pack(side="left", padx=(px(6), 0))
-        self.test_result.set("")
-        self.text("", textvariable=self.test_result, pady=(px(2), px(6)))
+        row.pack(fill="x", pady=(0, px(6)))
+        ttk.Label(row, text="Send the files:").pack(side="left", padx=(0, px(8)))
+        for value, label in (("ftp", "Over Wi-Fi (FTP)"), ("folder", "USB or a folder")):
+            ttk.Radiobutton(row, text=label, value=value, variable=self.vita_via,
+                            command=lambda: self.show("destination")).pack(side="left", padx=(0, px(12)))
+        if self.to_card():
+            self.text("Plug the Vita in and turn on VitaShell's USB mode (START opens its settings, where you pick "
+                      "the card): the card shows up as a drive. Choose it, or any folder to copy onto the card "
+                      "later.", pady=(0, px(6)))
+            self.field("Memory card's drive, or a folder:", self.card_folder, pady=(0, 2),
+                       browse=lambda: self.browse_folder(self.card_folder))
+            self.text("", textvariable=self.card_note, pady=(px(2), px(6)))
+            self.update_card_note()
+        else:
+            self.text("On the Vita, open VitaShell and press SELECT. It shows an address like "
+                      "ftp://192.168.1.20:1337: type it here.", pady=(0, px(6)))
+            self.text("Vita's address:")
+            row = ttk.Frame(self.body)
+            row.pack(fill="x", pady=(px(2), 0))
+            ttk.Entry(row, textvariable=self.host).pack(side="left", fill="x", expand=True)
+            self.test_button = ttk.Button(row, text="Test connection", command=self.test_connection)
+            self.test_button.pack(side="left", padx=(px(6), 0))
+            self.test_result.set("")
+            self.text("", textvariable=self.test_result, pady=(px(2), px(6)))
         ttk.Checkbutton(self.body, text="Download the game package (VPK) and check its signature",
                         variable=self.download_vpk_box,
                         command=lambda: self.show("destination")).pack(anchor="w", pady=(0, px(4)))
@@ -4714,6 +4974,30 @@ class InstallerWindow:
         except OSError:
             return 0
 
+    def halo_folders(self) -> List[str]:
+        """The folders Setup reads the Halo files from or gathers them in: never a place to write the card's."""
+        return [folder for folder in (self.out.get().strip(), self.xbox_source.get().strip(),
+                                      self.mcc_root.get().strip(), self.ce_source.get().strip(), self.existing or "")
+                if folder]
+
+    def update_card_note(self):
+        """What the chosen drive or folder is: a memory card (the files go into its data/haloce-vita) or a
+        folder (the same layout, to copy over), and its free space."""
+        if self.page != "destination" or not self.to_card():
+            return
+        folder = self.card_folder.get().strip()
+        if not folder:
+            self.card_note.set("")
+            return
+        try:
+            root = check_card_folder(folder, self.halo_folders())
+        except InstallerError as error:
+            self.card_note.set(str(error))
+            return
+        kind = ("A Vita memory card: the files go into its data/haloce-vita." if looks_like_card_root(root) else
+                "Setup writes data/haloce-vita and the VPK here, with a README on what to copy to the card.")
+        self.card_note.set("%s Space free: %s." % (kind, human_size(self.free_bytes(root))))
+
     def update_space(self):
         if self.page != "destination" or not self.on_pc:
             return
@@ -4755,7 +5039,10 @@ class InstallerWindow:
 
     def leave_destination_vita(self) -> bool:
         try:
-            self._host_port()
+            if self.to_card():
+                check_card_folder(self.card_folder.get(), self.halo_folders())
+            else:
+                self._host_port()
             if self.own_vpk():
                 check_vpk(self.own_vpk())
             if not self.out.get().strip():
@@ -4866,8 +5153,15 @@ class InstallerWindow:
                     "PC build:", "    %s" % self.build_source()] + self.source_lines() + [
                 "Space needed: %s" % human_size(self.needed_bytes()),
                 "Shortcuts: %s" % (", ".join(shortcuts) or "none")]
-        host, port = self._host_port()
-        return ["Install on: PS Vita at %s:%d, in %s" % (host, port, VITA_GAME_FOLDER)] + self.source_lines() + [
+        if self.to_card():
+            root = card_root_of(self.card_folder.get())
+            where = ["Install on: PS Vita, written to %s" % ("its memory card over USB" if looks_like_card_root(root)
+                                                            else "a folder, to copy onto its memory card"),
+                     "    %s" % os.path.join(root, *VITA_GAME_FOLDER.partition(":")[2].split("/"))]
+        else:
+            host, port = self._host_port()
+            where = ["Install on: PS Vita at %s:%d, in %s" % (host, port, VITA_GAME_FOLDER)]
+        return where + self.source_lines() + [
             "Game package: %s" % ("downloaded from the project's GitHub releases" if self.download_vpk_box.get() else
                                   "%s (not signature-checked)" % os.path.basename(self.vpk.get()) if self.own_vpk()
                                   else "none chosen"),
@@ -4882,7 +5176,10 @@ class InstallerWindow:
         row.pack(fill="x")
         ttk.Label(row, textvariable=self.current_file).pack(side="left")
         ttk.Label(row, textvariable=self.percent).pack(side="right")
-        if not self.on_pc:
+        if not self.on_pc and self.to_card():
+            self.text("If the files go to the Vita's card, keep it plugged in with VitaShell's USB mode on until "
+                      "Setup is done.", pady=(px(16), 0))
+        elif not self.on_pc:
             self.text("Keep the Vita awake while it copies: touch its screen now and then, or turn off auto-standby "
                       "in its power settings.", pady=(px(16), 0))
 
@@ -4924,6 +5221,9 @@ class InstallerWindow:
 
     def finish_vita(self):
         px = self.px
+        if self.to_card():
+            self.finish_card()
+            return
         self.text("The files are on your PS Vita. What is left, on the Vita:", pady=(0, px(6)))
         vpk = self.sent_vpk
         steps = ["In VitaShell, press Circle to leave FTP mode, open ux0:, then data, press Cross on %s and confirm. "
@@ -4938,6 +5238,28 @@ class InstallerWindow:
         for line in FOLDER_NOTE_LINES[1:3]:
             self.text(line, pady=(0, px(2)), indent=16)
         self.text(FOLDER_NOTE_LINES[3])
+
+    def finish_card(self):
+        px = self.px
+        result = self.card_result
+        root = str(result.get("root", ""))
+        vpk = self.sent_vpk
+        if result.get("card"):
+            self.text("The files are on the Vita's memory card (%s). What is left:" % root, pady=(0, px(6)))
+            steps = ["On the Vita, press Circle in VitaShell to leave USB mode."]
+        else:
+            self.text("The files are in %s, laid out as on the memory card. What is left:" % root, pady=(0, px(6)))
+            steps = ["Copy its data folder onto the Vita's memory card (VitaShell's USB mode or FTP)%s, so the card "
+                     "has data/haloce-vita." % (", and %s" % vpk if vpk else "")]
+        steps += ["In VitaShell, open the card (ux0:, or uma0: for an SD2Vita), press Cross on %s and confirm. "
+                  "The bubble is called Halo CE." % vpk if vpk else
+                  "Install the VPK in VitaShell, if the game is not on the Vita yet.",
+                  "Check that ur0:data/libshacccg.suprx is there (ShaRKF00D extracts it), then start Halo CE."]
+        for number, step in enumerate(steps, 1):
+            self.text("%d.  %s" % (number, step), pady=(0, px(4)))
+        self.text("%s there says the same. An SD2Vita as uma0: is found by itself." % CARD_README,
+                  pady=(px(6), px(4)))
+        self.text("You can delete %s now." % self.out.get(), pady=(0, px(4)))
 
     # -- the work: everything is read from the window here, on its thread
     # (tkinter is not thread-safe), and runs in order on a thread of its own
@@ -4978,7 +5300,36 @@ class InstallerWindow:
             tasks.append(InstallTask("Converting the movies", 1 << 30, movies))
         return tasks
 
+    def card_tasks(self) -> List[InstallTask]:
+        """The Vita's files written to its card over USB, or to a folder (issue #54)."""
+        out = self.out.get()
+        folder = self.card_folder.get().strip()
+        halo = self.halo_folders()
+        vpk = self.own_vpk()
+        fetch = self.download_vpk_box.get()
+        tasks = self.game_tasks(out)
+        chosen = {"vpk": vpk}
+        if fetch:
+            def fetch_signed(step):
+                self.download_folder = tempfile.mkdtemp(prefix="halo-ce-setup-")
+                chosen["vpk"] = download_vpk(self.download_folder, step, self.log)
+            tasks.append(InstallTask("Downloading the game package", 64 << 20, fetch_signed))
+        elif vpk:
+            tasks.append(InstallTask("Checking the game package", 1, lambda step: match_signed_vpk(vpk, self.log)))
+
+        def write(step):
+            status = pc_files_status(out)
+            if not status.complete:
+                raise InstallerError(pc_files_help(status.missing))
+            self.card_result = copy_to_card(out, folder, chosen["vpk"], False, step, self.log, self.cancel, halo)
+            self.sent_vpk = str(self.card_result["vpk"])
+        tasks.append(InstallTask("Writing the files to the memory card or folder", max(self.game_bytes, 1 << 30),
+                                 write))
+        return tasks
+
     def vita_tasks(self) -> List[InstallTask]:
+        if self.to_card():
+            return self.card_tasks()
         out = self.out.get()
         host, port = self._host_port()
         vpk = self.own_vpk()
