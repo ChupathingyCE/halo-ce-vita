@@ -1292,11 +1292,12 @@ void object_types_place_objects(
 #ifdef HALO_LINUX
 							/* port (mixed play r4, port/linux/game/mixed_coop.c): an MCC machine
 							placing an Xbox-files host's layout keeps the host's word on which
-							of them stand in its BSP (Halo PC rebuilt the BSP: a blocker the
-							Xbox places, Sidewinder's, stands outside MCC's) */
+							of its scenery and vehicles stand in its BSP (Halo PC rebuilt the
+							BSP: a blocker the Xbox places, Sidewinder's, stands outside MCC's) */
 							int mixed_coop_xbox_layout_here(void);
 
-							if (mixed_coop_xbox_layout_here())
+							if (mixed_coop_xbox_layout_here() &&
+								(object_type == _object_type_scenery || object_type == _object_type_vehicle))
 							{
 							}
 							else
