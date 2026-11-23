@@ -85,21 +85,25 @@ def test_the_window_has_a_fixed_size_and_every_page_fits(root, tmp_path):
     assert root.resizable() == (False, False)
     window.host.set("192.168.1.20")
     window.existing = str(tmp_path)  # (so the maintenance page is one of them)
-    for platform in ("vita", "pc"):
+    # (the Vita's files over FTP, or to its card over USB or a folder: issue #54, a card chosen and its line shown)
+    window.card_folder.set(str(tmp_path / "card"))
+    for platform, via in (("vita", "ftp"), ("vita", "folder"), ("pc", "ftp")):
         window.platform.set(platform)
+        window.vita_via.set(via)
         for mode in ("automatic", "manual"):
             window.mode.set(mode)
             for page in window.PAGES:
                 window.show(page)
                 root.update()
-                assert window.shell.winfo_reqheight() <= window.shell.winfo_height(), page
-                assert window.shell.winfo_reqwidth() <= window.shell.winfo_width(), page
+                where = (platform, via, mode, page)
+                assert window.shell.winfo_reqheight() <= window.shell.winfo_height(), where
+                assert window.shell.winfo_reqwidth() <= window.shell.winfo_width(), where
                 bottom = window.shell.winfo_rooty() + window.shell.winfo_height()
                 right = window.shell.winfo_rootx() + window.shell.winfo_width()
                 for widget in all_widgets(window.body):
                     if widget.winfo_ismapped():
-                        assert widget.winfo_rooty() + widget.winfo_height() <= bottom, page
-                        assert widget.winfo_rootx() + widget.winfo_width() <= right, page
+                        assert widget.winfo_rooty() + widget.winfo_height() <= bottom, where
+                        assert widget.winfo_rootx() + widget.winfo_width() <= right, where
 
 
 def test_damaged_or_unwritable_settings(root, tmp_path, own_settings, monkeypatch):

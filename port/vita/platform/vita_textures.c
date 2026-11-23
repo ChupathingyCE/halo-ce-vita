@@ -25,6 +25,7 @@ memory_watch.c detects that by write-protecting the pages.
 #include "vita_xgpu.h"
 #include "vita_gxm.h"
 #include "port_config.h"
+#include "vita_game_folder.h"
 #include "../../linux/game/cache_file_formats.h"
 
 #include <stdio.h>
@@ -1312,7 +1313,7 @@ static BOOL texture_decode(struct texture_build *build)
 	free(scratch);
 	{
 		/* (debug) HALO_TEX_DUMP=<width>: the n-th upload of a linear texture
-		that wide is written to ux0:data/haloce-vita/tex_dump.raw */
+		that wide is written to the game folder's tex_dump.raw */
 		static int dump_width = -2, dumps;
 
 		if (dump_width == -2)
@@ -1322,7 +1323,11 @@ static BOOL texture_decode(struct texture_build *build)
 		}
 		if (dump_width > 0 && (long)width == dump_width && ++dumps == 60)
 		{
-			FILE *file = fopen("ux0:data/haloce-vita/tex_dump.raw", "wb");
+			char dump_path[160];
+			FILE *file;
+
+			snprintf(dump_path, sizeof(dump_path), "%s/tex_dump.raw", vita_game_folder());
+			file = fopen(dump_path, "wb");
 
 			if (file)
 			{

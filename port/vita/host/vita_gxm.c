@@ -12,7 +12,7 @@ vita_gxm.h). Built with VitaSDK's GCC: the Sce structures depend on its ABI.
   (app0:shaders.pak); any other Cg is compiled on the device by SceShaccCg
   (libshacccg.suprx, which Vita3K and every Vita that runs Xita have), on a
   thread of its own, and the result is kept on the memory card
-  (ux0:data/haloce-vita/shaders) for the next start.
+  (the game folder's shaders: ux0:data/haloce-vita/shaders, or uma0:'s or imc0:'s) for the next start.
 - Scenes: one per run of draws into the same targets; depth-stencil surfaces
   are loaded and stored at every scene, so a target keeps its depth across
   switches, as the game expects.
@@ -42,6 +42,7 @@ each frame's presentation.
 #include <string.h>
 
 #include "vita_controls.h"
+#include "vita_folder.h"
 #include "vita_gxm.h"
 #include "vita_host.h"
 #include "vita_overlay_font.h"
@@ -68,9 +69,12 @@ first asks for it (vgxm_display_buffering) */
 #define WORKER_RING_SIZE (2 * 1024 * 1024)
 #define PATCHER_BUFFER_SIZE (6 * 1024 * 1024)
 #define PATCHER_USSE_SIZE (4 * 1024 * 1024)
-#define SHADER_PARENT "ux0:data/haloce-vita"
+/* (the game folder: ux0:data/haloce-vita, or the uma0: or imc0: one chosen
+at start, vita_folder.h) */
+#define SHADER_PARENT vita_folder()
 #define SHADER_NAME "shaders"
-#define SHADER_DIRECTORY SHADER_PARENT "/" SHADER_NAME
+/* "<game folder>/shaders" */
+#define SHADER_DIRECTORY shader_directory()
 /* the GPU's cores, each counting a visibility test's samples into its own
 part of the buffer (sceGxmSetVisibilityBuffer's stride per core) */
 #define VISIBILITY_CORES 4
@@ -1207,6 +1211,16 @@ that very Cg and its bytes are the ones written: a file cut short (the
 process killed while writing it), damaged, written by another build or not
 a program, registered, can hang the patcher or the GPU or draw nothing (a
 black screen, issue #28) at every run - so it is removed and compiled again */
+/* the shader cache's folder, made once (the game folder stays for the run) */
+static const char *shader_directory(void)
+{
+	static char directory[VITA_FOLDER_SIZE + 16];
+
+	if (!directory[0])
+		snprintf(directory, sizeof(directory), "%s/" SHADER_NAME, SHADER_PARENT);
+	return directory;
+}
+
 static SceGxmProgram *cache_read(uint64_t hash)
 {
 	char path[128];
@@ -1217,7 +1231,7 @@ static SceGxmProgram *cache_read(uint64_t hash)
 	uint32_t size = 0;
 	enum vshc_result result;
 
-	snprintf(path, sizeof(path), SHADER_DIRECTORY "/%016llx.gxp", (unsigned long long)hash);
+	snprintf(path, sizeof(path), "%s/%016llx.gxp", SHADER_DIRECTORY, (unsigned long long)hash);
 	if (sceIoGetstat(path, &stat) < 0 || stat.st_size <= 0)
 		return NULL;
 	file = sceIoOpen(path, SCE_O_RDONLY, 0);
@@ -1343,13 +1357,15 @@ v1.1.0). The old folder is removed later, in the background
 well (cache_read), so a file of another build is never used either way. */
 static void shader_cache_check(void)
 {
-	static const char id_path[] = SHADER_DIRECTORY "/" VSHC_ID_FILE_NAME;
+	char id_path[VITA_FOLDER_SIZE + 48], temporary_path[VITA_FOLDER_SIZE + 48];
 	char contents[64], text[64], old_ids[64];
 	SceUID file;
 	int length = 0, created, index = 0;
 	unsigned long long before = sceKernelGetProcessTimeWide();
 	enum vshc_retire_result result = VSHC_RETIRE_RENAMED;
 
+	snprintf(id_path, sizeof(id_path), "%s/" VSHC_ID_FILE_NAME, SHADER_DIRECTORY);
+	snprintf(temporary_path, sizeof(temporary_path), "%s/" VSHC_ID_FILE_NAME ".tmp", SHADER_DIRECTORY);
 	created = sceIoMkdir(SHADER_DIRECTORY, 0777) >= 0;
 	if (!created && (file = sceIoOpen(id_path, SCE_O_RDONLY, 0)) >= 0)
 	{
@@ -1374,10 +1390,10 @@ static void shader_cache_check(void)
 				"the folder cannot be renamed or marked: its old files stay (each refused when read)",
 			(sceKernelGetProcessTimeWide() - before) / 1000.0);
 		if (result == VSHC_RETIRE_RENAMED)
-			log_line("gxm: old shader cache now " SHADER_DIRECTORY VSHC_OLD_FOLDER_SUFFIX "%d", index);
+			log_line("gxm: old shader cache now %s" VSHC_OLD_FOLDER_SUFFIX "%d", SHADER_DIRECTORY, index);
 	}
 	vshc_id_text(text, sizeof(text), &shader_ids);
-	if ((file = sceIoOpen(SHADER_DIRECTORY "/" VSHC_ID_FILE_NAME ".tmp", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC,
+	if ((file = sceIoOpen(temporary_path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC,
 		0666)) >= 0)
 	{
 		int written = sceIoWrite(file, text, strlen(text));
@@ -1386,10 +1402,10 @@ static void shader_cache_check(void)
 		if (written == (int)strlen(text))
 		{
 			sceIoRemove(id_path);
-			sceIoRename(SHADER_DIRECTORY "/" VSHC_ID_FILE_NAME ".tmp", id_path);
+			sceIoRename(temporary_path, id_path);
 		}
 		else
-			sceIoRemove(SHADER_DIRECTORY "/" VSHC_ID_FILE_NAME ".tmp");
+			sceIoRemove(temporary_path);
 	}
 }
 
@@ -1507,8 +1523,8 @@ static void cache_write_file(uint64_t hash, const SceGxmProgram *program)
 
 	/* written under another name and renamed into place, so a reader
 	never sees a partial file */
-	snprintf(path, sizeof(path), SHADER_DIRECTORY "/%016llx.gxp", (unsigned long long)hash);
-	snprintf(temporary, sizeof(temporary), SHADER_DIRECTORY "/%016llx.tmp", (unsigned long long)hash);
+	snprintf(path, sizeof(path), "%s/%016llx.gxp", SHADER_DIRECTORY, (unsigned long long)hash);
+	snprintf(temporary, sizeof(temporary), "%s/%016llx.tmp", SHADER_DIRECTORY, (unsigned long long)hash);
 	vshc_header_make(header, &shader_ids, hash, program, size);
 	file = sceIoOpen(temporary, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
 	if (file < 0)

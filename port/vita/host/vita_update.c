@@ -8,7 +8,8 @@ yes, on a thread below the game's (any time: a download of a few MB on a
 low-priority thread does not cost the game frames), runs
 vita_update_download.c's fetch with the panel's progress line (circle stops
 it): the release's signed manifest checked, halo.vpk downloaded and its
-SHA-512 checked, then kept as ux0:data/haloce-vita/update/halo-<version>.vpk.
+SHA-512 checked, then kept as the game folder's update/halo-<version>.vpk (ux0:data/haloce-vita,
+or uma0: or imc0:'s: vita_folder.h).
 The game is a safe homebrew (vita-make-fself -s) and cannot write its own
 folder: the message says to install that file with VitaShell, and the panel
 and the main menu's corner say so until the player has (each start checks
@@ -33,12 +34,13 @@ repository's later home GitHub redirects it to: github_release_move.h).
 
 #include "lang.h"
 #include "update_check.h"
+#include "vita_folder.h"
 #include "vita_host.h"
 #include "vita_update.h"
 #include "vita_update_download.h"
 #include "vita_version.h"
 
-#define DATA_DIRECTORY "ux0:data/haloce-vita"
+#define DATA_DIRECTORY vita_folder()
 #define TITLE T("Halo CE: update")
 
 void vita_settings_progress(const char *title, const char *text);
@@ -91,7 +93,7 @@ static int configure(struct update_download_config *config)
 	if (sceAppMgrAppParamGetString(0, 12, title, sizeof(title)) < 0 || strlen(title) != 9)
 		return 0;
 	snprintf(config->title, sizeof(config->title), "%s", title);
-	/* (the app's own folder, ux0:data/haloce-vita, not the game's data root
+	/* (the game's own folder, ux0:data/haloce-vita or the card chosen, not the game's data root
 	under it, HALO_DATA_ROOT: update/ is where players find it in VitaShell) */
 	snprintf(config->data, sizeof(config->data), "%s", DATA_DIRECTORY);
 	snprintf(config->current_version, sizeof(config->current_version), "%s", HALO_VITA_VERSION);

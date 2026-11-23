@@ -20,7 +20,8 @@ docs/steam_download_security.md):
 - at start, a sign-in left behind (its no-secret marker,
   steam-session.txt): the panel's message says to remove "Halo CE Vita (PS
   Vita)" in the Steam app.
-1.1.x's: Halo CE's files to ux0:data/haloce-vita (1.2.0's: project-ark).
+1.1.x's: Halo CE's files to the game folder, ux0:data/haloce-vita or the uma0:
+or imc0: one chosen at start (vita_folder.h) (1.2.0's: project-ark).
 In a test build (configure.py --steam-test-ca) env.txt's HALO_STEAM_TEST_ROOT
 takes the files (a scratch folder, never the game's own), and
 HALO_STEAM_TEST_CM / HALO_STEAM_TEST_CDN the fake server (steam_job.c).
@@ -41,12 +42,13 @@ HALO_STEAM_TEST_CM / HALO_STEAM_TEST_CDN the fake server (steam_job.c).
 
 #include "lang.h"
 #include "steam_job.h"
+#include "vita_folder.h"
 #include "vita_host.h"
 
 void vita_settings_message(const char *title, const char *text);
 
-/* (vita_main.c's VITA_DATA_DIRECTORY: Halo CE's files and the app's own folder, one and the same in 1.1.x) */
-#define DATA_DIRECTORY "ux0:data/haloce-vita"
+/* (the game folder, vita_folder.h: Halo CE's files and the app's own folder, one and the same in 1.1.x) */
+#define DATA_DIRECTORY vita_folder()
 
 static int shell_ready, locked;
 

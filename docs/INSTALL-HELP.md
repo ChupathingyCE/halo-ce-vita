@@ -41,6 +41,14 @@ also work).
 - The Windows Setup tool (`HaloCEVitaInstaller.exe`, on the releases page)
   puts everything in the right place for you: choose **Manual** for your Xbox
   disc image (recommended), **Automatic** for your Steam MCC.
+  No Wi-Fi? Its Destination page has **USB or a folder**: VitaShell's USB
+  mode shows the card as a drive, and Setup writes `data/haloce-vita` and the
+  VPK onto it (or into any folder, to copy over yourself).
+- **SD2Vita as `uma0:`** (the official card is `ux0:`): put the same
+  `data/haloce-vita` folder on `uma0:` (`uma0:data/haloce-vita/maps/` ...).
+  The game uses the first card (`ux0:`, `uma0:`, `imc0:`) whose
+  `data/haloce-vita` has the game's files; Settings > Multiplayer > Modded
+  maps > **Game folder** picks one by hand. `halo.log` is in that folder.
 
 ### Xbox files or MCC files: what you get
 

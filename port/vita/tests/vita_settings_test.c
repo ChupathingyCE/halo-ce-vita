@@ -1319,8 +1319,8 @@ static void settings_file_delete(void)
 	unlink(SETTINGS_FILE);
 	/* (and the copies the writer keeps, which the load reads when
 	settings.txt is not there) */
-	unlink(SETTINGS_FILE ".bak");
-	unlink(SETTINGS_FILE ".new");
+	unlink(SETTINGS_FILE_BAK);
+	unlink(SETTINGS_FILE_NEW);
 }
 
 /* a fake map: the cache header's signature, version and scenario type
@@ -4306,6 +4306,8 @@ static void test_variables_kept(void)
 		"HALO_VOLUME", "HALO_MUSIC_VOLUME", "HALO_EFFECTS_VOLUME", "HALO_DIALOGUE_VOLUME", "HALO_AMBIENCE_VOLUME",
 		/* (1.1.3: Command and Firefight experimental, the Menus page) */
 		"HALO_EXPERIMENTAL_MODES",
+		/* (1.1.3, issue #53: the Game folder, ux0, uma0 or imc0; kept in its own file) */
+		"HALO_GAME_FOLDER",
 	};
 	int index, all = 1, choices = 0;
 
@@ -5806,8 +5808,8 @@ static void test_settings_load_safe(void)
 		snprintf(now, sizeof(now), "%s", file_text(SETTINGS_FILE));
 		check(strstr(now, "HALO_RENDER_SCALE=0.5\n") && strlen(now) > 20 &&
 			!strcmp(now + strlen(now) - strlen(SETTINGS_END "=1\n"), SETTINGS_END "=1\n") &&
-			strstr(file_text(SETTINGS_FILE ".bak"), "HALO_RENDER_SCALE=0.75\n") &&
-			access(SETTINGS_FILE ".new", F_OK) != 0,
+			strstr(file_text(SETTINGS_FILE_BAK), "HALO_RENDER_SCALE=0.75\n") &&
+			access(SETTINGS_FILE_NEW, F_OK) != 0,
 			"safe load: settings.txt ends with its last line; the one before it is settings.txt.bak; no .new left");
 		/* (every cut of it: the rows it has, the rest the defaults, never a
 		value cut in two read as another - "0.5" cut to "0." is 0, none) */
@@ -5909,16 +5911,16 @@ static void test_settings_load_safe(void)
 		static const char newer_cut[] = "HALO_RENDER_SCALE=0.5\nHALO_FRAME";
 
 		settings_file_delete();
-		write_file(SETTINGS_FILE ".bak", older, sizeof(older) - 1);
-		write_file(SETTINGS_FILE ".new", newer, sizeof(newer) - 1);
+		write_file(SETTINGS_FILE_BAK, older, sizeof(older) - 1);
+		write_file(SETTINGS_FILE_NEW, newer, sizeof(newer) - 1);
 		rows_fresh();
 		log_text[0] = 0;
 		vita_settings_load();
 		check(!strcmp(getenv("HALO_RENDER_SCALE"), "0.5") && strstr(log_text, "settings.txt is not there: read from settings.txt.new"),
 			"safe load: stopped between putting the old one aside and the new one in place: the new one (.new)");
 		settings_file_delete();
-		write_file(SETTINGS_FILE ".bak", older, sizeof(older) - 1);
-		write_file(SETTINGS_FILE ".new", newer_cut, sizeof(newer_cut) - 1);
+		write_file(SETTINGS_FILE_BAK, older, sizeof(older) - 1);
+		write_file(SETTINGS_FILE_NEW, newer_cut, sizeof(newer_cut) - 1);
 		rows_fresh();
 		log_text[0] = 0;
 		vita_settings_load();
@@ -5926,7 +5928,7 @@ static void test_settings_load_safe(void)
 			"safe load: stopped while the new one was written: the one before it (.bak), not the part");
 		settings_file_delete();
 		write_file(SETTINGS_FILE, "\x00\x01garbage\xff", 11);
-		write_file(SETTINGS_FILE ".bak", older, sizeof(older) - 1);
+		write_file(SETTINGS_FILE_BAK, older, sizeof(older) - 1);
 		rows_fresh();
 		log_text[0] = 0;
 		vita_settings_load();
@@ -5940,20 +5942,20 @@ static void test_settings_load_safe(void)
 
 			settings_file_delete();
 			write_file(SETTINGS_FILE, zeros, sizeof(zeros));
-			write_file(SETTINGS_FILE ".bak", older, sizeof(older) - 1);
-			unlink(SETTINGS_FILE ".bad");
+			write_file(SETTINGS_FILE_BAK, older, sizeof(older) - 1);
+			unlink(SETTINGS_FILE_BAD);
 			rows_fresh();
 			vita_settings_load();
 			vita_settings_set("HALO_FRAME_CAP", "30");
 			vita_settings_save_wait();
-			check(strstr(file_text(SETTINGS_FILE ".bak"), "HALO_RENDER_SCALE=0.75\n") &&
-				access(SETTINGS_FILE ".bad", F_OK) == 0 && strstr(file_text(SETTINGS_FILE), SETTINGS_END "=1\n"),
+			check(strstr(file_text(SETTINGS_FILE_BAK), "HALO_RENDER_SCALE=0.75\n") &&
+				access(SETTINGS_FILE_BAD, F_OK) == 0 && strstr(file_text(SETTINGS_FILE), SETTINGS_END "=1\n"),
 				"safe load: a zeroed settings.txt is kept as .bad on the next save; the good .bak stays");
 		}
 		/* (an older build's settings.txt, no last line: read, not the copy) */
 		settings_file_delete();
 		write_file(SETTINGS_FILE, "HALO_RENDER_SCALE=0.875\n", 24);
-		write_file(SETTINGS_FILE ".bak", older, sizeof(older) - 1);
+		write_file(SETTINGS_FILE_BAK, older, sizeof(older) - 1);
 		rows_fresh();
 		log_text[0] = 0;
 		vita_settings_load();
@@ -6424,19 +6426,20 @@ int main(void)
 #endif
 	check(!strcmp(menu_line(2, line, sizeof(line)), "Mod manager\x02  >") &&
 		!strncmp(menu_line(3 + ws, line, sizeof(line)), "PC maps\x02", 8) &&
-		!strcmp(menu_line(4 + ws, line, sizeof(line)), "Halo content folder\x02  Found by itself >") &&
-		!strcmp(menu_line(5 + ws, line, sizeof(line)), "Map downloads\x02  Ask >") && !menu_line(6 + ws, line, sizeof(line))[0] &&
-		!strcmp(menu_line(7 + ws, line, sizeof(line)), "!Missing: sounds.map loc.map") &&
-		!strcmp(menu_line(8 + ws, line, sizeof(line)), "!Copy them in, or the Halo CE installer") &&
-		!strcmp(menu_line(9 + ws, line, sizeof(line)), "!(halocesetup*.exe) to ux0:data/haloce-vita") &&
-		!strcmp(menu_line(10 + ws, line, sizeof(line)), "\x04" "Content: the Xbox maps (no MCC folder)") &&
-		!strcmp(menu_line(11 + ws, line, sizeof(line)), "\x04" "Steam's MCC files (halo1/maps) go in:") &&
-		!strcmp(menu_line(12 + ws, line, sizeof(line)), "\x04" "ux0:data/haloce-vita/mcc/halo1/maps"),
-		"Mod manager, PC maps switch, Halo content folder (found by itself), Map downloads (Ask), a gap; a CE map "
+		!strcmp(menu_line(4 + ws, line, sizeof(line)), "Game folder*\x02  Auto >") &&
+		!strcmp(menu_line(5 + ws, line, sizeof(line)), "Halo content folder\x02  Found by itself >") &&
+		!strcmp(menu_line(6 + ws, line, sizeof(line)), "Map downloads\x02  Ask >") && !menu_line(7 + ws, line, sizeof(line))[0] &&
+		!strcmp(menu_line(8 + ws, line, sizeof(line)), "!Missing: sounds.map loc.map") &&
+		!strcmp(menu_line(9 + ws, line, sizeof(line)), "!Copy them in, or the Halo CE installer") &&
+		!strcmp(menu_line(10 + ws, line, sizeof(line)), "!(halocesetup*.exe) to ux0:data/haloce-vita") &&
+		!strcmp(menu_line(11 + ws, line, sizeof(line)), "\x04" "Content: the Xbox maps (no MCC folder)") &&
+		!strcmp(menu_line(12 + ws, line, sizeof(line)), "\x04" "Steam's MCC files (halo1/maps) go in:") &&
+		!strcmp(menu_line(13 + ws, line, sizeof(line)), "\x04" "ux0:data/haloce-vita/mcc/halo1/maps"),
+		"Mod manager, PC maps switch, Game folder (Auto), Halo content folder (found by itself), Map downloads (Ask), a gap; a CE map "
 		"without sounds.map/loc.map: the warning, and that the installer does; no MCC folder: the Xbox maps");
-	check(!strncmp(menu_line(13 + ws, line, sizeof(line)), "cemap\x02", 6) && !strncmp(menu_line(14 + ws, line, sizeof(line)), "cesolo\x02", 7) &&
-		!strncmp(menu_line(15 + ws, line, sizeof(line)), "inplay\x02", 7) &&
-		!strncmp(menu_line(16 + ws, line, sizeof(line)), "mygulch\x02", 8) && menu_line(17 + ws, line, sizeof(line))[0] == '\x05',
+	check(!strncmp(menu_line(14 + ws, line, sizeof(line)), "cemap\x02", 6) && !strncmp(menu_line(15 + ws, line, sizeof(line)), "cesolo\x02", 7) &&
+		!strncmp(menu_line(16 + ws, line, sizeof(line)), "inplay\x02", 7) &&
+		!strncmp(menu_line(17 + ws, line, sizeof(line)), "mygulch\x02", 8) && menu_line(18 + ws, line, sizeof(line))[0] == '\x05',
 		"the custom maps listed in order, not the Xbox's or CE resource maps");
 #ifdef HALO_STEAM_DOWNLOAD
 	/* (1.1.3-insider.4) Download from Steam: Cross asks the game for DOWNLOAD FROM STEAM over the main menu
@@ -6479,6 +6482,28 @@ int main(void)
 	press(VITA_BUTTON_LEFT);
 	check(!strcmp(getenv("HALO_CONTENT_ROOT"), "auto") && strstr(file_text(SETTINGS_FILE), "HALO_CONTENT_ROOT=auto\n"),
 		"left: found by itself again, saved");
+	/* (1.1.3, issue #53) Game folder: Auto by default, its help naming the folder in use; a card chosen is kept
+	in ux0:data/haloce-vita-folder.txt (outside every game folder, read at the next start), not in settings.txt
+	nor the environment, and waits for a restart; Auto again removes the file */
+	to_line("Game folder");
+	check(strstr(menu, "\nGame folder*\x02  Auto >\n") &&
+		strstr(menu, "\n\x05" "Now: ux0:data/haloce-vita. Auto: where the game's files are\n") && menu_fits() &&
+		access(VITA_FOLDER_CHOICE_FILE, F_OK) != 0, "Game folder: Auto by default, the folder in use on its help line");
+	press(VITA_BUTTON_RIGHT);
+	press(VITA_BUTTON_RIGHT);
+	check(strstr(menu, "\nGame folder*\x02< uma0 >\n") && vita_folder_choice_read() == VITA_FOLDER_UMA0 &&
+		!strcmp(file_text(VITA_FOLDER_CHOICE_FILE), "uma0\n") && !strstr(file_text(SETTINGS_FILE), "HALO_GAME_FOLDER") &&
+		!getenv("HALO_GAME_FOLDER") && !strcmp(vita_folder(), "ux0:data/haloce-vita") &&
+		strstr(menu, "Restart the game for this change"),
+		"right twice: uma0, kept in its own file (not settings.txt), the folder in use unchanged until a restart");
+	press(VITA_BUTTON_LEFT);
+	press(VITA_BUTTON_LEFT);
+	check(strstr(menu, "\nGame folder*\x02  Auto >\n") && access(VITA_FOLDER_CHOICE_FILE, F_OK) != 0,
+		"left twice: Auto again, the file removed");
+	/* (the restart notice and offer let go: the rows below are checked as before) */
+	notice[0] = 0;
+	restart_pending = 0;
+	frame(0);
 	/* Map downloads: Ask (the default: public games warn), Not public games,
 	Never; each with its own help, saved and in the environment the game
 	reads (map_share.c) */

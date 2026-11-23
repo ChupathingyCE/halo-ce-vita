@@ -1,7 +1,8 @@
 # Halo CE Setup
 
 `halo_ce_vita_installer.py` is a standard Setup wizard for Halo CE: it installs
-the game on a PS Vita, over VitaShell's FTP, or on this PC, from your own game
+the game on a PS Vita, over VitaShell's FTP or its memory card over USB (or a
+folder), or on this PC, from your own game
 files. It is one Python file for Windows, Linux and macOS;
 `HaloCEVitaInstaller.exe` is the same tool as one Windows program, with ffmpeg
 inside it.
@@ -50,9 +51,13 @@ right. Cancel asks first.
      Vita whether to convert the disc's movies. If MCC is not found, Manual is
      selected and the page says why.
 5. **Destination.**
-   - **Vita:** its address, as VitaShell shows it, with **Test connection**;
-     the VPK; the folder the files are gathered in on their way (about 2.5 GB
-     with Xbox files, about 3.1 GB with MCC's).
+   - **Vita:** **Send the files: Over Wi-Fi (FTP)** - its address, as
+     VitaShell shows it, with **Test connection** - or **USB or a folder**: the
+     memory card's drive (VitaShell's USB mode, START for its settings, shows
+     the card as a drive) or any folder, with **Browse**; the line below says
+     whether it is a Vita card and its free space. Then the VPK, and the
+     folder the files are gathered in on their way (about 2.5 GB with Xbox
+     files, about 3.1 GB with MCC's).
    - **PC:** the install folder (`%LOCALAPPDATA%\Programs\Halo CE`,
      `~/.local/share/halo-ce` on Linux: no admin needed), with **Browse**, the
      space needed and free, and check boxes for a desktop shortcut and a Start
@@ -235,6 +240,19 @@ Files page; on the command line, the commands below.
    Vita with the right size are skipped, so it goes on from where it stopped.
    Every file is checked by its size on the Vita after copying. The command
    line's `upload --replace` copies files already there again.
+
+   **USB or a folder** (no Wi-Fi, issue #54): Setup writes the same layout to
+   the chosen drive or folder: `data/haloce-vita/...` (the game's folder: the
+   maps, `default.xbe`, movies, `mcc/...`), the VPK at its root and
+   `README-what-to-do.txt`. A folder that is a Vita card's root (it has `app`,
+   `data`, `id.dat` ...) gets the files straight into its `data/haloce-vita`;
+   choosing the card's `data` or `data/haloce-vita` folder means the card too.
+   As over FTP, files already there at the right size are kept, the VPK is
+   always written, and the free space is checked first. Each file is written
+   beside its place, checked by its size and moved in. Setup refuses a system
+   folder, the system drive itself, and any folder inside (or holding) the
+   Halo files it reads or gathers. An SD2Vita can be `uma0:`: copy
+   `data/haloce-vita` there and the game finds it by itself (since 1.1.3).
 5. **The VPK (Vita).** Download `halo-ce-vita-<version>-vita.vpk` from the
    [releases](https://github.com/ChupathingyCE/halo-ce-vita/releases/latest)
    (Setup downloads and signature-checks it by itself; a VPK of your own is only
@@ -275,6 +293,7 @@ python3 halo_ce_vita_installer.py check-installer "any name.exe"
 python3 halo_ce_vita_installer.py [--out FOLDER] check
 python3 halo_ce_vita_installer.py [--out FOLDER] upload 192.168.1.20 [--replace]
 python3 halo_ce_vita_installer.py vpk 192.168.1.20 [your.vpk]   # no file: the signed download
+python3 halo_ce_vita_installer.py [--out FOLDER] card E:\ [--vpk your.vpk | --download-vpk] [--replace]   # USB or a folder
 python3 halo_ce_vita_installer.py [--out FOLDER] pc-copy [BUILD FOLDER] [--replace]
 python3 halo_ce_vita_installer.py [--out FOLDER] pc-install [FOLDER] [--package ARCHIVE | --download] [--desktop-shortcut] [--start-menu]
 python3 halo_ce_vita_installer.py pc-uninstall [FOLDER]

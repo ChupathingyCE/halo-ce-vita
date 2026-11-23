@@ -24,6 +24,7 @@ HALO_TEST_NETVERSIONS_INTERVAL seconds in place of a day.
 */
 
 #include "netversion_fetch.h"
+#include "vita_game_folder.h"
 #include "halo_port_limits.h"
 
 #if !defined(HALO_DEDICATED_SERVER) && defined(HALO_PORT_VITA_NETWORK)
@@ -82,7 +83,7 @@ static void kept_path(char *path, size_t size, const char *name)
 		snprintf(path, size, "%s/%s", folder, name);
 	else
 #if defined(HALO_VITA)
-		snprintf(path, size, "ux0:data/haloce-vita/%s", name);
+		snprintf(path, size, "%s/%s", vita_game_folder(), name);
 #else
 		snprintf(path, size, "%s/%s", platform_save_root(), name);
 #endif

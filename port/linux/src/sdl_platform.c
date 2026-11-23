@@ -10,6 +10,7 @@ and the debug keyboard that the game's console reads.
 */
 
 #include "platform.h"
+#include "vita_game_folder.h"
 #include "sdl_platform.h"
 #include "gl.h"
 #include "port_config.h"
@@ -893,7 +894,7 @@ static void platform_invite_clipboard(BOOL look)
 		char path[512];
 		FILE *file;
 
-		snprintf(path, sizeof(path), "ux0:data/haloce-vita/host_invite.txt");
+		snprintf(path, sizeof(path), "%s/host_invite.txt", vita_game_folder());
 		file = fopen(path, "w");
 		if (file)
 		{

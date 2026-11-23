@@ -101,7 +101,7 @@ static void flame_list_paths(char *shipped, char *dropped, int size)
 #endif
 #if defined(HALO_VITA) && !defined(P2P_FRIENDS_TEST)
 	snprintf(shipped, (size_t)size, "app0:" TESTER_LIST_FILE);
-	snprintf(dropped, (size_t)size, "ux0:data/haloce-vita/" TESTER_LIST_FILE);
+	snprintf(dropped, (size_t)size, "%s/" TESTER_LIST_FILE, vita_game_folder());
 #elif defined(P2P_FRIENDS_TEST)
 	snprintf(shipped, (size_t)size, "%s/shipped-" TESTER_LIST_FILE, platform_save_root());
 	snprintf(dropped, (size_t)size, "%s/" TESTER_LIST_FILE, platform_save_root());
