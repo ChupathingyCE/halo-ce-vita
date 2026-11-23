@@ -91,7 +91,9 @@ build count: 0.9.2 (build 1).
      cancelled copy leaves nothing behind. Afterwards you can delete the
      disc image.
    - **Use Halo CE Vita's maps where they are**: Warthog reads them from
-     there, and remembers the choice (`maps_source.txt`).
+     there, and remembers the choice (`maps_source.txt`). When those are
+     the only maps on the card and there's no disc image, Warthog just uses
+     them, without asking.
 
    With nothing found, Warthog says where the maps folder goes, which maps
    it needs, and where a disc image can go. Triangle looks again.

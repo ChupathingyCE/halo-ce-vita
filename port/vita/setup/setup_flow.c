@@ -6,6 +6,7 @@ player, and a disc image's maps copied with the screen up.
 
 	the data folder's maps/ui.map an Xbox map     the game starts, no screen
 	a kept choice (choice_file) still good        read from there, no screen
+	one maps folder elsewhere, no disc image      read from there, no screen
 	maps folders elsewhere, disc images found     SET UP WARTHOG: each one a
 	                                              row, the ones that can't be
 	                                              used dimmed with the reason
@@ -785,6 +786,29 @@ int setup_find_maps(const struct setup_system *system, const struct setup_places
 	}
 	log_line(system, "setup: no Xbox maps in %s; looking on the memory card%s", own, NULL);
 	scan(flow);
+	{
+		/* (one maps folder and no disc image to copy: nothing to choose, so
+		it is read without a screen, as before the screens) */
+		const struct candidate *only = NULL;
+		int index, images = 0, folders = 0;
+
+		for (index = 0; index < flow->count; index++)
+		{
+			if (!flow->candidates[index].usable)
+				continue;
+			if (flow->candidates[index].kind == CANDIDATE_IMAGE)
+				images++;
+			else
+				folders++, only = &flow->candidates[index];
+		}
+		if (!images && folders == 1)
+		{
+			snprintf(maps_root, (size_t)maps_root_size, "%s", only->path);
+			log_line(system, "setup: the maps from %s (the only maps on the card)%s", only->path, NULL);
+			free(flow);
+			return SETUP_MAPS_ELSEWHERE;
+		}
+	}
 	flow->held = system->buttons();
 	for (;;)
 	{

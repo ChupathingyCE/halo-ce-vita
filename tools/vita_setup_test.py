@@ -134,6 +134,12 @@ def main():
                         "open(sys.argv[2], 'wb').write(x.fake_map('ui'))", str(ROOT / "tools"),
                         str(other / "ui.map")], check=True)
     maps = [(other, "Halo CE Vita's maps")]
+    result = case.run("", maps)
+    check(result.get("result") == f"elsewhere {other}" and "the only maps on the card" in case.log,
+          "another app's maps alone: read where they are, no screen")
+    check(case.written() == [], "another app's maps alone: nothing written")
+    # with a disc image beside them: the choice, kept
+    make_image(case.card / "halo.iso", "--fake")
     result = case.run("wait:150,shot:choices,press:cross", maps)
     check(result.get("result") == f"elsewhere {other}", "another app's maps: chosen, read where they are")
     check((case.data / "maps_source.txt").read_text().strip() == str(other), "another app's maps: the choice kept")
