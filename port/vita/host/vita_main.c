@@ -5,10 +5,11 @@ The process: memory, clocks, the log, the settings passed as environment
 variables, and the game's main (source/shell/shell_xbox.c, renamed
 halo_main for the Vita build).
 
-ux0:data/haloce-vita/env.txt holds NAME=value lines that are set in the
+The game's folder (ux0:data/haloce-vita, or uma0: or imc0:'s: vita_folder.h,
+chosen first of all) holds env.txt: NAME=value lines that are set in the
 environment before the game starts (HALO_* settings, port_config.c), as the
-desktop builds take them from the shell. The log is
-ux0:data/haloce-vita/log.txt (stderr).
+desktop builds take them from the shell. The log is log.txt there (stderr),
+halo.log the game's own.
 */
 
 #include <psp2/kernel/clib.h>
@@ -38,16 +39,20 @@ ux0:data/haloce-vita/log.txt (stderr).
 
 #include "lang.h"
 #include "mcc_paths.h"
+#include "vita_folder.h"
 #include "vita_host.h"
 #include "vita_update.h"
 #include "vita_version.h"
 
-#define VITA_DATA_DIRECTORY "ux0:data/haloce-vita"
-/* the game's own files (settings, log, init.txt); the maps go in
-ux0:data/haloce-vita/maps, or are shared with the ones Xita's installer
-put on the card */
-#define VITA_DEFAULT_DATA_ROOT VITA_DATA_DIRECTORY "/data"
-#define VITA_DEFAULT_MAPS_ROOT VITA_DATA_DIRECTORY "/maps"
+/* the game's folder, chosen at start (vita_folder.h: ux0:data/haloce-vita,
+or uma0: or imc0:'s) */
+#define VITA_DATA_DIRECTORY vita_folder()
+/* the game's own files (settings, log, init.txt); the maps go in the game
+folder's maps, or are shared with the ones Xita's installer put on the
+card (ux0:) */
+static char default_data_root[VITA_FOLDER_SIZE + 8], default_maps_root[VITA_FOLDER_SIZE + 8];
+#define VITA_DEFAULT_DATA_ROOT default_data_root
+#define VITA_DEFAULT_MAPS_ROOT default_maps_root
 #define VITA_XITA_MAPS_ROOT "ux0:data/xita/haloce/maps"
 #define ARENA_SIZE 0x07000000UL /* PLATFORM_CONTIGUOUS_SIZE */
 
@@ -293,7 +298,8 @@ rather than trying to open it */
 
 static void movie_placeholders_remove_stale(void)
 {
-	SceUID directory = sceIoDopen(VITA_DEFAULT_DATA_ROOT "/bink");
+	char bink[VITA_FOLDER_SIZE + 16];
+	SceUID directory = sceIoDopen((snprintf(bink, sizeof(bink), "%s/bink", VITA_DEFAULT_DATA_ROOT), bink));
 	SceIoDirent entry;
 	/* (the names first, then the removals: not while the folder is read) */
 	char stale[16][64];
@@ -312,7 +318,7 @@ static void movie_placeholders_remove_stale(void)
 			char path[160];
 			SceIoStat stat;
 
-			snprintf(path, sizeof(path), VITA_DATA_DIRECTORY "/movies/%.*s.mp4", (int)(length - 4), entry.d_name);
+			snprintf(path, sizeof(path), "%s/movies/%.*s.mp4", VITA_DATA_DIRECTORY, (int)(length - 4), entry.d_name);
 			if (sceIoGetstat(path, &stat) < 0)
 				snprintf(stale[stale_count++], sizeof(stale[0]), "%s", entry.d_name);
 		}
@@ -323,7 +329,7 @@ static void movie_placeholders_remove_stale(void)
 	{
 		char path[160], message[192];
 
-		snprintf(path, sizeof(path), VITA_DEFAULT_DATA_ROOT "/bink/%.63s", stale[index]);
+		snprintf(path, sizeof(path), "%s/bink/%.63s", VITA_DEFAULT_DATA_ROOT, stale[index]);
 		sceIoRemove(path);
 		snprintf(message, sizeof(message), "movie: %.63s has no MP4 in movies/ now; its stand-in removed (the movie is skipped)",
 			stale[index]);
@@ -335,12 +341,14 @@ static void movie_placeholders(void)
 {
 	SceUID directory;
 	SceIoDirent entry;
+	char folder[VITA_FOLDER_SIZE + 16];
 
 	movie_placeholders_remove_stale();
-	directory = sceIoDopen(VITA_DATA_DIRECTORY "/movies");
+	directory = sceIoDopen(vita_folder_path(folder, sizeof(folder), "movies"));
 	if (directory < 0)
 		return;
-	sceIoMkdir(VITA_DEFAULT_DATA_ROOT "/bink", 0777);
+	snprintf(folder, sizeof(folder), "%s/bink", VITA_DEFAULT_DATA_ROOT);
+	sceIoMkdir(folder, 0777);
 	memset(&entry, 0, sizeof(entry));
 	while (sceIoDread(directory, &entry) > 0)
 	{
@@ -350,7 +358,7 @@ static void movie_placeholders(void)
 
 		if (length > 4 && strcasecmp(entry.d_name + length - 4, ".mp4") == 0 && length < 200)
 		{
-			snprintf(path, sizeof(path), VITA_DEFAULT_DATA_ROOT "/bink/%.*s.bik", (int)(length - 4), entry.d_name);
+			snprintf(path, sizeof(path), "%s/bink/%.*s.bik", VITA_DEFAULT_DATA_ROOT, (int)(length - 4), entry.d_name);
 			if (sceIoGetstat(path, &stat) < 0)
 			{
 				SceUID file = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT, 0666);
@@ -408,23 +416,30 @@ static void show_missing_data(void)
 {
 	/* (35 characters a line fit at this size; each in the Vita's language,
 	lang.c, a translation's lines as long) */
-	static const char *const lines[] = {
+	/* (the paths in the game's folder: ux0:, uma0: or imc0:'s) */
+	static char maps[VITA_FOLDER_SIZE + 16], mcc[VITA_FOLDER_SIZE + 32];
+	const char *const lines[] = {
 		N_("The game files are missing."),
 		"",
 		N_("Copy the maps folder of your"),
 		N_("Xbox Halo: Combat Evolved to"),
 		"",
-		"  ux0:data/haloce-vita/maps/",
+		maps,
 		"",
 		N_("(ui.map, bloodgulch.map ...)"),
 		"",
 		N_("Steam's MCC files go in:"),
-		"  ux0:data/haloce-vita/mcc/halo1/maps/",
+		mcc,
 		"",
 		N_("Press START to exit."),
 	};
+	char message[300];
 
-	vita_host_log("vita: no ui.map in " VITA_DEFAULT_MAPS_ROOT " or " VITA_XITA_MAPS_ROOT);
+	snprintf(maps, sizeof(maps), "  %s/maps/", VITA_DATA_DIRECTORY);
+	snprintf(mcc, sizeof(mcc), "  %s/mcc/halo1/maps/", VITA_DATA_DIRECTORY);
+	snprintf(message, sizeof(message), "vita: no ui.map in %s or " VITA_XITA_MAPS_ROOT " (game folder %s)",
+		VITA_DEFAULT_MAPS_ROOT, VITA_DATA_DIRECTORY);
+	vita_host_log(message);
 	show_screen(lines, sizeof(lines) / sizeof(lines[0]));
 }
 
@@ -435,28 +450,32 @@ Xbox maps), so it says where they go instead of the damaged disc error
 (black screen, no sound) that 1.1.2 ended in */
 static void show_mcc_in_maps_folder(const char *found)
 {
-	static const char *const lines[] = {
+	static char mcc[VITA_FOLDER_SIZE + 32], sound[VITA_FOLDER_SIZE + 32], maps[VITA_FOLDER_SIZE + 16];
+	const char *const lines[] = {
 		N_("These are Halo MCC files."),
 		"",
 		N_("Move them (the contents of"),
 		N_("halo1/maps) from the Xbox maps"),
 		N_("folder to this folder:"),
 		"",
-		"  ux0:data/haloce-vita/mcc/halo1/maps/",
+		mcc,
 		"",
 		N_("The sound file goes in:"),
-		"  ux0:data/haloce-vita/mcc/halo1/sound/pc/",
+		sound,
 		"",
 		N_("Put the Xbox disc's maps in:"),
-		"  ux0:data/haloce-vita/maps/",
+		maps,
 		"",
 		N_("Press START to exit."),
 	};
 	char message[800];
 
+	snprintf(mcc, sizeof(mcc), "  %s/mcc/halo1/maps/", VITA_DATA_DIRECTORY);
+	snprintf(sound, sizeof(sound), "  %s/mcc/halo1/sound/pc/", VITA_DATA_DIRECTORY);
+	snprintf(maps, sizeof(maps), "  %s/maps/", VITA_DATA_DIRECTORY);
 	snprintf(message, sizeof(message), "vita: %s is a Halo MCC map, not an Xbox one: MCC's files belong in "
-		VITA_DATA_DIRECTORY "/mcc/halo1/maps (and sounds_adpcm.fsb in " VITA_DATA_DIRECTORY "/mcc/halo1/sound/pc)",
-		found);
+		"%s/mcc/halo1/maps (and sounds_adpcm.fsb in %s/mcc/halo1/sound/pc)",
+		found, VITA_DATA_DIRECTORY, VITA_DATA_DIRECTORY);
 	vita_host_log(message);
 	show_screen(lines, sizeof(lines) / sizeof(lines[0]));
 }
@@ -527,12 +546,12 @@ static int file_exists_at(const char *path)
 }
 
 /* the Halo content folder's halo1/maps/ui.map: where the setting names (a folder
-holding halo1, or halo1 itself), else ux0:data/haloce-vita/mcc, then its data/mcc
+holding halo1, or halo1 itself), else the game folder's mcc, then its data/mcc
 (the game's own search order: port/linux/src/xbox_files.c) */
 static int mcc_ui_map_found(char *where, size_t size)
 {
 	/* (as the game's search: beside the data root, then in it; the data root is
-	HALO_DATA_ROOT, ux0:data/haloce-vita/data unless a test moved it) */
+	HALO_DATA_ROOT, the game folder's data unless a test moved it) */
 	const char *data = getenv("HALO_DATA_ROOT");
 	const char *chosen = getenv("HALO_CONTENT_ROOT");
 	char beside[320], inside[320];
@@ -605,7 +624,8 @@ static void start_without_xbox_files(void)
 
 static void read_environment_file(void)
 {
-	FILE *file = fopen(VITA_DATA_DIRECTORY "/env.txt", "r");
+	char path[VITA_FOLDER_SIZE + 16];
+	FILE *file = fopen(vita_folder_path(path, sizeof(path), "env.txt"), "r");
 	/* (long enough for a test script's HALO_TEST_COMMANDS line; static, so
 	it takes nothing from the stack) */
 	static char line[4096];
@@ -855,7 +875,9 @@ static void heartbeat_thread(void *unused)
 		vita_host_battery_log();
 		if (!write_beats)
 			continue;
-		file = sceIoOpen(VITA_DATA_DIRECTORY "/heartbeat.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0666);
+		char heartbeat[VITA_FOLDER_SIZE + 16];
+
+		file = sceIoOpen(vita_folder_path(heartbeat, sizeof(heartbeat), "heartbeat.txt"), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0666);
 		if (file < 0)
 			continue;
 		length = snprintf(line, sizeof(line), "%lu presents %lu at %llu us\n", ++beats, halo_present_counter,
@@ -1105,25 +1127,35 @@ int main(int argc, char **argv)
 	static char *arguments[] = { "halo", NULL };
 	SceAppUtilInitParam init;
 	SceAppUtilBootParam boot;
+	static char folder_why[320];
+	char path[VITA_FOLDER_SIZE + 24], previous[VITA_FOLDER_SIZE + 24];
 
 	(void)argc;
 	(void)argv;
 	on_exit(process_end, NULL);
+	/* the game's folder before anything else is read or written: ux0:, or
+	the uma0: or imc0: card the player chose or that has the game's files
+	(vita_folder.h, issue #53) */
+	vita_folder_start(folder_why, sizeof(folder_why));
+	snprintf(default_data_root, sizeof(default_data_root), "%s/data", vita_folder());
+	snprintf(default_maps_root, sizeof(default_maps_root), "%s/maps", vita_folder());
 	sceIoMkdir(VITA_DATA_DIRECTORY, 0777);
-	sceIoMkdir(VITA_DATA_DIRECTORY "/saves", 0777);
+	sceIoMkdir(vita_folder_path(path, sizeof(path), "saves"), 0777);
 	/* An invite from a previous process cannot join this run's host. */
-	sceIoRemove(VITA_DATA_DIRECTORY "/host_invite.txt");
-	if (freopen(VITA_DATA_DIRECTORY "/log.txt", "w", stderr))
+	sceIoRemove(vita_folder_path(path, sizeof(path), "host_invite.txt"));
+	if (freopen(vita_folder_path(path, sizeof(path), "log.txt"), "w", stderr))
 		setvbuf(stderr, NULL, _IONBF, 0);
 	/* the last session's log is kept (a crash leaves no other trace) */
-	sceIoRemove(VITA_DATA_DIRECTORY "/halo-prev.log");
-	sceIoRename(VITA_DATA_DIRECTORY "/halo.log", VITA_DATA_DIRECTORY "/halo-prev.log");
+	sceIoRemove(vita_folder_path(path, sizeof(path), "halo-prev.log"));
+	sceIoRename(vita_folder_path(path, sizeof(path), "halo.log"), vita_folder_path(previous, sizeof(previous), "halo-prev.log"));
 	{
 		/* (the realtime stamp tells one launch's log from the next; the
 		version, which build a report came from) */
-		char message[96];
+		char message[96 + sizeof(folder_why) + VITA_FOLDER_SIZE];
 
 		snprintf(message, sizeof(message), "vita: Halo CE " HALO_VITA_VERSION " starting, realtime %ld", (long)time(NULL));
+		vita_host_log(message);
+		snprintf(message, sizeof(message), "vita: game folder %s: %s", vita_folder(), folder_why);
 		vita_host_log(message);
 	}
 
@@ -1154,7 +1186,8 @@ int main(int argc, char **argv)
 		/* (the maps where this game keeps them, else Xita's copy) */
 		SceIoStat stat;
 
-		int own = sceIoGetstat(VITA_DEFAULT_MAPS_ROOT "/ui.map", &stat) >= 0;
+		char ui[VITA_FOLDER_SIZE + 24];
+		int own = sceIoGetstat((snprintf(ui, sizeof(ui), "%s/ui.map", VITA_DEFAULT_MAPS_ROOT), ui), &stat) >= 0;
 		int xita = !own && sceIoGetstat(VITA_XITA_MAPS_ROOT "/ui.map", &stat) >= 0;
 
 		setenv("HALO_MAPS_ROOT", xita ? VITA_XITA_MAPS_ROOT : VITA_DEFAULT_MAPS_ROOT, 0);
@@ -1162,7 +1195,7 @@ int main(int argc, char **argv)
 		below, once the settings are read: they may name the folder) */
 		xbox_ui_missing = !own && !xita;
 	}
-	setenv("HALO_SAVE_ROOT", VITA_DATA_DIRECTORY "/saves", 0);
+	setenv("HALO_SAVE_ROOT", vita_folder_path(path, sizeof(path), "saves"), 0);
 	setenv("HALO_NET_ONLINE", "false", 0);
 	/* the Vita's 16:9 screen: 480 lines of 848 columns (the port widens the
 	3D view and centres the menus) */
@@ -1225,9 +1258,10 @@ int main(int argc, char **argv)
 		char message[128];
 
 		memset(&space, 0, sizeof(space));
-		if (sceIoDevctl("ux0:", 0x3001, NULL, 0, &space, sizeof(space)) >= 0)
+		if (sceIoDevctl(vita_folder_device(), 0x3001, NULL, 0, &space, sizeof(space)) >= 0)
 		{
-			snprintf(message, sizeof(message), "vita: ux0: %llu MB free of %llu MB", space.free >> 20, space.maximum >> 20);
+			snprintf(message, sizeof(message), "vita: %s %llu MB free of %llu MB", vita_folder_device(), space.free >> 20,
+				space.maximum >> 20);
 			vita_host_log(message);
 		}
 		else
@@ -1236,10 +1270,12 @@ int main(int argc, char **argv)
 			view of the device) */
 			uint64_t maximum = 0, free = 0;
 
-			if (sceAppMgrGetDevInfo("ux0:", &maximum, &free) >= 0)
-				snprintf(message, sizeof(message), "vita: ux0: %llu MB free of %llu MB (app manager)", (unsigned long long)free >> 20, (unsigned long long)maximum >> 20);
+			if (sceAppMgrGetDevInfo(vita_folder_device(), &maximum, &free) >= 0)
+				snprintf(message, sizeof(message), "vita: %s %llu MB free of %llu MB (app manager)", vita_folder_device(),
+					(unsigned long long)free >> 20, (unsigned long long)maximum >> 20);
 			else
-				snprintf(message, sizeof(message), "vita: ux0: free space unknown (devctl and app manager both refused)");
+				snprintf(message, sizeof(message), "vita: %s free space unknown (devctl and app manager both refused)",
+					vita_folder_device());
 			vita_host_log(message);
 		}
 	}
@@ -1355,7 +1391,11 @@ void vita_host_log(const char *line)
 	int crashing = strstr(line, "crash") != NULL;
 
 	if (log_file < 0)
-		log_file = sceIoOpen(VITA_DATA_DIRECTORY "/halo.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0666);
+	{
+		char path[VITA_FOLDER_SIZE + 16];
+
+		log_file = sceIoOpen(vita_folder_path(path, sizeof(path), "halo.log"), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0666);
+	}
 	length = snprintf(text, sizeof(text), "%7llu.%03llu %s\n", now / 1000000ULL, now / 1000ULL % 1000ULL, line);
 	if (length < 0)
 		return;

@@ -36,6 +36,7 @@ the picture to fit the screen at its display shape.
 #endif
 
 #include "vita_host.h"
+#include "vita_game_folder.h"
 
 #define ALIGN(value, alignment) (((value) + (alignment) - 1) & ~((alignment) - 1))
 
@@ -540,7 +541,7 @@ void vita_movie_copy(void *destination, long pitch, unsigned long width, unsigne
 	{
 		/* (debug) HALO_MOVIE_DUMP=n: the n-th frame's raw NV12 (all of the
 		decoder's memory from the frame on, up to 4 MB) and the converted
-		rows to ux0:data/haloce-vita/movie_*.raw */
+		rows to the game folder's movie_*.raw */
 		static int dump_at = -2, copies;
 
 		if (dump_at == -2)
@@ -550,7 +551,11 @@ void vita_movie_copy(void *destination, long pitch, unsigned long width, unsigne
 		}
 		if (dump_at >= 0 && copies++ == dump_at)
 		{
-			FILE *file = fopen("ux0:data/haloce-vita/movie_nv12.raw", "wb");
+			char dump_path[160];
+			FILE *file;
+
+			snprintf(dump_path, sizeof(dump_path), "%s/movie_nv12.raw", vita_game_folder());
+			file = fopen(dump_path, "wb");
 
 			if (file)
 			{
@@ -745,8 +750,11 @@ void vita_movie_copy(void *destination, long pitch, unsigned long width, unsigne
 	}
 	if (dump_pending)
 	{
-		FILE *file = fopen("ux0:data/haloce-vita/movie_rgb.raw", "wb");
+		char dump_path[160];
+		FILE *file;
 
+		snprintf(dump_path, sizeof(dump_path), "%s/movie_rgb.raw", vita_game_folder());
+		file = fopen(dump_path, "wb");
 		dump_pending = 0;
 		if (file)
 		{

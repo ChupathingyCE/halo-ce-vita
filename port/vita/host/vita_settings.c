@@ -20,7 +20,7 @@ column of its own (a '\x02' between label and value, vita_gxm.c
 menu_build), the selected row's help on one line below the rows and the
 panel's buttons on the line under it. Each setting is one of the
 environment variables the port already reads (HALO_MODEL_LOD_SCALE...),
-kept in ux0:data/haloce-vita/settings.txt (written by a thread of its own:
+kept in the game folder's settings.txt (written by a thread of its own:
 save) and set before the game starts;
 which page shows a row changes nothing of that. A change
 bumps halo_settings_generation, and the readers that can take a new value
@@ -278,6 +278,7 @@ Multiplayer tab's way.
 #include "system_link_shortcut.h"
 #include "update_check.h"
 #include "vita_controls.h"
+#include "vita_folder.h"
 #include "vita_gxm.h"
 #include "vita_host.h"
 #include "vita_update.h"
@@ -293,8 +294,16 @@ int experimental_modes_map_ok(const char *map);
 nonzero on the crossplay wire (a PC's game, or one hosted for Vitas and PC) */
 int network_wire_crossplay(void);
 
-#define DATA_DIRECTORY "ux0:data/haloce-vita"
-#define SETTINGS_FILE DATA_DIRECTORY "/settings.txt"
+/* the game's folder (ux0:data/haloce-vita, or uma0: or imc0:'s: vita_folder.h);
+the Game folder row's variable, which is not an environment variable: the
+row is kept in VITA_FOLDER_CHOICE_FILE (game_folder_row) */
+#define GAME_FOLDER_ROW "HALO_GAME_FOLDER"
+#define DATA_DIRECTORY vita_folder()
+/* settings.txt in it, and its .new, .bak and .bad (settings_files) */
+#define SETTINGS_FILE settings_file(0)
+#define SETTINGS_FILE_NEW settings_file(1)
+#define SETTINGS_FILE_BAK settings_file(2)
+#define SETTINGS_FILE_BAD settings_file(3)
 /* settings.txt's last line (save_lines): the file was written whole */
 #define SETTINGS_END "HALO_SETTINGS_END"
 /* where the system writes its crash dumps (psp2core-*.psp2dmp) */
@@ -1110,6 +1119,12 @@ static struct setting settings[] = {
 	player's own MCC folder, halo1 in it, its maps listed with the others;
 	found by itself in ux0:data/haloce-vita/mcc, or one of these. No
 	switch: the page's lines say where the content is read from) */
+	/* (the game's own folder, vita_folder.h, issue #53: Auto - the first card
+	with the game's files, ux0: first -, or the card named. Kept in
+	ux0:data/haloce-vita-folder.txt, not settings.txt, which is in the folder;
+	read at start: after a restart. Nothing is moved between cards) */
+	{ "Game folder", GAME_FOLDER_ROW, 1, 4, { "auto", "ux0", "uma0", "imc0" }, { "Auto", "ux0", "uma0", "imc0" },
+		"Where the game's files are (data/haloce-vita). Auto finds them", 0, PAGE_MAPS },
 	{ "Halo content folder", "HALO_CONTENT_ROOT", 0, 4, { "auto", "ux0:data/mcc", "uma0:data/mcc", "imc0:data/mcc" },
 		{ "Found by itself", "ux0:data/mcc", "uma0:data/mcc", "imc0:data/mcc" },
 		"Your MCC folder with halo1 in it; only read. Default: haloce-vita/mcc", 0, PAGE_MAPS },
@@ -2048,13 +2063,20 @@ static int choice_disabled(const struct setting *setting, int choice)
 }
 
 /* a setting's value as the environment variable (or variables) it is */
+/* the Game folder row: kept in its own file (VITA_FOLDER_CHOICE_FILE), not
+in settings.txt nor the environment */
+static int game_folder_row(const char *variable)
+{
+	return variable && strcmp(variable, GAME_FOLDER_ROW) == 0;
+}
+
 static void apply_value(const struct setting *setting)
 {
 	const char *value = setting->values[setting->choice];
 
 	/* (the profile's, which the game keeps: player_models.c,
 player_cosmetics.c; changed only by a press, change) */
-	if (profile_row(setting->variable))
+	if (profile_row(setting->variable) || game_folder_row(setting->variable))
 		return;
 	if (strcmp(setting->variable, PERFORMANCE_LOG) == 0)
 	{
@@ -2220,7 +2242,7 @@ static void save_lines(struct save_output *output)
 	save_put(output, "HALO_SETTINGS_BUILD=%s\n", HALO_VITA_VERSION);
 	for (index = 0; index < SETTING_COUNT; index++)
 		if (settings[index].kind == KIND_CHOICE && !(settings[index].dev && settings[index].choice == 0) &&
-			!profile_row(settings[index].variable))
+			!profile_row(settings[index].variable) && !game_folder_row(settings[index].variable))
 		{
 			save_put(output, "%s=%s\n", settings[index].variable, settings[index].values[settings[index].choice]);
 		}
@@ -2254,13 +2276,34 @@ enum
 
 static int settings_source_kind(const char *path);
 
+/* settings.txt's path (0), its .new (1), .bak (2), .bad (3): in the game's
+folder, which is chosen before the settings are first read and stays */
+static const char *settings_file(int which)
+{
+	static const char *const suffixes[4] = { "", ".new", ".bak", ".bad" };
+	static char paths[4][VITA_FOLDER_SIZE + 24];
+	static char made_for[VITA_FOLDER_SIZE];
+
+	if (which < 0 || which > 3)
+		which = 0;
+	if (strcmp(made_for, vita_folder()))
+	{
+		int index;
+
+		for (index = 0; index < 4; index++)
+			snprintf(paths[index], sizeof(paths[index]), "%s/settings.txt%s", vita_folder(), suffixes[index]);
+		snprintf(made_for, sizeof(made_for), "%s", vita_folder());
+	}
+	return paths[which];
+}
+
 static int save_file(const char *text)
 {
 	FILE *file;
 	int ok, kept;
 
-	remove(SETTINGS_FILE ".new");
-	file = fopen(SETTINGS_FILE ".new", "w");
+	remove(SETTINGS_FILE_NEW);
+	file = fopen(SETTINGS_FILE_NEW, "w");
 	if (!file)
 		return 0;
 	if (text)
@@ -2278,7 +2321,7 @@ static int save_file(const char *text)
 	ok = fclose(file) == 0 && ok;
 	if (!ok)
 	{
-		remove(SETTINGS_FILE ".new");
+		remove(SETTINGS_FILE_NEW);
 		return 0;
 	}
 	/* (only a whole file becomes the last good copy: a damaged one, the real
@@ -2287,22 +2330,22 @@ static int save_file(const char *text)
 	if (settings_source_kind(SETTINGS_FILE) == SETTINGS_SOURCE_NONE)
 		kept = 0;
 	else if (settings_source_kind(SETTINGS_FILE) == SETTINGS_SOURCE_WHOLE ||
-		settings_source_kind(SETTINGS_FILE ".bak") != SETTINGS_SOURCE_WHOLE)
+		settings_source_kind(SETTINGS_FILE_BAK) != SETTINGS_SOURCE_WHOLE)
 	{
-		remove(SETTINGS_FILE ".bak");
-		kept = rename(SETTINGS_FILE, SETTINGS_FILE ".bak") == 0;
+		remove(SETTINGS_FILE_BAK);
+		kept = rename(SETTINGS_FILE, SETTINGS_FILE_BAK) == 0;
 	}
 	else
 	{
-		remove(SETTINGS_FILE ".bad");
-		rename(SETTINGS_FILE, SETTINGS_FILE ".bad");
+		remove(SETTINGS_FILE_BAD);
+		rename(SETTINGS_FILE, SETTINGS_FILE_BAD);
 	}
 	if (!kept)
 		remove(SETTINGS_FILE);
-	ok = rename(SETTINGS_FILE ".new", SETTINGS_FILE) == 0;
+	ok = rename(SETTINGS_FILE_NEW, SETTINGS_FILE) == 0;
 	/* (not put in place: the old one back where it was) */
 	if (!ok && kept)
-		rename(SETTINGS_FILE ".bak", SETTINGS_FILE);
+		rename(SETTINGS_FILE_BAK, SETTINGS_FILE);
 	return ok;
 }
 
@@ -2607,7 +2650,7 @@ it wrote the file, or a file damaged on the card */
 static FILE *settings_source(void)
 {
 	static const char *const names[] = { "settings.txt.new", "settings.txt.bak" };
-	static const char *const paths[] = { SETTINGS_FILE ".new", SETTINGS_FILE ".bak" };
+	const char *const paths[] = { SETTINGS_FILE_NEW, SETTINGS_FILE_BAK };
 	int kind = settings_source_kind(SETTINGS_FILE), index, best = -1, best_kind = SETTINGS_SOURCE_GARBAGE;
 	char message[200];
 
@@ -3012,6 +3055,8 @@ void vita_settings_load(void)
 			vita_host_log(message);
 			setting->choice = choice;
 		}
+	/* (the Game folder row: its own file's, whatever settings.txt or env.txt say) */
+	setting_named(GAME_FOLDER_ROW)->choice = vita_folder_choice_read();
 	/* (the profile is what the rows are: Custom when env.txt or the panel
 	set them apart from every profile) */
 	setting_named("HALO_PROFILE")->choice = matching_profile();
@@ -3077,7 +3122,11 @@ static const char *maps_directory(void)
 {
 	const char *directory = getenv("HALO_MAPS_ROOT");
 
-	return directory && directory[0] ? directory : DATA_DIRECTORY "/maps";
+	static char maps[VITA_FOLDER_SIZE + 8];
+
+	if (directory && directory[0])
+		return directory;
+	return vita_folder_path(maps, sizeof(maps), "maps");
 }
 
 static int map_disabled(const char *name)
@@ -3246,7 +3295,7 @@ static void maps_scan(void)
 		DIR *maps_folder;
 
 		snprintf(maps_content_folder, sizeof(maps_content_folder), "%s",
-			chosen && *chosen && strcmp(chosen, "auto") ? chosen : DATA_DIRECTORY "/mcc");
+			chosen && *chosen && strcmp(chosen, "auto") ? chosen : vita_folder_path(halo1, sizeof(halo1), "mcc"));
 		snprintf(halo1, sizeof(halo1), "%s/halo1/maps", maps_content_folder);
 		maps_content_halo1 = -1;
 		maps_folder = opendir(halo1);
@@ -3265,13 +3314,17 @@ static void maps_scan(void)
 		}
 	}
 	maps_mods_present = 0;
-	folder = opendir(DATA_DIRECTORY "/mods");
+	{
+		char mods[VITA_FOLDER_SIZE + 8];
+
+		folder = opendir(vita_folder_path(mods, sizeof(mods), "mods"));
+	}
 	while (folder && !maps_mods_present && (entry = readdir(folder)) != NULL)
 	{
 		char path[512];
 		struct stat status;
 
-		snprintf(path, sizeof(path), "%s/%s", DATA_DIRECTORY "/mods", entry->d_name);
+		snprintf(path, sizeof(path), "%s/mods/%s", DATA_DIRECTORY, entry->d_name);
 		maps_mods_present = entry->d_name[0] != '.' && stat(path, &status) == 0 && S_ISDIR(status.st_mode);
 	}
 	if (folder)
@@ -3591,13 +3644,13 @@ static void report_thread(void *argument)
 	vita_settings_save_wait();
 	memset(&time, 0, sizeof(time));
 	sceRtcGetCurrentClockLocalTime(&time);
-	snprintf(report_path, sizeof(report_path), DATA_DIRECTORY "/report-%04u%02u%02u-%02u%02u%02u",
+	snprintf(report_path, sizeof(report_path), "%s/report-%04u%02u%02u-%02u%02u%02u", DATA_DIRECTORY,
 		(unsigned)time.year, (unsigned)time.month, (unsigned)time.day, (unsigned)time.hour, (unsigned)time.minute,
 		(unsigned)time.second);
 	mkdir(report_path, 0777);
 	for (index = 0; index < (int)(sizeof(files) / sizeof(files[0])); index++)
 	{
-		snprintf(path, sizeof(path), DATA_DIRECTORY "/%s", files[index]);
+		snprintf(path, sizeof(path), "%s/%s", DATA_DIRECTORY, files[index]);
 		count += report_copy(path, report_path, files[index]);
 	}
 	/* the newest crash dump */
@@ -4844,8 +4897,8 @@ static int page_lines(struct line *lines)
 				snprintf(lines[count++].text + 1, sizeof(lines[0].text) - 1, "%s", T("Copy them in, or the Halo CE installer"));
 				lines[count].type = LINE_INFO;
 				lines[count].text[0] = '!';
-				snprintf(lines[count++].text + 1, sizeof(lines[0].text) - 1, "%s",
-					T("(halocesetup*.exe) to ux0:data/haloce-vita"));
+				snprintf(lines[count++].text + 1, sizeof(lines[0].text) - 1, T("(halocesetup*.exe) to %s"),
+					DATA_DIRECTORY);
 			}
 		}
 		/* (where the content is read from: the Halo content folder, or the
@@ -4864,7 +4917,7 @@ static int page_lines(struct line *lines)
 			lines[count].type = LINE_INFO;
 			snprintf(lines[count++].text, sizeof(lines[0].text), "%s", T("Steam's MCC files (halo1/maps) go in:"));
 			lines[count].type = LINE_INFO;
-			snprintf(lines[count++].text, sizeof(lines[0].text), "%s", DATA_DIRECTORY "/mcc/halo1/maps");
+			snprintf(lines[count++].text, sizeof(lines[0].text), "%s/mcc/halo1/maps", DATA_DIRECTORY);
 		}
 		if (maps_folder_has_mcc)
 		{
@@ -5302,6 +5355,14 @@ static const char *setting_help(const struct setting *setting)
 	if (setting->variable && !strcmp(setting->variable, "HALO_MAP_SHARE_FROM") && setting->choice >= 0 &&
 		setting->choice < 3)
 		return T(map_downloads_help[setting->choice]);
+	/* (the Game folder: the one in use, chosen at start) */
+	if (game_folder_row(setting->variable))
+	{
+		static char folder_help[128];
+
+		snprintf(folder_help, sizeof(folder_help), T("Now: %s. Auto: where the game's files are"), vita_folder());
+		return folder_help;
+	}
 
 	/* (the debug camera's Black: the Vita button it is on) */
 	if (row >= 0 && !strcmp(playstation_rows[row].key, "HALO_DEBUG_CAMERA"))
@@ -6774,6 +6835,21 @@ static void change(struct setting *setting, int step)
 		set_notice("%s", T("In a party: Online only (leave the party first)"));
 		return;
 	}
+	if (game_folder_row(setting->variable))
+	{
+		char line[200];
+
+		/* (kept at once, outside the game folder: the next start reads it) */
+		if (!vita_folder_choice_write(choice))
+		{
+			set_notice("%s", T("The Game folder could not be saved"));
+			vita_host_log("settings: the Game folder choice could not be written to " VITA_FOLDER_CHOICE_FILE);
+			return;
+		}
+		snprintf(line, sizeof(line), "settings: Game folder %s (in use now: %s; read at the next start)",
+			vita_folder_choice_word(choice), vita_folder());
+		vita_host_log(line);
+	}
 	setting->choice = choice;
 	apply_value(setting);
 	if (strcmp(setting->variable, "HALO_PLAYER_MODEL") == 0)
@@ -7876,7 +7952,7 @@ static void friend_backup_input(unsigned long pressed)
 		{
 			char said[192];
 
-			snprintf(said, sizeof(said), "%s\nux0:data/haloce-vita/\n%s.hfb\n%s", T("Backup saved to"),
+			snprintf(said, sizeof(said), "%s\n%s/\n%s.hfb\n%s", T("Backup saved to"), DATA_DIRECTORY,
 				friend_backup.name, T("Keep it and its password safe."));
 			friend_backup_finish(said);
 		}

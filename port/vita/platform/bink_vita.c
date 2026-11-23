@@ -4,7 +4,7 @@ BINK_VITA.C
 The Bink video SDK entry points bink_playback.c uses (as bink_null.c on
 Linux), answered by the Vita's video player (port/vita/host/vita_movie.c)
 from H.264 copies of the disc's movies: d:\bink\<name>.bik plays
-ux0:data/haloce-vita/movies/<name>.mp4. A missing copy is skipped, as the
+the game folder's movies/<name>.mp4 (ux0:data/haloce-vita, or uma0:'s or imc0:'s). A missing copy is skipped, as the
 game skips a missing movie. The movie's sound plays on its own audio port,
 so the game is told there is no DirectSound for Bink.
 
@@ -28,6 +28,7 @@ memory ("movie: path ...").
 
 #include "platform.h"
 #include "vita_host.h"
+#include "vita_game_folder.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,7 +132,7 @@ HBINK __stdcall BinkOpen(const char *name, unsigned long flags)
 	length = dot ? (size_t)(dot - base) : strlen(base);
 	if (length > 64)
 		length = 64;
-	snprintf(path, sizeof(path), "ux0:data/haloce-vita/movies/%.*s.mp4", (int)length, base);
+	snprintf(path, sizeof(path), "%s/movies/%.*s.mp4", vita_game_folder(), (int)length, base);
 	if (vita_movie_open(path, &width, &height) != 0)
 	{
 		open_failed_for_now = vita_movie_open_failed_for_now();

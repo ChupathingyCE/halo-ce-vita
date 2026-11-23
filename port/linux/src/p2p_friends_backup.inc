@@ -121,7 +121,7 @@ static void backup_wipe(void *bytes, int size)
 static int backup_folder(char *path, int size)
 {
 #if defined(HALO_VITA) && !defined(P2P_FRIENDS_TEST)
-	return snprintf(path, (size_t)size, "ux0:data/haloce-vita") < size;
+	return snprintf(path, (size_t)size, "%s", vita_game_folder()) < size;
 #else
 	return snprintf(path, (size_t)size, "%s", platform_save_root()) < size;
 #endif

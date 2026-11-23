@@ -93,6 +93,7 @@ for a gamepad); a test build's HALO_TEST_TEXT_INPUT answers in its place,
 #include "controls_menu.h"
 #include "halo_menus.h"
 #include "../src/lang.h"
+#include "../src/vita_game_folder.h"
 #include "../src/p2p.h"
 #include "../src/p2p_friends.h"
 #include "../src/p2p_party.h"
@@ -12847,8 +12848,22 @@ static void h3_mods_update(struct widget_instance *list)
 				widget_instance_set_visibility_recursive(hint, chosen != NULL);
 		}
 	}
-	text_show(named(screen, "mods_message"), mod_manager_count() ? "" :
-		T("No custom maps or mods yet. Copy maps to ux0:data/haloce-vita/maps,\nmods to ux0:data/haloce-vita/mods."));
+	if (mod_manager_count())
+		text_show(named(screen, "mods_message"), "");
+	else
+	{
+		/* (the game folder: the Vita's ux0:, uma0: or imc0: one, chosen at start) */
+		char said[512];
+#ifdef HALO_VITA
+		char const *folder = vita_game_folder();
+#else
+		extern char const *platform_data_root(void);
+		char const *folder = platform_data_root();
+#endif
+
+		snprintf(said, sizeof(said), T("No custom maps or mods yet. Copy maps to %s/maps,\nmods to %s/mods."), folder, folder);
+		text_show(named(screen, "mods_message"), said);
+	}
 	/* the totals, or a delete's outcome for a few seconds */
 	if (h3_mods.message[0] && system_milliseconds() - h3_mods.message_time < H3_MODS_MESSAGE_MILLISECONDS)
 		snprintf(text, sizeof(text), "%s", h3_mods.message);

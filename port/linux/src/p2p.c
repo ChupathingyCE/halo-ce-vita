@@ -65,6 +65,7 @@ only look up and create stand-ins.
 */
 
 #include "platform.h"
+#include "vita_game_folder.h"
 #include "posix.h"
 #include "port_config.h"
 #include "p2p_internal.h"
@@ -4703,8 +4704,8 @@ static void poll_invite_file(void)
 		return;
 	checked_time = p2p_now();
 	#ifdef HALO_VITA
-	snprintf(path, sizeof(path), "ux0:data/haloce-vita/join_link.txt");
-	snprintf(taken, sizeof(taken), "ux0:data/haloce-vita/join_link.taken");
+	snprintf(path, sizeof(path), "%s/join_link.txt", vita_game_folder());
+	snprintf(taken, sizeof(taken), "%s/join_link.taken", vita_game_folder());
 #else
 	snprintf(path, sizeof(path), "%s/join_link.txt", platform_data_root());
 	snprintf(taken, sizeof(taken), "%s/join_link.taken", platform_data_root());

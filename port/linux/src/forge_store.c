@@ -3,7 +3,7 @@ FORGE_STORE.C
 
 Forge's map variants on the memory card (forge_store.h). The folders and
 files are this machine's own paths (the platform layer's, not the game's
-Xbox drives): ux0:data/haloce-vita/forge/<map>/<name>.hmv on the Vita,
+Xbox drives): <game folder>/forge/<map>/<name>.hmv on the Vita (ux0:data/haloce-vita),
 <save root>/forge/<map>/<name>.hmv on Linux and PC.
 
 What is never done here: open a name this port did not make (a folder whose
@@ -27,6 +27,7 @@ write stops half way, as on a full card (run_forge_test.sh).
 #include "posix.h"
 #include "lang.h"
 #include "forge_store.h"
+#include "vita_game_folder.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,9 +46,6 @@ write stops half way, as on a full card (run_forge_test.sh).
 /* a save under a title's name: the most numbers tried after it */
 #define FORGE_STORE_MAXIMUM_NUMBER 999
 
-#ifdef HALO_VITA
-#define FORGE_STORE_ROOT "ux0:data/haloce-vita/forge"
-#endif
 
 /* ---------- private code */
 
@@ -65,7 +63,8 @@ static int forge_store_root(
 	int size)
 {
 #ifdef HALO_VITA
-	return snprintf(path, (size_t)size, "%s", FORGE_STORE_ROOT) < size;
+	/* (the game folder's forge: ux0:, or the uma0: or imc0: card chosen at start) */
+	return snprintf(path, (size_t)size, "%s/forge", vita_game_folder()) < size;
 #else
 	return snprintf(path, (size_t)size, "%s/forge", platform_save_root()) < size;
 #endif

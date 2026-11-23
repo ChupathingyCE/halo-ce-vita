@@ -59,6 +59,7 @@ steps, comma-separated (test_steps below); everything is logged as
 */
 
 #include "platform.h"
+#include "vita_game_folder.h"
 #include "posix.h"
 #include "port_config.h"
 #include "p2p_internal.h"
@@ -1134,7 +1135,7 @@ static void identity_from_seed(void)
 static int friends_folder(char *path, int size)
 {
 #if defined(HALO_VITA) && !defined(P2P_FRIENDS_TEST)
-	return snprintf(path, (size_t)size, "ux0:data/haloce-vita/friends") < size;
+	return snprintf(path, (size_t)size, "%s/friends", vita_game_folder()) < size;
 #else
 	return snprintf(path, (size_t)size, "%s/friends", platform_save_root()) < size;
 #endif

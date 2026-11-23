@@ -28,9 +28,10 @@ game restarts itself when the main menu is up and no network game holds it
 
 #include "ce_installer.h"
 #include "lang.h"
+#include "vita_folder.h"
 #include "vita_host.h"
 
-#define DATA_DIRECTORY "ux0:data/haloce-vita"
+#define DATA_DIRECTORY vita_folder()
 /* (each message in the language chosen: lang.c) */
 #define TITLE T("Halo CE: PC map files")
 /* what the three need, and a margin */
@@ -61,7 +62,11 @@ static const char *maps_directory(void)
 {
 	const char *directory = getenv("HALO_MAPS_ROOT");
 
-	return directory && directory[0] ? directory : DATA_DIRECTORY "/maps";
+	static char maps[VITA_FOLDER_SIZE + 8];
+
+	if (directory && directory[0])
+		return directory;
+	return vita_folder_path(maps, sizeof(maps), "maps");
 }
 
 /* an installer beside the game, or in the maps folder */
@@ -92,9 +97,10 @@ static unsigned long long free_space(void)
 	uint64_t maximum = 0, free_bytes = 0;
 
 	memset(&space, 0, sizeof(space));
-	if (sceIoDevctl("ux0:", 0x3001, NULL, 0, &space, sizeof(space)) >= 0)
+	/* (the game folder's card: ux0:, or uma0: or imc0:) */
+	if (sceIoDevctl(vita_folder_device(), 0x3001, NULL, 0, &space, sizeof(space)) >= 0)
 		return space.free;
-	if (sceAppMgrGetDevInfo("ux0:", &maximum, &free_bytes) >= 0)
+	if (sceAppMgrGetDevInfo(vita_folder_device(), &maximum, &free_bytes) >= 0)
 		return free_bytes;
 	/* (unknown: a full card shows as a write that fails) */
 	return SPACE_NEEDED;
@@ -147,7 +153,7 @@ static void extraction_thread(void *argument)
 			"about 180 MB. Free some space, then restart the game or use Modded maps' Extract PC files."),
 			space >> 20);
 		vita_settings_message(TITLE, text);
-		log_line("ce installer: %s: not enough space on ux0: (%s)", file_name(installer), "");
+		log_line("ce installer: %s: not enough space on %s", file_name(installer), vita_folder_device());
 		running = 0;
 		return;
 	}
