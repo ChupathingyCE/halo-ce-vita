@@ -1,3 +1,4 @@
 [submodule "chupathingyce"]
 	path = chupathingyce
-	url = https://github.com/ChupathingyCE/chupathingyce.git
+	url = https://github.com/ChupathingyCE/halo-ce-vita.git
+	branch = warthog-vita-chupathingy
