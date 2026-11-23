@@ -276,6 +276,7 @@ Multiplayer tab's way.
 #include "game_chat_share.h"
 #include "crossplay_guard.h"
 #include "system_link_shortcut.h"
+#include "thank_you.h"
 #include "update_check.h"
 #include "vita_controls.h"
 #include "vita_folder.h"
@@ -494,6 +495,8 @@ enum
 	/* (Modded maps, a build with the Steam download) DOWNLOAD FROM STEAM
 	over the game's main menu (SYSTEM_LINK_REQUEST_STEAM) */
 	ACTION_STEAM_DOWNLOAD,
+	/* 1.1.3's thank-you note again (port/linux/src/thank_you.c) */
+	ACTION_THANK_YOU,
 };
 
 struct setting
@@ -783,6 +786,10 @@ static struct setting settings[] = {
 	Rarely changed, so here rather than beside Check for updates) */
 	{ "Update channel", "HALO_UPDATE_CHANNEL", 0, 2, { "experimental", "stable" }, { "Experimental", "Stable" },
 		"Experimental: betas too. Stable: releases only", 1, TAB_GAME },
+	/* (1.1.3's thank-you note from the owner, shown once at the first start:
+	again here, port/linux/src/thank_you.c) */
+	{ "Thank you", NULL, 0, 0, { NULL }, { NULL }, "A note from BirchWood about 1.1.3 and what's next",
+		0, TAB_GAME, KIND_ACTION, ACTION_THANK_YOU },
 	{ "Show dev settings", "HALO_DEV_SETTINGS", 0, 2, { "0", "1" }, { "Off", "On" },
 		"The Dev tab: switches for testers, Save report", 0, TAB_GAME },
 	/* (dsound_sdl.c halo_sound_class_volume, config.toml's audio.volume and audio.*_volume: the master
@@ -1963,8 +1970,15 @@ static int online_panel_style(void);
 static int original_style(void);
 static int pc_menus_shown(void);
 
+/* (show_list) the classic panel still short of room once its headings gave
+way: Game's Thank you row gives way too (the update check's answers and the
+Forge row on the tab; the Halo 3 panels fit their rows to their height) */
+static int thank_you_gives_way;
+
 static int setting_shown(const struct setting *setting)
 {
+	if (setting->action == ACTION_THANK_YOU)
+		return !thank_you_gives_way;
 	/* (Forge and File Share: the Halo 3 main menu has them; for the
 	original menus, the Halo CE Menu style, the panel does; and for every
 	style while a Forge game is played: its rows are that game's, Touch in
@@ -6138,8 +6152,28 @@ static void show_list(void)
 {
 	char text[3072];
 	struct line lines[MAXIMUM_LINES];
-	int count = page_lines(lines), index, highlighted, headings, skip;
+	int count, index, highlighted, headings, skip;
 	int *selected = &page_selected[page];
+
+	/* (Game's Thank you row: shown when the page fits with it, its headings
+	given way as needed; else it gives way too, below) */
+	thank_you_gives_way = 0;
+	count = page_lines(lines);
+	if (page == TAB_GAME && classic_panel())
+	{
+		for (skip = 0; ; skip++)
+		{
+			list_text(text, (int)sizeof(text), lines, count, 0, skip, &headings);
+			if (classic_panel_fits(text))
+				break;
+			if (skip >= headings)
+			{
+				thank_you_gives_way = 1;
+				count = page_lines(lines);
+				break;
+			}
+		}
+	}
 
 	if (*selected >= count)
 		*selected = count - 1;
@@ -7267,6 +7301,12 @@ static void act(const struct setting *setting)
 {
 	switch (setting->action)
 	{
+	/* (the panel closed: the note in the game's own message, as at the
+	first start) */
+	case ACTION_THANK_YOU:
+		close_panel();
+		thank_you_show("the settings panel's Thank you");
+		break;
 	/* (in the background: the answer shows under the version as it comes) */
 	case ACTION_UPDATE_CHECK:
 		/* port: an update found: the press downloads it, or says where it
@@ -8403,6 +8443,14 @@ static void panel_begin(void)
 int vita_settings_panel_open(void)
 {
 	return panel_open;
+}
+
+/* (system_link_shortcut.c: 1.1.3's thank-you note waits for it) a message,
+question or progress line of the panel's over the game, shown or waiting */
+int vita_settings_box_open(void)
+{
+	return message_pending || message_visible || question_pending || question_visible || progress_changed ||
+		progress_visible;
 }
 
 /* (each frame) the connection the game runs (network_connection.c, switched

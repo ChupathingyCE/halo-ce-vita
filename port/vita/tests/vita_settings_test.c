@@ -341,6 +341,46 @@ int vita_ce_installer_start(void)
 	return 0;
 }
 
+/* (1.1.3's thank-you note, port/linux/src/thank_you.c, with what it asks of
+port_config.c and sdl_platform.c: the platform's message the Vita's, the
+panel's box - the Halo 3 dialog is the game's -, the showings counted) */
+static int thank_you_shown;
+int config_boolean(const char *name) { (void)name; return 0; }
+double config_real(const char *name) { (void)name; return 0.0; }
+void config_folder(char *path, size_t size) { snprintf(path, size, "./"); }
+char *config_file_read(const char *path, size_t *size)
+{
+	FILE *file = fopen(path, "rb");
+	char *text = file ? calloc(1, 4096) : NULL;
+	size_t length = text ? fread(text, 1, 4095, file) : 0;
+
+	if (file)
+		fclose(file);
+	if (size)
+		*size = length;
+	return text;
+}
+int config_file_write(const char *path, const char *text, size_t size)
+{
+	FILE *file = fopen(path, "wb");
+	int written = file && fwrite(text, 1, size, file) == size;
+
+	if (file)
+		fclose(file);
+	return written;
+}
+void platform_log(const char *format, ...)
+{
+	(void)format;
+}
+void vita_settings_message(const char *title, const char *text);
+void platform_show_message(const char *title, const char *message)
+{
+	thank_you_shown++;
+	vita_settings_message(title, message);
+}
+#include "../../linux/src/thank_you.c"
+
 /* (update_notify.c's: the status a test sets, the presses counted) */
 static int update_status_value = UPDATE_STATUS_NONE, update_requests;
 static char update_version_value[UPDATE_VERSION_SIZE];
@@ -1429,11 +1469,15 @@ bar, 22 pixels under its line's top, above the rule at 468 over the help
 and the buttons: 392 pixels for the lines; the Halo 3 menus' panel fits its
 rows to its height, so a page that fits this fits both); a screen without a
 tab bar fits by its own height */
+/* (menu_height_fits: the classic panel's headings that gave way, counted) */
+static int menu_headings_given_way;
+
 static int menu_height_fits(void)
 {
 	const char *at = menu;
 	int y = 76, last = 0, first = 1;
 
+	menu_headings_given_way = 0;
 	if (menu[0] != '\t')
 		return 1;
 	while (*at)
@@ -1456,6 +1500,15 @@ static int menu_height_fits(void)
 			y += 28;
 		}
 		at += bytes + (at[bytes] == '\n');
+	}
+	/* (the classic panel short of room: its headings give way, the first
+	first, vita_settings.c show_list - 1.1.3's Thank you row on Game leaves
+	room for all but one there, the Interface heading; the Halo 3 panel keeps
+	them all, its rows fitted to its height) */
+	for (at = menu; last + 22 > 468 && (at = strstr(at, "\n\x08")) != NULL; at += 2)
+	{
+		last -= 22;
+		menu_headings_given_way++;
 	}
 	if (last + 22 > 468)
 		printf("too many lines: the last row at %d pixels\n", last);
@@ -3929,6 +3982,7 @@ static void test_tab_layouts(void)
 		{ PAGE_APPEARANCE, "Flaming helmet", "HALO_FLAMING_HELMET", "false|true", 0, "true" },
 		{ TAB_GAME, "Check for updates", NULL, NULL, 0, NULL, ACTION_UPDATE_CHECK },
 		{ TAB_GAME, "Update channel", "HALO_UPDATE_CHANNEL", "experimental|stable", 0, channel },
+		{ TAB_GAME, "Thank you", NULL, NULL, 0, NULL, ACTION_THANK_YOU },
 		{ TAB_GAME, "Show dev settings", "HALO_DEV_SETTINGS", "0|1", 0, "0" },
 	};
 	static const struct layout_row controls[] = {
@@ -4094,7 +4148,7 @@ static void test_headings(void)
 		const char *tab, *outline;
 	} tabs[] = {
 		{ "Game", "=Interface|Menus|Button icons|Language|FPS counter|=First person|First-person legs|"
-			"Smooth weapon motion|Appearance|=Updates|Check for updates|Update channel|Show dev settings" },
+			"Smooth weapon motion|Appearance|=Updates|Check for updates|Update channel|Thank you|Show dev settings" },
 		{ "Controls", "=Look|Look sensitivity|Invert look|Stick deadzone|=Buttons|Crouch|Button layout|Reset controls|"
 			"=Gyro|Gyro aiming|Gyro settings|=Touch|Rear touch guard|Touch zones" },
 		{ "Video", "=Quality|Profile|Render resolution|Dynamic minimum|Frame limit|Frame interpolation|=Screen|"
@@ -4162,7 +4216,7 @@ static void test_headings(void)
 	test_flame_listed = 1;
 	check(to_tab("Game") && !strcmp(outline_of(outline, sizeof(outline), 0), "=Interface|Menus|Button icons|Language|"
 		"FPS counter|=First person|First-person legs|Smooth weapon motion|Appearance|=Updates|Check for updates|"
-		"Update channel|Show dev settings") && menu_fits() && menu_height_fits() && steps_skip_headings() &&
+		"Update channel|Thank you|Show dev settings") && menu_fits() && menu_height_fits() && steps_skip_headings() &&
 		!strstr(menu, "Flaming helmet"), "a listed tester: the Game tab as anyone's (no Flaming helmet row on it)");
 	check(open_page("Appearance") && !strcmp(outline_of(outline, sizeof(outline), 0), "Armor color|Visor color|Flaming helmet") &&
 		(strstr(menu, "\nFlaming helmet\x02< On  ") || strstr(menu, "\nFlaming helmet\x02  On >") ||
@@ -4886,8 +4940,8 @@ static void test_languages(void)
 			update_status_value = statuses[index];
 			show();
 			/* (on the classic panel: the headings giving way, Interfaz first,
-			when the lines run to three) */
-			if (!menu_fits() || !menu_height_fits() || menu_rows() != 11 ||
+			when the lines run to three; then 1.1.3's Gracias row) */
+			if (!menu_fits() || !menu_height_fits() || menu_rows() != 11 + (strstr(menu, "\nGracias\x02") != NULL) ||
 				!strstr(menu, "Buscar actualizaciones\x02  >\n\x04Versión "))
 			{
 				printf("(update status %d)\n%s\n--\n", statuses[index], menu);
@@ -5021,6 +5075,76 @@ static void test_languages(void)
 	vita_settings_set("HALO_LANGUAGE", "auto");
 }
 
+/* ---------- 1.1.3's thank-you note (port/linux/src/thank_you.c): Game's
+Thank you row shows it again, the panel closed, in the panel's box (the
+classic panel's: 46 characters a line, 19 lines at most at 544 pixels -
+vita_gxm.c menu_build: 24 + 26 a line); in English and in Spanish; the
+first start's showing waits for the main menu, three seconds, once */
+static int box_lines(void)
+{
+	int lines = 1;
+	const char *at;
+
+	for (at = menu; *at; at++)
+		lines += *at == '\n';
+	return lines;
+}
+
+static void test_thank_you(void)
+{
+	static const char *const languages[] = { "en", "es" };
+	char path[64];
+	int index;
+
+	for (index = 0; index < 2; index++)
+	{
+		vita_settings_set("HALO_LANGUAGE", languages[index]);
+		tab = page = TAB_GAME;
+		open_panel();
+		thank_you_shown = 0;
+		check(to_line(index ? "Gracias" : "Thank you") && strstr(menu, index ? "\n\x05Una nota de BirchWood sobre la 1.1.3 y lo que viene\n" :
+			"\n\x05" "A note from BirchWood about 1.1.3 and what's next\n"),
+			index ? "Spanish: Juego > Gracias, its help" : "Game > Thank you, under Updates: its help");
+		press(VITA_BUTTON_CROSS);
+		frame(0);
+		printf("%s\n--\n", menu);
+		check(thank_you_shown == 1 && !panel_open && menu_visible && menu[0] != '\t' && menu_lines_fit() &&
+			box_lines() <= 19 && strstr(menu, index ? "Gracias\n\nEsta es la última actualización" :
+			"Thank you\n\nThis is the last Halo CE Vita update.") && strstr(menu, "BirchWood"),
+			index ? "Spanish: the note, the panel closed, in lines of 46 characters, 19 lines at most" :
+			"cross: the note, the panel closed, in lines of 46 characters, 19 lines at most");
+		frame(VITA_BUTTON_CROSS);
+		frame(0);
+		check(!menu_visible, index ? "Spanish: Cross closes the note" : "Cross closes the note");
+	}
+	vita_settings_set("HALO_LANGUAGE", "auto");
+	/* (the first start: thank_you.txt in the data folder; the main menu up
+	three seconds first, the time reset when something is over it) */
+	snprintf(path, sizeof(path), "thank_you_test_data");
+	mkdir(path, 0777);
+	setenv("HALO_DATA_ROOT", path, 1);
+	remove("thank_you_test_data/thank_you.txt");
+	thank_you_shown = 0;
+	thank_you_update(0, 1000);
+	thank_you_update(1, 2000);
+	thank_you_update(0, 4000);
+	thank_you_update(1, 4500);
+	thank_you_update(1, 7400);
+	check(!thank_you_shown, "first start: not before the main menu is up three seconds with nothing over it");
+	thank_you_update(1, 7500);
+	frame(0);
+	check(thank_you_shown == 1 && menu_visible && strstr(menu, "Thank you\n\n") &&
+		!strncmp(file_text("thank_you_test_data/thank_you.txt"), "1.1.3", 5),
+		"first start: shown once the main menu is up three seconds, and remembered in thank_you.txt");
+	frame(VITA_BUTTON_CROSS);
+	frame(0);
+	thank_you_update(1, 20000);
+	check(thank_you_shown == 1, "... and once only");
+	remove("thank_you_test_data/thank_you.txt");
+	rmdir(path);
+	unsetenv("HALO_DATA_ROOT");
+}
+
 /* ---------- the update check: Game's Updates rows, Check for updates and
 its lines, then its channel */
 
@@ -5106,23 +5230,26 @@ static void test_updates(void)
 	/* Check for updates: the first row under Updates, in the background,
 	its answer beside the version under it; the Update channel and Show dev
 	settings under its lines */
-	check(strstr(menu, "\t*Game|") && !strstr(menu, "\n\x03") && to_line("Check for updates") && menu_selected == 11 &&
-		!strcmp(menu_line(10, line, sizeof(line)), "\x08Updates") && !update_requests,
+	/* (the classic panel, Forge's row on it and 1.1.3's Thank you: Interface
+	and First person give way) */
+	check(strstr(menu, "\t*Game|") && !strstr(menu, "\n\x03") && to_line("Check for updates") && menu_selected == 10 &&
+		!strcmp(menu_line(9, line, sizeof(line)), "\x08Updates") && !update_requests,
 		"Game: Check for updates under the Updates heading, nothing asked before the press");
 	check(strstr(menu, "\n\x05" "Asks GitHub for the newest version; again to download it\n") &&
 		strstr(menu, "\n\x06L/R: tabs   Cross: select   Circle: close"), "Check for updates: its help, cross presses it");
-	check(!strcmp(menu_line(12, line, sizeof(line)), "\x04" "Version " HALO_VITA_VERSION) &&
-		!strncmp(menu_line(13, line, sizeof(line)), "Update channel\x02", 15) &&
+	check(!strcmp(menu_line(11, line, sizeof(line)), "\x04" "Version " HALO_VITA_VERSION) &&
+		!strncmp(menu_line(12, line, sizeof(line)), "Update channel\x02", 15) &&
+		!strcmp(menu_line(13, line, sizeof(line)), "Thank you\x02  >") &&
 		!strncmp(menu_line(14, line, sizeof(line)), "Show dev settings\x02", 18),
-		"no look yet: the version alone under it, then Update channel and Show dev settings (no gap)");
+		"no look yet: the version alone under it, then Update channel, Thank you and Show dev settings (no gap)");
 	press(VITA_BUTTON_UP);
-	check(menu_selected == 9 && !strncmp(menu_line(menu_selected, line, sizeof(line)), "Appearance\x02", 11),
+	check(menu_selected == 8 && !strncmp(menu_line(menu_selected, line, sizeof(line)), "Appearance\x02", 11),
 		"up from Check for updates: Appearance (the Updates heading stepped over)");
 	press(VITA_BUTTON_DOWN);
-	check(menu_selected == 11, "... and down: Check for updates again");
+	check(menu_selected == 10, "... and down: Check for updates again");
 	press(VITA_BUTTON_CROSS);
 	redraw();
-	check(update_requests == 1 && !strcmp(menu_line(12, line, sizeof(line)), "\x04" "Version " HALO_VITA_VERSION " - Checking...") &&
+	check(update_requests == 1 && !strcmp(menu_line(11, line, sizeof(line)), "\x04" "Version " HALO_VITA_VERSION " - Checking...") &&
 		menu_fits() && menu_height_fits(), "pressed: Checking..., beside the version");
 	update_status_value = UPDATE_STATUS_AVAILABLE;
 	snprintf(update_version_value, sizeof(update_version_value), "1.1.0-beta.4");
@@ -5174,8 +5301,8 @@ static void test_updates(void)
 	update_status_value = UPDATE_STATUS_UP_TO_DATE;
 	snprintf(update_version_value, sizeof(update_version_value), "%s", HALO_VITA_VERSION);
 	redraw();
-	check(!strcmp(menu_line(12, line, sizeof(line)), "\x04" "Version " HALO_VITA_VERSION " - Up to date") &&
-		!strstr(menu, "github.com") && !strncmp(menu_line(13, line, sizeof(line)), "Update channel\x02", 15) && menu_fits(),
+	check(!strcmp(menu_line(11, line, sizeof(line)), "\x04" "Version " HALO_VITA_VERSION " - Up to date") &&
+		!strstr(menu, "github.com") && !strncmp(menu_line(12, line, sizeof(line)), "Update channel\x02", 15) && menu_fits(),
 		"up to date");
 	update_status_value = UPDATE_STATUS_NO_CONNECTION;
 	redraw();
@@ -5191,9 +5318,10 @@ static void test_updates(void)
 	update_status_value = UPDATE_STATUS_NONE;
 	redraw();
 	check(!strstr(menu, "Couldn't") && !strstr(menu, "Checking"), "no look yet: no line");
-	check(!strstr(menu, "Interface") && strstr(menu, "\n\x08" "First person\n") && strstr(menu, "\n\x08Updates\n") &&
-		menu_height_fits(), "room again (the version alone): First person and Updates back (Interface gives way while "
-		"Forge's row is on the classic panel)");
+	check(!strstr(menu, "Interface") && !strstr(menu, "\n\x08" "First person\n") && strstr(menu, "\n\x08Updates\n") &&
+		strstr(menu, "\nThank you\x02") && menu_height_fits() && !menu_headings_given_way,
+		"room again (the version alone): Updates and Thank you back (Interface and First person give way while "
+		"Forge's row and Thank you are on the classic panel)");
 	press(VITA_BUTTON_CIRCLE);
 	check(!menu_visible, "circle on Game closes the panel");
 	vita_settings_set("HALO_MENU_STYLE", "halo3");
@@ -5897,14 +6025,15 @@ int main(void)
 		!strcmp(menu_line(11, line, sizeof(line)), "Check for updates\x02  >") &&
 		!strcmp(menu_line(12, line, sizeof(line)), "\x04" "Version " HALO_VITA_VERSION) &&
 		!strncmp(menu_line(13, line, sizeof(line)), "Update channel\x02", 15) &&
-		!strcmp(menu_line(14, line, sizeof(line)), "Show dev settings\x02  Off >") &&
-		!strcmp(menu_line(15, line, sizeof(line)), "\x05" "Menu style, the carnage report and scoreboard") &&
-		!strncmp(menu_line(16, line, sizeof(line)), "\x06L/R: tabs", 10) && menu_height_fits(),
+		!strcmp(menu_line(14, line, sizeof(line)), "Thank you\x02  >") &&
+		!strcmp(menu_line(15, line, sizeof(line)), "Show dev settings\x02  Off >") &&
+		!strcmp(menu_line(16, line, sizeof(line)), "\x05" "Menu style, the carnage report and scoreboard") &&
+		!strncmp(menu_line(17, line, sizeof(line)), "\x06L/R: tabs", 10) && menu_height_fits(),
 		"Game: Interface (Menus: Halo 3, Button icons, Language, FPS counter), First person (First-person legs, "
 		"Smooth weapon motion, Appearance: the armor color), Updates (Check for updates and the version, Update channel, "
-		"Show dev settings); help, buttons");
-	check(menu_selected == 2 && menu_fits() && menu_rows() == 10 && !strstr(menu, "*\x02"),
-		"Game: Menus chosen first (not the heading over it); ten rows, each fits, all live (no *)");
+		"Thank you, Show dev settings); help, buttons");
+	check(menu_selected == 2 && menu_fits() && menu_rows() == 11 && !strstr(menu, "*\x02"),
+		"Game: Menus chosen first (not the heading over it); eleven rows, each fits, all live (no *)");
 	check(!strstr(menu, "Profile") && !strstr(menu, "Aspect ratio") && !strstr(menu, "Look sensitivity") &&
 		!strstr(menu, "Stick deadzone") && !strstr(menu, "Sound voices") && !strstr(menu, "\nScreen\x02") &&
 		!strstr(menu, "\nFirst person\x02") && !strstr(menu, "\nAdvanced\x02"),
@@ -6551,7 +6680,7 @@ int main(void)
 	/* ---------- Dev, behind its switch */
 	press(VITA_BUTTON_R);
 	check(strstr(menu, "\t*Game|") != NULL, "R from Multiplayer: Game (Dev hidden)");
-	check(to_line("Show dev settings") && menu_selected == 14 && strstr(menu, "\n\x05The Dev tab: switches for testers, Save report\n"),
+	check(to_line("Show dev settings") && menu_selected == 15 && strstr(menu, "\n\x05The Dev tab: switches for testers, Save report\n"),
 		"Show dev settings: Game's last row, under Updates, its help");
 	press(VITA_BUTTON_RIGHT);
 	check(strstr(menu, "\t*Game|Controls|Video|Sound|Multiplayer|Dev\n") && menu_fits() && tab_bar_fits() &&
@@ -7122,6 +7251,7 @@ int main(void)
 	update_status_value = UPDATE_STATUS_AVAILABLE;
 	snprintf(update_version_value, sizeof(update_version_value), "1.1.0-beta.4");
 	test_languages();
+	test_thank_you();
 	test_menu_style_row();
 	test_answer_press_held();
 	test_menu_style_original();
