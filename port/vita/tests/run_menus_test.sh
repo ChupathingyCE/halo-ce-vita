@@ -4340,6 +4340,9 @@ PY
 			"mp_modes|60|$cpmp $d $d $d $d $d $d $d $d a:150:3500 a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.modes.screen pc.cp.forge.lobby pc.ce.modes.screen pc.cp.command.lobby pc.ce.modes.screen pc.cp.firefight.lobby pc.ce.modes.screen pc.cp.gametypes.screen pc.ce.modes.screen pc.mp.screen main_menu.main_menu|"
 			"mp_lan|40|$cpmp $d a:150:4000 a:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
 			"mp_lanlist|46|$cpmp $d a:150:4000 a:150:2000 a:150:2000 a:150:5000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen connected.server_list.server_list_screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
+			# (Menu style Classic chosen in the settings panel from Classic+: the Xbox files switch at once; MCC's ui.map
+			# keeps Classic+ till the next start - its PROFILES crashed the game, Nov 24)
+			"style_to_classic|45|wait:150:5000 $d $d a:150:4000 a:150:4000 b:150:3000 b:150:3000 wait:150:2000|main_menu.main_menu player_profile_select_screen main_menu.main_menu|HALO_TEST_MENU_STYLE_SWITCH=2000:original"
 			# (the game modes' START rows: Forge starts its game; Command and Firefight open the packs' prepare box, B
 			# back to the lobby)
 			"modes_forge|70|$cpmp $d $d $d $d $d $d $d $d a:150:3500 a:150:4000 $d $d a:150:8000 wait:150:20000|pc.ce.modes.screen pc.cp.forge.lobby|"

@@ -27382,6 +27382,20 @@ static void menu_style_update(boolean main_menu_loaded)
 	}
 	if (!strcmp(style, menu_style_watch.style))
 		return;
+	/* (MCC's ui.map - Halo PC's, its PROFILES the profile manager -: Menu style Classic, Halo PC's own menus, is
+	set up as the map loads - its functions, its screens' stand-ins -, and chosen in the settings panel after the
+	start in another style its PROFILES crashed the game (the 1.1.3 Classic+ audit, Nov 24). Kept for the next
+	start, the menus as they are till then, the player told) */
+	if (!strcmp(style, "original") && main_menu_loaded &&
+		tag_loaded(UI_WIDGET_DEFINITION_TAG, "ui\\shell\\main_menu\\profile_manager\\player_profile_manager") != NONE)
+	{
+		platform_log("menus: Menu style %s -> original on Halo PC's ui.map (MCC's): kept for the next start, %s till then",
+			menu_style_watch.style, menu_style_watch.style);
+		setenv("HALO_MENU_STYLE", menu_style_watch.style, 1);
+		platform_show_message(T("Halo: Menu style"),
+			T("Menu style Classic is used from the next start of the game. Close the game and start it again to see it."));
+		return;
+	}
 	platform_log("menus: Menu style %s -> %s: the main menu again, in it", menu_style_watch.style, style);
 	snprintf(menu_style_watch.style, sizeof(menu_style_watch.style), "%s", style);
 	/* (a lobby's game closed first; the lobby's characters let go) */
