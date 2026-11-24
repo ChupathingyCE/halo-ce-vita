@@ -39,6 +39,10 @@ int experimental_modes_map_ok(const char *map)
 		if (*character == '\\' || *character == '/')
 			name = character + 1;
 	}
+	/* (MCC's own copy, on an install from MCC alone: forge_map_path's
+	levels\test\mcc_bloodgulch\mcc_bloodgulch - Blood Gulch too) */
+	if (!strncasecmp(name, "mcc_", 4))
+		name += 4;
 	length = strlen(name);
 	if (length >= 4 && !strcasecmp(name + length - 4, ".map"))
 		length -= 4;

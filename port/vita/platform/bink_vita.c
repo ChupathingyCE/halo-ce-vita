@@ -132,6 +132,12 @@ HBINK __stdcall BinkOpen(const char *name, unsigned long flags)
 	length = dot ? (size_t)(dot - base) : strlen(base);
 	if (length > 64)
 		length = 64;
+	/* (no name: the game found no file of the movie in any language -
+	attract_mode_get_localized_movie_path's empty path, as with no credits
+	or attract movies - and asks anyway, as the Xbox's did; nothing to look
+	for, nothing to log: its own "unable to locate" line already said so) */
+	if (!length)
+		return NULL;
 	snprintf(path, sizeof(path), "%s/movies/%.*s.mp4", vita_game_folder(), (int)length, base);
 	if (vita_movie_open(path, &width, &height) != 0)
 	{
