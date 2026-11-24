@@ -3844,6 +3844,7 @@
 "The host didn't send its placements of %s: with Xbox and MCC files together it needs a host of this version with the Xbox's maps." = "El anfitrión no mandó sus posiciones de %s: con archivos de Xbox y de MCC juntos hace falta un anfitrión de esta versión con los mapas de Xbox."
 "The host's placements of %s couldn't be read (%s)." = "No se pudieron leer las posiciones de %s del anfitrión (%s)."
 "The host plays %s from the Xbox's files and its version can't play co-op with MCC's files: update the host's game, or play with your Xbox files." = "El anfitrión juega %s con los archivos de Xbox y su versión no puede jugar cooperativo con los de MCC: actualiza el juego del anfitrión o juega con tus archivos de Xbox."
+"This game's host plays %s from the Xbox's files on an older version that can't play it with MCC's files: the host needs to update its game, or join with your Xbox files." = "El anfitrión de esta partida juega %s con los archivos de Xbox en una versión anterior que no puede jugarlo con los de MCC: el anfitrión tiene que actualizar su juego, o únete con tus archivos de Xbox."
 "The host didn't send what's needed to play %s together from Xbox and MCC files." = "El anfitrión no mandó lo necesario para jugar %s juntos con archivos de Xbox y de MCC."
 "The host's description of the level couldn't be read (%s)." = "No se pudo leer la descripción del nivel del anfitrión (%s)."
 "The host plays another level than this machine loaded." = "El anfitrión juega un nivel distinto al que cargó esta máquina."

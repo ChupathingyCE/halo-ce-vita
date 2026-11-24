@@ -65,6 +65,7 @@ when what the game reads in them is alike.
 #include "structures/structure_bsp_definitions.h"
 
 #include "mcc_content.h"
+#include "custom_edition_maps.h"
 
 /* (collision_bsp.c) the collision BSP whose invisible surfaces collide with nothing, or NULL */
 extern struct collision_bsp const *collision_bsp_invisible_masked;
@@ -277,6 +278,12 @@ static struct
 	struct network_game_client *start_pending;
 	unsigned long start_pending_since;
 	unsigned long layout_asked_time;
+	/* (1.1.3, the owner's 8l) the game's start held for the host's hello: a host that never says it plays mixed
+	(an older build) refused before the map loads; and the lobby's wait for it (0: not waiting) */
+	boolean start_waits_hello;
+	unsigned long lobby_hello_since;
+	/* 1 + the level a refusal before the load names (its title "Halo: map" or "Halo: co-op"); 0: the loaded one */
+	int leave_level;
 	/* the scenario blocks made from it (freed at the next map's load) */
 	void *layout_blocks[8];
 	/* the Xbox tags this machine plays with its stand-ins (mixed_coop_stand_ins) */
@@ -2641,6 +2648,11 @@ void mixed_coop_tags_loaded(
 	mixed_coop.matched = FALSE;
 	mixed_coop.requested = FALSE;
 	mixed_coop.needs_dictionary = FALSE;
+	/* (a host's: the machines that asked for the last map's dictionary ask again for this one's - its BSP digests
+	were sent to them as this map loaded, before the game's time began: a dedicated server's map cycle with an MCC
+	machine in it halted, game_time_get's assertion, as the next map loaded) */
+	for (index = 0; index < HALO_PORT_MAXIMUM_NETWORK_MACHINES; index++)
+		mixed_coop.machines[index].requested = FALSE;
 	mixed_coop.unmapped_tags = mixed_coop.unmapped_animations = 0;
 	scenario_instance = mixed_coop_instance(scenario_index);
 	if (getenv("HALO_MIXED_COOP_DIGEST_DUMP"))
@@ -3085,8 +3097,9 @@ void mixed_coop_structure_bsp_loaded(
 	/* (the test's probe on the host: its BSP as it is; a client's once it matched, mixed_coop_dictionary_take) */
 	if (global_network_game_server_get())
 		mixed_coop_collision_probe();
-	/* (the host: to every client that asked for its dictionary) */
-	if (global_network_game_server_get() && mixed_coop.network_coop)
+	/* (the host: to every client that asked for its dictionary - a BSP switched in play; the first, as the map loads
+	before the game's time begins, is in the dictionary each machine asks for) */
+	if (global_network_game_server_get() && mixed_coop.network_coop && game_time_initialized())
 	{
 		short slot;
 
@@ -3466,14 +3479,106 @@ static void mixed_coop_leave(
 	error(_error_silent, "mixed co-op: refused: %s", mixed_coop.leave_text);
 }
 
+/* ---------- (1.1.3, the owner's 8l) a host that never says it plays mixed: refused before the map loads */
+
+/* (network_client_manager.c's states: the lobby) */
+#define MIXED_COOP_CLIENT_STATE_PREGAME 2
+/* how long a joiner of MCC's files waits for an Xbox-files host's hello (sent at once to a machine that joins, again
+each second, mixed_coop_frame) before it takes the host for an older build that cannot play mixed */
+#define MIXED_COOP_HELLO_WAIT_MILLISECONDS 8000
+
+/* the mixed level (`*level`) of `game` this machine would play from MCC's files with a host that has not said it
+plays mixed: the host's file the Xbox's (an MCC host names its level MIXED_COOP_MCC_IDENTITY) and no hello yet -
+an Xbox-files host of this build says so within a second or two; an older one (1.1.2, the official servers'
+1.1.1 build) never does, and its game cannot be played with MCC's files */
+static boolean mixed_coop_client_awaits_hello(
+	struct network_game const *game,
+	int *level)
+{
+	*level = -1;
+	if (!game || !mixed_coop_capable() || global_network_game_server_get() || network_wire_crossplay() ||
+		network_game_is_splitscreen_local() || mixed_coop.host_said || game->map.version)
+	{
+		return FALSE;
+	}
+	*level = mixed_coop_level_index(game->map.name);
+	if (*level < 0 || mixed_coop_local_family(*level) != _mixed_coop_family_mcc)
+		return FALSE;
+	/* (a campaign level: co-op alone - mixed_coop_hosted_server, the host says nothing of another game there) */
+	if (!mixed_coop_level_is_multiplayer(*level) && game->variant.game_engine_index != 0)
+		return FALSE;
+	return TRUE;
+}
+
+static void mixed_coop_refuse_older_host(
+	struct network_game *game,
+	int level,
+	char const *where)
+{
+	platform_log("mixed play: the host never said it plays mixed (an older version): %s refused, %s", mixed_coop_level_stems[level],
+		where);
+	mixed_coop.leave_level = level + 1;
+	if (mixed_coop_level_is_multiplayer(level))
+	{
+		/* (no "co-op": a multiplayer game, 8l's Boarding Action on an official server) */
+		mixed_coop_leave(T("This game's host plays %s from the Xbox's files on an older version that can't play it with MCC's "
+			"files: the host needs to update its game, or join with your Xbox files."),
+			game ? custom_edition_maps_level_title(game->map.name) : mixed_coop_level_stems[level]);
+	}
+	else
+	{
+		mixed_coop_leave(T("The host plays %s from the Xbox's files and its version can't play co-op with MCC's "
+			"files: update the host's game, or play with your Xbox files."), mixed_coop_level_stems[level]);
+	}
+}
+
+/* (the lobby's) a host that has not said it plays mixed in MIXED_COOP_HELLO_WAIT_MILLISECONDS: refused there */
+static void mixed_coop_client_lobby_update(
+	struct network_game_client *client)
+{
+	struct network_game *game;
+	unsigned long now = system_milliseconds();
+	int level;
+
+	if (!client || mixed_coop.leaving || mixed_coop.start_pending ||
+		network_game_client_get_state(client, NULL) != MIXED_COOP_CLIENT_STATE_PREGAME)
+	{
+		mixed_coop.lobby_hello_since = 0;
+		return;
+	}
+	game = network_game_client_get_game(client);
+	if (!mixed_coop_client_awaits_hello(game, &level))
+	{
+		mixed_coop.lobby_hello_since = 0;
+		return;
+	}
+	if (!mixed_coop.lobby_hello_since)
+	{
+		mixed_coop.lobby_hello_since = now ? now : 1;
+		platform_log("mixed play: the host's game is on %s, played here from MCC's files: waiting for the host to say it "
+			"plays mixed", mixed_coop_level_stems[level]);
+		return;
+	}
+	if (now - mixed_coop.lobby_hello_since >= MIXED_COOP_HELLO_WAIT_MILLISECONDS)
+	{
+		mixed_coop.lobby_hello_since = 0;
+		mixed_coop_refuse_older_host(game, level, "in its lobby, before the map loads");
+	}
+}
+
 int mixed_coop_client_update(
 	struct network_game_client *client)
 {
-	(void)client;
+	mixed_coop_client_lobby_update(client);
 	if (!mixed_coop.leaving)
 		return TRUE;
-	platform_show_message(mixed_coop_level_is_multiplayer(mixed_coop.level) ? T("Halo: map") : T("Halo: co-op"), mixed_coop.leave_text);
+	{
+		int level = mixed_coop.leave_level ? mixed_coop.leave_level - 1 : mixed_coop.level;
+
+		platform_show_message(mixed_coop_level_is_multiplayer(level) ? T("Halo: map") : T("Halo: co-op"), mixed_coop.leave_text);
+	}
 	mixed_coop.leaving = FALSE;
+	mixed_coop.leave_level = 0;
 	return FALSE;
 }
 
@@ -3491,12 +3596,12 @@ void mixed_coop_client_dispose(
 	mixed_coop.layout_reassembly = NULL;
 	mixed_coop.layout_complete = FALSE;
 	mixed_coop.start_pending = NULL;
+	mixed_coop.start_waits_hello = FALSE;
+	mixed_coop.lobby_hello_since = 0;
 }
 
 /* ---------- (r4) a joiner's: the host's layout before the map loads */
 
-/* (network_client_manager.c's states: the lobby) */
-#define MIXED_COOP_CLIENT_STATE_PREGAME 2
 /* how long a joiner waits for the host's layout once the game starts, and between its asks */
 #define MIXED_COOP_LAYOUT_WAIT_MILLISECONDS 45000
 #define MIXED_COOP_LAYOUT_ASK_MILLISECONDS 2000
@@ -3528,6 +3633,19 @@ int mixed_coop_client_start_waits(
 
 	if (!game || !mixed_coop_capable() || global_network_game_server_get() || network_wire_crossplay())
 		return FALSE;
+	/* (1.1.3, the owner's 8l: an MCC-only Vita joined an official server's game in progress - its 1.1.1 build plays
+	no mixed games - loaded MCC's Boarding Action whole, 15 s, and only then was refused) the game's start held for
+	the host's hello; a host that never says it plays mixed is refused before the map loads */
+	if (mixed_coop_client_awaits_hello(game, &level))
+	{
+		mixed_coop.host_level = level;
+		mixed_coop.start_pending = client;
+		mixed_coop.start_pending_since = system_milliseconds();
+		mixed_coop.start_waits_hello = TRUE;
+		platform_log("mixed play: the game starts on %s, played here from MCC's files: held until the host says it plays mixed",
+			mixed_coop_level_stems[level]);
+		return TRUE;
+	}
 	level = mixed_coop_level_index(game->map.name);
 	/* (the host's hello may name the map before this one - a map cycle's next game: the host's family as it said,
 	the map the game settings name; the host answers for the map it plays) */
@@ -3567,6 +3685,28 @@ static void mixed_coop_client_start_update(
 	{
 		platform_log("mixed play: the game left before the host's placements came");
 		mixed_coop.start_pending = NULL;
+		mixed_coop.start_waits_hello = FALSE;
+		return;
+	}
+	if (mixed_coop.start_waits_hello)
+	{
+		if (mixed_coop.host_said)
+		{
+			mixed_coop.start_waits_hello = FALSE;
+			mixed_coop.start_pending = NULL;
+			platform_log("mixed play: the host said it plays mixed (%lu ms): the game's start goes on",
+				now - mixed_coop.start_pending_since);
+			/* (its layout next, a map whose placements are the host's; else the map loads now) */
+			if (!mixed_coop_client_start_waits(client) && !network_game_client_game_has_started(client))
+				network_event("network_game_client_game_has_started() failed");
+			return;
+		}
+		if (now - mixed_coop.start_pending_since >= MIXED_COOP_HELLO_WAIT_MILLISECONDS)
+		{
+			mixed_coop.start_waits_hello = FALSE;
+			mixed_coop.start_pending = NULL;
+			mixed_coop_refuse_older_host(network_game_client_get_game(client), mixed_coop.host_level, "as its game starts, before the map loads");
+		}
 		return;
 	}
 	if (mixed_coop.layout_complete)
@@ -3833,15 +3973,14 @@ int mixed_coop_client_ready_allowed(
 	if (mixed_coop.matched || mixed_coop.leaving)
 		return mixed_coop.matched;
 	game = network_game_get_game();
-	(void)game;
 	/* (an Xbox machine whose host said nothing (an older host, or an Xbox
 	one): the game as before) */
 	if (!mixed_coop.host_said)
 	{
 		if (mixed_coop.family == _mixed_coop_family_mcc)
 		{
-			mixed_coop_leave(T("The host plays %s from the Xbox's files and its version can't play co-op with MCC's "
-				"files: update the host's game, or play with your Xbox files."), mixed_coop_level_stems[mixed_coop.level]);
+			/* (refused before the load since 8l - mixed_coop_client_start_waits -; this one only if that was missed) */
+			mixed_coop_refuse_older_host(game, mixed_coop.level, "with the level loaded");
 			return FALSE;
 		}
 		return TRUE;

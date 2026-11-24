@@ -47,6 +47,13 @@
 #             sidewinder carousel hangemhigh with an MCC host and an Xbox joiner), the Xbox joiner refused with
 #             the message naming the map as one Halo PC rebuilt and that it needs an Xbox-files host, never in
 #             the game
+#   mixedold  (1.1.3-insider.8l, the owner: an MCC-only Vita joined an official server's game - its 1.1.1 build plays no
+#             mixed games -, loaded MCC's Boarding Action whole and only then was refused) an OLDER host
+#             (HALO_TEST_MIXED_OLD_HOST: a build of v1.1.2 or insider.8d, required) on an Xbox level
+#             (HALO_TEST_MIXED="xbox JOINER MAP GAME", default "xbox mcc boardingaction ctf"): an MCC joiner never
+#             loads the map - refused in the lobby or as the game starts, told the host's version can't play it
+#             with MCC's files, never "co-op" in a multiplayer game -, stays up; an Xbox joiner plays 60 s with two
+#             players as before
 #   mixedvitajoin  the dev Vita's MCC-only join (Nov 22 2026): an Xbox host's Longest CTF, an MCC-only joiner
 #             with only the files that Vita had (ui.map, bitmaps.map, a10.map, longest.map, custom_edition's
 #             bitmaps.map and loc.map), Menu style Halo 3, its game thread held 6.5 s as it enters the game
@@ -252,7 +259,9 @@ PY
 
 mixed_case() {
 	local host_family join_family map game host_name
-	set -- ${HALO_TEST_MIXED:-mcc xbox chillout slayer}
+	local mixed_default="mcc xbox chillout slayer"
+	[ $mode = mixedold ] && mixed_default="xbox mcc boardingaction ctf"
+	set -- ${HALO_TEST_MIXED:-$mixed_default}
 	host_family=$1 join_family=$2 map=$3 game=${4:-slayer}
 	mcc_setup
 	local host_data=$data join_data=$data host_content=none join_content=none
@@ -263,8 +272,14 @@ mixed_case() {
 	copy_data_host=$host_data
 	copy_data_joiner=$join_data
 	mcc_lan_machine
-	local decisions="HALO_MIXED_DECISIONS=${HALO_TEST_MIXED_DECISIONS:-}"
-	run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NET_ONLINE=false \
+	local decisions="HALO_MIXED_DECISIONS=${HALO_TEST_MIXED_DECISIONS:-}" host_vita=$vita
+	if [ $mode = mixedold ]; then
+		host_vita=${HALO_TEST_MIXED_OLD_HOST:-}
+		[ -x "$host_vita" ] || { echo "mixedold needs HALO_TEST_MIXED_OLD_HOST (a v1.1.2 or insider.8d build)"; exit 2; }
+		[ $host_family = xbox ] || { echo "mixedold: an older host plays the Xbox's files (HALO_TEST_MIXED's HOST xbox)"; exit 2; }
+		echo "mixedold: the older host $host_vita"
+	fi
+	run_copy host "$host_machine" "$host_vita" "$cpu_a" $host_env HALO_NET_ONLINE=false \
 		HALO_NETWORK_TEST=host:$host_name:$game HALO_CONTENT_ROOT="$host_content" HALO_MIXED_COOP_HASH=1 $decisions \
 		$([ "$host_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); host_pid=$last_pid
 	sleep 5
@@ -307,6 +322,23 @@ mixed_case() {
 		esac
 		mcc_scoreboards
 		mixed_hashes ;;
+	mixedold)
+		if [ $join_family = xbox ]; then
+			[ "$two" -ge 60 ] || fail "the Xbox joiner played the older host's game for $two s with two players"
+			grep -aq "mixed co-op: refused\|platform: message" "$jl" &&
+				fail "the Xbox joiner was refused or told something ($(grep -a "mixed co-op: refused\|platform: message" "$jl" | head -1))"
+			mcc_scoreboards
+			return
+		fi
+		[ "$two" = 0 ] || fail "the MCC joiner played the older host's game ($two s)"
+		grep -aqE "mixed play: the host never said it plays mixed \(an older version\): $map refused, (in its lobby|as its game starts), before the map loads" "$jl" ||
+			fail "the MCC joiner was not refused before the map loads"
+		grep -aq "MCC level in network co-op loaded\|structure bsp switch" "$jl" &&
+			fail "the MCC joiner loaded the level before it was refused ($(grep -a "MCC level in network co-op loaded\|structure bsp switch" "$jl" | head -1))"
+		grep -aq "Halo: map: This game's host plays .* from the Xbox's files on an older version" "$jl" ||
+			fail "the MCC joiner was not told (Halo: map) the host's version can't play it with MCC's files"
+		grep -a "Halo: map: \|Halo: co-op: " "$jl" | grep -aqi "co-op" && fail "the multiplayer refusal says co-op"
+		echo "the MCC joiner, refused: $(grep -a "Halo: map: " "$jl" | head -1)" ;;
 	mixedrebuilt)
 		[ "$two" = 0 ] || fail "the joiner played the host's game on a map Halo PC rebuilt ($two s)"
 		grep -aq "a map Halo PC rebuilt: refused" "$jl" || fail "the joiner was not refused the rebuilt map"
@@ -361,7 +393,7 @@ mcc_lan_menus_case() {
 
 mcc_case() {
 	local host_data=$data join_data=$data host_content=none join_content=none host_game=host:bloodgulch:slayer
-	case $mode in mixedmp|mixedrebuilt) mixed_case; return ;; mixedvitajoin|mixedvitahost) mixed_vita_case; return ;; esac
+	case $mode in mixedmp|mixedrebuilt|mixedold) mixed_case; return ;; mixedvitajoin|mixedvitahost) mixed_vita_case; return ;; esac
 	[ $mode = mcclanmenus ] && { mcc_lan_menus_case; return; }
 	case $mode in
 	mcclan|mccmenus) host_data=$out/mcc-none join_data=$out/mcc-none host_content=$out/mcc-content
