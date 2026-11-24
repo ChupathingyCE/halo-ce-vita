@@ -2303,7 +2303,11 @@ crossrefuse)
 			fi ;;
 		refuse-mcc)
 			got=$(grep -ah "a PC game can only be joined with the Xbox's maps" "$clientlog" 2>/dev/null | head -1)
-			ticks=$(sed -n "/join: the host's map is .*bloodgulch/,\$ p" "$clientlog" 2>/dev/null | grep -ac "network test: tick [0-9]* ")
+			# (ticks played from the host's map named to the refusal: since client B, Nov 24 2026, an MCC-only
+			# client is refused in the lobby after asking the host's Delta Peer, and back in the menus the
+			# menu backdrop's own ticks follow - not the host's game)
+			ticks=$(sed -n "/join: the host's map is .*bloodgulch/,/a PC game can only be joined with the Xbox's maps/ p" \
+				"$clientlog" 2>/dev/null | grep -ac "network test: tick [0-9]* ")
 			loaded=$(grep -ac "system link: in a network game" "$clientlog" 2>/dev/null)
 			echo "--- $name: our MCC-only client played ${ticks:-0} ticks of the host's game, in it ${loaded:-0} times; the refusal: ${got:-none}"
 			if [ -n "$got" ] && [ "${ticks:-0}" = 0 ] && [ "${loaded:-0}" = 0 ]; then
