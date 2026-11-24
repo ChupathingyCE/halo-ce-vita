@@ -5685,8 +5685,11 @@ void ui_widget_port_text_check(
 		if (said[index] == hash)
 			return;
 	}
-	if (said_count < (short)NUMBEROF(said))
-		said[said_count++] = hash;
+	/* (the table full - a browser scrolled through hundreds of games -: nothing more said. It said the
+	same lines every frame after it filled, ~30 log lines a second on the owner's 8l Vita) */
+	if (said_count >= (short)NUMBEROF(said))
+		return;
+	said[said_count++] = hash;
 	if (!ui_widget_port_text_measure(widget, text, &room_width, &room_height, &text_width, &text_height))
 		return;
 	if (text_width > room_width || text_height > room_height)
