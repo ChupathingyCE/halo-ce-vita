@@ -4340,16 +4340,37 @@ PY
 			"mp_modes|60|$cpmp $d $d $d $d $d $d $d $d a:150:3500 a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.modes.screen pc.cp.forge.lobby pc.ce.modes.screen pc.cp.command.lobby pc.ce.modes.screen pc.cp.firefight.lobby pc.ce.modes.screen pc.cp.gametypes.screen pc.ce.modes.screen pc.mp.screen main_menu.main_menu|"
 			"mp_lan|40|$cpmp $d a:150:4000 a:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
 			"mp_lanlist|46|$cpmp $d a:150:4000 a:150:2000 a:150:2000 a:150:5000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen connected.server_list.server_list_screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
+			# (the game modes' START rows: Forge starts its game; Command and Firefight open the packs' prepare box, B
+			# back to the lobby)
+			"modes_forge|70|$cpmp $d $d $d $d $d $d $d $d a:150:3500 a:150:4000 $d $d a:150:8000 wait:150:20000|pc.ce.modes.screen pc.cp.forge.lobby|"
+			"modes_command|60|$cpmp $d $d $d $d $d $d $d $d a:150:3500 $d a:150:4000 $d $d $d $d a:150:6000 b:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.modes.screen pc.cp.command.lobby pc.cp.command.prepare.screen pc.cp.command.lobby pc.ce.modes.screen pc.mp.screen main_menu.main_menu|"
+			"modes_firefight|60|$cpmp $d $d $d $d $d $d $d $d a:150:3500 $d $d a:150:4000 $d a:150:6000 b:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.modes.screen pc.cp.firefight.lobby pc.cp.command.prepare.screen pc.cp.firefight.lobby pc.ce.modes.screen pc.mp.screen main_menu.main_menu|"
+			# (a level's pause: RESTART AT CHECKPOINT and RESTART LEVEL confirmed; the quit row - the Xbox files' SAVE
+			# AND QUIT, MCC's own pause's QUIT, @QUIT@ - back to the main menu)
+			"pause_restart|150|wait:150:4000 a:150:3500 a:150:3500 a:150:3500 a:150:3500 level:150:90000 wait:150:6000 start:150:3000 $d a:150:3000 a:150:8000 start:150:3000 $d $d a:150:3000 a:150:10000|solo_game.pause_game.pause_game confirm_restartatsave_modal_fullscreen solo_game.pause_game.pause_game confirm_restartlevel_modal_fullscreen|HALO_TEST_COMMANDS=L150:@skip"
+			"pause_quit|130|wait:150:4000 a:150:3500 a:150:3500 a:150:3500 a:150:3500 level:150:90000 wait:150:6000 start:150:3000 @QUIT@ a:150:4000 wait:150:10000|solo_game.pause_game.pause_game main_menu.main_menu|HALO_TEST_COMMANDS=L150:@skip"
+			# (multiplayer, a local game with bots on Blood Gulch - @MAP@, MCC's own copy on MCC's files -: the pause,
+			# its PLAYERS screen and back; a game to its end: the carnage report (the postgame), its game types, back)
+			"mp_pause|70|wait:150:32000 start:150:3000 down:150:1200 a:150:3000 b:150:2500 down:150:1200 a:150:2000 up:150:1000 up:150:1000 a:150:3000 wait:150:6000|splitscreen_pregame_wrapper_normal 1p_pause_game pc.cp.players.screen 1p_pause_game|$offnet HALO_NETWORK_TEST=local:@MAP@:team_slayer HALO_NETWORK_TEST_PROFILE=1 HALO_NETWORK_TEST_START=3 HALO_BOTS=1"
+			"mp_carnage|110|wait:150:62000 a:150:4000 wait:150:4000 a:150:4000 wait:150:4000 b:150:3000 wait:150:6000|splitscreen_map_select_postgame_wrapper gametype_select_screen_wrapper splitscreen_map_select_postgame_wrapper|$offnet HALO_NETWORK_TEST=local:@MAP@:team_slayer HALO_NETWORK_TEST_PROFILE=1 HALO_NETWORK_TEST_START=3 HALO_NETWORK_TEST_END=40 HALO_BOTS=3"
 		)
 		for cp_flow in "${cp_flows[@]}"; do
-			IFS='|' read -r cp_name cp_seconds cp_pad cp_screens cp_env <<< "$cp_flow"
+			IFS='|' read -r cp_name cp_seconds cp_pad0 cp_screens cp_env0 <<< "$cp_flow"
+			# (HALO_TEST_CP_FLOWS: some flows alone, by name)
+			[ -n "${HALO_TEST_CP_FLOWS:-}" ] && [[ " $HALO_TEST_CP_FLOWS " != *" $cp_name "* ]] && continue
 			for cp_setup in $cp_setups; do
+				# (@MAP@: Blood Gulch, MCC's own copy on MCC's files; @QUIT@: the pause's quit row, the Xbox files'
+				# fourth (SAVE AND QUIT), MCC's own pause's fifth (QUIT, after CHANGE SETTINGS))
+				if [ "$cp_setup" = mcc ]; then cp_map=mcc_bloodgulch cp_quit="$d $d $d $d"; else cp_map=bloodgulch cp_quit="$d $d $d"; fi
+				cp_pad=${cp_pad0//@QUIT@/$cp_quit} cp_env=${cp_env0//@MAP@/$cp_map}
 				if [ "$cp_setup" = mcc ]; then
 					profile_from=$cp_profile run "cpaudit_${cp_setup}_$cp_name" "$out/cp-none" "$cp_seconds" "$cp_pad" HALO_SCENE_PACKS=0 \
 						HALO_CONTENT_ROOT="$out/cp-content" $cp_env &
 				else
 					profile_from=$cp_profile run "cpaudit_${cp_setup}_$cp_name" "$menus_data" "$cp_seconds" "$cp_pad" HALO_SCENE_PACKS=0 $cp_env &
 				fi
+				# (a local game hosts on the game's network port: one data set at a time, or the second is refused)
+				[[ "$cp_env" == *HALO_NETWORK_TEST=* ]] && wait
 			done
 			wait
 			for cp_setup in $cp_setups; do
@@ -4364,6 +4385,9 @@ PY
 				[ -n "$cp_bad" ] && fail cpaudit "$cp_setup $cp_name: $cp_bad"
 				grep -aqE "failed to spawn widget|may not run event handler function" "$out/$cp_run/data/debug.txt" 2>/dev/null &&
 					fail cpaudit "$cp_setup $cp_name: debug.txt: $(grep -aE "failed to spawn widget|may not run event handler function" "$out/$cp_run/data/debug.txt" | head -1)"
+				# (Forge's START: the game started)
+				[ $cp_name = modes_forge ] && ! grep -aq "forge: the Forge game of .* starts" "$log" &&
+					fail cpaudit "$cp_setup $cp_name: START did not start the Forge game"
 				# (each screen wanted, in order)
 				cp_rest=$(grep -a "ui: screen" "$log" | sed 's/.*ui: screen //')
 				for cp_want in $cp_screens; do
