@@ -269,9 +269,13 @@ Xbox-files host (`mixed_coop_multiplayer_refusal`).
   MCC's own digest for it (what they have) and their players are the host's
   as ever. An older build drops the ask and is refused as before; anything not
   taken leaves the Xbox machine refused as before. Chill Out's and Wizard's
-  needler item collection (Halo PC's needler in MCC's files) still refuses an
-  Xbox machine in an MCC host's game where it can spawn, unless the owner's
-  `needler` decision is on. Tests: `mixedmp mcc xbox ...` with
+  needler item collection (Halo PC's needler in MCC's files) spawns the
+  Xbox's needler on MCC machines (the owner's `needler` decision, on since
+  Nov 24 2026), so an MCC host plays those maps with Xbox machines too; with
+  `HALO_MIXED_DECISIONS_OFF=needler` it refuses an Xbox machine where the
+  collection can spawn, as before. Boarding Action's MCC host stays refused to
+  Xbox machines (its netgame equipment spawns Halo PC's needler:
+  `mixed_collision_host_lacks`). Tests: `mixedmp mcc xbox ...` with
   `HALO_MIXED_STAND_PROBE` (both machines' rays onto each stand and the CTF
   flags' places agree), the fuzz target `mixed_collision`.
 
@@ -319,12 +323,17 @@ Xbox-files host (`mixed_coop_multiplayer_refusal`).
   and a client takes the host's places for flags of the same types and teams
   (Halo PC moved the teleporters, race checkpoints and hills a little; a
   client runs teleporters too).
-- **Pending, refused by default** (`mixed_coop_decisions`, one line each):
-  the flag stand and teleporter base have no collision in MCC's files (on all
-  seven maps: dropped for everyone in mixed games when decided); MCC's needler
-  item collection spawns Halo PC's `mp_needler` (Chill Out, Wizard: the Xbox's
-  needler on MCC machines when decided). Tests turn them on with
-  `HALO_MIXED_DECISIONS`. (The field generator's collision, Rat Race's too, is
+- **The owner's decisions** (`mixed_coop_decisions`, one line each): MCC's
+  needler item collection spawns Halo PC's `mp_needler` (Chill Out, Wizard):
+  decided (Nov 24 2026), the Xbox's needler on MCC machines in every network
+  game on those maps - an MCC machine of an older build (insider.8o and
+  before), which spawns `mp_needler`, differs in the collection's digest and
+  is refused before the map plays. Pending, refused by default: the flag stand
+  and teleporter base have no collision in MCC's files (on all seven maps:
+  dropped for everyone in mixed games when decided; an MCC host takes the
+  Xbox's collision from an Xbox joiner instead, above). Tests turn a pending
+  one on with `HALO_MIXED_DECISIONS` and a decided one off with
+  `HALO_MIXED_DECISIONS_OFF`. (The field generator's collision, Rat Race's too, is
   played by default: above.)
 
 Tests: `run_netns_online_test.sh mixedmp` (`HALO_TEST_MIXED="HOST JOINER MAP

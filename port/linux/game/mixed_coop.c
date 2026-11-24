@@ -832,7 +832,10 @@ enum
 	everyone in mixed multiplayer (the Xbox machines' too: a cut) */
 	_mixed_decision_flag_stand,
 	/* multiplayer (Chill Out, Wizard): MCC's needler item collection spawns
-	Halo PC's mp_needler. TRUE: the Xbox's needler on MCC machines */
+	Halo PC's mp_needler. TRUE: the Xbox's needler on MCC machines, in every
+	network game on these maps (default, the owner Nov 24 2026: an MCC host
+	takes Xbox machines on Chill Out and Wizard; an older MCC build, which
+	spawns mp_needler, then differs in the collection's digest and is refused) */
 	_mixed_decision_needler,
 	NUMBER_OF_MIXED_DECISIONS
 };
@@ -847,7 +850,7 @@ static struct
 	{ "flood_carrier_autoaim", TRUE },
 	{ "granite_boulder", TRUE },
 	{ "flag_stand", FALSE },
-	{ "needler", FALSE },
+	{ "needler", TRUE },
 };
 
 static boolean mixed_coop_decided(

@@ -39,8 +39,9 @@
 #             collision decides); GAME: slayer, ctf ...). (1.1.3) An MCC host's Xbox joiner sends
 #             the host the flag stand's and teleporter base's collision from its own files, which the host takes as the
 #             Xbox's (its digest) and plays with: the stands collide on both and agree (HALO_MIXED_STAND_PROBE, CTF
-#             flags resting on them); where MCC's needler can spawn (Chill Out, Wizard) it is still refused, naming the
-#             Needler, unless HALO_TEST_MIXED_DECISIONS=needler. System Link: an MCC host hosts MCC's map, named the
+#             flags resting on them); where MCC's needler can spawn (Chill Out, Wizard) the MCC host spawns the Xbox's
+#             needler (the owner's needler decision, on since Nov 24 2026); with HALO_TEST_ENV_host=
+#             HALO_MIXED_DECISIONS_OFF=needler (or an older host) it is refused, naming the Needler. System Link: an MCC host hosts MCC's map, named the
 #             Xbox's on the wire; the joiner joins and plays 60 s at least with two players; a mixed joiner
 #             matched the host's dictionary (never refused); both scoreboards agree; the per-tick state
 #             hashes (HALO_MIXED_COOP_HASH) agree but for runs of 90 ticks at most, and at the end; the placed
@@ -390,8 +391,8 @@ mixed_case() {
 			fi
 			grep -aq "mixed play: in this game: flag_base\|mixed play: in this game: teleporter_base" "$jl" &&
 				fail "the Xbox joiner still found the host's stands different"
-			# (Chill Out and Wizard: MCC's needler item collection spawns Halo PC's needler - the owner's needler
-			# decision, off by default: refused, naming the Needler)
+			# (Chill Out and Wizard: MCC's needler item collection spawns Halo PC's needler unless the owner's
+			# needler decision - on by default since Nov 24 2026 - makes it the Xbox's: off, refused, naming the Needler)
 			if grep -aq "mixed play: in this game: needler" "$jl"; then
 				[ "$two" = 0 ] || fail "the Xbox joiner played the MCC host's game with Halo PC's needler in it ($two s)"
 				grep -aq "games with the Needler need an Xbox-files host" "$jl" || fail "the Xbox joiner was not told about the Needler"
