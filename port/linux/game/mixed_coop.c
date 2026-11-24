@@ -732,6 +732,13 @@ static struct mixed_coop_rule const mixed_coop_rules_table[] =
 	{ "netgame_equipment", 0x10, 0x40, _mixed_rule_skip, 0 },
 	{ "netgame_equipment", 0x40, 0x50, _mixed_rule_floats, 0 },
 	{ "netgame_equipment", 0x54, 0x84, _mixed_rule_skip, 0 },
+	/* (a control's on, off and denied effects, which no schema lists: their
+	name pointers, which a loader points at its own empty string - an
+	address in the executable, another in every build - not hashed; their
+	groups and indices are) */
+	{ "control_definition", 0x2ec, 0x2f0, _mixed_rule_skip, 0 },
+	{ "control_definition", 0x2fc, 0x300, _mixed_rule_skip, 0 },
+	{ "control_definition", 0x30c, 0x310, _mixed_rule_skip, 0 },
 };
 
 /* ---------- the owner's decisions (Nov 22 2026, 09:27 "All I want is the mcc maps to play with Xbox
