@@ -127,7 +127,7 @@ static struct title_tool_title const titles[] =
 
 /* each one's picture's name (classic/{lang}/<name>.png), its words in
 English (the language file's key: lang_text) and where its first letter
-starts: the game's own headings' place, but for the stand-ins for two Xbox
+starts: the game's own headings' place, but for the stand-ins for the Xbox
 headings MCC's ui.map has not, whose widgets are at 29, not 35
 (classic/xbox_screens.xml) */
 static struct
@@ -162,6 +162,8 @@ static struct
 	{ "header_command", "COMMAND", HEADING_LEFT },
 	{ "header_select_profile_to_edit", "SELECT PROFILE TO EDIT", HEADING_LEFT - 6 },
 	{ "header_advanced_controls", "ADVANCED CONTROLS", HEADING_LEFT - 6 },
+	/* (classic/xbox_netscreens.xml: the System Link list's, header_found_games on the Xbox's) */
+	{ "header_system_link_games", "SYSTEM LINK GAMES", HEADING_LEFT - 6 },
 };
 
 /* ---------- globals */

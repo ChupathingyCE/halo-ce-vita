@@ -30,7 +30,11 @@ tools/fonts/OFL.txt). The same bytes each run.
   b_butn_sm.png, the button key's Y and the small A and B in the look of the
   game's A, B and X (a coloured disc, a pale rim, the letter);
   arrow_big_<side>_<0|1>.png, the 3-wide lists' arrows; split_quarter.png
-  and split_quarter_border.png, split screen's START TO JOIN quarters.
+  and split_quarter_border.png, split screen's START TO JOIN quarters;
+  pregame_list_field.png, pregame_remote_field.png and
+  pregame_message_field.png, the network lobby's (ENLISTED PLAYERS) fields:
+  this machine's, the other machines' and the message's, at the Xbox's sizes
+  (classic/xbox_netscreens.xml).
 - In English (en/) and in each language of port/vita/app0/lang (es/), the
   words its file gives them; menu_tags.c picks the language's ({lang}).
 
@@ -73,7 +77,14 @@ HEADINGS = (('header_lobby_options', 'LOBBY OPTIONS'),
 # (classic/xbox_screens.xml: an Xbox screen's heading an MCC-only install's ui.map has not, at the
 # size of the Xbox's own headings - capitals about 20 high, 18 a letter)
 XBOX_HEADINGS = (('header_select_profile_to_edit', 'SELECT PROFILE TO EDIT'),
-                 ('header_advanced_controls', 'ADVANCED CONTROLS'))
+                 ('header_advanced_controls', 'ADVANCED CONTROLS'),
+                 # (classic/xbox_netscreens.xml: the System Link list's)
+                 ('header_system_link_games', 'SYSTEM LINK GAMES'))
+# (classic/xbox_netscreens.xml: the network lobby's fields MCC's ui.map has not - the picture's size,
+# the field's in it at the top left, drawn 1:1 into the Xbox's widget of that size; the other machines'
+# 95 high in their 104, as the Xbox's are, the three 97 apart)
+FIELDS = (('pregame_list_field', (256, 512), (254, 286)), ('pregame_remote_field', (256, 128), (254, 95)),
+          ('pregame_message_field', (512, 32), (512, 31)))
 
 # (the widget it is drawn into, fit="widget": 226 x 229; the PNG a power of
 # two, so drawn at that scale and stretched back by the game)
@@ -261,6 +272,29 @@ def quarter_border():
     return image.resize((256, 256), Image.LANCZOS)
 
 
+def field(canvas, size):
+    """a field of the network lobby (canvas: the picture's size; size: the field's, at its top left):
+    split screen's quarters' look (quarter_panel) at another size - dark see-through blue, lighter
+    at the top, in a light blue rounded frame"""
+    scale = 4
+    width, height = size
+    panel = Image.new('RGBA', canvas, (0, 0, 0, 0))
+    pixels = panel.load()
+    for y in range(height):
+        colour = tuple(round(a + (b - a) * (y / height)) for a, b in zip((18, 44, 82), (8, 22, 46)))
+        for x in range(width):
+            pixels[x, y] = colour + (150,)
+    radius = min(8, height // 3)
+    box = (1 * scale, 1 * scale, (width - 2) * scale, (height - 2) * scale)
+    mask = Image.new('L', (canvas[0] * scale, canvas[1] * scale), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius * scale, fill=255)
+    image = Image.new('RGBA', canvas, (0, 0, 0, 0))
+    image.paste(panel, (0, 0), mask.resize(canvas, Image.LANCZOS))
+    frame = Image.new('RGBA', (canvas[0] * scale, canvas[1] * scale), (0, 0, 0, 0))
+    ImageDraw.Draw(frame).rounded_rectangle(box, radius=radius * scale, outline=(60, 150, 240, 230), width=2 * scale)
+    return Image.alpha_composite(image, frame.resize(canvas, Image.LANCZOS))
+
+
 def translations(code):
     """the language file's words for the English (port/vita/app0/lang/<code>.txt)"""
     words = {}
@@ -283,6 +317,8 @@ def main():
             big_arrow(side == 'right', lit).save(os.path.join(folder, 'arrow_big_%s_%d.png' % (side, lit)), optimize=True)
     quarter_panel().save(os.path.join(folder, 'split_quarter.png'), optimize=True)
     quarter_border().save(os.path.join(folder, 'split_quarter_border.png'), optimize=True)
+    for name, canvas, size in FIELDS:
+        field(canvas, size).save(os.path.join(folder, name + '.png'), optimize=True)
     languages = {'en': {}}
     for name in sorted(os.listdir(LANG)):
         if name.endswith('.txt'):

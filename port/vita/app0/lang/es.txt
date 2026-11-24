@@ -3585,6 +3585,11 @@
 "INVERT FLIGHT CONTROL:" = "INVERTIR VUELO:"
 "AUTO-CENTER:" = "AUTOCENTRAR:"
 
+# classic/xbox_netscreens.xml: Classic+ on an MCC-only install, the Xbox's System Link list (1.1.3)
+"= CREATE GAME" = "= CREAR PARTIDA"
+"Looking for games...\n\nPress %a-button or %y-button to start\nyour own game" = "Buscando partidas...\n\nPulsa %a-button o %y-button para crear\ntu propia partida"
+"Game Status:\nMap:\nGame Rules:\nMode:\nNumber of Players:\nScore Limit:" = "Estado:\nMapa:\nReglas:\nModo:\nJugadores:\nLímite:"
+
 # ---------- GAME MANAGER: DOWNLOAD FROM STEAM (halo3/steam.xml, menu_functions.c h3_steam_*, vita_steam.c)
 "DOWNLOAD FROM STEAM" = "DESCARGAR DESDE STEAM"
 "Your own MCC files" = "Tus archivos de MCC"

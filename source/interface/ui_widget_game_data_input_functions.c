@@ -359,6 +359,10 @@ symbols in this file:
 #include "../../port/linux/src/lang.h" /* port: port/linux/src/lang.c */
 #ifdef HALO_LINUX
 #include "custom_edition_maps.h"
+/* (port/linux/game/custom_edition_cache.c) whether the menus' ui.map is MCC's - Halo PC's -, and
+its map pictures' (ui\shell\bitmaps\mp_map_grafix) frame of an unknown map, its "?" */
+boolean custom_edition_cache_menus_are_mcc_ui(void);
+#define MCC_UI_UNKNOWN_LEVEL_FRAME 19
 #include "map_share.h"
 #include "bots.h"
 #endif
@@ -1286,6 +1290,12 @@ static void server_list_menu_update(
 				else
 					map_bitmap->animation.current_frame_index = 13;
 #ifdef HALO_LINUX
+				/* port: MCC's ui.map (Halo PC's: an MCC-only install, Menu style
+				Classic+'s System Link list, classic/xbox_netscreens.xml) has Halo
+				PC's six maps' pictures and names after the Xbox's thirteen, then
+				its "?" and "Unknown Level": its 13th is Ice Fields */
+				if (map_bitmap->animation.current_frame_index == 13 && custom_edition_cache_menus_are_mcc_ui())
+					map_bitmap->animation.current_frame_index = MCC_UI_UNKNOWN_LEVEL_FRAME;
 				/* a Custom Edition map this machine has shows its own name and
 				picture, even one whose name holds an Xbox level's
 				(port/linux/game/custom_edition_maps.c) */
@@ -1453,6 +1463,16 @@ static void server_list_menu_update(
 				map_bitmap->animation.current_frame_index = 13;
 				open_closed_text->parameters.text_box.string_list_index = 1;
 				map_name_text->parameters.text_box.string_list_index = 14;
+#ifdef HALO_LINUX
+				/* port: MCC's ui.map (above): its "?", and no map named - its
+				14th name is Death Island's, the Xbox's an empty one (a space: an
+				empty override is none) */
+				if (custom_edition_cache_menus_are_mcc_ui())
+				{
+					map_bitmap->animation.current_frame_index = MCC_UI_UNKNOWN_LEVEL_FRAME;
+					ui_widget_port_text_override(map_name_text, L" ");
+				}
+#endif
 				ruleset_text->parameters.text_box.string_list_index = 1;
 				teams_text->parameters.text_box.string_list_index = 1;
 
