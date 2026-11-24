@@ -60,6 +60,7 @@ when what the game reads in them is alike.
 #include "physics/physics_definitions.h"
 #include "physics/collision_model_definitions.h"
 #include "physics/collision_bsp.h"
+#include "physics/collisions.h"
 #include "objects/damage_resistances.h"
 #include "scenario/scenario.h"
 #include "scenario/scenario_definitions.h"
@@ -71,11 +72,13 @@ when what the game reads in them is alike.
 /* (collision_bsp.c) the collision BSP whose invisible surfaces collide with nothing, or NULL */
 extern struct collision_bsp const *collision_bsp_invisible_masked;
 #include "mixed_coop.h"
+#include "mixed_collision_protocol.h"
 #include "mixed_coop_delta.h"
 #include "network_distributed.h"
 #include "network_wire.h"
 #include "tag_schema.h"
 #include "../src/lang.h"
+#include "../../third_party/monocypher/monocypher.h"
 
 #include <math.h>
 #include <stdarg.h>
@@ -91,6 +94,8 @@ const char *config_string(char const *name);
 boolean network_game_client_send_to_server(struct network_game_client *client, void *message);
 int halo_content_library_found(void);
 extern long halo_loaded_tag_count;
+/* (cache_files.c, 1.1.3) a runtime tag beside the map's (mixed play's flag stand collision), or NULL */
+struct cache_file_tag_instance_view *cache_runtime_tag_instance(long tag_index);
 
 /* (network_messages.c's packet table: the classes of the lobby's) */
 #define MIXED_COOP_CLASS_CLIENT_PREGAME 3
@@ -98,6 +103,8 @@ extern long halo_loaded_tag_count;
 
 /* how long a client waits for the host's dictionary before it leaves */
 #define MIXED_COOP_DICTIONARY_WAIT_MILLISECONDS 20000
+/* (1.1.3) how long a host holds a machine's dictionary request for the collision it offered */
+#define MIXED_COLLISION_WAIT_MILLISECONDS 12000
 #define MIXED_COOP_HELLO_RESEND_MILLISECONDS 1000
 /* the deepest a tag's walk goes, and the most elements it takes in all */
 #define MIXED_COOP_WALK_DEPTH 12
@@ -233,12 +240,27 @@ static struct
 		short hellos;
 		/* (r4) asked for the host's layout: 1 + the next fragment to send it (0: not asked) */
 		short layout_next;
+		/* (1.1.3, an MCC host's: mixed_collision_protocol.h) asked for the collision it lacks (how often, when
+		last), the machine's offer heard (what it will send), its stream as it comes, done (taken or not), and
+		its dictionary request held until then */
+		short collision_asks;
+		unsigned long collision_ask_time;
+		boolean collision_offer_heard;
+		uint16_t collision_offered;
+		struct mixed_collision_reassembly *collision_reassembly;
+		boolean collision_done;
+		boolean request_held;
+		unsigned long request_held_since;
+		struct mixed_coop_request held_request;
 	} machines[HALO_PORT_MAXIMUM_NETWORK_MACHINES];
 	/* the host's dictionary stream (built once a map) */
 	uint8_t *stream;
 	uint32_t stream_length;
 
 	/* --- the lobby: a client's */
+	/* (1.1.3) the collision models an MCC host asked this Xbox machine for, in that hosting */
+	uint16_t collision_asked;
+	uint32_t collision_asked_session;
 	boolean host_said;
 	int host_family;
 	int host_level;
@@ -663,6 +685,9 @@ static uint32_t mixed_coop_tag_path_hash(
 {
 	struct cache_file_tag_instance_view *instance = mixed_coop_instance(tag_index);
 
+	/* (1.1.3: the flag stand's collision an Xbox machine sent this MCC host, named as the Xbox's) */
+	if (!instance)
+		instance = cache_runtime_tag_instance(tag_index);
 	if (!instance || !instance->name)
 		return 0xFFFFFFFFu;
 	return mixed_coop_path_hash((uint32_t)instance->group_tag, instance->name);
@@ -2808,6 +2833,411 @@ static void mixed_coop_dump(
 	}
 }
 
+/* ---------- (1.1.3, the owner's flag stand decision, Nov 24 2026) the flag stand and teleporter base collision an
+Xbox-files machine sends an MCC-files host (mixed_collision_protocol.h) */
+
+/* (the game's layout, as mixed_collision_protocol.c lays a model out) */
+typedef char mixed_collision_root_size_assert[sizeof(struct collision_model) == MIXED_COLLISION_ROOT_BYTES ? 1 : -1];
+typedef char mixed_collision_root_materials_assert[
+	offsetof(struct collision_model, resistance.materials) == MIXED_COLLISION_ROOT_MATERIALS ? 1 : -1];
+typedef char mixed_collision_root_regions_assert[
+	offsetof(struct collision_model, resistance.regions) == MIXED_COLLISION_ROOT_REGIONS ? 1 : -1];
+typedef char mixed_collision_root_modifiers_assert[
+	offsetof(struct collision_model, resistance.modifiers) == MIXED_COLLISION_ROOT_MODIFIERS ? 1 : -1];
+typedef char mixed_collision_root_spheres_assert[
+	offsetof(struct collision_model, pathfinding_spheres) == MIXED_COLLISION_ROOT_SPHERES ? 1 : -1];
+typedef char mixed_collision_root_nodes_assert[offsetof(struct collision_model, nodes) == MIXED_COLLISION_ROOT_NODES ? 1 : -1];
+typedef char mixed_collision_root_effects_assert[
+	offsetof(struct collision_model, resistance.localized_damage_effect) == 0x70 &&
+	offsetof(struct collision_model, resistance.area_damage_effect) == 0x84 &&
+	offsetof(struct collision_model, resistance.body_damaged_effect) == 0x98 &&
+	offsetof(struct collision_model, resistance.body_depleted_effect) == 0xA8 &&
+	offsetof(struct collision_model, resistance.body_destroyed_effect) == 0xBC &&
+	offsetof(struct collision_model, resistance.maximum_shield_vitality) == 0xCC &&
+	offsetof(struct collision_model, resistance.shield_material_type) == 0xD2 &&
+	offsetof(struct collision_model, resistance.shield_damaged_effect) == 0x188 &&
+	offsetof(struct collision_model, resistance.shield_depleted_effect) == 0x198 &&
+	offsetof(struct collision_model, resistance.shield_recharging_effect) == 0x1A8 &&
+	offsetof(struct collision_model, resistance.runtime_shield_recharge_velocity) == 0x1C0 &&
+	offsetof(struct collision_model, pathfinding_box) == 0x268 ? 1 : -1];
+typedef char mixed_collision_material_size_assert[
+	sizeof(struct damage_resistance_material) == MIXED_COLLISION_MATERIAL_BYTES ? 1 : -1];
+typedef char mixed_collision_sphere_size_assert[sizeof(struct pathfinding_sphere) == MIXED_COLLISION_SPHERE_BYTES ? 1 : -1];
+typedef char mixed_collision_node_size_assert[sizeof(struct collision_node) == MIXED_COLLISION_NODE_BYTES &&
+	offsetof(struct collision_node, bsps) == MIXED_COLLISION_NODE_BSPS ? 1 : -1];
+typedef char mixed_collision_bsp_size_assert[sizeof(struct collision_bsp) == MIXED_COLLISION_BSP_BYTES &&
+	offsetof(struct collision_bsp, bsp3d.nodes) == MIXED_COLLISION_BSP_BSP3D_NODES &&
+	offsetof(struct collision_bsp, bsp3d.planes) == MIXED_COLLISION_BSP_PLANES &&
+	offsetof(struct collision_bsp, leaves) == MIXED_COLLISION_BSP_LEAVES &&
+	offsetof(struct collision_bsp, bsp2d_references) == MIXED_COLLISION_BSP_BSP2D_REFERENCES &&
+	offsetof(struct collision_bsp, bsp2d.nodes) == MIXED_COLLISION_BSP_BSP2D_NODES &&
+	offsetof(struct collision_bsp, surfaces) == MIXED_COLLISION_BSP_SURFACES &&
+	offsetof(struct collision_bsp, edges) == MIXED_COLLISION_BSP_EDGES &&
+	offsetof(struct collision_bsp, vertices) == MIXED_COLLISION_BSP_VERTICES ? 1 : -1];
+typedef char mixed_collision_bsp_elements_assert[sizeof(struct bsp3d_node) == MIXED_COLLISION_BSP3D_NODE_BYTES &&
+	sizeof(struct bsp2d_node) == MIXED_COLLISION_BSP2D_NODE_BYTES && sizeof(struct collision_surface) == MIXED_COLLISION_SURFACE_BYTES &&
+	sizeof(struct collision_edge) == MIXED_COLLISION_EDGE_BYTES && sizeof(struct collision_vertex) == MIXED_COLLISION_VERTEX_BYTES ? 1 : -1];
+
+/* (cache_files.c) a runtime tag put beside the map's */
+long cache_runtime_tag_add(long group_tag, char *name, void *base_address);
+
+/* the Xbox's files' models, by their digest (BLAKE2b-256 of the stream's model bytes, the same in every stock
+multiplayer map of the Xbox's that has the model: measured Nov 24 2026 from the 13 maps). A model of any other
+digest is not taken */
+static struct
+{
+	uint8_t model;
+	uint8_t digest[MIXED_COLLISION_DIGEST_BYTES];
+} const mixed_collision_known[] =
+{
+	/* (scenery\flag_base\flag_base: 1796 bytes, all 13 maps) */
+	{ MIXED_COLLISION_MODEL_FLAG_STAND, { 0x40, 0x7d, 0x8a, 0x48, 0x90, 0xc8, 0x3d, 0x9e, 0x2e, 0x0c, 0x29, 0x2d, 0x56, 0x03, 0x84, 0x95,
+		0x15, 0xd6, 0x9b, 0x69, 0x30, 0xbd, 0x8a, 0x87, 0x74, 0xbb, 0xd0, 0xe1, 0x44, 0xa0, 0x10, 0x76 } },
+	/* (scenery\teleporter_base\teleporter_base: 1636 bytes, the 3 maps that have it) */
+	{ MIXED_COLLISION_MODEL_TELEPORTER_BASE, { 0xb7, 0x31, 0x17, 0xcb, 0xb2, 0x50, 0x1f, 0xac, 0xc9, 0x07, 0xbc, 0xf9, 0x1d, 0x15, 0x31, 0xc7,
+		0xbf, 0x3e, 0x4c, 0x1b, 0x6e, 0xe5, 0xb2, 0x0b, 0x12, 0x85, 0xb9, 0x2a, 0xeb, 0x2b, 0x04, 0x60 } },
+};
+
+/* (the host's) the models this hosting holds, in memory alone - from the first machine that sent each, checked:
+taken again for each map of the hosting, never written anywhere nor sent on */
+static struct
+{
+	uint8_t *region;
+	uint32_t region_bytes;
+	void *root;
+	char name[64];
+	/* (this map's) the runtime tag, the scenery it was given to and that scenery's digest before */
+	long tag_index;
+	long scenery_absolute;
+	uint32_t digest_before;
+	boolean grafted;
+} mixed_collision_held[NUMBER_OF_MIXED_COLLISION_MODELS];
+
+static boolean mixed_collision_tests_any_digest(
+	void)
+{
+#ifndef HALO_RELEASE
+	/* (debug builds alone: the digests measured) */
+	return getenv("HALO_MIXED_COLLISION_ANY_DIGEST") != NULL;
+#else
+	return FALSE;
+#endif
+}
+
+static void mixed_collision_digest_text(
+	uint8_t const *digest,
+	char *text)
+{
+	short index;
+
+	for (index = 0; index < MIXED_COLLISION_DIGEST_BYTES; index++)
+		sprintf(text + index * 2, "%02x", digest[index]);
+}
+
+static boolean mixed_collision_digest_known(
+	int model,
+	uint8_t const *digest)
+{
+	short index;
+
+	for (index = 0; index < (short)NUMBEROF(mixed_collision_known); index++)
+	{
+		if (mixed_collision_known[index].model == model &&
+			!memcmp(mixed_collision_known[index].digest, digest, MIXED_COLLISION_DIGEST_BYTES))
+		{
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/* the held models let go (this machine hosts no more) */
+static void mixed_collision_free_held(
+	void)
+{
+	short model;
+
+	for (model = 0; model < NUMBER_OF_MIXED_COLLISION_MODELS; model++)
+	{
+		if (mixed_collision_held[model].region)
+			platform_log("mixed play: the %s collision this hosting held let go", mixed_collision_model_path(model));
+		mixed_coop_free(mixed_collision_held[model].region);
+		csmemset(&mixed_collision_held[model], 0, sizeof(mixed_collision_held[model]));
+	}
+}
+
+/* whether this machine (the host) plays the mixed multiplayer map `level` from MCC's files, which lack the models */
+static boolean mixed_collision_host_lacks(
+	int level)
+{
+	return level >= 0 && mixed_coop_level_is_multiplayer(level) && !mixed_coop_rebuilt_level(level) &&
+		mixed_coop_local_family(level) == _mixed_coop_family_mcc && global_network_game_server_get() != NULL;
+}
+
+/* (the host's) the models it asks an Xbox machine for: those it lacks and holds none of */
+static uint16_t mixed_collision_missing(
+	int level)
+{
+	uint16_t bits = 0;
+	short model;
+
+	if (!mixed_collision_host_lacks(level))
+		return 0;
+	for (model = 0; model < NUMBER_OF_MIXED_COLLISION_MODELS; model++)
+	{
+		if (!mixed_collision_held[model].region)
+			bits |= (uint16_t)(1u << model);
+	}
+	return bits;
+}
+
+static uint32_t mixed_coop_gameplay_digest(void);
+
+/* (the host's) a held model given to its scenery on the loaded map: its runtime tag made, the scenery's collision
+model, its placed objects' (objects_placed: the game's running) made colliding, its digest worked out again (the one
+before kept: an MCC machine is sent that one, mixed_coop_build_stream) */
+static boolean mixed_collision_graft(
+	int model,
+	boolean objects_placed)
+{
+	long scenery = mixed_coop_find_tag('scen', mixed_collision_model_path(model));
+	struct object_definition *definition = scenery != NONE ? mixed_coop_instances()[scenery].base_address : NULL;
+	long tag_index, objects = 0;
+
+	if (!mixed_collision_held[model].region || mixed_collision_held[model].grafted || !definition || !mixed_coop.tags ||
+		scenery >= mixed_coop.tag_count)
+	{
+		return FALSE;
+	}
+	if (definition->object.collision_model.index != NONE)
+	{
+		platform_log("mixed play: %s has a collision model already (this machine's files): kept",
+			mixed_collision_model_path(model));
+		return FALSE;
+	}
+	tag_index = cache_runtime_tag_add('coll', mixed_collision_held[model].name, mixed_collision_held[model].root);
+	if (tag_index == NONE)
+	{
+		platform_log("mixed play: no room for %s's collision beside the map's tags", mixed_collision_model_path(model));
+		return FALSE;
+	}
+	definition->object.collision_model.group_tag = 'coll';
+	definition->object.collision_model.index = tag_index;
+	mixed_collision_held[model].tag_index = tag_index;
+	mixed_collision_held[model].scenery_absolute = scenery;
+	mixed_collision_held[model].grafted = TRUE;
+	if (objects_placed)
+	{
+		struct object_iterator iterator;
+
+		object_iterator_new(&iterator, _object_mask_scenery, 0);
+		while (object_iterator_next(&iterator))
+		{
+			struct object_datum *object = object_get(iterator.index);
+
+			if ((short)object->definition_index != (short)scenery ||
+				TEST_FLAG(object->object.flags, _object_has_collision_model_bit))
+			{
+				continue;
+			}
+			if (TEST_FLAG(object->object.flags, _object_connected_to_map_bit))
+			{
+				struct location location = object->object.location;
+
+				object_disconnect_from_map(iterator.index);
+				SET_FLAG(object->object.flags, _object_has_collision_model_bit, TRUE);
+				object_reconnect_to_map(iterator.index, &location);
+			}
+			else
+				SET_FLAG(object->object.flags, _object_has_collision_model_bit, TRUE);
+			objects++;
+		}
+	}
+	mixed_collision_held[model].digest_before = mixed_coop.tags[scenery].digest;
+	if (mixed_coop.tags[scenery].kind != _mixed_tag_other)
+		mixed_coop.tags[scenery].digest = mixed_coop_tag_digest(scenery);
+	if (objects_placed)
+	{
+		mixed_coop.digests.gameplay = mixed_coop_gameplay_digest();
+		mixed_coop_free(mixed_coop.stream);
+		mixed_coop.stream = NULL;
+		mixed_coop.stream_length = 0;
+	}
+	platform_log("mixed play: %s plays with the Xbox's collision now (held in memory, from a joining Xbox machine's own "
+		"files): tag %08lx, %ld placed objects made colliding, its digest %08x (MCC's %08x)", mixed_collision_model_path(model),
+		(unsigned long)tag_index, objects, (unsigned)mixed_coop.tags[scenery].digest,
+		(unsigned)mixed_collision_held[model].digest_before);
+	return TRUE;
+}
+
+/* (the host's) a model's bytes from machine_index: checked (mixed_collision_model_rebuild's checks, the game's own
+tag check as a scene pack's, its digest one of the Xbox's) and held. TRUE if held */
+static boolean mixed_collision_take_model(
+	long machine_index,
+	int model,
+	uint8_t const *bytes,
+	uint32_t length)
+{
+	/* (the region's first bytes: a tag header and its one instance, as tag_validate_pack_tags takes a pack's, and
+	the tag's name) */
+	enum
+	{
+		HEADER_BYTES = 0x24,
+		INSTANCE_BYTES = 0x20,
+		NAME_BYTES = 64,
+		RESERVE = HEADER_BYTES + INSTANCE_BYTES + NAME_BYTES,
+	};
+	struct pack_header
+	{
+		void *instances;
+		long scenario_tag_index;
+		unsigned long checksum;
+		long tag_count;
+		long vertex_buffer_count;
+		void *vertex_buffers;
+		long index_buffer_count;
+		void *index_buffers;
+		unsigned long signature;
+	} *header;
+	struct cache_file_tag_instance_view *instance;
+	uint8_t digest[MIXED_COLLISION_DIGEST_BYTES];
+	char digest_text[MIXED_COLLISION_DIGEST_BYTES * 2 + 1];
+	uint8_t *region;
+	uint32_t region_bytes, root_offset;
+	char why[160];
+	long corrections = 0;
+
+	typedef char pack_header_size_assert[sizeof(struct pack_header) == HEADER_BYTES ? 1 : -1];
+	typedef char pack_instance_size_assert[sizeof(struct cache_file_tag_instance_view) == INSTANCE_BYTES ? 1 : -1];
+
+	why[0] = 0;
+	crypto_blake2b(digest, sizeof(digest), bytes, length);
+	mixed_collision_digest_text(digest, digest_text);
+	if (!mixed_collision_model_rebuild(bytes, length, RESERVE, &region, &region_bytes, &root_offset, why, sizeof(why)))
+	{
+		platform_log("mixed play: machine %ld's %s collision not taken: %s", machine_index, mixed_collision_model_path(model),
+			why);
+		return FALSE;
+	}
+	header = (struct pack_header *)region;
+	instance = (struct cache_file_tag_instance_view *)(region + HEADER_BYTES);
+	header->instances = instance;
+	header->scenario_tag_index = NONE;
+	header->tag_count = 1;
+	header->signature = 'tags';
+	instance->group_tag = 'coll';
+	instance->parent_group_tags[0] = NONE;
+	instance->parent_group_tags[1] = NONE;
+	instance->tag_index = (long)0xE7A10000UL;
+	instance->name = (char *)(region + HEADER_BYTES + INSTANCE_BYTES);
+	snprintf(instance->name, NAME_BYTES, "%s", mixed_collision_model_path(model));
+	instance->base_address = region + root_offset;
+	if (!tag_validate_pack_tags(region, (long)region_bytes, 0, 0, "mixed play collision", &corrections) || corrections)
+	{
+		platform_log("mixed play: machine %ld's %s collision not taken: the game's tag check refused it (%ld corrections)",
+			machine_index, mixed_collision_model_path(model), corrections);
+		mixed_coop_free(region);
+		return FALSE;
+	}
+	if (!mixed_collision_digest_known(model, digest) && !mixed_collision_tests_any_digest())
+	{
+		platform_log("mixed play: machine %ld's %s collision not taken: its digest %s is none of the Xbox's files'",
+			machine_index, mixed_collision_model_path(model), digest_text);
+		mixed_coop_free(region);
+		return FALSE;
+	}
+	mixed_coop_free(mixed_collision_held[model].region);
+	csmemset(&mixed_collision_held[model], 0, sizeof(mixed_collision_held[model]));
+	mixed_collision_held[model].region = region;
+	mixed_collision_held[model].region_bytes = region_bytes;
+	mixed_collision_held[model].root = region + root_offset;
+	snprintf(mixed_collision_held[model].name, sizeof(mixed_collision_held[model].name), "%s", mixed_collision_model_path(model));
+	mixed_collision_held[model].tag_index = NONE;
+	platform_log("mixed play: machine %ld's %s collision taken (%lu bytes, digest %s%s), held in memory for this hosting",
+		machine_index, mixed_collision_model_path(model), (unsigned long)length, digest_text,
+		mixed_collision_digest_known(model, digest) ? ", the Xbox's" : ", ANY DIGEST (test)");
+	return TRUE;
+}
+
+/* (HALO_MIXED_COOP_DIGEST_DUMP) the flag stand's and teleporter base's collision models of this map as an Xbox machine
+would send them: their sizes and digests (the digests mixed_collision_known lists were measured so) */
+static void mixed_collision_dump_models(
+	void)
+{
+	static uint8_t bytes[MIXED_COLLISION_MAXIMUM_MODEL_BYTES];
+	short model;
+
+	for (model = 0; model < NUMBER_OF_MIXED_COLLISION_MODELS; model++)
+	{
+		long scenery = mixed_coop_find_tag('scen', mixed_collision_model_path(model));
+		struct object_definition const *definition = scenery != NONE ? mixed_coop_instances()[scenery].base_address : NULL;
+		struct cache_file_tag_instance_view *collision = definition ? mixed_coop_instance(definition->object.collision_model.index) : NULL;
+		uint8_t digest[MIXED_COLLISION_DIGEST_BYTES];
+		char text[MIXED_COLLISION_DIGEST_BYTES * 2 + 1], why[160];
+		uint32_t length;
+
+		if (!collision || collision->group_tag != 'coll' || !collision->base_address)
+		{
+			platform_log("mixed collision digest: %d none (%s)", (int)model, definition ? "no collision model" : "no scenery");
+			continue;
+		}
+		why[0] = 0;
+		length = mixed_collision_model_write(collision->base_address, bytes, sizeof(bytes), why, sizeof(why));
+		if (!length)
+		{
+			platform_log("mixed collision digest: %d not written: %s", (int)model, why);
+			continue;
+		}
+		crypto_blake2b(digest, sizeof(digest), bytes, length);
+		mixed_collision_digest_text(digest, text);
+		platform_log("mixed collision digest: %d %lu %s %s", (int)model, (unsigned long)length, text,
+			mixed_collision_digest_known(model, digest) ? "known" : "unknown");
+		/* (HALO_MIXED_COLLISION_HEX: the bytes too, 64 a line - the fuzz target's seeds) */
+		if (getenv("HALO_MIXED_COLLISION_HEX"))
+		{
+			uint32_t at;
+
+			for (at = 0; at < length; at += 64)
+			{
+				char line[129];
+				uint32_t index;
+
+				for (index = 0; index < 64 && at + index < length; index++)
+					sprintf(line + index * 2, "%02x", bytes[at + index]);
+				platform_log("mixed collision hex: %d %s", (int)model, line);
+			}
+		}
+	}
+}
+
+/* the gameplay digest: the gameplay tags' digests by path, in path order */
+static uint32_t mixed_coop_gameplay_digest(
+	void)
+{
+	uint32_t gameplay = MIXED_COOP_FNV_BASIS;
+	struct mixed_coop_local_tag *sorted;
+	long index;
+
+	sorted = malloc(sizeof(*sorted) * (size_t)MAX(1, mixed_coop.tag_count));
+	if (!sorted)
+		return gameplay;
+	csmemcpy(sorted, mixed_coop.tags, sizeof(*sorted) * (size_t)mixed_coop.tag_count);
+	qsort(sorted, (size_t)mixed_coop.tag_count, sizeof(*sorted), mixed_coop_compare_tags);
+	for (index = 0; index < mixed_coop.tag_count; index++)
+	{
+		if (index + 1 < mixed_coop.tag_count && sorted[index].path_hash == sorted[index + 1].path_hash)
+			platform_log("mixed co-op: two tags of one path hash %08x (left out of the translation)",
+				(unsigned)sorted[index].path_hash);
+		if (sorted[index].kind == _mixed_tag_gameplay)
+		{
+			gameplay = mixed_coop_fnv(gameplay, &sorted[index].path_hash, 4);
+			gameplay = mixed_coop_fnv(gameplay, &sorted[index].digest, 4);
+		}
+	}
+	mixed_coop_free(sorted);
+	return gameplay;
+}
+
 void mixed_coop_tags_loaded(
 	long scenario_index,
 	int custom_edition)
@@ -2823,6 +3253,18 @@ void mixed_coop_tags_loaded(
 
 	mixed_coop_free_tables();
 	mixed_coop_layout_free();
+	/* (1.1.3: the held collision's runtime tags went with the last map; let go once this machine hosts no more) */
+	{
+		short model;
+
+		for (model = 0; model < NUMBER_OF_MIXED_COLLISION_MODELS; model++)
+		{
+			mixed_collision_held[model].grafted = FALSE;
+			mixed_collision_held[model].tag_index = NONE;
+		}
+		if (game_connection() != _game_connection_network_server)
+			mixed_collision_free_held();
+	}
 	mixed_coop.stand_ins = 0;
 	mixed_coop.layout_taken = FALSE;
 	collision_bsp_invisible_masked = NULL;
@@ -2962,29 +3404,23 @@ void mixed_coop_tags_loaded(
 		mixed_coop.tags[index].ambiguous = 0;
 		mixed_coop.tags[index].digest = kind != _mixed_tag_other ? mixed_coop_tag_digest(index) : 0;
 	}
-	mixed_coop_scenario_digests(scenario_instance->base_address, scenario_group->definition);
-	/* (gameplay: the gameplay tags' digests by path, in path order) */
-	sorted = malloc(sizeof(*sorted) * (size_t)MAX(1, mixed_coop.tag_count));
-	if (sorted)
+	/* (1.1.3, an MCC host of a multiplayer map: the flag stand and teleporter base collision this hosting holds,
+	from an Xbox machine's own files, given to their scenery before anything is placed) */
+	if (mixed_coop.network_coop && mixed_collision_host_lacks(mixed_coop.level))
 	{
-		csmemcpy(sorted, mixed_coop.tags, sizeof(*sorted) * (size_t)mixed_coop.tag_count);
-		qsort(sorted, (size_t)mixed_coop.tag_count, sizeof(*sorted), mixed_coop_compare_tags);
-		for (index = 0; index < mixed_coop.tag_count; index++)
-		{
-			if (index + 1 < mixed_coop.tag_count && sorted[index].path_hash == sorted[index + 1].path_hash)
-				platform_log("mixed co-op: two tags of one path hash %08x (left out of the translation)",
-					(unsigned)sorted[index].path_hash);
-			if (sorted[index].kind == _mixed_tag_gameplay)
-			{
-				gameplay = mixed_coop_fnv(gameplay, &sorted[index].path_hash, 4);
-				gameplay = mixed_coop_fnv(gameplay, &sorted[index].digest, 4);
-			}
-		}
-		mixed_coop_free(sorted);
+		short model;
+
+		for (model = 0; model < NUMBER_OF_MIXED_COLLISION_MODELS; model++)
+			mixed_collision_graft(model, FALSE);
 	}
-	mixed_coop.digests.gameplay = gameplay;
+	mixed_coop_scenario_digests(scenario_instance->base_address, scenario_group->definition);
+	(void)gameplay;
+	(void)sorted;
+	mixed_coop.digests.gameplay = mixed_coop_gameplay_digest();
 	mixed_coop.digests.tag_count = (uint32_t)mixed_coop.tag_count;
 	mixed_coop.loaded = TRUE;
+	if (dump && mixed_coop_multiplayer_level && mixed_coop.family == _mixed_coop_family_xbox)
+		mixed_collision_dump_models();
 	platform_log("mixed co-op: %s's %s level %s loaded%s: %ld tags, layout %08x, gameplay %08x, host's alone %08x "
 		"(%ld MCC-only placements left out, %ld scripts not started, %ld Xbox rules)",
 		mixed_coop_level_stems[mixed_coop.level], mixed_coop_family_name(mixed_coop.family),
@@ -3365,6 +3801,23 @@ static void mixed_coop_client_start_update(void);
 static void mixed_coop_layout_send(long machine_index);
 static void mixed_coop_client_delta_wants(void);
 
+/* (the host's) a machine's slot let go: its collision stream's reassembly with it */
+static void mixed_coop_machine_release(
+	short index)
+{
+	mixed_coop_free(mixed_coop.machines[index].collision_reassembly);
+	csmemset(&mixed_coop.machines[index], 0, sizeof(mixed_coop.machines[index]));
+}
+
+static void mixed_coop_machines_release(
+	void)
+{
+	short index;
+
+	for (index = 0; index < HALO_PORT_MAXIMUM_NETWORK_MACHINES; index++)
+		mixed_coop_machine_release(index);
+}
+
 void mixed_coop_frame(
 	void)
 {
@@ -3387,7 +3840,7 @@ void mixed_coop_frame(
 		if (mixed_coop.hosting && !global_network_game_server_get())
 		{
 			mixed_coop.hosting = FALSE;
-			csmemset(mixed_coop.machines, 0, sizeof(mixed_coop.machines));
+			mixed_coop_machines_release();
 		}
 		return;
 	}
@@ -3397,7 +3850,7 @@ void mixed_coop_frame(
 		mixed_coop.hosting = TRUE;
 		mixed_coop.hello_level = NONE;
 		mixed_coop.session = (uint32_t)now ^ ((uint32_t)rand() << 16) ^ 0x4D584350u;
-		csmemset(mixed_coop.machines, 0, sizeof(mixed_coop.machines));
+		mixed_coop_machines_release();
 		platform_log(mixed_coop_level_is_multiplayer(level) ? "mixed play: hosting %s from the %s files: each machine joining is told" :
 			"mixed co-op: hosting co-op on %s from the %s files: each machine joining is told",
 			mixed_coop_level_stems[level], mixed_coop_family_name(mixed_coop_local_family(level)));
@@ -3416,6 +3869,13 @@ void mixed_coop_frame(
 			mixed_coop.machines[index].answered = FALSE;
 			mixed_coop.machines[index].hellos = 0;
 			mixed_coop.machines[index].hello_time = 0;
+			mixed_coop.machines[index].collision_asks = 0;
+			mixed_coop.machines[index].collision_ask_time = 0;
+			mixed_coop.machines[index].collision_offer_heard = FALSE;
+			mixed_coop.machines[index].collision_offered = 0;
+			mixed_coop.machines[index].collision_done = FALSE;
+			mixed_coop_free(mixed_coop.machines[index].collision_reassembly);
+			mixed_coop.machines[index].collision_reassembly = NULL;
 		}
 	}
 	count = network_game_server_port_joined_machines(machines, (short)NUMBEROF(machines));
@@ -3429,7 +3889,7 @@ void mixed_coop_frame(
 		for (at = 0; at < count; at++)
 			still |= machines[at] == mixed_coop.machines[index].machine_index;
 		if (!still)
-			csmemset(&mixed_coop.machines[index], 0, sizeof(mixed_coop.machines[index]));
+			mixed_coop_machine_release(index);
 	}
 	for (index = 0; index < count; index++)
 	{
@@ -3465,6 +3925,48 @@ void mixed_coop_frame(
 				mixed_coop.machines[machine_index].hello_time = now ? now : 1;
 				mixed_coop.machines[machine_index].hellos++;
 			}
+		}
+		/* (1.1.3) an MCC host of a multiplayer map: a machine of the Xbox's files asked for the flag stand and
+		teleporter base collision this host lacks (mixed_collision_protocol.h), until it offers (an older build
+		never does: it drops the ask, and is refused as before) */
+		if (mixed_coop.machines[machine_index].answered && mixed_coop.machines[machine_index].family == _mixed_coop_family_xbox &&
+			!mixed_coop.machines[machine_index].collision_offer_heard && mixed_coop.machines[machine_index].collision_asks < 10 &&
+			mixed_collision_missing(level) &&
+			(!mixed_coop.machines[machine_index].collision_ask_time ||
+				now - mixed_coop.machines[machine_index].collision_ask_time >= MIXED_COOP_HELLO_RESEND_MILLISECONDS))
+		{
+			struct mixed_coop_lobby_message ask;
+
+			csmemset(&ask, 0, sizeof(ask));
+			ask.command = _mixed_coop_lobby_collision_ask;
+			ask.version = (uint16_t)mixed_coop_version_for_level((unsigned)level);
+			ask.family = _mixed_coop_family_mcc;
+			ask.level = (uint8_t)level;
+			ask.flags = mixed_collision_missing(level);
+			ask.session = mixed_coop.session;
+			if (mixed_coop_server_send(machine_index, &ask))
+			{
+				if (!mixed_coop.machines[machine_index].collision_asks)
+					platform_log("mixed play: machine %ld (Xbox files) asked for the collision this host's files lack "
+						"(flags %u)", machine_index, (unsigned)ask.flags);
+				mixed_coop.machines[machine_index].collision_ask_time = now ? now : 1;
+				mixed_coop.machines[machine_index].collision_asks++;
+			}
+		}
+		/* (its dictionary request, held for the collision it offered: answered once that is taken or refused, or
+		MIXED_COLLISION_WAIT_MILLISECONDS on) */
+		if (mixed_coop.machines[machine_index].request_held &&
+			(mixed_coop.machines[machine_index].collision_done ||
+				now - mixed_coop.machines[machine_index].request_held_since >= MIXED_COLLISION_WAIT_MILLISECONDS))
+		{
+			struct mixed_coop_request request = mixed_coop.machines[machine_index].held_request;
+
+			if (!mixed_coop.machines[machine_index].collision_done)
+				platform_log("mixed play: machine %ld's collision never came whole: its dictionary sent without it",
+					machine_index);
+			mixed_coop.machines[machine_index].collision_done = TRUE;
+			mixed_coop.machines[machine_index].request_held = FALSE;
+			mixed_coop_handle_request(machine_index, &request, 1);
 		}
 		/* (r4) its layout to a machine that asked, once this host's map is loaded and its objects placed (its
 		placements' BSP flags this host's own: mixed_coop_layout_build), made at the first ask */
@@ -3545,7 +4047,8 @@ void mixed_coop_server_handle_lobby(
 	long machine_index = NONE;
 
 	if (!mixed_coop_lobby_decode(message, message_size, _message_client_mixed_coop, MIXED_COOP_CLASS_CLIENT_PREGAME, &answer) ||
-		(answer.command != _mixed_coop_lobby_answer && answer.command != _mixed_coop_lobby_layout_request))
+		(answer.command != _mixed_coop_lobby_answer && answer.command != _mixed_coop_lobby_layout_request &&
+			answer.command != _mixed_coop_lobby_collision_offer))
 	{
 		network_event("mixed co-op: an answer that could not be decoded or checked");
 		return;
@@ -3571,6 +4074,23 @@ void mixed_coop_server_handle_lobby(
 		}
 		return;
 	}
+	/* (1.1.3) an Xbox machine's offer of the collision this host asked it for: its dictionary request is held for it
+	(mixed_coop_handle_request); none offered: nothing waited for */
+	if (answer.command == _mixed_coop_lobby_collision_offer)
+	{
+		int level;
+
+		if (mixed_coop_hosted_server(&level) && answer.level == (uint8_t)level && mixed_collision_missing(level) &&
+			mixed_coop.machines[machine_index].family == _mixed_coop_family_xbox &&
+			!mixed_coop.machines[machine_index].collision_offer_heard)
+		{
+			mixed_coop.machines[machine_index].collision_offer_heard = TRUE;
+			mixed_coop.machines[machine_index].collision_offered = (uint16_t)(answer.flags & mixed_collision_missing(level));
+			platform_log("mixed play: machine %ld offers the collision (flags %u): its dictionary waits for it",
+				machine_index, (unsigned)mixed_coop.machines[machine_index].collision_offered);
+		}
+		return;
+	}
 	if (!mixed_coop.machines[machine_index].answered)
 		platform_log("mixed co-op: machine %ld plays this level from the %s files", machine_index,
 			mixed_coop_family_name(answer.family));
@@ -3590,9 +4110,43 @@ void mixed_coop_client_handle_lobby(
 	struct mixed_coop_lobby_message hello;
 
 	if (!mixed_coop_lobby_decode(message, message_size, _message_server_mixed_coop, MIXED_COOP_CLASS_SERVER_PREGAME, &hello) ||
-		hello.command != _mixed_coop_lobby_hello)
+		(hello.command != _mixed_coop_lobby_hello && hello.command != _mixed_coop_lobby_collision_ask))
 	{
 		network_event("mixed co-op: a host's message that could not be decoded or checked");
+		return;
+	}
+	/* (1.1.3) an MCC host's ask for the flag stand and teleporter base collision: offered, if this machine plays the
+	map from the Xbox's files - sent once it has loaded it (mixed_coop_client_send_collision) */
+	if (hello.command == _mixed_coop_lobby_collision_ask)
+	{
+		struct mixed_coop_lobby_message offer;
+		void *encoded;
+
+		if (!mixed_coop_capable() || global_network_game_server_get() || !mixed_coop.host_said ||
+			hello.session != mixed_coop.host_session || hello.level != (uint8_t)mixed_coop.host_level ||
+			mixed_coop.host_family != _mixed_coop_family_mcc ||
+			mixed_coop_local_family(hello.level) != _mixed_coop_family_xbox)
+		{
+			return;
+		}
+		if (mixed_coop.collision_asked != (hello.flags & MIXED_COLLISION_ALL_BITS) ||
+			mixed_coop.collision_asked_session != hello.session)
+		{
+			platform_log("mixed play: the MCC host asks for the collision its files lack (flags %u): offered, sent once "
+				"the map is loaded", (unsigned)hello.flags);
+		}
+		mixed_coop.collision_asked = (uint16_t)(hello.flags & MIXED_COLLISION_ALL_BITS);
+		mixed_coop.collision_asked_session = hello.session;
+		csmemset(&offer, 0, sizeof(offer));
+		offer.command = _mixed_coop_lobby_collision_offer;
+		offer.version = hello.version;
+		offer.family = _mixed_coop_family_xbox;
+		offer.level = hello.level;
+		offer.flags = mixed_coop.collision_asked;
+		offer.session = hello.session;
+		encoded = create_network_game_message(_message_client_mixed_coop, &offer, sizeof(offer));
+		if (!encoded || !network_game_client_send_to_server(client, encoded))
+			network_event("mixed play: the collision offer could not be sent");
 		return;
 	}
 	mixed_coop_client_take_hello(client, &hello);
@@ -3624,6 +4178,8 @@ static void mixed_coop_client_take_hello(
 		platform_log("mixed co-op: the host plays %s from the %s files; this machine from the %s files",
 			mixed_coop_level_stems[hello.level], mixed_coop_family_name(hello.family),
 			mixed_coop_family_name(mixed_coop_local_family(hello.level)));
+	if (mixed_coop.host_session != hello.session)
+		mixed_coop.collision_asked = 0;
 	mixed_coop.host_said = TRUE;
 	mixed_coop.host_family = hello.family;
 	mixed_coop.host_level = hello.level;
@@ -3874,6 +4430,8 @@ void mixed_coop_client_dispose(
 	csmemset(&mixed_coop_delta_layout, 0, sizeof(mixed_coop_delta_layout));
 	mixed_coop.host_said = FALSE;
 	mixed_coop.host_family = _mixed_coop_family_none;
+	mixed_coop.collision_asked = 0;
+	mixed_coop.collision_asked_session = 0;
 	mixed_coop.needs_dictionary = FALSE;
 	mixed_coop.matched = FALSE;
 	mixed_coop.requested = FALSE;
@@ -4080,6 +4638,9 @@ void mixed_coop_client_handle_layout(
 
 /* ---------- after the load: the host's dictionary */
 
+/* (1.1.3) the family of the machine the dictionary is built for */
+static int mixed_coop_stream_family;
+
 static boolean mixed_coop_build_stream(
 	void)
 {
@@ -4112,8 +4673,19 @@ static boolean mixed_coop_build_stream(
 	}
 	for (index = 0; index < mixed_coop.tag_count; index++)
 	{
+		uint32_t digest = mixed_coop.tags[index].digest;
+		short model;
+
+		for (model = 0; model < NUMBER_OF_MIXED_COLLISION_MODELS; model++)
+		{
+			if (mixed_collision_held[model].grafted && mixed_collision_held[model].scenery_absolute == index &&
+				mixed_coop_stream_family == _mixed_coop_family_mcc)
+			{
+				digest = mixed_collision_held[model].digest_before;
+			}
+		}
 		mixed_coop_writer_u32(&writer, mixed_coop.tags[index].path_hash);
-		mixed_coop_writer_u32(&writer, mixed_coop.tags[index].digest);
+		mixed_coop_writer_u32(&writer, digest);
 		mixed_coop_writer_u32(&writer, (uint32_t)mixed_coop_instances()[index].tag_index);
 	}
 	graph_count_at = writer.length;
@@ -4213,10 +4785,32 @@ void mixed_coop_handle_request(
 	}
 	mixed_coop.machines[machine_index].family = request.family;
 	mixed_coop.machines[machine_index].mixed = request.family != (uint8_t)mixed_coop.family;
+	/* (1.1.3) the collision this machine offered first (it comes before its request): held until then
+	(mixed_coop_frame) */
+	if (mixed_coop.machines[machine_index].collision_offered && !mixed_coop.machines[machine_index].collision_done)
+	{
+		if (!mixed_coop.machines[machine_index].request_held)
+		{
+			platform_log("mixed play: machine %ld's dictionary request held for the collision it offered", machine_index);
+			mixed_coop.machines[machine_index].request_held = TRUE;
+			mixed_coop.machines[machine_index].request_held_since = system_milliseconds();
+		}
+		mixed_coop.machines[machine_index].held_request = request;
+		return;
+	}
 	platform_log("mixed co-op: machine %ld (%s files) asks for the dictionary: layout %08x (the host's %08x), gameplay %08x "
 		"(%08x), host's alone %08x (%08x)", machine_index, mixed_coop_family_name(request.family),
 		(unsigned)request.digests.layout, (unsigned)mixed_coop.digests.layout, (unsigned)request.digests.gameplay,
 		(unsigned)mixed_coop.digests.gameplay, (unsigned)request.digests.host_only, (unsigned)mixed_coop.digests.host_only);
+	/* (1.1.3: with the flag stand's collision an Xbox machine sent, an MCC machine is sent the digests of MCC's own
+	files - what it has; an Xbox machine this host's now) */
+	if (mixed_collision_held[0].grafted || mixed_collision_held[1].grafted)
+	{
+		mixed_coop_free(mixed_coop.stream);
+		mixed_coop.stream = NULL;
+		mixed_coop.stream_length = 0;
+	}
+	mixed_coop_stream_family = request.family;
 	if (!mixed_coop_build_stream())
 		return;
 	/* (each structure BSP the host has loaded since the map loaded: as it
@@ -4264,6 +4858,78 @@ void mixed_coop_handle_request(
 	platform_log("mixed co-op: the dictionary sent to machine %ld (%u pieces)", machine_index, (unsigned)fragments);
 }
 
+/* (1.1.3, the host's) a piece of the collision stream machine_index offered: whole, each model it holds no copy of
+taken (mixed_collision_take_model) and given to its scenery (mixed_collision_graft); its dictionary request then
+answered (mixed_coop_frame) */
+void mixed_coop_handle_collision(
+	long machine_index,
+	void const *entries,
+	short count,
+	unsigned short entries_size)
+{
+	struct mixed_coop_fragment fragment;
+	struct mixed_collision_stream stream;
+	char why[160];
+	int result, level;
+	uint8_t index;
+
+	if (count < 1 || !VALID_INDEX(machine_index, HALO_PORT_MAXIMUM_NETWORK_MACHINES) || !mixed_coop.hosting ||
+		!mixed_coop.loaded || !mixed_coop.network_coop || !mixed_coop.machines[machine_index].known ||
+		!mixed_coop.machines[machine_index].collision_offered || mixed_coop.machines[machine_index].collision_done ||
+		!mixed_coop_hosted_server(&level) || level != mixed_coop.level || entries_size < offsetof(struct mixed_coop_fragment, data))
+	{
+		return;
+	}
+	csmemset(&fragment, 0, sizeof(fragment));
+	csmemcpy(&fragment, entries, MIN((size_t)entries_size, sizeof(fragment)));
+	if (!mixed_coop.machines[machine_index].collision_reassembly)
+	{
+		mixed_coop.machines[machine_index].collision_reassembly = malloc(sizeof(struct mixed_collision_reassembly));
+		if (!mixed_coop.machines[machine_index].collision_reassembly)
+		{
+			mixed_coop.machines[machine_index].collision_done = TRUE;
+			return;
+		}
+		mixed_collision_reassembly_begin(mixed_coop.machines[machine_index].collision_reassembly, mixed_coop.session);
+	}
+	result = mixed_collision_reassembly_take(mixed_coop.machines[machine_index].collision_reassembly, &fragment,
+		MIN((uint32_t)entries_size, (uint32_t)sizeof(fragment)));
+	if (result == _mixed_coop_fragment_taken)
+		return;
+	if (result == _mixed_coop_fragment_complete)
+	{
+		struct mixed_collision_reassembly *reassembly = mixed_coop.machines[machine_index].collision_reassembly;
+
+		why[0] = 0;
+		if (!mixed_collision_stream_read(reassembly->bytes, reassembly->total_bytes, &stream, why, sizeof(why)) ||
+			stream.level != (uint8_t)mixed_coop.level)
+		{
+			platform_log("mixed play: machine %ld's collision not taken: %s", machine_index,
+				why[0] ? why : "another map's");
+		}
+		else
+		{
+			for (index = 0; index < stream.model_count; index++)
+			{
+				int model = stream.models[index].model;
+
+				if (!(mixed_coop.machines[machine_index].collision_offered & (1u << model)) ||
+					!(mixed_collision_missing(level) & (1u << model)))
+				{
+					continue;
+				}
+				if (mixed_collision_take_model(machine_index, model, stream.models[index].data, stream.models[index].bytes))
+					mixed_collision_graft(model, TRUE);
+			}
+		}
+	}
+	else
+		platform_log("mixed play: machine %ld's collision piece refused: its stream not taken", machine_index);
+	mixed_coop_free(mixed_coop.machines[machine_index].collision_reassembly);
+	mixed_coop.machines[machine_index].collision_reassembly = NULL;
+	mixed_coop.machines[machine_index].collision_done = TRUE;
+}
+
 /* ---------- after the load: a client's */
 
 static uint32_t mixed_coop_client_session;
@@ -4286,6 +4952,89 @@ static void mixed_coop_client_delta_wants(
 	mixed_coop_delta_pieces_wanted(&mixed_coop_delta_dictionary, &first, bits, MIXED_COOP_DELTA_DICTIONARY_WANT_BITS);
 	mixed_coop_delta_send_request(&mixed_coop_delta_request, first, bits);
 	mixed_coop_delta_wanted_time = now ? now : 1;
+}
+
+/* (1.1.3, an Xbox machine an MCC host asked) the flag stand and teleporter base collision models of the map this
+machine loaded from its own files, sent to the host before its dictionary request (mixed_collision_protocol.h):
+only those asked for, only the host, nothing kept */
+static void mixed_coop_client_send_collision(
+	void)
+{
+	static uint8_t model_bytes[MIXED_COLLISION_MAXIMUM_MODEL_BYTES];
+	struct mixed_collision_writer writer;
+	uint8_t *stream;
+	uint32_t length, offset;
+	uint16_t fragments, fragment;
+	short model;
+
+	if (!mixed_coop.collision_asked || mixed_coop.collision_asked_session != mixed_coop.host_session ||
+		mixed_coop.host_family != _mixed_coop_family_mcc || mixed_coop.family != _mixed_coop_family_xbox ||
+		!mixed_coop_level_is_multiplayer(mixed_coop.level) || network_wire_crossplay())
+	{
+		return;
+	}
+	stream = malloc(MIXED_COLLISION_MAXIMUM_STREAM_BYTES);
+	if (!stream)
+		return;
+	mixed_collision_writer_begin(&writer, stream, MIXED_COLLISION_MAXIMUM_STREAM_BYTES, (uint8_t)mixed_coop.level);
+	for (model = 0; model < NUMBER_OF_MIXED_COLLISION_MODELS; model++)
+	{
+		long scenery = (mixed_coop.collision_asked & (1u << model)) ? mixed_coop_find_tag('scen', mixed_collision_model_path(model)) : NONE;
+		struct object_definition const *definition = scenery != NONE ? mixed_coop_instances()[scenery].base_address : NULL;
+		struct cache_file_tag_instance_view *collision = definition ? mixed_coop_instance(definition->object.collision_model.index) : NULL;
+		char why[160];
+		uint32_t bytes;
+
+		if (!collision || collision->group_tag != 'coll' || !collision->base_address)
+			continue;
+		why[0] = 0;
+		bytes = mixed_collision_model_write(collision->base_address, model_bytes, sizeof(model_bytes), why, sizeof(why));
+		if (!bytes)
+		{
+			platform_log("mixed play: %s's collision not sent: %s", mixed_collision_model_path(model), why);
+			continue;
+		}
+		{
+			uint8_t digest[MIXED_COLLISION_DIGEST_BYTES];
+			char text[MIXED_COLLISION_DIGEST_BYTES * 2 + 1];
+
+			crypto_blake2b(digest, sizeof(digest), model_bytes, bytes);
+			mixed_collision_digest_text(digest, text);
+			platform_log("mixed play: %s's collision from this machine's files: %lu bytes, digest %s",
+				mixed_collision_model_path(model), (unsigned long)bytes, text);
+		}
+		mixed_collision_writer_model(&writer, (uint8_t)model, model_bytes, bytes);
+	}
+	length = mixed_collision_writer_end(&writer);
+	if (!length)
+	{
+		platform_log("mixed play: no collision the host asked for is in this machine's map: none sent");
+		mixed_coop_free(stream);
+		return;
+	}
+	fragments = (uint16_t)((length + MIXED_COLLISION_FRAGMENT_BYTES - 1) / MIXED_COLLISION_FRAGMENT_BYTES);
+	for (fragment = 0, offset = 0; fragment < fragments; fragment++, offset += MIXED_COLLISION_FRAGMENT_BYTES)
+	{
+		static struct
+		{
+			struct distributed_message_header header;
+			struct mixed_coop_fragment fragment;
+		} message;
+
+		csmemset(&message, 0, sizeof(message));
+		message.fragment.session = mixed_coop.host_session;
+		message.fragment.total_bytes = length;
+		message.fragment.index = fragment;
+		message.fragment.count = fragments;
+		message.fragment.bytes = (uint16_t)MIN(MIXED_COLLISION_FRAGMENT_BYTES, length - offset);
+		csmemcpy(message.fragment.data, stream + offset, message.fragment.bytes);
+		distributed_send(&message, DISTRIBUTED_MESSAGE_MIXED_COLLISION, 1,
+			(word)(sizeof(message.header) + offsetof(struct mixed_coop_fragment, data) + message.fragment.bytes),
+			_distributed_to_host_reliably);
+	}
+	platform_log("mixed play: the collision the MCC host asked for sent (%lu bytes, %u pieces)", (unsigned long)length,
+		(unsigned)fragments);
+	mixed_coop_free(stream);
 }
 
 int mixed_coop_client_ready_allowed(
@@ -4340,6 +5089,8 @@ int mixed_coop_client_ready_allowed(
 		message.request.digests = mixed_coop.digests;
 		/* (a PC host's game: over Delta Peer, said again with the pieces still wanted until the dictionary is whole,
 		mixed_coop_client_delta_wants) */
+		/* (1.1.3: an MCC host's flag stand and teleporter base collision, from this machine's files, first) */
+		mixed_coop_client_send_collision();
 		if (network_wire_crossplay())
 		{
 			mixed_coop_delta_request = message.request;
@@ -4489,6 +5240,7 @@ static void mixed_coop_dictionary_take(
 	char why[96];
 	struct mixed_coop_lookup *lookups;
 	long index, gameplay_differences = 0, xbox_host_needed = 0, told_differences = 0, host_only_tags = 0, mapped = 0;
+	long stand_differences = 0;
 	char first_difference[200];
 	uint32_t offset = 0;
 	uint16_t host_graph, animation_count;
@@ -4589,6 +5341,8 @@ static void mixed_coop_dictionary_take(
 				if (mixed_coop_xbox_host_decides_tag(mixed_coop_instances()[(short)local].name))
 				{
 					xbox_host_needed++;
+					if (strncasecmp(mixed_coop_instances()[(short)local].name, "item collections\\", 17))
+						stand_differences++;
 					if (dictionary.family == _mixed_coop_family_mcc && mixed_coop.family == _mixed_coop_family_xbox &&
 						mixed_coop_xbox_host_tag_in_play(mixed_coop_instances()[(short)local].name, game_type, in_play,
 							sizeof(in_play)))
@@ -4667,6 +5421,15 @@ static void mixed_coop_dictionary_take(
 	platform_log("mixed co-op: %ld of the host's tags are this machine's, %ld the host's alone; %ld gameplay tags differ, "
 		"%ld others (told); %ld animations mapped", mapped, host_only_tags, gameplay_differences, told_differences,
 		mixed_coop.animation_pool_used);
+	if (gameplay_differences && xbox_host_needed == gameplay_differences && !stand_differences)
+	{
+		/* (1.1.3: the flag stand and teleporter base the host plays with the Xbox's collision now - its needler alone
+		is Halo PC's, in a game that can spawn it) */
+		mixed_coop_leave(T("The host plays %s from MCC's files, whose Needler is Halo PC's: with Xbox and MCC files "
+			"together this map's games with the Needler need an Xbox-files host. Ask a player with the Xbox's maps to "
+			"host."), mixed_coop_level_stems[mixed_coop.level]);
+		return;
+	}
 	if (gameplay_differences && xbox_host_needed == gameplay_differences)
 	{
 		mixed_coop_leave(T("The host plays %s from MCC's files: with Xbox and MCC files together this map needs an "
@@ -5034,6 +5797,49 @@ void mixed_coop_placed_hash(
 	error(_error_silent, "mixed placed %ld %08x", objects, (unsigned)placed);
 }
 
+/* (test: HALO_MIXED_STAND_PROBE=1 with HALO_MIXED_COOP_HASH=1, every 5 s of the game) what a flag stand and a teleporter
+base are to this machine's simulation: a ray down onto each one's middle from 3 wu above - the stand's own top when it
+collides, the ground under it when it does not (MCC's files' stand on an MCC host that holds no collision) - and where
+each CTF flag is: lines both machines of a mixed game must agree on */
+static void mixed_coop_stand_probe(
+	void)
+{
+	struct object_iterator iterator;
+	struct object_datum *object;
+
+	if (!getenv("HALO_MIXED_STAND_PROBE") || game_time_get() % 150 != 0)
+		return;
+	object_iterator_new(&iterator, _object_mask_scenery | _object_mask_weapon, 0);
+	while ((object = object_iterator_next(&iterator)) != NULL)
+	{
+		long absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(iterator.index);
+		struct cache_file_tag_instance_view *instance = mixed_coop_instance(object->definition_index);
+		char const *name = instance && instance->name ? instance->name : "";
+
+		if (object->object.type == _object_type_scenery &&
+			(!csstrcasecmp(name, mixed_collision_model_path(0)) || !csstrcasecmp(name, mixed_collision_model_path(1))))
+		{
+			struct collision_result result;
+			real_point3d point = object->object.bounding_sphere_center;
+			real_vector3d down = { 0.0f, 0.0f, -6.0f };
+			boolean hit;
+
+			point.z += 3.0f;
+			hit = collision_test_vector(FLAG(_collision_test_structure_bit) | FLAG(_collision_test_front_facing_surfaces_bit) |
+				FLAG(_collision_test_objects_bit) | FLAG(_collision_test_objects_scenery_bit), &point, &down, NONE, &result);
+			platform_log("mixed stand probe: %ld %s %04lx at %.3f %.3f %.3f: %s z %.3f", (long)game_time_get(),
+				strrchr(name, '\\') ? strrchr(name, '\\') + 1 : name, (unsigned long)absolute_index, object->object.position.x,
+				object->object.position.y, object->object.position.z,
+				!hit ? "nothing" : result.object_index == iterator.index ? "the stand" : "the ground", hit ? result.point.z : 0.0f);
+		}
+		else if (object->object.type == _object_type_weapon && strstr(name, "weapons\\flag\\"))
+		{
+			platform_log("mixed stand probe: %ld flag %04lx at %.3f %.3f %.3f", (long)game_time_get(), (unsigned long)absolute_index,
+				object->object.position.x, object->object.position.y, object->object.position.z);
+		}
+	}
+}
+
 void mixed_coop_tick_hash(
 	void)
 {
@@ -5051,6 +5857,7 @@ void mixed_coop_tick_hash(
 		return;
 	if (mixed_coop_holding())
 		return;
+	mixed_coop_stand_probe();
 	/* (what the netcode makes the same on every machine (network_objects.c,
 	network_coop.c): the units, vehicles, weapons and equipment at the host's
 	object index, each by its index and the path of its definition - the

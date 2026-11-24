@@ -184,6 +184,12 @@ static __inline__ void *tag_get_inline(long group_tag, long tag_index)
 	the tags or another kind of tag read as this one */
 	if (__builtin_expect(absolute_index < 0 || absolute_index >= halo_loaded_tag_count, 0))
 	{
+		/* (1.1.3: a runtime tag beside the map's - cache_files.c's cache_runtime_tag_get) */
+		extern void *cache_runtime_tag_get(long group_tag, long tag_index);
+		void *runtime = cache_runtime_tag_get(group_tag, tag_index);
+
+		if (runtime)
+			return runtime;
 		tag_index_error("tag", tag_index, halo_loaded_tag_count);
 		return tag_empty_data_sized(0x10000);
 	}

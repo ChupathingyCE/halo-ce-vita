@@ -225,7 +225,7 @@ High (their placements, flags and starts the Xbox's, only the collision
 rebuilt) play mixed in an Xbox-files host's game, and so do Blood Gulch, Battle
 Creek and Sidewinder (r4, Nov 23 2026: Halo PC placed other scenery and vehicles
 on them too, so an MCC machine takes the host's layout before it loads the map,
-below). An MCC host's game on any of the five stays MCC's own: an Xbox machine
+below). An MCC host's game on any of the five Halo PC rebuilt stays MCC's own: an Xbox machine
 is refused with a message saying Halo PC rebuilt the map and that it needs an
 Xbox-files host (`mixed_coop_multiplayer_refusal`).
 
@@ -243,6 +243,37 @@ Xbox-files host (`mixed_coop_multiplayer_refusal`).
   (`mixed_coop_stand_ins`: the Warthog and the Ghost's gun made the Xbox's in
   code, the pine trees Halo PC's, their collision the host's deciding); a tag
   the host places that the machine has neither of is refused, named.
+
+- **The flag stand and teleporter base on an MCC host** (1.1.3, the owner's
+  decision of Nov 24 2026). MCC's files have no collision model for
+  `scenery\flag_base\flag_base` or `scenery\teleporter_base\teleporter_base`,
+  which every stock map places in every game type. An MCC host of a map above
+  asks each machine that answered with the Xbox's files for the models it
+  lacks (`_mixed_coop_lobby_collision_ask`, its flags the models); a 1.1.3
+  machine offers them (`_mixed_coop_lobby_collision_offer`) and, once it has
+  loaded the map, sends them from its own files before its dictionary request
+  (`DISTRIBUTED_MESSAGE_MIXED_COLLISION`, 3200-byte pieces of an 'MXC1' stream,
+  `mixed_collision_protocol.h`). The host holds that request until the stream is
+  whole (12 s at most), then checks each model: every count within the game's
+  limits and the bytes, every index into its own blocks, every float finite,
+  every name ended, the BSP trees' children after their parents, each
+  surface's edge ring closed (`mixed_collision_model_rebuild`); the game's own
+  tag check of it as a scene pack's, with no correction allowed
+  (`tag_validate_pack_tags`); and its BLAKE2b-256 digest one of the Xbox's files'
+  (`mixed_collision_known`, the same in all 13 maps). Taken, it is held in
+  memory for the hosting (never written, never sent on; each map of the
+  hosting takes it again before anything is placed) and given to the scenery
+  as a runtime tag beside the map's (`cache_runtime_tag_add`, indices from
+  0x7F00, gone with the map); placed stands are made colliding. The scenery's
+  digest is then the Xbox's, so the Xbox machine matches; MCC machines are sent
+  MCC's own digest for it (what they have) and their players are the host's
+  as ever. An older build drops the ask and is refused as before; anything not
+  taken leaves the Xbox machine refused as before. Chill Out's and Wizard's
+  needler item collection (Halo PC's needler in MCC's files) still refuses an
+  Xbox machine in an MCC host's game where it can spawn, unless the owner's
+  `needler` decision is on. Tests: `mixedmp mcc xbox ...` with
+  `HALO_MIXED_STAND_PROBE` (both machines' rays onto each stand and the CTF
+  flags' places agree), the fuzz target `mixed_collision`.
 
 - **The Xbox-host-decides mode** (Derelict, Hang 'Em High). The host's
   collision decides where every player is: the host takes an MCC client's

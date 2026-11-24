@@ -86,7 +86,21 @@ int mixed_coop_lobby_valid(struct mixed_coop_lobby_message const *message)
 		return 0;
 	if (message->command == 0 || message->command >= NUMBER_OF_MIXED_COOP_LOBBY_COMMANDS)
 		return 0;
-	if (message->reserved != 0 || message->flags != 0)
+	if (message->reserved != 0)
+		return 0;
+	/* (1.1.3: the collision ask, an MCC host's, and the offer, an Xbox machine's, of a multiplayer map: their flags
+	the flag stand and teleporter base models - mixed_collision_protocol.h's bits; no other message has flags) */
+	if (message->command == _mixed_coop_lobby_collision_ask || message->command == _mixed_coop_lobby_collision_offer)
+	{
+		if ((message->flags & ~0x3u) != 0 || message->level < MIXED_COOP_CAMPAIGN_LEVELS ||
+			message->family != (message->command == _mixed_coop_lobby_collision_ask ? _mixed_coop_family_mcc :
+				_mixed_coop_family_xbox) ||
+			(message->command == _mixed_coop_lobby_collision_ask && message->flags == 0))
+		{
+			return 0;
+		}
+	}
+	else if (message->flags != 0)
 		return 0;
 	if (message->family >= NUMBER_OF_MIXED_COOP_FAMILIES)
 		return 0;

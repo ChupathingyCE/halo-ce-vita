@@ -302,11 +302,92 @@ char const *data_00316820[] =
 
 /* ---------- private code */
 
+#ifdef HALO_LINUX
+/* (port, 1.1.3) runtime tags: the few tags the game puts beside the map's in memory, past every index a map or a
+scene pack takes - mixed play's flag stand and teleporter base collision models, which an Xbox-files machine sent
+an MCC-files host (port/linux/game/mixed_coop.c). Never a file's: gone with the map (scenario_tags_unload) */
+enum
+{
+	CACHE_RUNTIME_TAG_FIRST = 0x7F00,
+	CACHE_RUNTIME_TAG_MAXIMUM = 4,
+	CACHE_RUNTIME_TAG_SALT = 0xE7A0,
+};
+
+static struct cache_file_tag_instance cache_runtime_tags[CACHE_RUNTIME_TAG_MAXIMUM];
+static short cache_runtime_tag_count;
+
+/* a runtime tag's instance by its index, or NULL */
+struct cache_file_tag_instance *cache_runtime_tag_instance(
+	long tag_index)
+{
+	short absolute_index = (short)tag_index;
+
+	if (tag_index == NONE || absolute_index < CACHE_RUNTIME_TAG_FIRST ||
+		absolute_index >= CACHE_RUNTIME_TAG_FIRST + cache_runtime_tag_count ||
+		cache_runtime_tags[absolute_index - CACHE_RUNTIME_TAG_FIRST].tag_index != tag_index)
+	{
+		return NULL;
+	}
+	return &cache_runtime_tags[absolute_index - CACHE_RUNTIME_TAG_FIRST];
+}
+
+/* a runtime tag's data, asked for by its group (tag_get): NULL if it is none of them */
+void *cache_runtime_tag_get(
+	long group_tag,
+	long tag_index)
+{
+	struct cache_file_tag_instance *instance = cache_runtime_tag_instance(tag_index);
+
+	if (!instance || !instance->base_address || (instance->group_tag != group_tag &&
+		instance->parent_group_tags[0] != group_tag && instance->parent_group_tags[1] != group_tag))
+	{
+		return NULL;
+	}
+	return instance->base_address;
+}
+
+/* a tag put beside the map's (its data and name the caller's, kept until the map goes): its index, or NONE */
+long cache_runtime_tag_add(
+	long group_tag,
+	char *name,
+	void *base_address)
+{
+	struct cache_file_tag_instance *instance;
+
+	if (!cache_file_globals.tags_loaded || cache_runtime_tag_count >= CACHE_RUNTIME_TAG_MAXIMUM || !base_address)
+		return NONE;
+	instance = &cache_runtime_tags[cache_runtime_tag_count];
+	csmemset(instance, 0, sizeof(*instance));
+	instance->group_tag = group_tag;
+	instance->parent_group_tags[0] = NONE;
+	instance->parent_group_tags[1] = NONE;
+	instance->tag_index = (long)(((unsigned long)CACHE_RUNTIME_TAG_SALT << 16) |
+		(unsigned long)(CACHE_RUNTIME_TAG_FIRST + cache_runtime_tag_count));
+	instance->name = name;
+	instance->base_address = base_address;
+	cache_runtime_tag_count++;
+	return instance->tag_index;
+}
+
+/* every runtime tag gone (the map's going, or the caller's data) */
+void cache_runtime_tags_clear(
+	void)
+{
+	csmemset(cache_runtime_tags, 0, sizeof(cache_runtime_tags));
+	cache_runtime_tag_count = 0;
+}
+
+#endif
 static struct cache_file_tag_instance *cache_get_tag_instance(
 	long tag_index)
 {
 	short absolute_index;
 	struct cache_file_tag_instance *tag_instance;
+
+#ifdef HALO_LINUX
+	if (cache_runtime_tag_instance(tag_index))
+		return cache_runtime_tag_instance(tag_index);
+#endif
 
 	match_assert(
 		"c:\\halo\\SOURCE\\cache\\cache_files.c",
@@ -626,6 +707,8 @@ void scenario_tags_unload(
 	sound_cache_close();
 	texture_cache_close();
 #ifdef HALO_LINUX
+	/* port: the runtime tags beside the map go with it (mixed play's: port/linux/game/mixed_coop.c) */
+	cache_runtime_tags_clear();
 	/* port: the menus' live backdrop let go, ui.map's scenario as it was,
 	before the packs it was of (port/linux/game/menu_backdrop.c) */
 	{
@@ -2216,6 +2299,8 @@ void *tag_get(
 	/* port: a map's tag reference is untrusted (tag_groups.h's release
 	tag_get checks the same): an index past the tags, or a tag of another
 	group, gets the empty data rather than memory past the tags */
+	if (cache_runtime_tag_get(group_tag, tag_index))
+		return cache_runtime_tag_get(group_tag, tag_index);
 	if (!cache_file_globals.tags_loaded || !global_tag_instances ||
 		(short)tag_index < 0 || (short)tag_index >= cache_file_globals.tag_header->tag_count ||
 		!global_tag_instances[(short)tag_index].base_address ||
@@ -2262,6 +2347,8 @@ boolean tag_index_is_group(
 	short absolute_index = (short)tag_index;
 	struct cache_file_tag_instance *tag_instance;
 
+	if (cache_runtime_tag_get(group_tag, tag_index))
+		return TRUE;
 	if (tag_index == NONE || !cache_file_globals.tags_loaded || !global_tag_instances ||
 		absolute_index < 0 || absolute_index >= cache_file_globals.tag_header->tag_count)
 	{

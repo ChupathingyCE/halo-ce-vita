@@ -171,6 +171,9 @@ int mixed_coop_client_ready_allowed(void);
 void mixed_coop_handle_request(long machine_index, void const *entries, short count);
 void mixed_coop_handle_dictionary(void const *entries, short count, unsigned short entries_size);
 void mixed_coop_handle_bsp_digest(void const *entries, short count);
+/* (1.1.3, the host's) a piece of the flag stand and teleporter base collision an Xbox machine sends an MCC host
+(mixed_collision_protocol.h) */
+void mixed_coop_handle_collision(long machine_index, void const *entries, short count, unsigned short entries_size);
 
 /* ---------- translation (a client's) */
 

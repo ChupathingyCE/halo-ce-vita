@@ -36,8 +36,11 @@
 #             rebuilt their collision alone: the host's decides, mixed_coop_host_decides_*), and (r4) bloodgulch
 #             beavercreek sidewinder with an Xbox host and an MCC joiner (Halo PC placed other scenery and vehicles
 #             too: the joiner takes the host's layout before it loads the map, mixed_coop.c's host_layout; the host's
-#             collision decides); GAME: slayer, ctf ...). With no HALO_TEST_MIXED_DECISIONS an MCC host's
-#             Xbox joiner is refused, told the map needs an Xbox-files host, System Link: an MCC host hosts MCC's map, named the
+#             collision decides); GAME: slayer, ctf ...). (1.1.3) An MCC host's Xbox joiner sends
+#             the host the flag stand's and teleporter base's collision from its own files, which the host takes as the
+#             Xbox's (its digest) and plays with: the stands collide on both and agree (HALO_MIXED_STAND_PROBE, CTF
+#             flags resting on them); where MCC's needler can spawn (Chill Out, Wizard) it is still refused, naming the
+#             Needler, unless HALO_TEST_MIXED_DECISIONS=needler. System Link: an MCC host hosts MCC's map, named the
 #             Xbox's on the wire; the joiner joins and plays 60 s at least with two players; a mixed joiner
 #             matched the host's dictionary (never refused); both scoreboards agree; the per-tick state
 #             hashes (HALO_MIXED_COOP_HASH) agree but for runs of 90 ticks at most, and at the end; the placed
@@ -265,6 +268,54 @@ sys.exit(0 if len(ticks) >= 600 and longest <= 90 and not ends and hp and hp == 
 PY
 }
 
+# (1.1.3, the owner's flag stand decision, Nov 24 2026) an MCC host playing the flag stand and teleporter base with the
+# collision an Xbox joiner sent: each machine's HALO_MIXED_STAND_PROBE lines - a ray down onto each stand ("the stand":
+# it collides; "the ground": it does not) and each CTF flag's place - must agree, every stand on the host must be one
+# that collides, and every CTF flag on the host must rest on its stand (not fallen through it to the ground)
+mixed_stands() {
+	python3 -I - "$out/host/run.log" "$out/joiner/run.log" <<'PY' || fail "the host's and joiner's flag stands did not agree"
+import re, sys
+def load(path):
+    stands, flags = {}, {}
+    for line in open(path, errors='replace'):
+        m = re.search(r'mixed stand probe: (\d+) (flag_base|teleporter_base) ([0-9a-f]{4}) at (\S+) (\S+) (\S+): (the stand|the ground|nothing) z (\S+)', line)
+        if m:
+            stands.setdefault((m.group(2), m.group(3)), set()).add((m.group(7), round(float(m.group(8)), 2), float(m.group(4)), float(m.group(5))))
+            continue
+        m = re.search(r'mixed stand probe: (\d+) flag ([0-9a-f]{4}) at (\S+) (\S+) (\S+)', line)
+        if m:
+            flags.setdefault(int(m.group(1)), {})[m.group(2)] = tuple(float(v) for v in m.group(3, 4, 5))
+    return stands, flags
+(hs, hf), (js, jf) = load(sys.argv[1]), load(sys.argv[2])
+bad = []
+if not any(k[0] == 'flag_base' for k in hs):
+    bad.append('no flag stand probed on the host')
+for key, seen in hs.items():
+    if any(r != 'the stand' for r, z, x, y in seen):
+        bad.append('host: %s %s does not collide (%s)' % (key[0], key[1], sorted(seen)[:2]))
+    if key in js and {(r, z) for r, z, x, y in seen} != {(r, z) for r, z, x, y in js[key]}:
+        bad.append('%s %s: host %s, joiner %s' % (key[0], key[1], sorted(seen)[:2], sorted(js[key])[:2]))
+tops = [(x, y, z) for (name, index), seen in hs.items() if name == 'flag_base' for r, z, x, y in seen if r == 'the stand']
+compared = 0
+for tick, flags in hf.items():
+    for index, (x, y, z) in flags.items():
+        near = [t for t in tops if (t[0] - x) ** 2 + (t[1] - y) ** 2 < 1.0]
+        if near and z < min(t[2] for t in near) - 0.1:
+            bad.append('host tick %d: flag %s at z %.3f, under its stand\'s top %.3f' % (tick, index, z, min(t[2] for t in near)))
+        if tick in jf and index in jf[tick]:
+            compared += 1
+            jx, jy, jz = jf[tick][index]
+            if abs(jx - x) > 0.05 or abs(jy - y) > 0.05 or abs(jz - z) > 0.05:
+                bad.append('tick %d flag %s: host %.3f %.3f %.3f, joiner %.3f %.3f %.3f' % (tick, index, x, y, z, jx, jy, jz))
+print('the flag stands: host %s; joiner %s; CTF flag places compared %d' % (
+    ', '.join('%s %s %s' % (k[0], k[1], sorted({(r, z) for r, z, x, y in v})) for k, v in sorted(hs.items())),
+    ', '.join('%s %s %s' % (k[0], k[1], sorted({(r, z) for r, z, x, y in v})) for k, v in sorted(js.items())), compared))
+for line in bad[:8]:
+    print('  ' + line)
+sys.exit(1 if bad else 0)
+PY
+}
+
 mixed_case() {
 	local host_family join_family map game host_name
 	local mixed_default="mcc xbox chillout slayer"
@@ -280,7 +331,8 @@ mixed_case() {
 	copy_data_host=$host_data
 	copy_data_joiner=$join_data
 	mcc_lan_machine
-	local decisions="HALO_MIXED_DECISIONS=${HALO_TEST_MIXED_DECISIONS:-}" host_vita=$vita
+	local decisions="HALO_MIXED_DECISIONS=${HALO_TEST_MIXED_DECISIONS:-}" host_vita=${HALO_TEST_MIXED_HOST_BIN:-$vita}
+	local join_vita=${HALO_TEST_MIXED_JOINER_BIN:-$vita}
 	if [ $mode = mixedold ]; then
 		host_vita=${HALO_TEST_MIXED_OLD_HOST:-}
 		[ -x "$host_vita" ] || { echo "mixedold needs HALO_TEST_MIXED_OLD_HOST (a v1.1.2 or insider.8d build)"; exit 2; }
@@ -288,11 +340,11 @@ mixed_case() {
 		echo "mixedold: the older host $host_vita"
 	fi
 	run_copy host "$host_machine" "$host_vita" "$cpu_a" $host_env HALO_NET_ONLINE=false \
-		HALO_NETWORK_TEST=host:$host_name:$game HALO_CONTENT_ROOT="$host_content" HALO_MIXED_COOP_HASH=1 $decisions \
+		HALO_NETWORK_TEST=host:$host_name:$game HALO_CONTENT_ROOT="$host_content" HALO_MIXED_COOP_HASH=1 HALO_MIXED_STAND_PROBE=1 $decisions \
 		$([ "$host_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); host_pid=$last_pid
 	sleep 5
-	run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2 \
-		HALO_CONTENT_ROOT="$join_content" HALO_MIXED_COOP_HASH=1 $decisions $([ "$join_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); join_pid=$last_pid
+	run_copy joiner "$lan" "$join_vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2 \
+		HALO_CONTENT_ROOT="$join_content" HALO_MIXED_COOP_HASH=1 HALO_MIXED_STAND_PROBE=1 $decisions $([ "$join_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); join_pid=$last_pid
 	wait $join_pid $host_pid 2>/dev/null
 	hl=$out/host/run.log
 	jl=$out/joiner/run.log
@@ -304,23 +356,37 @@ mixed_case() {
 	mcc_no_assertion joiner
 	case $mode in
 	mixedmp)
-		# (r3: no decisions, an MCC host and an Xbox joiner: the map needs an Xbox-files host - the flag stand's
-		# and teleporter base's collision, which MCC's files have not: refused, said so)
-		if [ $host_family = mcc ] && [ $join_family = xbox ] && [ -z "${HALO_TEST_MIXED_DECISIONS:-}" ]; then
-			[ "$two" = 0 ] || fail "the Xbox joiner played the MCC host's game with no decision ($two s)"
+		# (1.1.3, the owner's flag stand decision, Nov 24 2026: an MCC host and an Xbox joiner - the joiner sends the
+		# flag stand's and teleporter base's collision from its own files, the host checks it and plays with it; with
+		# HALO_TEST_MIXED_COLLISION=old the joiner is an older build, which never answers the ask: refused as before)
+		# (an older build either side - HALO_TEST_MIXED_HOST_BIN or HALO_TEST_MIXED_JOINER_BIN, and
+		# HALO_TEST_MIXED_COLLISION=old: no collision asked or sent, refused as before, naming the flag stands)
+		if [ $host_family = mcc ] && [ $join_family = xbox ] && [ "${HALO_TEST_MIXED_COLLISION:-}" = old ]; then
+			[ "$two" = 0 ] || fail "the Xbox joiner played the older pair's MCC game ($two s)"
 			grep -aq "this map needs an Xbox-files host" "$jl" || fail "the Xbox joiner was not told the map needs an Xbox-files host"
-			# (1.1.3, the owner Nov 24: refused only for what can come into play in this game - every stock map places
-			# two flag stands, in every game type: mixed_coop_xbox_host_tag_in_play names them)
-			grep -aq "mixed play: in this game: flag_base placed 2 times" "$jl" ||
-				fail "the Xbox joiner's refusal did not name the flag stands in play"
-			# (a teleporter base or the needler that is not in this game is no reason: said, not counted)
-			grep -a "mixed play: differs, not in this game" "$jl" | head -3
-			# (nothing stale on the host's screen: "Couldn't load" of a map its lobby left - the owner's 8m)
-			grep -a "Halo: map: Couldn't load" "$hl" | head -2
-			if grep -aq "Halo: map: Couldn't load" "$hl" && ! grep -aq "Halo: map: withdrawn: Couldn't load" "$hl"; then
-				fail "the host's lobby kept a stale \"Couldn't load\" message"
-			fi
+			grep -aq "plays with the Xbox's collision now" "$hl" && fail "the host played with collision an older pair never sends"
 			return
+		fi
+		if [ $host_family = mcc ] && [ $join_family = xbox ]; then
+			grep -a "mixed play: machine [0-9]*'s .*collision\|mixed play: scenery.* plays with\|mixed play: machine [0-9]* offers" "$hl" | head -4
+			grep -aq "mixed play: machine [0-9]* offers the collision" "$hl" || fail "the Xbox joiner never offered the collision"
+			grep -aq "scenery.flag_base.flag_base collision taken (1796 bytes, digest 407d8a48[0-9a-f]*, the Xbox's)" "$hl" ||
+				fail "the host did not take the flag stand's collision as the Xbox's"
+			grep -aq "mixed play: scenery.flag_base.flag_base plays with the Xbox's collision now" "$hl" ||
+				fail "the host's flag stand did not play with the Xbox's collision"
+			if grep -aq "mixed play: .* teleporter bases placed [1-9]" "$hl"; then
+				grep -aq "mixed play: scenery.teleporter_base.teleporter_base plays with the Xbox's collision now" "$hl" ||
+					fail "the host's teleporter base did not play with the Xbox's collision"
+			fi
+			grep -aq "mixed play: in this game: flag_base\|mixed play: in this game: teleporter_base" "$jl" &&
+				fail "the Xbox joiner still found the host's stands different"
+			# (Chill Out and Wizard: MCC's needler item collection spawns Halo PC's needler - the owner's needler
+			# decision, off by default: refused, naming the Needler)
+			if grep -aq "mixed play: in this game: needler" "$jl"; then
+				[ "$two" = 0 ] || fail "the Xbox joiner played the MCC host's game with Halo PC's needler in it ($two s)"
+				grep -aq "games with the Needler need an Xbox-files host" "$jl" || fail "the Xbox joiner was not told about the Needler"
+				return
+			fi
 		fi
 		[ "$two" -ge 60 ] || fail "the joiner played the host's game for $two s with two players"
 		grep -aq "Halo: co-op\|mixed co-op: refused\|platform: message" "$jl" &&
@@ -340,7 +406,9 @@ mixed_case() {
 			fi ;;
 		esac
 		mcc_scoreboards
-		mixed_hashes ;;
+		mixed_hashes
+		[ $host_family = mcc ] && [ $join_family = xbox ] && mixed_stands
+		true ;;
 	mixedold)
 		if [ $join_family = xbox ]; then
 			[ "$two" -ge 60 ] || fail "the Xbox joiner played the older host's game for $two s with two players"

@@ -5441,7 +5441,7 @@ static void distributed_handle_message(
 	}
 	/* (mixed co-op's, mixed_coop.c: over a connection's stream alone, a
 	client's request to the host, the host's to a client) */
-	if (header.type >= DISTRIBUTED_MESSAGE_MIXED_REQUEST && header.type <= DISTRIBUTED_MESSAGE_MIXED_BSP)
+	if (header.type >= DISTRIBUTED_MESSAGE_MIXED_REQUEST && header.type <= DISTRIBUTED_MESSAGE_MIXED_COLLISION)
 	{
 		word entries_size = (word)(size - sizeof(header));
 
@@ -5450,7 +5450,12 @@ static void distributed_handle_message(
 		{
 			return;
 		}
-		if (header.type == DISTRIBUTED_MESSAGE_MIXED_REQUEST)
+		if (header.type == DISTRIBUTED_MESSAGE_MIXED_COLLISION)
+		{
+			if (machine_index != NONE && game_connection() == _game_connection_network_server)
+				mixed_coop_handle_collision(machine_index, entries, header.count, entries_size);
+		}
+		else if (header.type == DISTRIBUTED_MESSAGE_MIXED_REQUEST)
 		{
 			if (machine_index != NONE && game_connection() == _game_connection_network_server &&
 				entries_size >= sizeof(struct mixed_coop_request))

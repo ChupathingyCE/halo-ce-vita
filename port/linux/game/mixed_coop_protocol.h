@@ -83,6 +83,12 @@ enum
 	host's layout, please: answered with _message_server_mixed_layout's
 	fragments once the host's map is loaded */
 	_mixed_coop_lobby_layout_request,
+	/* (1.1.3, mixed_collision_protocol.h) an MCC-files host of a multiplayer map to a machine of the Xbox's files
+	that answered its hello: the collision models it lacks (flags: MIXED_COLLISION_*_BIT), please; and that
+	machine's offer, the ones it will send once it has loaded the map (flags; none: nothing). A build without them
+	drops them (a command past its own) */
+	_mixed_coop_lobby_collision_ask,
+	_mixed_coop_lobby_collision_offer,
 	NUMBER_OF_MIXED_COOP_LOBBY_COMMANDS
 };
 
@@ -95,6 +101,7 @@ struct mixed_coop_lobby_message
 	uint8_t family;
 	/* the level (0 to 9; version 2: 0 to MIXED_COOP_LEVELS - 1) */
 	uint8_t level;
+	/* (the collision ask and offer alone: their models; 0 in every other) */
 	uint16_t flags;
 	/* the host's hosting (the hello's, echoed by the answer) */
 	uint32_t session;

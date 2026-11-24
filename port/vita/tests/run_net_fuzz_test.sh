@@ -79,7 +79,7 @@ out=${TMPDIR:-/tmp}/net_fuzz_test.$$
 test_out_begin "$out"
 clang=${CLANG:-$(sed -n 's/^linux_cc = //p' "$root/build.ninja" | head -1)}
 [ -n "$clang" ] || clang=clang
-targets=${NET_FUZZ_TARGETS:-"p2p signal messages map_share variant_options crossplay_maps lobby actor_table forge command chat netversions epoch workshop mixed_coop mixed_coop_delta"}
+targets=${NET_FUZZ_TARGETS:-"p2p signal messages map_share variant_options crossplay_maps lobby actor_table forge command chat netversions epoch workshop mixed_coop mixed_coop_delta mixed_collision"}
 seconds=${NET_FUZZ_SECONDS:-0}
 mkdir -p "$out"
 cd "$root"
@@ -155,6 +155,8 @@ for target in $targets; do
 	mixed_coop) flags=$platform_flags; sources="port/vita/tests/net_fuzz_mixed_coop.c port/linux/game/mixed_coop_protocol.c" ;;
 	mixed_coop_delta) flags="$platform_flags -DMIXED_COOP_DELTA_WIRE_ONLY"; sources="port/vita/tests/net_fuzz_mixed_coop_delta.c
 		port/linux/game/mixed_coop_delta.c port/linux/game/mixed_coop_protocol.c" ;;
+	mixed_collision) flags=$platform_flags; sources="port/vita/tests/net_fuzz_mixed_collision.c
+		port/linux/game/mixed_collision_protocol.c port/linux/game/mixed_coop_protocol.c" ;;
 	chat) flags=$platform_flags; sources="port/vita/tests/net_fuzz_chat.c" ;;
 	netversions) flags=$platform_flags; sources="port/vita/tests/net_fuzz_netversions.c port/linux/src/netversion_table.c
 		port/linux/src/p2p_crypto.c $monocypher" ;;

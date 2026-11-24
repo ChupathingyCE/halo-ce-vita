@@ -151,6 +151,9 @@ them drops them as kinds it does not know */
 #define DISTRIBUTED_MESSAGE_MIXED_REQUEST 120
 #define DISTRIBUTED_MESSAGE_MIXED_DICTIONARY 121
 #define DISTRIBUTED_MESSAGE_MIXED_BSP 122
+/* (1.1.3) an Xbox machine's flag stand and teleporter base collision, in pieces, to an MCC host that asked for it
+(mixed_collision_protocol.h): sent only to a host that asked, which a build without it never does */
+#define DISTRIBUTED_MESSAGE_MIXED_COLLISION 123
 
 /* where a message goes */
 enum
