@@ -43,6 +43,7 @@ setup-shots, a new one at most every 1.5 s, as BMP files).
 #include <psp2/ctrl.h>
 #include <psp2/display.h>
 #include <psp2/io/devctl.h>
+#include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/sysmem.h>
@@ -176,8 +177,8 @@ static void shot_write(const unsigned char *pixels)
 	unsigned char header[54];
 	unsigned int sum = 2166136261u, index, row;
 	char path[160];
-	unsigned char *line;
-	FILE *file;
+	unsigned char *picture, *line;
+	SceUID file;
 
 	if (!wanted || *wanted != '1' || count >= 60 || (count && now - last_time < 1500))
 		return;
@@ -187,15 +188,12 @@ static void shot_write(const unsigned char *pixels)
 		return;
 	sceIoMkdir(VITA_DATA_DIRECTORY "/setup-shots", 0777);
 	snprintf(path, sizeof(path), VITA_DATA_DIRECTORY "/setup-shots/%02d.bmp", count);
-	file = fopen(path, "wb");
-	line = malloc(SETUP_WIDTH * 4);
-	if (!file || !line)
-	{
-		if (file)
-			fclose(file);
-		free(line);
+	/* (the whole picture made first and written at once: a row at a time,
+	each write waited behind a disc image copy's on the card, and the
+	screens stopped for as long) */
+	picture = malloc(sizeof(header) + DISPLAY_BYTES);
+	if (!picture)
 		return;
-	}
 	memset(header, 0, sizeof(header));
 	header[0] = 'B', header[1] = 'M';
 	*(unsigned int *)(void *)(header + 2) = sizeof(header) + DISPLAY_BYTES;
@@ -205,8 +203,9 @@ static void shot_write(const unsigned char *pixels)
 	*(int *)(void *)(header + 22) = -SETUP_HEIGHT;
 	header[26] = 1, header[28] = 32;
 	*(unsigned int *)(void *)(header + 34) = DISPLAY_BYTES;
-	fwrite(header, 1, sizeof(header), file);
-	for (row = 0; row < SETUP_HEIGHT; row++)
+	memcpy(picture, header, sizeof(header));
+	line = picture + sizeof(header);
+	for (row = 0; row < SETUP_HEIGHT; row++, line += SETUP_WIDTH * 4)
 	{
 		const unsigned char *from = pixels + row * SETUP_WIDTH * 4;
 
@@ -217,10 +216,14 @@ static void shot_write(const unsigned char *pixels)
 			line[index * 4 + 2] = from[index * 4];
 			line[index * 4 + 3] = 0xFF;
 		}
-		fwrite(line, 1, SETUP_WIDTH * 4, file);
 	}
-	fclose(file);
-	free(line);
+	file = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
+	if (file >= 0)
+	{
+		sceIoWrite(file, picture, sizeof(header) + DISPLAY_BYTES);
+		sceIoClose(file);
+	}
+	free(picture);
 	last_time = now;
 	last_sum = sum;
 	count++;
@@ -248,10 +251,13 @@ static void present(const unsigned char *pixels)
 /* ---------- the system */
 
 /* (HALO_SETUP_PAD) the test's presses held now: each held 150 ms from its
-time */
+time, and seen at least once (a screen busy past its 150 ms, writing a
+shot, sees it late rather than never) */
 static unsigned int test_presses(void)
 {
 	static unsigned long long start;
+	static unsigned char seen[64];
+	int step = 0;
 	const char *script = getenv("HALO_SETUP_PAD");
 	unsigned long long now = sceKernelGetProcessTimeWide() / 1000;
 	unsigned int held = 0;
@@ -271,8 +277,11 @@ static unsigned int test_presses(void)
 		if (!*script || sscanf(script, "%c@%llu%n", &name, &at, &used) != 2 || !used)
 			break;
 		script += used;
-		if (now - start < at || now - start >= at + 150)
+		step++;
+		if (now - start < at || (now - start >= at + 150 && (step > 64 || seen[step - 1])))
 			continue;
+		if (step <= 64)
+			seen[step - 1] = 1;
 		held |= name == 'x' ? SETUP_BUTTON_CROSS : name == 'o' ? SETUP_BUTTON_CIRCLE :
 			name == 't' ? SETUP_BUTTON_TRIANGLE : name == 's' ? SETUP_BUTTON_SQUARE : name == 'u' ? SETUP_BUTTON_UP :
 			name == 'd' ? SETUP_BUTTON_DOWN : name == 'l' ? SETUP_BUTTON_LEFT : name == 'r' ? SETUP_BUTTON_RIGHT :
