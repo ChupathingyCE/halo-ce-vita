@@ -647,9 +647,14 @@ static struct
 	boolean failed;
 	/* a level's map (the in-game set) */
 	boolean ingame;
+	/* (the in-game set's screens and handlers for the other kind of level - the campaign's pause on a
+	multiplayer map, the multiplayer pause on a campaign map -: counted, said once, ingame_other_kind) */
+	long other_kind;
 	/* a Halo PC ui.map (MCC's): the Xbox's screens it has not stand in (a child's halo_pc=) */
 	boolean halo_pc_ui;
 } build;
+
+static boolean ingame_other_kind(char const *path);
 
 /* ---------- private code */
 
@@ -1261,7 +1266,8 @@ static void handler_build(struct ui_widget_event_handler_reference *handler, str
 		questions) */
 		if (build.ingame && strchr(targets[0], '\\') && tag_loaded(UI_WIDGET_DEFINITION_TAG, targets[0]) == NONE)
 		{
-			platform_log("menus: %s:%ld: this map has no %s: the handler opens nothing here", source->file,
+			if (!ingame_other_kind(targets[0]))
+				platform_log("menus: %s:%ld: this map has no %s: the handler opens nothing here", source->file,
 				source->line, targets[0]);
 			SET_FLAG(handler->flags, _event_handler_open_widget_bit, FALSE);
 			SET_FLAG(handler->flags, _event_handler_replace_self_with_widget_bit, FALSE);
@@ -1618,8 +1624,9 @@ static void *widget_build(long widget_index)
 	map's; said once, the set still added) */
 	if (source->extends && tag_loaded(UI_WIDGET_DEFINITION_TAG, source->extends) == NONE)
 	{
-		platform_log("menus: %s:%ld: this map has no %s for %s to extend: left out here", source->file, source->line,
-			source->extends, source->name);
+		if (!ingame_other_kind(source->extends))
+			platform_log("menus: %s:%ld: this map has no %s for %s to extend: left out here", source->file, source->line,
+				source->extends, source->name);
 		return definition;
 	}
 	if (source->type)
@@ -1896,6 +1903,35 @@ screens open these by name and the Halo 3 and Online styles put their own in the
 the map's would be, it is opened by name and stood for, and where nothing stands for it
 (Halo CE's styles, which would show the Xbox's screen) it is empty, not another screen
 made up. Said in the log, once per name. */
+/* (a level's map, the in-game set) a screen of the game's this map has not because it is the other
+kind of level: the campaign's pause and its questions on a multiplayer map (no ui\shell\solo_game
+pause), the multiplayer pause on a campaign map (no 1p_pause_game) - not a gap, nothing opens it here
+(the 1.1.3 Classic+ audit: these were logged as "stands for nothing" and read as bugs) */
+static boolean ingame_other_kind(
+	char const *path)
+{
+	boolean campaign_map, multiplayer_map;
+
+	if (!build.ingame || !path)
+		return FALSE;
+	campaign_map = tag_loaded(UI_WIDGET_DEFINITION_TAG, "ui\\shell\\solo_game\\pause_game\\pause_game") != NONE;
+	multiplayer_map = tag_loaded(UI_WIDGET_DEFINITION_TAG, "ui\\shell\\multiplayer_game\\pause_game\\1p_pause_game") != NONE;
+	if (!campaign_map && (!strncmp(path, "ui\\shell\\solo_game\\", sizeof("ui\\shell\\solo_game\\") - 1) ||
+		!strncmp(path, "ui\\shell\\error\\confirm_restart", sizeof("ui\\shell\\error\\confirm_restart") - 1) ||
+		!strncmp(path, "ui\\shell\\error\\warning_saving_file_screen", sizeof("ui\\shell\\error\\warning_saving_file_screen") - 1) ||
+		!strcmp(path, "ui\\shell\\error\\confirm_quit_modal_halfscreen")))
+	{
+		build.other_kind++;
+		return TRUE;
+	}
+	if (!multiplayer_map && !strncmp(path, "ui\\shell\\multiplayer_game\\", sizeof("ui\\shell\\multiplayer_game\\") - 1))
+	{
+		build.other_kind++;
+		return TRUE;
+	}
+	return FALSE;
+}
+
 static char const *const xbox_only_widgets[] =
 {
 	"ui\\shell\\main_menu\\multiplayer_type_select\\connected\\4way_profile_select\\4way_start2join_screen",
@@ -3206,7 +3242,9 @@ void menu_tags_loaded(
 		{
 			/* (a level's map without the screen: a multiplayer map has no
 			campaign pause screen to stand for) */
-			if (ingame && from == NONE && widget != NONE)
+			if (ingame && from == NONE && widget != NONE && ingame_other_kind(screen->replaces))
+				;
+			else if (ingame && from == NONE && widget != NONE)
 				platform_log("menus: this map has no %s: %s stands for nothing here", screen->replaces, screen->root);
 			else
 				problem(screen->file, screen->line, from == NONE ? "the map has no screen" : "no widget is named",
@@ -3304,6 +3342,10 @@ void menu_tags_loaded(
 		halo_pc_menus_state = 1;
 	if (!menu_tags.alone)
 		menu_tags_art_preread();
+	if (ingame && build.other_kind)
+		platform_log("menus: a %s level: %ld of the in-game set's screens and handlers are the other kind of level's "
+			"(not on this map, not needed here)", tag_loaded(UI_WIDGET_DEFINITION_TAG,
+			"ui\\shell\\solo_game\\pause_game\\pause_game") != NONE ? "campaign" : "multiplayer", build.other_kind);
 	platform_log("menus: %s: %ld widgets, %ld string lists and %ld bitmaps added to "
 		"%s.map's %ld tags in %lu us (the Halo PC files checked %lu, the XML read %lu, the tags %lu; the pictures "
 		"and text are read when they first open)", ingame ? (menu_tags.alone ? "the HUD fonts alone" : "the in-game screens") :
@@ -3574,6 +3616,23 @@ long menu_tags_screen(
 		return tag_index;
 	/* (the Xbox screens with Menu style Halo CE's rows, or without) */
 	classic_patches_apply();
+	/* (1.1.3-insider.8m, the Classic+ audit: Classic+ on an MCC-only install - Halo PC's ui.map -,
+	MULTIPLAYER's EDIT GAMETYPES opened Halo PC's own SELECT GAMETYPE TO EDIT, whose list Halo PC's
+	functions fill (halo_pc_menus.c, Menu style Classic alone): an empty list, A did nothing. Classic+'s
+	own game types editor in its place - GAME MODES' GAMETYPES PLUS, classic/standins.xml -, which
+	lists, edits, copies and saves them; on the Xbox's files the Xbox's screen, as ever) */
+	if (halo_menu_style_classic_plus() && menu_tags.stub_count &&
+		tag_index == tag_loaded(UI_WIDGET_DEFINITION_TAG,
+			"ui\\shell\\main_menu\\settings_select\\multiplayer_setup\\playlist_select\\gametype_select_screen"))
+	{
+		long editor = menu_tags_ingame_screen("cp/gametypes/screen");
+
+		if (editor != NONE)
+		{
+			platform_log("menus: Classic+ on Halo PC's ui.map: EDIT GAMETYPES opens Classic+'s game types");
+			return editor;
+		}
+	}
 	/* (a Forge game: its menu for the level's pause screen, which would
 	save the game and offer the campaign's checkpoints) */
 	if (forge_game_active())
