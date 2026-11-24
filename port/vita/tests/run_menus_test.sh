@@ -4325,10 +4325,10 @@ PY
 		cp_profile=${campaign_profile:-}
 		d="down:150:500"
 		cpmp="wait:150:4000 $d a:150:3500"
-		# NAME|SECONDS|PAD|SCREENS (each a regex of a "ui: screen" line, in order)|ENV
+		# NAME|SECONDS|PAD|SCREENS (each a regex of a "ui: screen" line, in order; a,b: either)|ENV
 		cp_flows=(
 			"main_campaign|40|wait:150:4000 a:150:3500 a:150:3500 b:150:3000 b:150:3000 wait:150:1500|load_campaign_player_profile solo_level_select_screen load_campaign_player_profile main_menu.main_menu|"
-			"main_profiles|60|wait:150:4000 $d $d a:150:3500 a:150:3500 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:4000 b:150:3500 $d a:150:3000 wait:150:3000 b:150:3000 b:150:3000 wait:150:1500|player_profile_select_screen player_profile_edit_screen controller_options_screen player_profile_edit_screen advanced_controls_screen player_profile_edit_screen color_select_screen player_profile_edit_screen pc.cp.custom.screen player_profile_edit_screen pc.ce.keys.screen player_profile_edit_screen player_profile_select_screen main_menu.main_menu|"
+			"main_profiles|64|wait:150:4000 $d $d a:150:3500 a:150:3500 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:4000 b:150:3500 $d a:150:3000 wait:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|player_profile_select_screen player_profile_edit_screen controller_options_screen player_profile_edit_screen advanced_controls_screen player_profile_edit_screen color_select_screen player_profile_edit_screen pc.cp.custom.screen player_profile_edit_screen pc.ce.keys.screen player_profile_edit_screen player_profile_select_screen main_menu.main_menu|"
 			"main_newprofile|50|wait:150:4000 $d $d a:150:3500 y:150:3500 a:150:3500 a:150:3500 wait:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|player_profile_select_screen create_and_edit_player_profile_screen profile_name_screen create_and_edit_player_profile_screen main_menu.main_menu|HALO_TEST_TEXT_INPUT=Rookie"
 			"main_settings|40|wait:150:4000 $d $d $d a:150:3500 a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 b:150:3000 wait:150:1500|pc.ce.settings.screen pc.ce.mods.screen pc.ce.settings.screen pc.ce.fileshare.screen pc.ce.settings.screen pc.classic.friends.screen pc.ce.settings.screen main_menu.main_menu|"
 			"main_quit|26|wait:150:4000 $d $d $d $d a:150:3000 b:150:3000 wait:150:1500|pc.ce.quit.screen main_menu.main_menu|"
@@ -4336,7 +4336,7 @@ PY
 			"mp_setup|30|$cpmp $d $d $d a:150:4000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen pc.setup.screen pc.mp.screen main_menu.main_menu|$offnet"
 			"mp_coop|44|$cpmp $d $d $d $d $d a:150:4000 a:150:3500 a:150:3500 b:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen solo_game_player_profile_select_screen solo_level_select_screen difficulty_select_list_screen solo_level_select_screen solo_game_player_profile_select_screen pc.mp.screen main_menu.main_menu|"
 			"mp_split|40|$cpmp $d $d $d $d $d $d a:150:4000 a:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen split_screen.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|"
-			"mp_gametypes|40|$cpmp $d $d $d $d $d $d $d a:150:4000 a:150:3500 wait:150:2000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen (gametype_select_screen|pc.cp.gametypes.screen) (gametype_edit_screen|pc.cp.gtbase.screen) pc.mp.screen main_menu.main_menu|"
+			"mp_gametypes|40|$cpmp $d $d $d $d $d $d $d a:150:4000 a:150:3500 wait:150:2000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen gametype_select_screen,pc.cp.gametypes.screen gametype_edit_screen,pc.cp.gtbase.screen pc.mp.screen main_menu.main_menu|"
 			"mp_modes|60|$cpmp $d $d $d $d $d $d $d $d a:150:3500 a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.modes.screen pc.cp.forge.lobby pc.ce.modes.screen pc.cp.command.lobby pc.ce.modes.screen pc.cp.firefight.lobby pc.ce.modes.screen pc.cp.gametypes.screen pc.ce.modes.screen pc.mp.screen main_menu.main_menu|"
 			"mp_lan|40|$cpmp $d a:150:4000 a:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
 			"mp_lanlist|46|$cpmp $d a:150:4000 a:150:2000 a:150:2000 a:150:5000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen connected.server_list.server_list_screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
@@ -4367,7 +4367,7 @@ PY
 				# (each screen wanted, in order)
 				cp_rest=$(grep -a "ui: screen" "$log" | sed 's/.*ui: screen //')
 				for cp_want in $cp_screens; do
-					cp_line=$(printf '%s\n' "$cp_rest" | grep -anE "$cp_want" | head -1 | cut -d: -f1)
+					cp_line=$(printf '%s\n' "$cp_rest" | grep -anE "${cp_want//,/|}" | head -1 | cut -d: -f1)
 					if [ -z "$cp_line" ]; then
 						fail cpaudit "$cp_setup $cp_name: $cp_want did not open (in turn)"; break
 					fi

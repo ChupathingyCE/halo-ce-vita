@@ -3229,7 +3229,7 @@ void menu_tags_loaded(
 		char const *stub_name = tag_get_name(menu_tags.stub_tags[index]);
 
 		if (xbox_screen_tag(menu_tags.stub_tags[index]))
-			platform_log("menus: this ui.map has no %s: Classic+'s own in its place (classic/xbox_screens.xml)", stub_name);
+			platform_log("menus: this ui.map has no %s: Classic+'s own in its place (classic/xbox_screens.xml, xbox_netscreens.xml)", stub_name);
 		else
 			platform_log("menus: this ui.map has no %s: an empty widget stands in for it", stub_name);
 	}
