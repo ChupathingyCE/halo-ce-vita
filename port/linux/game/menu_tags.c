@@ -2119,22 +2119,27 @@ static void classic_patches_apply(void)
 	struct cache_file_tag_instance *instances;
 	long count, index;
 
-	xbox_screens_style_apply();
-	if (!menu_tags.classic_count || menu_tags.classic_applied == (classic ? 1 : -1))
-		return;
-	instances = cache_files_tag_instances(&count);
-	if (!instances)
-		return;
-	for (index = 0; index < menu_tags.classic_count; index++)
+	/* (a tag both patch - PROFILES' edit screen -: Classic+ puts the Xbox screen in, then its own patch over
+	it; the other styles take the patch off, then the Xbox screen off, the map's own left whichever of the
+	two was built over the other) */
+	if (classic)
+		xbox_screens_style_apply();
+	if (menu_tags.classic_count && menu_tags.classic_applied != (classic ? 1 : -1) &&
+		(instances = cache_files_tag_instances(&count)) != NULL)
 	{
-		long absolute = DATUM_INDEX_TO_ABSOLUTE_INDEX(menu_tags.classic_tags[index]);
+		for (index = 0; index < menu_tags.classic_count; index++)
+		{
+			long absolute = DATUM_INDEX_TO_ABSOLUTE_INDEX(menu_tags.classic_tags[index]);
 
-		if (absolute >= 0 && absolute < count)
-			instances[absolute].base_address = classic ? menu_tags.classic_patched[index] : menu_tags.classic_original[index];
+			if (absolute >= 0 && absolute < count)
+				instances[absolute].base_address = classic ? menu_tags.classic_patched[index] : menu_tags.classic_original[index];
+		}
+		menu_tags.classic_applied = classic ? 1 : -1;
+		platform_log("menus: Menu style %s: the Xbox screens' %ld widgets %s", classic ? "Halo CE" : "Halo 3",
+			menu_tags.classic_count, classic ? "with the port's rows" : "as the map has them");
 	}
-	menu_tags.classic_applied = classic ? 1 : -1;
-	platform_log("menus: Menu style %s: the Xbox screens' %ld widgets %s", classic ? "Halo CE" : "Halo 3",
-		menu_tags.classic_count, classic ? "with the port's rows" : "as the map has them");
+	if (!classic)
+		xbox_screens_style_apply();
 }
 
 /* ---------- the player's Halo PC data */
@@ -3211,7 +3216,15 @@ void menu_tags_loaded(
 	menu_tags.xbox_count = 0;
 	menu_tags.xbox_applied = 0;
 	if (!build.failed && !ingame && build.halo_pc_ui)
+	{
 		xbox_screen_widgets_apply(instances);
+		/* (the map's own again before anything is built unless Menu style is Classic+: the classic set's
+		patches, classic_patch=, extend - and keep as the original to put back - what the tag is while they
+		are built; the Xbox screen there made Menu style Classic's PROFILES and SETTINGS Classic+'s screens,
+		the Classic+ audit's mccmenu, Nov 24) */
+		if (menu_tags.xbox_count && !halo_menu_style_classic_plus())
+			xbox_screens_style_apply();
+	}
 	for (index = 0; index < widget_count && (!build.failed); index++)
 	{
 		if (strncmp(menus->widgets[index].name, XBOX_SCREEN_WIDGET_PREFIX, strlen(XBOX_SCREEN_WIDGET_PREFIX)))
