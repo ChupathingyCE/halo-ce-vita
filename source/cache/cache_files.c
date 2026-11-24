@@ -1337,6 +1337,11 @@ void cache_files_show_multiplayer_unavailable(
 not tried again every second (cache_files_give_time_to_precache) until a map
 is chosen or a game's settings name one again */
 static char cache_files_precache_failed_map[256];
+/* (1.1.3) the message a host's or a lone player's failed precache showed (its title T("Halo: map")), until the map
+named is another: then taken back (cache_files_give_time_to_precache) - the owner's 8m: an MCC-only Vita's lobby
+said "Couldn't load Derelict" (the lobby's first map, before the host's choice) over its carnage report minutes later */
+static char cache_files_precache_failed_message[480];
+static char cache_files_precache_failed_message_map[256];
 
 void cache_files_precache_failure_forget(
 	void)
@@ -1410,6 +1415,10 @@ boolean cache_files_precache_failed(
 
 			snprintf(message, sizeof(message), T("Couldn't load %s: %s."), custom_edition_maps_level_title(map_name), why);
 			platform_show_message(T("Halo: map"), message);
+			csstrncpy(cache_files_precache_failed_message, message, sizeof(cache_files_precache_failed_message) - 1);
+			cache_files_precache_failed_message[sizeof(cache_files_precache_failed_message) - 1] = 0;
+			csstrncpy(cache_files_precache_failed_message_map, map_name, sizeof(cache_files_precache_failed_message_map) - 1);
+			cache_files_precache_failed_message_map[sizeof(cache_files_precache_failed_message_map) - 1] = 0;
 		}
 		return TRUE;
 	}
@@ -1467,6 +1476,15 @@ boolean cache_files_give_time_to_precache(
 	if (!map_name || !map_name[0])
 	{
 		return FALSE;
+	}
+	/* (1.1.3: a failed precache's message taken back once another map is named - the lobby's map changed) */
+	if (cache_files_precache_failed_message[0] && csstrcasecmp(cache_files_precache_failed_message_map, map_name))
+	{
+		void platform_withdraw_message(char const *title, char const *message);
+
+		platform_withdraw_message(T("Halo: map"), cache_files_precache_failed_message);
+		cache_files_precache_failed_message[0] = 0;
+		cache_files_precache_failed_message_map[0] = 0;
 	}
 #endif
 	if (cache_files_precache_map_loaded(map_name))

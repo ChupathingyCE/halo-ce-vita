@@ -22538,6 +22538,8 @@ static struct
 	char messages[H3_DIALOG_MESSAGES][640];
 	short message_count;
 	boolean message_shown;
+	/* (1.1.3) the message up taken back (platform_withdraw_message): its dialog closed */
+	boolean message_withdrawn;
 	/* its question: asked, shown (opened at least once), withdrawn */
 	boolean question_asked;
 	boolean question_shown;
@@ -22921,6 +22923,47 @@ static void h3_dialog_answer(long function)
 	platform_log("menus: h3 dialog: question answered %s", function == _function_h3_dialog_yes ? "yes" : "no");
 }
 
+/* (h3_dialog.lock held) whether the message waits or is up already */
+static boolean h3_dialog_message_queued(char const *title, char const *text)
+{
+	short index;
+
+	for (index = 0; index < h3_dialog.message_count; index++)
+	{
+		if (!strcmp(h3_dialog.message_titles[index], title) && !strcmp(h3_dialog.messages[index], text))
+			return TRUE;
+	}
+	return FALSE;
+}
+
+/* (sdl_platform.c platform_dialog_withdraw_hook: any thread) every copy of a message taken back: those waiting
+dropped, the one up closed (h3_dialog_port_update) */
+static void h3_dialog_port_withdraw(char const *title, char const *text)
+{
+	short index = 0;
+
+	pthread_mutex_lock(&h3_dialog.lock);
+	while (index < h3_dialog.message_count)
+	{
+		if (strcmp(h3_dialog.message_titles[index], title) || strcmp(h3_dialog.messages[index], text))
+		{
+			index++;
+			continue;
+		}
+		if (index == 0 && h3_dialog.message_shown)
+		{
+			h3_dialog.message_withdrawn = TRUE;
+			h3_dialog.message_shown = FALSE;
+		}
+		h3_dialog.message_count--;
+		memmove(h3_dialog.messages[index], h3_dialog.messages[index + 1],
+			sizeof(h3_dialog.messages[0]) * (h3_dialog.message_count - index));
+		memmove(h3_dialog.message_titles[index], h3_dialog.message_titles[index + 1],
+			sizeof(h3_dialog.message_titles[0]) * (h3_dialog.message_count - index));
+	}
+	pthread_mutex_unlock(&h3_dialog.lock);
+}
+
 /* (sdl_platform.c platform_dialog_hook: any thread) a message or question
 of the platform's taken by the dialog while it can show it: Menu style
 Halo 3, the dialog in the map (and a window someone watches: a test's
@@ -22951,6 +22994,11 @@ static int h3_dialog_port_hook(int question, char const *title, char const *text
 			h3_dialog.question_asked = TRUE;
 			h3_dialog.question_shown = FALSE;
 			h3_dialog.question_withdrawn = FALSE;
+			taken = 1;
+		}
+		else if (h3_dialog_message_queued(title ? title : "", text))
+		{
+			/* (1.1.3: the same message twice - a lobby map's precache failed twice - shown once) */
 			taken = 1;
 		}
 		else if (h3_dialog.message_count < H3_DIALOG_MESSAGES)
@@ -22991,6 +23039,12 @@ static void h3_dialog_port_update(void)
 
 	if (!platform_dialog_hook)
 		platform_dialog_hook = h3_dialog_port_hook;
+	{
+		extern void (*platform_dialog_withdraw_hook)(const char *title, const char *text);
+
+		if (!platform_dialog_withdraw_hook)
+			platform_dialog_withdraw_hook = h3_dialog_port_withdraw;
+	}
 	h3_dialog.ready = ready;
 	pthread_mutex_lock(&h3_dialog.lock);
 	if (!ready)
@@ -23021,6 +23075,18 @@ static void h3_dialog_port_update(void)
 		h3_dialog.message_shown = FALSE;
 		pthread_mutex_unlock(&h3_dialog.lock);
 		return;
+	}
+	/* (1.1.3: a message taken back while up: its dialog closed - the next waiting opens after) */
+	if (h3_dialog.message_withdrawn)
+	{
+		h3_dialog.message_withdrawn = FALSE;
+		if (active && active->definition_tag_index == message_tag)
+		{
+			pthread_mutex_unlock(&h3_dialog.lock);
+			platform_log("menus: h3 dialog: the message was withdrawn");
+			ui_widget_delete(active);
+			return;
+		}
 	}
 	/* (a question withdrawn: its dialog closed, if it is up) */
 	if (h3_dialog.question_withdrawn)
