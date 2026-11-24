@@ -715,6 +715,12 @@ static boolean forge_net_host_begin_as(
 		if (!_stricmp(forge_maps[index].path, map_path))
 			map_index = index;
 	}
+	/* (an install from MCC alone: the lobby's map is MCC's copy,
+	forge_map_path's levels\test\mcc_bloodgulch\mcc_bloodgulch - its map
+	too; every network Forge and Command game of an MCC-only host was refused
+	here) */
+	if (map_index == NONE)
+		map_index = forge_map_of_level(map_path);
 	if (map_index == NONE)
 	{
 		if (why)
