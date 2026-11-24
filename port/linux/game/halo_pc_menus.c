@@ -91,6 +91,7 @@ logs it).
 #endif
 #if defined(HALO_VITA)
 #include "vita_controls.h"
+#include "../src/system_link_shortcut.h"
 #endif
 
 #include <stdio.h>
@@ -2172,6 +2173,23 @@ boolean halo_pc_menu_function_invoke(
 
 	(void)event;
 	(void)widget_deleted;
+	/* (1.1.3-insider.8m, the Classic+ audit: an MCC level's own pause - Halo PC's, on its map, whatever
+	the Menu style - has CHANGE SETTINGS, Halo PC's profile settings (137), which open a screen of ui.map
+	no level's map has: with Halo PC's menus off (Classic+, Halo 3, ElDewrito) the row did nothing. In a
+	level it opens the settings panel - the Vita's settings, the profile's controls among them -, as the
+	pause's SELECT does; the handler fails, so nothing else opens under it) */
+	if (widget && function_index == PC_PROFILE_SET_EDIT_BEGIN && screen && screen->definition_tag_index != NONE &&
+		!strcmp(tag_get_name(screen->definition_tag_index), "ui\\shell\\solo_game\\pause_game\\pause_game"))
+	{
+#if defined(HALO_VITA)
+		__atomic_store_n(&halo_settings_panel_request, HALO_SETTINGS_PANEL_OPEN, __ATOMIC_RELEASE);
+		platform_log("menus: the level's pause: CHANGE SETTINGS: the settings panel asked for");
+#else
+		platform_log("menus: the level's pause: CHANGE SETTINGS: the settings panel asked for (none on this build)");
+#endif
+		*result = FALSE;
+		return TRUE;
+	}
 	if (!halo_pc_menus_active() || !widget)
 		return FALSE;
 	pending_reset();

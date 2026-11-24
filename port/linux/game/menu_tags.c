@@ -1624,7 +1624,13 @@ static void *widget_build(long widget_index)
 	map's; said once, the set still added) */
 	if (source->extends && tag_loaded(UI_WIDGET_DEFINITION_TAG, source->extends) == NONE)
 	{
-		if (!ingame_other_kind(source->extends))
+		/* (and on the Xbox's ui.map a Halo PC row's twin, <name>_pc - main.xml's PROFILES and QUIT for MCC's
+		ui.map -: not used there, not a gap) */
+		size_t name_length = strlen(source->name);
+		boolean halo_pc_twin = !build.ingame && !build.halo_pc_ui && name_length > 3 &&
+			!strcmp(source->name + name_length - 3, "_pc");
+
+		if (!ingame_other_kind(source->extends) && !halo_pc_twin)
 			platform_log("menus: %s:%ld: this map has no %s for %s to extend: left out here", source->file, source->line,
 				source->extends, source->name);
 		return definition;

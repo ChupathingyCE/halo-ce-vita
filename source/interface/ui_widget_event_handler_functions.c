@@ -3972,7 +3972,18 @@ static boolean pc_function_invoke(
 	extern boolean main_menu_is_active(void);
 
 	if (!main_menu_is_active())
+	{
+		/* (in a level: an MCC level's own pause - Halo PC's - and its CHANGE SETTINGS (137), which
+		halo_pc_menus.c turns into the settings panel; the Classic+ audit, 1.1.3-insider.8m) */
+		if (function_index == 137)
+		{
+			extern boolean halo_pc_menu_function_invoke(struct widget_instance *widget, struct event_record *event,
+				word function_index, boolean *widget_deleted, boolean *result);
+
+			return halo_pc_menu_function_invoke(widget, event, function_index, widget_deleted, result);
+		}
 		return FALSE;
+	}
 	switch (function_index)
 	{
 	case PC_FUNCTION_QUIT_GAME:
@@ -6727,6 +6738,19 @@ boolean ui_widget_port_cooperative_campaign_host_level(
 	if (custom_edition_mods_level_name(map_name))
 	{
 		error(2, "co-op: '%s' is a mod's Halo: CE Anniversary map, which plays offline only", map_name);
+#ifdef HALO_LINUX
+		/* (1.1.3-insider.8m, the Classic+ audit: said to the player too - with MCC's files alone the campaign's
+		levels are MCC's own (mods\mcc_a10 ...), and Y on CO-OP CAMPAIGN's CHOOSE DIFFICULTY did nothing at
+		all. A co-op game is hosted from the Xbox's maps; an MCC-only Vita joins one) */
+		{
+			void platform_show_message(char const *title, char const *text);
+			void platform_log(const char *format, ...);
+
+			platform_log("co-op: not hosted: %s is MCC's own mission (or a mod's), which plays on this machine alone", map_name);
+			platform_show_message(T("Co-op"), T("Co-op can't be hosted on MCC's own missions: they play on this Vita alone. "
+				"Host co-op with the Xbox's campaign maps, or join a co-op game from INTERNET or LAN."));
+		}
+#endif
 		return FALSE;
 	}
 	if (difficulty < 0 || difficulty > 3 || !custom_edition_maps_campaign_level(map_name))

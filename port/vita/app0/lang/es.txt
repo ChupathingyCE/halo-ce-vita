@@ -770,6 +770,7 @@
 # (the crossplay guardrails, port/linux/src/crossplay_guard.c and its callers: a large or co-op PC game asked about, split screen, the server browser's badges)
 "Halo: large PC game" = "Halo: partida de PC grande"
 "Large PC game: more than 16 players can make the Vita lag. Join anyway?" = "Partida de PC grande: con más de 16 jugadores la Vita puede ir lenta. ¿Unirte de todos modos?"
+"Co-op can't be hosted on MCC's own missions: they play on this Vita alone. Host co-op with the Xbox's campaign maps, or join a co-op game from INTERNET or LAN." = "No se puede alojar el cooperativo en las misiones propias de MCC: se juegan solo en esta Vita. Aloja el cooperativo con los mapas de campaña de Xbox, o únete a una partida cooperativa desde INTERNET o LAN."
 "Halo: PC co-op game" = "Halo: partida cooperativa de PC"
 "PC co-op game: experimental on the Vita. The host's AI and extra enemies can make it lag. Join anyway?" = "Partida cooperativa de PC: experimental en la Vita. La IA del anfitrión y sus enemigos extra pueden hacer que vaya lenta. ¿Unirte de todos modos?"
 "PC co-op game with more than 4 players: experimental on the Vita. More players and the host's extra enemies can make it lag. Join anyway?" = "Partida cooperativa de PC con más de 4 jugadores: experimental en la Vita. Más jugadores y los enemigos extra del anfitrión pueden hacer que vaya lenta. ¿Unirte de todos modos?"
