@@ -4339,6 +4339,7 @@ PY
 			"mp_gametypes|40|$cpmp $d $d $d $d $d $d $d a:150:4000 a:150:3500 wait:150:2000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen (gametype_select_screen|pc.cp.gametypes.screen) (gametype_edit_screen|pc.cp.gtbase.screen) pc.mp.screen main_menu.main_menu|"
 			"mp_modes|60|$cpmp $d $d $d $d $d $d $d $d a:150:3500 a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.modes.screen pc.cp.forge.lobby pc.ce.modes.screen pc.cp.command.lobby pc.ce.modes.screen pc.cp.firefight.lobby pc.ce.modes.screen pc.cp.gametypes.screen pc.ce.modes.screen pc.mp.screen main_menu.main_menu|"
 			"mp_lan|40|$cpmp $d a:150:4000 a:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
+			"mp_lanlist|46|$cpmp $d a:150:4000 a:150:2000 a:150:2000 a:150:5000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen connected.server_list.server_list_screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
 		)
 		for cp_flow in "${cp_flows[@]}"; do
 			IFS='|' read -r cp_name cp_seconds cp_pad cp_screens cp_env <<< "$cp_flow"

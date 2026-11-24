@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Menu style Classic+ on an MCC-only install (1.1.3, the Classic+ audit): the Xbox's network screens as
+     Classic+ has them on the Xbox's files, as classic/xbox_screens.xml has the others - System Link's
+     SELECT PROFILE (start to join), the System Link list (SYSTEM LINK GAMES: where JOIN LAN lists the
+     games, where the INTERNET browser's join and CREATE LAN / CREATE INTERNET go on to the new game's
+     map list) and the network game's lobby (ENLISTED PLAYERS), with the map list's and SELECT
+     GAMETYPE's wrappers, whose A goes on to the next. MCC's ui.map (Halo PC's) has none of these
+     three screens, and its two wrappers have no A (Halo PC's code went on from them): without these
+     Classic+ opened the Halo 3 set's join screen, LAN browser and lobby for them (the owner, Nov 15:
+     "need to use the old menus for the classic plus not a mixture").
+     Each cp/xb/<path> here is laid out as the Xbox's ui\shell\main_menu\<path> (its place, size,
+     flags, list, children in the order the game's code reads them, and the game's own functions on
+     its events), from the Xbox's widgets dumped with HALO_MENUS_DUMP_TAGS. The pictures, fonts and
+     words are the player's MCC ui.map's where it has them (the gradient, list_item_bkd, list_field,
+     colors_sm, console_grafix, controller_graphix, the map and game type pictures, the large and small
+     fonts, ui\multiplayer_game_text, the button key's words, the lobby's heading, button key, team
+     spinner and players' rows); where it has not, the port's own: the start-to-join quarters, the Y
+     button and the lobby's fields (tools/classic_menu_art.py), the SYSTEM LINK GAMES heading (set in
+     the letters of the player's ui.map's headings as the menus load, menu_titles.c; the picture here
+     the fallback), and the list's few words (CREATE GAME, the looking-for-games line, the game's
+     description's labels). No Bungie picture or text is in this folder.
+     menu_tags.c xbox_screen_widgets_apply makes each the definition of the map's tag of that path
+     (the three stand-ins, the two wrappers) while Menu style is Classic+; the rest go by their cp/xb
+     names. On the Xbox's files, and in the other styles, none of this is used. -->
+<menus>
+	<!-- the pictures MCC's ui.map has not: the port's own (tools/classic_menu_art.py) -->
+	<bitmap name="cp/xb/art/header_system_link_games">
+		<frame png="classic/{lang}/header_system_link_games.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/pregame_list_field">
+		<frame png="classic/pregame_list_field.png" width="256" height="512"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/pregame_remote_field">
+		<frame png="classic/pregame_remote_field.png" width="256" height="128"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/pregame_message_field">
+		<frame png="classic/pregame_message_field.png" width="512" height="32"/>
+	</bitmap>
+	<!-- the words MCC's ui.map has not: the port's own -->
+	<strings name="cp/xb/text/create_game_button">
+		<string text="= CREATE GAME"/>
+	</strings>
+	<!-- (the game's code shows the first for a second, then the second; the third with a game listed,
+	     hidden then: server_list_menu_update) -->
+	<strings name="cp/xb/text/looking_for_servers_message">
+		<string text="Looking for games..."/>
+		<string text="Looking for games...\n\nPress %a-button or %y-button to start\nyour own game"/>
+		<string text="Looking for games..."/>
+	</strings>
+	<strings name="cp/xb/text/server_description_label_text">
+		<string text="Game Status:\nMap:\nGame Rules:\nMode:\nNumber of Players:\nScore Limit:"/>
+	</strings>
+
+	<!-- System Link's SELECT PROFILE: a quarter for each controller, START (or A) joins its player,
+	     left and right choose the profile, A sets it, A again goes on to the System Link list -->
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/4way_start2join_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<data input="system link status check"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/4way_start2join"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/header_select_profile"/>
+		<child widget="cp/xb/button_key"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/4way_start2join" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child no_focused_child pass_unhandled_to_all_children">
+		<on event="created" run="clear multiplayer player joins"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_start2join" x="70" y="76" controller="1"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_start2join" x="328" y="76" controller="2"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_start2join" x="70" y="242" controller="3"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_start2join" x="328" y="242" controller="4"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_start2join" type="container" left="0" top="0" width="255" height="165" flags="pass_unhandled_to_focused_child nifty_fx" bitmap="cp/xb/art/split_screen_bkd" controller="1">
+		<on event="start" run="join controller to mp game" replace="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_select"/>
+		<on event="a" run="join controller to mp game" replace="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_select"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/press_start_to_join" x="54" y="20"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/press_start_to_join_controller"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_select" type="container" left="0" top="0" width="254" height="164" flags="pass_unhandled_to_focused_child nifty_fx" bitmap="cp/xb/art/split_screen_bkd">
+		<on event="a" run="1wide plyr prof set for game" replace="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_selected"/>
+		<on event="start" run="1wide plyr prof set for game" replace="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_selected"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\4way_profile_select\qtr_screen_profile_color_pic"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_desc"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_spinner"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_desc" type="text" left="98" top="45" width="147" height="111" string_list="cp/xb/text/press_start_to_join" string_index="1" font="ui\small_ui" color="#FF2896FF" text_flags="flashing" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_spinner" type="spinner" left="47" top="2" width="160" height="24" flags="pass_unhandled_to_focused_child left_right_tabs_items" font="ui\large_ui" color="#FF2896FF" align="center" list_flags="items_in_code" controller="1" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="8 40 20 46" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="8 208 20 214">
+		<data input="player profile small menu update"/>
+		<on event="created" run="player profile list initialize"/>
+		<on event="deleted" run="player profile list dispose"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_selected" type="container" left="0" top="0" width="254" height="164" flags="pass_unhandled_to_focused_child nifty_fx" bitmap="cp/xb/art/split_screen_bkd">
+		<on event="a" open="ui\shell\main_menu\multiplayer_type_select\connected\server_list\server_list_screen"/>
+		<on event="start" open="ui\shell\main_menu\multiplayer_type_select\connected\server_list\server_list_screen"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_color_pic_selected"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_selected_text"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_selected_name"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_color_pic_selected" type="container" left="18" top="22" width="112" height="136" bitmap="ui\shell\bitmaps\colors_sm" controller="1">
+		<data input="get active plyr profile color"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_selected_text" type="text" left="98" top="45" width="147" height="111" string_list="cp/xb/text/press_start_to_join" string_index="2" font="ui\small_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/qtr_screen_profile_selected_name" type="text" left="47" top="2" width="160" height="24" font="ui\large_ui" color="#FFFFFFFF" align="center" list_flags="items_in_code" controller="1" header_bitmap="ui\shell\bitmaps\arrow_sm_left" header_bounds="8 40 20 46" footer_bitmap="ui\shell\bitmaps\arrow_sm_right" footer_bounds="8 208 20 214">
+		<data input="get active plyr profile name"/>
+	</widget>
+	<!-- (the Xbox's heading here is the same picture as player_profiles_select's, which MCC's ui.map has) -->
+	<widget name="cp/xb/multiplayer_type_select/connected/4way_profile_select/header_select_profile" type="container" left="35" top="11" width="333" height="59" bitmap="ui\shell\main_menu\player_profiles_select\header_select_profile" controller="1"/>
+
+	<!-- the System Link list: the games found (nine rows), the focused one's description at the right;
+	     A joins it (or, with none listed, starts a game: the map list), Y starts a game -->
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child tag_controller_index" bitmap="ui\shell\bitmaps\gradient">
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/create_game_key" x="180" y="414"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/header_found_games"/>
+		<child widget="cp/xb/button_key"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list" type="column_list" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child up_down_tabs_items" color="#00000000" list_flags="items_in_code" description="cp/xb/multiplayer_type_select/connected/server_list/server_list_extended_desc">
+		<data input="server list update"/>
+		<on event="created" run="initialize net game server list"/>
+		<on event="deleted" run="dispose net game server list"/>
+		<on event="y" run="start network game server" open="ui\shell\main_menu\multiplayer_type_select\connected\connected_map_select_wrapper"/>
+		<on event="a" run="net game join from server list"/>
+		<on event="start" run="net game join from server list"/>
+		<on event="a" run="start server if none advertised" open="ui\shell\main_menu\multiplayer_type_select\connected\connected_map_select_wrapper"/>
+		<on event="start" run="start server if none advertised" open="ui\shell\main_menu\multiplayer_type_select\connected\connected_map_select_wrapper"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list_item0"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list_item1"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list_item2"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list_item3"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list_item4"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list_item5"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list_item6"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list_item7"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/server_list_item8"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_item0" type="text" left="48" top="78" width="256" height="32" bitmap="ui\shell\bitmaps\list_item_bkd_top" font="ui\large_ui" color="#FF0080FF" text_x="10" text_y="5" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_item1" type="text" left="48" top="110" width="256" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" font="ui\large_ui" color="#FF0080FF" text_x="10" text_y="5" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_item2" type="text" left="48" top="142" width="256" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" font="ui\large_ui" color="#FF0080FF" text_x="10" text_y="5" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_item3" type="text" left="48" top="174" width="256" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" font="ui\large_ui" color="#FF0080FF" text_x="10" text_y="5" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_item4" type="text" left="48" top="206" width="256" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" font="ui\large_ui" color="#FF0080FF" text_x="10" text_y="5" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_item5" type="text" left="48" top="238" width="256" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" font="ui\large_ui" color="#FF0080FF" text_x="10" text_y="5" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_item6" type="text" left="48" top="270" width="256" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" font="ui\large_ui" color="#FF0080FF" text_x="10" text_y="5" controller="1"/>
+	<!-- (the Xbox's last two rows' text 5 in and 5 higher than the others', as it has them) -->
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_item7" type="text" left="48" top="302" width="256" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" font="ui\large_ui" color="#FF0080FF" text_x="5" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_item8" type="text" left="48" top="334" width="256" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" font="ui\large_ui" color="#FF0080FF" text_x="5" controller="1"/>
+	<!-- (the description: five children in the order server_list_menu_update reads them - the game
+	     type's and the map's pictures, the game's details, the looking-for-games line, the labels) -->
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/server_list_extended_desc" type="container" left="272" top="78" width="318" height="322" bitmap="ui\shell\bitmaps\list_field" controller="1">
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/game_type_graphic"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/mp_map_graphic"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/mp_game_info" x="326" y="225"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/looking_for_servers_text"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/mp_game_description_labels"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/game_type_graphic" type="container" left="433" top="96" width="139" height="113" bitmap="ui\shell\bitmaps\game_type_grafix" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/mp_map_graphic" type="container" left="286" top="96" width="139" height="113" bitmap="ui\shell\bitmaps\mp_map_grafix" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/mp_game_info" type="container" left="0" top="0" width="260" height="144" controller="1">
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/var_game_status" x="80" y="0"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/var_map" x="0" y="21"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/var_game_rules" x="70" y="42"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/var_mode" x="12" y="63"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/var_number_of_players" x="129" y="84"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/var_score_limit" x="67" y="105"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/var_score_limit_type" x="96" y="105"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/var_game_status" type="text" left="0" top="0" width="260" height="22" string_list="ui\multiplayer_game_text" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/var_map" type="text" left="0" top="0" width="260" height="22" string_list="ui\shell\main_menu\mp_map_list" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/var_game_rules" type="text" left="0" top="0" width="260" height="22" string_list="ui\multiplayer_game_text" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/var_mode" type="text" left="0" top="0" width="260" height="22" string_list="ui\multiplayer_game_text" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/var_number_of_players" type="text" left="0" top="0" width="260" height="22" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/var_score_limit" type="text" left="0" top="0" width="32" height="22" font="ui\large_ui" color="#FFFFFFFF" align="center" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/var_score_limit_type" type="text" left="0" top="0" width="150" height="22" string_list="ui\multiplayer_game_text" font="ui\large_ui" color="#FFFFFFFF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/looking_for_servers_text" type="text" left="40" top="78" width="240" height="232" string_list="cp/xb/text/looking_for_servers_message" font="ui\large_ui" color="#FFFFFFFF" text_flags="flashing" text_x="13" text_y="5" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/mp_game_description_labels" type="text" left="283" top="225" width="173" height="165" string_list="cp/xb/text/server_description_label_text" font="ui\large_ui" color="#FF2896FF" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/create_game_key" type="container" left="0" top="0" width="205" height="25" controller="1">
+		<on event="x" run="NULL"/>
+		<child widget="cp/xb/y_butn"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/server_list/create_game_button" x="10" y="0"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/create_game_button" type="text" left="0" top="0" width="180" height="20" string_list="cp/xb/text/create_game_button" font="ui\large_ui" color="#FF2896FF" align="center" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/server_list/header_found_games" type="container" left="29" top="11" width="512" height="64" bitmap="cp/xb/art/header_system_link_games" controller="1"/>
+
+	<!-- the map list's and SELECT GAMETYPE's wrappers for a network game: A on a map goes on to SELECT
+	     GAMETYPE, A on a game type to the lobby (MCC's have no A: Halo PC's code went on from them) -->
+	<widget name="cp/xb/multiplayer_type_select/connected/connected_map_select_wrapper" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child pause_game tag_controller_index">
+		<on event="a" run="mp level select" open="ui\shell\main_menu\multiplayer_type_select\connected\gametype_select_screen_wrapper"/>
+		<on event="start" run="mp level select" open="ui\shell\main_menu\multiplayer_type_select\connected\gametype_select_screen_wrapper"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\mp_map_select\mp_map_select_screen"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/gametype_select_screen_wrapper" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child pause_game">
+		<on event="a" run="mp profile set for game" open="ui\shell\main_menu\multiplayer_type_select\connected\pregame\connected_pregame_screen"/>
+		<on event="start" run="mp profile set for game" open="ui\shell\main_menu\multiplayer_type_select\connected\pregame\connected_pregame_screen"/>
+		<child widget="ui\shell\main_menu\gametype_select\gametype_select_screen"/>
+	</widget>
+
+	<!-- the network game's lobby (ENLISTED PLAYERS / SELECT TEAMS): this machine's field at the left,
+	     three others' at the right; the heading, the team spinners, the players' rows, the button key
+	     and the directions MCC's ui.map's own. (Classic+'s Y PLAYERS and LOBBY OPTIONS are added to
+	     it as on the Xbox's files: classic/pregame.xml's classic patch) -->
+	<widget name="cp/xb/multiplayer_type_select/connected/pregame/connected_pregame_screen" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child pause_game main_menu_if_no_history" bitmap="ui\shell\bitmaps\gradient">
+		<on event="created" run="net server accept conx"/>
+		<on event="created" run="net server allow start"/>
+		<on event="left" run="swap player team"/>
+		<on event="right" run="swap player team"/>
+		<on event="stick_left" run="swap player team"/>
+		<on event="stick_right" run="swap player team"/>
+		<on event="a" run="net game speed start"/>
+		<on event="a" run="net game join player"/>
+		<on event="start" run="net game join player"/>
+		<on event="x" run="net game delay start"/>
+		<on event="start" run="net game speed start"/>
+		<on event="b" run="net game unjoin player" back="true"/>
+		<on event="back" run="net game unjoin player" back="true"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\header_select_teams"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/pregame/pregame_message_field" x="64" y="78"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/pregame/connected_pregame_list"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\mp_button_key" x="80" y="414"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\choose_teams_text" x="75" y="82"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/pregame/pregame_message_field" type="container" left="0" top="0" width="512" height="31" bitmap="cp/xb/art/pregame_message_field" controller="1"/>
+	<!-- (six children in the order network_pregame_status_screen_update reads them: this machine's,
+	     the three others', the status and the countdown) -->
+	<widget name="cp/xb/multiplayer_type_select/connected/pregame/connected_pregame_list" type="container" left="0" top="0" width="640" height="480" flags="pass_unhandled_to_focused_child pause_game" controller="1">
+		<data input="network pregame status update"/>
+		<data input="net splitscreen prejoin players"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/pregame/local_machine_status" x="64" y="115"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/pregame/remote_machine_status" x="323" y="115"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/pregame/remote_machine_status" x="323" y="212"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/pregame/remote_machine_status" x="323" y="309"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\autostart_label" x="77" y="82"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/pregame/autostart_text" x="208" y="82"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/pregame/local_machine_status" type="container" left="0" top="0" width="254" height="286" flags="pass_unhandled_to_focused_child" bitmap="cp/xb/art/pregame_list_field" controller="1">
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\local_machine_name" x="27" y="5"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\xbox_graphic" x="71" y="29"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\local_player_data" x="13" y="90" controller="1"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\local_player_data" x="13" y="138" controller="2"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\local_player_data" x="13" y="186" controller="3"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\local_player_data" x="13" y="234" controller="4"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/pregame/remote_machine_status" type="container" left="0" top="0" width="254" height="104" bitmap="cp/xb/art/pregame_remote_field" controller="1">
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\xbox_graphic" x="12" y="27"/>
+		<child widget="cp/xb/multiplayer_type_select/connected/pregame/remote_machine_name"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\controller_graphic" x="133" y="3"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\controller_graphic" x="192" y="3"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\controller_graphic" x="133" y="44"/>
+		<child widget="ui\shell\main_menu\multiplayer_type_select\connected\pregame\controller_graphic" x="192" y="44"/>
+	</widget>
+	<widget name="cp/xb/multiplayer_type_select/connected/pregame/remote_machine_name" type="text" left="8" top="4" width="122" height="22" font="ui\large_ui" color="#FF2896FF" align="center" controller="1"/>
+	<widget name="cp/xb/multiplayer_type_select/connected/pregame/autostart_text" type="text" left="0" top="0" width="100" height="20" font="ui\large_ui" color="#FFFFFFFF" text_x="4" controller="1"/>
+</menus>
