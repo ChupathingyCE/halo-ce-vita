@@ -49,6 +49,71 @@ static struct
 	unsigned char *file;
 } fonts[POSIX_UI_FONT_COUNT];
 
+/* the lookups the overlay makes again every frame, cached: it measures and
+lays out each string of a frame anew, three advances a character, each a
+search of the face's cmap and a walk of its GPOS kerning (most of a
+handheld's frame with the Delta Guide open). Exact: the same glyph indices
+and kerning, read once; a face read from a file forgets its own */
+enum
+{
+	GLYPH_CACHE_SIZE = 256, /* a face's, by codepoint (direct-mapped) */
+	KERN_CACHE_SIZE = 2048, /* every face's, by the pair (direct-mapped) */
+};
+
+static struct
+{
+	unsigned int codepoint_plus_one;
+	int glyph;
+} glyph_cache[POSIX_UI_FONT_COUNT][GLYPH_CACHE_SIZE];
+
+static struct
+{
+	unsigned int pair;
+	int font_plus_one;
+	int kern;
+} kern_cache[KERN_CACHE_SIZE];
+
+static void forget_lookups(int font)
+{
+	int index;
+
+	memset(glyph_cache[font], 0, sizeof(glyph_cache[font]));
+	for (index = 0; index < KERN_CACHE_SIZE; index++)
+	{
+		if (kern_cache[index].font_plus_one == font + 1)
+			kern_cache[index].font_plus_one = 0;
+	}
+}
+
+static int glyph_index(int font, const stbtt_fontinfo *info, unsigned int codepoint)
+{
+	unsigned int slot = (codepoint ^ (codepoint >> 8)) & (GLYPH_CACHE_SIZE - 1);
+
+	if (glyph_cache[font][slot].codepoint_plus_one != codepoint + 1)
+	{
+		glyph_cache[font][slot].glyph = stbtt_FindGlyphIndex(info, (int)codepoint);
+		glyph_cache[font][slot].codepoint_plus_one = codepoint + 1;
+	}
+	return glyph_cache[font][slot].glyph;
+}
+
+/* (stbtt_GetCodepointKernAdvance's, by glyph index) */
+static int kern_units(int font, const stbtt_fontinfo *info, int first, int second)
+{
+	unsigned int pair = ((unsigned int)first & 0xFFFF) | ((unsigned int)second << 16);
+	unsigned int slot = (pair * 2654435761u + (unsigned int)font * 40503u) >> 21 & (KERN_CACHE_SIZE - 1);
+
+	if (!info->kern && !info->gpos)
+		return 0;
+	if (kern_cache[slot].font_plus_one != font + 1 || kern_cache[slot].pair != pair)
+	{
+		kern_cache[slot].kern = stbtt_GetGlyphKernAdvance(info, first, second);
+		kern_cache[slot].pair = pair;
+		kern_cache[slot].font_plus_one = font + 1;
+	}
+	return kern_cache[slot].kern;
+}
+
 static stbtt_fontinfo *face(int font)
 {
 	if (font < 0 || font >= POSIX_UI_FONT_COUNT)
@@ -82,7 +147,7 @@ int posix_ui_font_has(int font, unsigned int codepoint)
 {
 	stbtt_fontinfo *info = face(font);
 
-	return info && stbtt_FindGlyphIndex(info, (int)codepoint) != 0;
+	return info && glyph_index(font, info, codepoint) != 0;
 }
 
 /* a question mark's room beyond a usual side bearing, in font units, on
@@ -114,11 +179,12 @@ float posix_ui_font_advance(int font, float pixel_height, unsigned int codepoint
 	if (!info)
 		return 0.0f;
 	scale = stbtt_ScaleForPixelHeight(info, pixel_height);
-	stbtt_GetCodepointHMetrics(info, (int)codepoint, &advance, &bearing);
+	stbtt_GetGlyphHMetrics(info, glyph_index(font, info, codepoint), &advance, &bearing);
 	width = (float)advance * scale;
 	if (previous)
 	{
-		width += (float)stbtt_GetCodepointKernAdvance(info, (int)previous, (int)codepoint) * scale;
+		width += (float)kern_units(font, info, glyph_index(font, info, previous), glyph_index(font, info, codepoint)) *
+			scale;
 		/* (a question mark drawn close to the word before it and the one after) */
 		if (previous != ' ')
 			width -= (float)question_slack(info, codepoint, 0) * scale;
@@ -160,6 +226,7 @@ int posix_ui_font_use_file(int font, const char *path)
 	free(fonts[font].file);
 	fonts[font].file = NULL;
 	fonts[font].state = 0;
+	forget_lookups(font);
 	if (!path || !*path || !(file = fopen(path, "rb")))
 		return 0;
 	if (fseek(file, 0, SEEK_END) == 0)
