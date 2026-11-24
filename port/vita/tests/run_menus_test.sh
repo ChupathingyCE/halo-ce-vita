@@ -180,7 +180,7 @@
 #            I click server browser"): Menu style Halo CE's Multiplayer, SERVER BROWSER: the
 #            profile screen, then OpenCE's server browser (B: the profile again, B: Multiplayer);
 #            the Halo 3 lobby's BROWSE GAMES on ONLINE: the profile, then the games browser;
-#            internet play off: SERVER BROWSER says how to turn it on, no profile
+#            internet play off: SERVER BROWSER switches the connection to Online, then the profile (1.1.3-insider.8l)
 #   h3players  the Halo 3 PLAYERS screen (menus/halo3/players.xml, MUTE CHAT too; the owner: "Can I move the
 #            cursor over the player like on Halo 3 and add friend?"), HALO_TEST_PROFILE's
 #            profile: SYSTEM LINK CO-OP hosted from the campaign lobby, the game's lobby;
@@ -642,7 +642,10 @@ check() { # NAME SCREENS_WANTED
 	grep -aq "menus: .*menus.txt cannot be read" "$log" && fail "$name" "the menus' XML was not found (HALO_MENUS_FOLDER)"
 	if [ "$2" = pc ]; then
 		[ "$(grep -ac 'ui: screen pc.mp.screen' "$log")" -ge 3 ] || fail "$name" "OpenCE's Multiplayer screen did not open twice"
-		grep -aq "ui: screen pc.mp.offline" "$log" || fail "$name" "Create Game Internet did not say internet play is off"
+		# (internet play off - Same Wi-Fi, the test's brokers -: Create Game Internet switches the connection to
+		# Online and opens Server Setup, 1.1.3-insider.8l; it said "Internet play is off" before)
+		grep -aq "ui: screen pc.setup.screen" "$log" || fail "$name" "Create Game Internet did not open Server Setup"
+		grep -aq "ui: screen pc.mp.offline" "$log" && fail "$name" "Create Game Internet said internet play is off"
 		grep -aq "menus: the Halo PC pictures and text read" "$log" || fail "$name" "the Halo PC pictures were not read"
 	else
 		grep -aq "menus: OpenCE" "$log" && fail "$name" "OpenCE's screens were added without the Halo PC files"
@@ -763,6 +766,9 @@ h3_no_xbox_profiles() { # NAME
 # (internet play on, nothing reached: its brokers, STUN and relays TEST-NET addresses)
 h3net="HALO_NET_ONLINE=true HALO_NET_BROKERS=198.51.100.1:1883 HALO_NET_STUN=198.51.100.1:3478"
 h3net="$h3net HALO_NET_RELAYS=198.51.100.1:47320 HALO_NET_ALLOW_UPNP=false HALO_DISCORD_APPLICATION="
+# (internet play off, as the Vita's own connection - Same Wi-Fi -, the test's unroutable brokers should
+# a press switch it to Online: Classic+'s INTERNET rows, 1.1.3-insider.8l)
+offnet="HALO_NET_BROKERS=198.51.100.1:1883 HALO_NET_STUN=198.51.100.1:3478 HALO_NET_RELAYS=198.51.100.1:47320 HALO_NET_ALLOW_UPNP=false HALO_DISCORD_APPLICATION="
 # (FRIENDS: Triangle on the main menu - a main menu row until 1.1.3)
 h3friendspad="wait:150:3000 y wait:150:3000"
 # a save folder's friends (run_p2p_friends_test.sh seed: made at test time, never in the repository)
@@ -821,10 +827,10 @@ cmp_create="wait:150:3000 down:150:800 a wait:150:3000 down:150:500 down:150:500
 for case in $cases; do
 	case $case in
 	fresh)
-		run fresh "$menus_data" 40 "$pad"
+		run fresh "$menus_data" 40 "$pad" $offnet
 		check fresh pc ;;
 	level)
-		init_line='map_name levels\a10\a10' run level "$menus_data" 90 "$pad" "HALO_TEST_COMMANDS=L150:@quit"
+		init_line='map_name levels\a10\a10' run level "$menus_data" 90 "$pad" $offnet "HALO_TEST_COMMANDS=L150:@quit"
 		grep -aq "ui: screen ui.shell.main_menu.main_menu" "$out/level/run.log" || fail level "the level did not go back to the main menu"
 		check level pc ;;
 	pausesave)
@@ -3461,8 +3467,9 @@ PY
 		# (Halo 3: MULTIPLAYER, down five to BROWSE GAMES on ONLINE: the profile, then the games browser)
 		run browserprofile_h3 "$menus_data" 40 "$h3mppad down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a wait:150:2000 a wait:150:2000 a wait:150:5000" \
 			HALO_MENU_STYLE=halo3 $h3net
-		# (internet play off: SERVER BROWSER says so; no profile screen)
-		run browserprofile_off "$menus_data" 25 "wait:150:3000 down:150:800 a wait:150:3000 a wait:150:4000" HALO_MENU_STYLE=classic
+		# (internet play off: SERVER BROWSER switches the connection to Online and asks for the profile, as
+		# with it on - 1.1.3-insider.8l; it only said "Internet play is off" before. The test's brokers)
+		run browserprofile_off "$menus_data" 25 "wait:150:3000 down:150:800 a wait:150:3000 a wait:150:4000" HALO_MENU_STYLE=classic $offnet
 		check_h3 browserprofile classic
 		check_h3 browserprofile_h3 halo3
 		log=$out/browserprofile/run.log
@@ -3480,9 +3487,11 @@ PY
 		awk '/4way_start2join_screen|pc.h3.join.screen/ { profile = 1 } /ui: screen pc.h3.lan.screen/ { if (!profile) exit 1; found = 1 }
 			END { exit !found }' "$log" || fail browserprofile "the games browser opened before the profile"
 		log=$out/browserprofile_off/run.log
-		grep -aq "ui: screen pc.mp.offline" "$log" || fail browserprofile "internet play off: SERVER BROWSER did not say how to turn it on"
-		grep -aq "4way_start2join_screen\|menus: Server Browser: the profile" "$log" &&
-			fail browserprofile "internet play off: the profile screen opened anyway" ;;
+		grep -aq "ui: screen pc.mp.offline" "$log" && fail browserprofile "internet play off: SERVER BROWSER said internet play is off"
+		grep -aq "menus: INTERNET: internet play was off: the connection switched to Online" "$log" ||
+			fail browserprofile "internet play off: SERVER BROWSER did not switch the connection to Online"
+		grep -aq "menus: Server Browser: the profile, then the server browser" "$log" ||
+			fail browserprofile "internet play off: SERVER BROWSER did not ask for the profile" ;;
 	h3gametypes)
 		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
 			echo "--- h3gametypes"; echo "SKIP: no HALO_TEST_PROFILE"; continue
@@ -3989,16 +3998,20 @@ PY
 		[ "$(grep -ac 'menus: the settings panel asked for' "$log")" = 2 ] || fail ceplusmain "start: Start did not ask for the settings panel twice"
 		[ "$(grep -ac 'ui: screen' "$log")" = 1 ] || fail ceplusmain "start: Start opened a screen"
 		grep -aq "may not run event handler function" "$out/ceplusmain_start/data/debug.txt" && fail ceplusmain "start: the main menu's Start was refused"
-		# (MULTIPLAYER, the first row with internet play off: the screen that says so; A asks for the
-		# settings panel's Multiplayer tab, as its footer's A=SELECT promises)
-		run ceplusmain_offline "$menus_data" 15 "wait:150:3000 down:150:800 a:150:3000 a:150:3000 a:150:1500" HALO_SCENE_PACKS=0
+		# (MULTIPLAYER, CREATE GAME INTERNET - the fourth row - with internet play off: the connection
+		# switched to Online and Server Setup opened, as the ElDewrito and Halo 3 browsers switch it; it only
+		# said "Internet play is off ... restart the game" until 1.1.3-insider.8l (the owner's 8k). The test's
+		# brokers, unroutable: nothing reaches the real ones)
+		run ceplusmain_offline "$menus_data" 15 "wait:150:3000 down:150:800 a:150:3000 down:150:500 down:150:500 down:150:500 a:150:3000" \
+			HALO_SCENE_PACKS=0 $offnet
 		log=$out/ceplusmain_offline/run.log
-		echo "--- ceplusmain (offline Multiplayer screen's A)"
-		grep -aE "ui: screen|settings panel" "$log" | head -6
+		echo "--- ceplusmain (CREATE GAME INTERNET with internet play off)"
+		grep -aE "ui: screen|menus: an internet row|network: Online" "$log" | head -6
 		[ "$(cat "$out/ceplusmain_offline/exit")" = 0 ] || fail ceplusmain "offline: exit $(cat "$out/ceplusmain_offline/exit")"
-		grep -aq "ui: screen pc.mp.offline" "$log" || fail ceplusmain "offline: the screen did not say internet play is off"
-		grep -aq "menus: the settings panel's Multiplayer tab asked for" "$log" ||
-			fail ceplusmain "offline: A did not ask for the settings panel's Multiplayer tab"
+		grep -aq "ui: screen pc.mp.offline" "$log" && fail ceplusmain "offline: CREATE GAME INTERNET said internet play is off"
+		grep -aq "menus: an internet row: internet play was off: the connection switched to Online" "$log" ||
+			fail ceplusmain "offline: CREATE GAME INTERNET did not switch the connection to Online"
+		grep -aq "ui: screen pc.setup.screen" "$log" || fail ceplusmain "offline: CREATE GAME INTERNET did not open Server Setup"
 		# (Menu style Halo 3: the map's own list, the Halo 3 main menu, none of the port's rows)
 		run ceplusmain_h3 "$menus_data" 15 "wait:150:3000" HALO_MENU_STYLE=halo3
 		log=$out/ceplusmain_h3/run.log
@@ -4256,7 +4269,7 @@ PY
 			HALO_MENU_STYLE=halo3 HALO_CONTENT_ROOT="$out/mp-content" &
 		# Classic+: MULTIPLAYER, then each of its first rows in turn (A, a while, B)
 		run mccmp_ceplus "$out/mp-none" 50 "wait:150:3000 down:150:800 a:150:3000 a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000" \
-			HALO_MENU_STYLE=classic HALO_CONTENT_ROOT="$out/mp-content" HALO_SCENE_PACKS=0 &
+			HALO_MENU_STYLE=classic HALO_CONTENT_ROOT="$out/mp-content" HALO_SCENE_PACKS=0 $offnet &
 		wait
 		# the settings panel's join and host (System Link) in every Menu style
 		for mp_style in original classic halo3 online; do

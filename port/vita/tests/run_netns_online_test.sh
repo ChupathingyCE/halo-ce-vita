@@ -153,10 +153,16 @@
 #            game of the joiner's own, and the join was lost); run it with a
 #            slow host link (HALO_TEST_NETEM="delay 400ms 50ms") to have the
 #            presses land before the host's game is listed
-#   onlinebrowser  the Menu style ElDewrito (online) SERVER BROWSER: the
-#            joiner's main menu SERVER BROWSER, A on the host's row (a
-#            Vita's public game) and Cross again twice; joined from the games
-#            browser once its host is reached, nothing hosted or published
+#   menusoff (1.1.3-insider.8k, the owner: "the server browser for Classic+ doesn't work") menus
+#            with the joiner on its own connection (Same Wi-Fi, HALO_NET_ONLINE=false: the
+#            Vita's default), internet play off: INTERNET switches the connection to Online
+#            (as the ElDewrito and Halo 3 browsers' network tabs do) and goes on to the
+#            browser; never the "Internet play is off ... restart the game" screen (pc\mp\offline)
+#   onlinebrowser  Menu style ElDewrito's (online) server browser: since 1.1.3 the main
+#            menu's MULTIPLAYER lobby's BROWSE GAMES (the main menu's SERVER BROWSER row
+#            before), the profile, A on the host's row (a Vita's public game) and Cross
+#            again twice; joined from the games browser once its host is reached,
+#            nothing hosted or published
 #   onlinebrowserded  the same with a dedicated server's game, a player in it
 #            first (HALO_TEST_OB_PLAYER=0: none)
 #   onlinebrowsertab  onlinebrowser, the browser's network switched first (R:
@@ -1597,8 +1603,14 @@ code|lobby|lobbytls|lobbypw|relay|latency|infection|infectionold)
 		fi
 	fi
 	;;
-menus|menuspw|menusjoinpress)
+menus|menuspw|menusjoinpress|menusoff)
 	password=${HALO_TEST_LOBBY_PASSWORD:-hunter2}
+	# (menusoff, 1.1.3-insider.8k, the owner: the joiner on its own connection - Same Wi-Fi, the
+	# Vita's default -, internet play off: INTERNET switches it to Online and goes on to the browser,
+	# as the ElDewrito and Halo 3 browsers' network tabs do; it only said "Internet play is off ...
+	# restart the game" before)
+	joiner_online=true
+	[ "$mode" = menusoff ] && joiner_online=false
 	menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 	extra="HALO_NET_HOST_PUBLIC=true"
 	[ "$mode" = menuspw ] && extra="$extra HALO_NET_LOBBY_PASSWORD=$password"
@@ -1627,7 +1639,7 @@ menus|menuspw|menusjoinpress)
 	# machine's game and published it; nothing may be hosted while the join goes on)
 	[ "$mode" = menusjoinpress ] && pad="$pad wait:150:250 a wait:150:1000 a wait:150:1000 a"
 	HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "${HALO_TEST_VITA_JOINER:-$vita}" "$cpu_b" \
-		HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_TEST_INPUT=bot:2 "HALO_TEST_PAD=$pad" \
+		HALO_NET_ONLINE=$joiner_online HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_TEST_INPUT=bot:2 "HALO_TEST_PAD=$pad" \
 		"HALO_TEST_TEXT_INPUT=$password"; join_pid=$last_pid
 	wait $join_pid $host_pid 2>/dev/null
 	jl=$out/joiner/run.log
@@ -1646,6 +1658,11 @@ menus|menuspw|menusjoinpress)
 			fail "a press on the System Link list during the browser's join hosted the joiner's own game"
 		grep -aq "Internet play: the game is public" "$jl" &&
 			fail "the joiner published a listing of a game of its own while joining"
+	fi
+	if [ "$mode" = menusoff ]; then
+		grep -aq "menus: INTERNET: internet play was off: the connection switched to Online" "$jl" ||
+			fail "INTERNET did not switch the connection to Online"
+		grep -aq "ui: screen pc.mp.offline" "$jl" && fail "INTERNET opened the Internet play is off screen"
 	fi
 	if [ "$mode" = menuspw ]; then
 		grep -aq "ui: screen pc.join.password.screen" "$jl" || fail "the password screen did not open"
@@ -1738,12 +1755,18 @@ onlinebrowser|onlinebrowserded|onlinebrowsertab)
 	# (the title screen: A; the main menu's SERVER BROWSER: A - the profile chosen before, the
 	# games browser at once -; a while for the listing, A on the game's row, then Cross again
 	# at once and a second on, as a player pressing on while the host is reached: nothing hosted)
-	pad=${HALO_TEST_OB_PAD:-"wait:150:3000 a wait:150:4000 a wait:150:${HALO_TEST_MENUS_LIST_WAIT:-10000} a wait:150:250 a wait:150:1000 a"}
+	# (1.1.3's main menu: CAMPAIGN first, the SERVER BROWSER row gone - the stale presses opened
+	# CAMPAIGN -: the title's A; down to MULTIPLAYER, A: its lobby; down five to BROWSE GAMES, A:
+	# the profile, then the games browser; a while for the listing, as the touchdrag case reaches it)
+	# (the title waited for by name - it comes after the main menu's first frames on a loaded machine -
+	# and a while on it: a press as it fades in is not taken)
+	ob_reach="until/online\\title:150:500 wait:150:3000 a:150:4000 down:150:800 a:150:1000 until/online\\mp:150:4000 down:150:400 down:150:400 down:150:400 down:150:400 down:150:400 a:150:3000 wait:150:3000"
+	pad=${HALO_TEST_OB_PAD:-"$ob_reach wait:150:${HALO_TEST_MENUS_LIST_WAIT:-10000} a wait:150:250 a wait:150:1000 a"}
 	# (onlinebrowsertab: R three times - SYSTEM LINK, AD HOC, ONLINE again -, a while for the
 	# listing, and A once: the first press must join; as the Vita runs it,
 	# the Vita's picture, the menus' live backdrop with it - its objects in the ticks)
 	ob_env=
-	[ $mode = onlinebrowsertab ] && pad=${HALO_TEST_OB_PAD:-"wait:150:3000 a wait:150:4000 a wait:150:6000 rt wait:150:3000 rt wait:150:3000 rt wait:150:12000 a"} &&
+	[ $mode = onlinebrowsertab ] && pad=${HALO_TEST_OB_PAD:-"$ob_reach wait:150:3000 rt wait:150:3000 rt wait:150:3000 rt wait:150:12000 a"} &&
 		ob_env="HALO_GL_VITA_DISPLAY=1 HALO_TEST_PLATFORM=vita HALO_RENDER_SCALE=1"
 	HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$join_machine" "${HALO_TEST_VITA_JOINER:-$vita}" "$cpu_b" \
 		HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_MENU_STYLE=online HALO_TEST_INPUT=bot:2 \
@@ -1751,7 +1774,7 @@ onlinebrowser|onlinebrowserded|onlinebrowsertab)
 	wait $join_pid 2>/dev/null
 	jl=$out/joiner/run.log
 	echo "--- joiner"; grep -aE "ui: screen|menus: (joining|the public|the games browser|not hosting)|system link: (hosting|joining|in |the joined)|Internet play: (joining|connected to host|hosting|the game is public)" "$jl" | head -30
-	grep -aq "ui: screen pc.online.lan.screen" "$jl" || fail "the ElDewrito menus' server browser did not open"
+	grep -aq "ui: screen pc.online.lan.screen" "$jl" || fail "the ElDewrito menus' games browser (BROWSE GAMES) did not open"
 	name=VitaHost
 	[ $mode = onlinebrowserded ] && name="Netns Browser"
 	grep -aq "menus: joining the public game $name" "$jl" || fail "A on the game's row did not join it"
@@ -6910,7 +6933,7 @@ mcclan|mccmenus|mccxbox|xboxmcc|xboxlan|mixedmp|mixedrebuilt|mixedvitajoin|mixed
 	mcc_case
 	;;
 *)
-	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b|command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|commandoff|commandmap|h3command|pcmapjoin|workshop|workshopget|workshopno|workshopdiff|workshopold|mcclan|mccmenus|mccxbox|xboxmcc|xboxlan|mixedmp|mixedrebuilt|mixedvitajoin|mixedvitahost" >&2
+	echo "usage: $0 code|infection|infectionold|relay|latency|lobby|lobbypw|lobbyflap|lobbydns|menus|menuspw|menusjoinpress|menusoff|onlinebrowser|onlinebrowserded|onlinebrowsertab|browserscroll|menushost|pickjoin|lan|pc|pchost|adhoc|many|solo|coop|coopstarts|coopmenu|h3coopmenu|h3lan|h3adhoc|h3mppause|carnage|carnageold|h3scoreboard|h3live|h3liveleave|h3liveagain|h3liveonline|h3liveinvite|h3livebots|h3liveprivate|h3online|h3onlinelan|h3pickjoin|netswitch|coopmenuonline|busyport|dedicated|dedicatedpc|dedicatedban|dedicatedfill|dedicatedbots|dedicatedcompat|partyserver|hostbots|dedicatedcoop|dedicatedrace|fullcache|badmap|dedicatedmulti|scoreboard|dedicatedfullcache|dedicatedreload|splitscreen|pings|pingsmixed|unjoinable|mapmid|mapmidmixed|maplobby|swat|swatmixed|friends|friendsdecline|friendsblock|friendsinvite|friendsoffline|friendsforged|friendsplayers|friendsplayersoff|friendsplayersnone|friendsbackup|fsbrowse|fsbrowseui|fsbrowsecp|fssend|fsrefuse|fsbad|party|partyfollow|chat|friendsprivate|friendsprivatepw|forge|forge3|forgemp|forgeold|forgeleave|h3forge|h3forgeadhoc|forgepanel|h3forgeonline|h3forgeslow|h3forgeskip|h3variant|vitapc|vitaonly|hostfuzz|hostfuzzforge|hostfuzzmap|hostfuzzjoin|forgetele|forgeold112|forgeold111|forgelate112|forgeflagwarn|forgephase|forgerider|forgeitems|forgespawnpad|forgedeleteall|forgedeleteallold|friendforge|partyforge|friendmp|fjoin|partyleave|friendsremove|fedge|presence|presence2b|command|commandcoop|commanddrop|commandjoin|commandfuzz|commandold|commandoff|commandmap|h3command|pcmapjoin|workshop|workshopget|workshopno|workshopdiff|workshopold|mcclan|mccmenus|mccxbox|xboxmcc|xboxlan|mixedmp|mixedrebuilt|mixedvitajoin|mixedvitahost" >&2
 	exit 2
 	;;
 esac

@@ -98,7 +98,14 @@
 #               said, the game played on), and a map our client lacks
 #               (wizard: T3's refusal, crossplay_maps.c; checked only when
 #               this build has it, else reported as waiting for T3). A PC
-#               co-op game is not refused since Oct 11 2026: crosscoop
+#               co-op game is not refused since Oct 11 2026: crosscoop.
+#               And (1.1.3-insider.8k, the owner) an MCC-only client (an empty
+#               maps folder, MCC's halo1 linked as its Halo content folder:
+#               HALO_TEST_MCC_ROOT; skipped without) in a ChupathingyCE host's
+#               Blood Gulch (XPPC_CHUPA; else OpenCE's): refused before it
+#               loads, told a PC game needs the Xbox's maps, never a tick of
+#               the game (it loaded MCC's file and nothing of the host's world
+#               came alive: no player spawned)
 #   crosscoop   PC co-op (section 6.2): an OpenCE, a ChupathingyCE and a
 #               DamnationCE host each start a network co-op game on a
 #               campaign level (XPPC_COOP_LEVEL, b30: its Map screen's co-op,
@@ -2236,11 +2243,28 @@ crossrefuse)
 		done
 		client_maps=$out/maps-nowizard host_game=wizard pair refuse-map lan opence ours
 	fi
+	# (refuse-mcc: an MCC-only client, as the owner's daily Vita)
+	mcc_root=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
+	[ -d "$mcc_root/halo1/maps" ] && mcc_root=$mcc_root/halo1
+	refuse_mcc=0
+	if [ -r "$mcc_root/maps/ui.map" ] && [ -r "$mcc_root/maps/bloodgulch.map" ] && grep -aq "a PC game can only be joined with the Xbox's maps" "$vita"; then
+		refuse_mcc=1
+		mkdir -p "$out/maps-none" "$out/mcc-content/halo1/maps"
+		for f in "$mcc_root"/maps/*.map "$mcc_root"/maps/custom_edition; do ln -sfn "$f" "$out/mcc-content/halo1/maps/"; done
+		for f in "$mcc_root"/*; do [ "$(basename "$f")" = maps ] || ln -sfn "$f" "$out/mcc-content/halo1/"; done
+		mcc_host=opence
+		[ -n "$chupa" ] && [ -x "$chupa" ] && mcc_host=chupa
+		client_maps=$out/maps-none client_extra="HALO_CONTENT_ROOT=$out/mcc-content" pair refuse-mcc lan $mcc_host ours
+	fi
 	wait_pairs
-	for name in refuse-split refuse-map; do
+	for name in refuse-split refuse-map refuse-mcc; do
 		clientlog=$out/$name/client/run.log clientdebug=$out/$name/client/data/debug.txt
 		if [ "$name" = refuse-map ] && [ $t3 = 0 ]; then
 			echo "--- refuse-map: not checked: this build has no T3 map refusals (feat/xp-map-identity's crossplay_maps.c)"
+			continue
+		fi
+		if [ "$name" = refuse-mcc ] && [ $refuse_mcc = 0 ]; then
+			echo "--- refuse-mcc: not checked: no MCC halo1 folder at $mcc_root (HALO_TEST_MCC_ROOT), or a build before 1.1.3-insider.8l"
 			continue
 		fi
 		joined=$(grep -ac "network test: joining" "$clientlog" 2>/dev/null)
@@ -2273,6 +2297,18 @@ crossrefuse)
 			if [ -n "$got" ] && [ "${ticks:-0}" = 0 ]; then
 				result=pass
 			elif [ "${ticks:-0}" != 0 ]; then
+				result=played-instead-of-refusing
+			else
+				result=refusal-message
+			fi ;;
+		refuse-mcc)
+			got=$(grep -ah "a PC game can only be joined with the Xbox's maps" "$clientlog" 2>/dev/null | head -1)
+			ticks=$(sed -n "/join: the host's map is .*bloodgulch/,\$ p" "$clientlog" 2>/dev/null | grep -ac "network test: tick [0-9]* ")
+			loaded=$(grep -ac "system link: in a network game" "$clientlog" 2>/dev/null)
+			echo "--- $name: our MCC-only client played ${ticks:-0} ticks of the host's game, in it ${loaded:-0} times; the refusal: ${got:-none}"
+			if [ -n "$got" ] && [ "${ticks:-0}" = 0 ] && [ "${loaded:-0}" = 0 ]; then
+				result=pass
+			elif [ "${ticks:-0}" != 0 ] || [ "${loaded:-0}" != 0 ]; then
 				result=played-instead-of-refusing
 			else
 				result=refusal-message

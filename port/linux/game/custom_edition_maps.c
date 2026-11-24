@@ -1770,7 +1770,22 @@ short custom_edition_maps_crossplay_check(
 		custom_edition_cache_crossplay_facts(file, kind == _crossplay_map_kind_custom_edition ? host_version : 0, &local);
 		if (kind == _crossplay_map_kind_xbox && crossplay_map_file_is_stock(file) && !host_version)
 		{
-			local.stock_problem = custom_edition_maps_stock_problem(level_name, 0, why, why_size);
+			/* (1.1.3-insider.8k, the owner on an MCC-only Vita: a PC host's game - ChupathingyCE's - joined and
+			loaded MCC's file of the level: nothing of the host's world came alive here, no player of this machine
+			spawned, a white screen and "Waiting for space to clear". Mixed play (custom_edition_maps_stock_problem's
+			mixed_coop_host_level_acceptable) lets MCC's file stand for the Xbox's only for a host that says it plays
+			mixed and sends its level's digests - this build's own; a PC host never does: its game is played here
+			from the Xbox's file alone, as before mixed play, and an MCC-only machine is refused before it loads,
+			told why) */
+			local.stock_problem = xbox_level_stock(tag_name_strip_path(level_name)) &&
+				cache_files_xbox_map_problem(level_name, why, why_size);
+			if (local.stock_problem && cache_files_multiplayer_family_is_mcc())
+			{
+				snprintf(why, (size_t)why_size, "%s", T("this is a PC game, and your maps are MCC's: a PC game can only "
+					"be joined with the Xbox's maps. Mixed MCC and Xbox games are played with Halo CE Vita hosts"));
+				error(_error_silent, "crossplay: the PC host plays the Xbox level '%s' and this machine has MCC's file of it "
+					"alone: refused before loading (a PC host sends no mixed play digests)", file);
+			}
 		}
 		if (kind == _crossplay_map_kind_custom_edition && local.file == _crossplay_map_file_custom_edition)
 		{

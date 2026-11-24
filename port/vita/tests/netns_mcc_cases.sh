@@ -12,6 +12,10 @@
 #   mccmenus  internet play from Classic+'s menus (Menu style classic, OpenCE's multiplayer screens) on an
 #             MCC-only joiner: MULTIPLAYER, INTERNET opens (never "multiplayer unavailable"), the server
 #             browser lists the MCC-only host's public game, the joiner joins it and plays
+#             HALO_TEST_MCCMENUS_HOST=xbox: an Xbox-files host's Blood Gulch instead (mixed play: the MCC
+#             joiner takes its layout); HALO_TEST_MCCMENUS_ONLINE=false: the joiner on its own connection (Same
+#             Wi-Fi, the Vita's default) - INTERNET switches it to Online (1.1.3-insider.8k, the owner: it only
+#             said "Internet play is off ... restart the game")
 #   mccxbox   an MCC-only host's System Link game, an Xbox machine (no MCC files) joins: refused as a mixed
 #             game (custom_edition_maps_family_mixed) with "This game's maps are a different version from
 #             yours; mixed games are coming", stays up, never in the game, no download offered
@@ -305,6 +309,11 @@ mcc_case() {
 	case $mode in
 	mcclan|mccmenus) host_data=$out/mcc-none join_data=$out/mcc-none host_content=$out/mcc-content
 		join_content=$out/mcc-content host_game=host:mcc_bloodgulch:slayer ;;
+	esac
+	# (mccmenus with an Xbox-files host: its Blood Gulch, mixed)
+	[ $mode = mccmenus ] && [ "${HALO_TEST_MCCMENUS_HOST:-mcc}" = xbox ] && host_data=$data host_content=none \
+		host_game=host:bloodgulch:slayer
+	case $mode in
 	mccxbox) host_data=$out/mcc-none host_content=$out/mcc-content host_game=host:mcc_bloodgulch:slayer ;;
 	xboxmcc) join_data=$out/mcc-none join_content=$out/mcc-content ;;
 	esac
@@ -322,8 +331,8 @@ mcc_case() {
 		echo "host's code: $code"
 		pad="wait:150:3000 down a wait:150:2000 a wait:150:2000 a wait:150:2000 a wait:150:2000 a"
 		pad="$pad wait:150:${HALO_TEST_MENUS_LIST_WAIT:-12000} a"
-		run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=true HALO_NETWORK_TEST=watch HALO_UI_LOG=1 \
-			HALO_CONTENT_ROOT="$join_content" HALO_TEST_INPUT=bot:2 "HALO_TEST_PAD=$pad"; join_pid=$last_pid
+		run_copy joiner "$join_machine" "$vita" "$cpu_b" HALO_NET_ONLINE=${HALO_TEST_MCCMENUS_ONLINE:-true} HALO_NETWORK_TEST=watch \
+			HALO_UI_LOG=1 HALO_CONTENT_ROOT="$join_content" HALO_TEST_INPUT=bot:2 "HALO_TEST_PAD=$pad"; join_pid=$last_pid
 	else
 		mcc_lan_machine
 		run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NET_ONLINE=false HALO_NETWORK_TEST=$host_game \
@@ -348,7 +357,7 @@ mcc_case() {
 		[ "$two" -ge $([ $mode = mccmenus ] && echo 30 || echo 60) ] ||
 			fail "the joiner played the host's game for $two s with two players"
 		mcc_scoreboards
-		if [ $mode != xboxlan ]; then
+		if [ $mode != xboxlan ] && [ "$host_content" != none ]; then
 			grep -aq "join: the host's map is levels.test.mcc_bloodgulch.mcc_bloodgulch (copy 0x" "$jl" ||
 				fail "the joiner did not check the host's MCC map by its copy"
 			for side in host joiner; do
@@ -362,6 +371,10 @@ mcc_case() {
 			grep -aq "ui: screen pc.browser.screen" "$jl" || fail "the server browser did not open"
 			grep -aq "menus: joining the public game MccHost" "$jl" || fail "the joiner did not join the host's game from the browser"
 			grep -aq "system link: in another's lobby\|system link: in a network game" "$jl" || fail "the joiner did not get into the host's game"
+			[ "${HALO_TEST_MCCMENUS_ONLINE:-true}" = false ] && { grep -aq "menus: INTERNET: internet play was off: the connection switched to Online" "$jl" ||
+				fail "INTERNET did not switch the joiner's connection to Online"; }
+			[ "${HALO_TEST_MCCMENUS_HOST:-mcc}" = xbox ] && { grep -aq "mixed co-op: the host's level matches this machine's" "$jl" ||
+				fail "the MCC joiner never matched the Xbox host's dictionary"; }
 		fi
 		;;
 	mccxbox)
