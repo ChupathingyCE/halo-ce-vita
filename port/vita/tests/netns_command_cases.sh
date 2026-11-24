@@ -210,12 +210,12 @@ command_case() {
 		host_cmds="L300:command net;L400:command buy marines;L900:command net;L1000:command camera 70 -120 300 34;L1040:@shot command-host-game"
 		join_cmds="L300:command net;L400:command buy grunts;L900:command net;L1000:command camera 70 -120 120 34;L1040:@shot command-joiner-game"
 		HALO_TEST_DATA_HOST=$menus_data run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false \
-			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_MENU_STYLE=halo3 HALO_TEST_FORGE_PACKS=none $(command_shots host) \
+			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_MENU_STYLE=halo3 HALO_TEST_FORGE_PACKS=none HALO_EXPERIMENTAL_MODES=true $(command_shots host) \
 			"HALO_TEST_PAD=$host_pad" "HALO_TEST_COMMANDS=$host_cmds"
 		host_pid=$last_pid
 		sleep 5
 		HALO_TEST_DATA_JOINER=$menus_data run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false \
-			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_MENU_STYLE=halo3 HALO_TEST_FORGE_PACKS=none $(command_shots joiner) \
+			HALO_NETWORK_TEST=watch HALO_UI_LOG=1 HALO_MENU_STYLE=halo3 HALO_TEST_FORGE_PACKS=none HALO_EXPERIMENTAL_MODES=true $(command_shots joiner) \
 			"HALO_TEST_PAD=wait:150:3000 down:150:700 a wait:150:3000 down:150:500 down:150:500 down:150:500 down:150:500 down:150:500 a wait:150:3000 a a a wait:150:15000 a wait:150:10000 @command-joiner-lobby:0:300" \
 			"HALO_TEST_COMMANDS=$join_cmds"
 		join_pid=$last_pid

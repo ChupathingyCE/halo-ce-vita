@@ -169,11 +169,14 @@ forge_shots() { # NAME: the copy's screenshots at the Vita's picture, in HALO_TE
 	echo "HALO_SCREENSHOT_DIR=$HALO_TEST_SHOTS/$1 HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1"
 }
 
-# the host's Forge game, with HALO_TEST_COMMANDS commands
+# the host's Forge game, with HALO_TEST_COMMANDS commands (HALO_TEST_FORGE_HOST_GAME: another network test
+# game, host:mcc_bloodgulch:forge for MCC's own copy on an install from MCC alone - HALO_TEST_DATA_HOST, its
+# HALO_CONTENT_ROOT by HALO_TEST_ENV_host)
 forge_host() { # forge_host COMMANDS [ENV...]
 	local commands=$1
 	shift
-	run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false HALO_NETWORK_TEST=host:bloodgulch:forge \
+	run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false \
+		HALO_NETWORK_TEST=${HALO_TEST_FORGE_HOST_GAME:-host:bloodgulch:forge} \
 		HALO_NETWORK_TEST_START=20 HALO_TEST_FORGE_PACKS=covenant_vehicles,covenant_ai "HALO_TEST_COMMANDS=$commands" "$@"
 	host_pid=$last_pid
 }
