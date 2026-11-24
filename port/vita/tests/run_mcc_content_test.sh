@@ -434,7 +434,7 @@ PY
 		log=$(menu_log mcconline)
 		if grep -aq "OpenCE's multiplayer screens not added" "$log"; then
 			fail "mcconline: the menus folder's screens were not added with MCC's ui.map alone ($out/mcconline)"
-		elif ! grep -aq "connected.pregame.connected_pregame_screen: an empty widget stands in for it" "$log"; then
+		elif ! grep -aqE "connected.pregame.connected_pregame_screen: (an empty widget stands in for it|Classic\+'s own in its place)" "$log"; then
 			fail "mcconline: no stand-in for the Xbox's lobby screen ($out/mcconline)"
 		elif ! grep -aq "menus: online screen pc.online.main.screen for pc.h3.main.screen" "$log" ||
 			! grep -aq "menus: Halo 3 screen h3/main/screen for ui.shell.main_menu.main_menu" "$log"; then
