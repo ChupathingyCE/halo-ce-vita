@@ -61,6 +61,11 @@ mcc_root=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo Th
 # (MCC's own folder, as pcmapjoin takes HALO_TEST_MCC_ROOT, holding halo1: its halo1)
 [ -d "$mcc_root/halo1/maps" ] && mcc_root=$mcc_root/halo1
 
+# (each MCC-only machine's scripted player, HALO_TEST_INPUT=bot, kept off the menus by a pad of one wait - the
+# scripted player plays only in a level when a pad is given, xinput_sdl.c: since the Classic+ audit an MCC-only
+# machine's network lobby is the Xbox's, as an Xbox-files one's, where its presses opened Y PLAYERS and the
+# host's KICK kicked the joiner as it came in)
+
 # mcc_setup: the MCC-only data folder ($out/mcc-none, its maps folder empty) and the content folder
 # ($out/mcc-content/halo1/maps: links to MCC's files)
 mcc_setup() {
@@ -115,7 +120,7 @@ mixed_vita_case() {
 		run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false HALO_NET_COOP_LEVEL=a10 \
 			HALO_NETWORK_TEST=host:a10 HALO_NETWORK_TEST_START=150 HALO_TEST_INPUT=bot:1:look HALO_NET_COOP_PLAYERS=2 \
 			HALO_NET_WHO_CAN_JOIN=vita_pc HALO_MENU_STYLE=classic HALO_UI_LOG=1 HALO_CONTENT_ROOT="$out/mcc-vita" \
-			HALO_MIXED_COOP_HASH=1; host_pid=$last_pid
+			HALO_MIXED_COOP_HASH=1 HALO_TEST_PAD=wait:150:1000; host_pid=$last_pid
 		sleep 5
 		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2:look \
 			HALO_CONTENT_ROOT=none HALO_MIXED_COOP_HASH=1; join_pid=$last_pid
@@ -260,10 +265,11 @@ mixed_case() {
 	mcc_lan_machine
 	local decisions="HALO_MIXED_DECISIONS=${HALO_TEST_MIXED_DECISIONS:-}"
 	run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NET_ONLINE=false \
-		HALO_NETWORK_TEST=host:$host_name:$game HALO_CONTENT_ROOT="$host_content" HALO_MIXED_COOP_HASH=1 $decisions; host_pid=$last_pid
+		HALO_NETWORK_TEST=host:$host_name:$game HALO_CONTENT_ROOT="$host_content" HALO_MIXED_COOP_HASH=1 $decisions \
+		$([ "$host_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); host_pid=$last_pid
 	sleep 5
 	run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2 \
-		HALO_CONTENT_ROOT="$join_content" HALO_MIXED_COOP_HASH=1 $decisions; join_pid=$last_pid
+		HALO_CONTENT_ROOT="$join_content" HALO_MIXED_COOP_HASH=1 $decisions $([ "$join_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); join_pid=$last_pid
 	wait $join_pid $host_pid 2>/dev/null
 	hl=$out/host/run.log
 	jl=$out/joiner/run.log
@@ -390,10 +396,10 @@ mcc_case() {
 	else
 		mcc_lan_machine
 		run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NET_ONLINE=false HALO_NETWORK_TEST=$host_game \
-			HALO_CONTENT_ROOT="$host_content"; host_pid=$last_pid
+			HALO_CONTENT_ROOT="$host_content" $([ "$host_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); host_pid=$last_pid
 		sleep 5
 		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2 \
-			HALO_CONTENT_ROOT="$join_content"; join_pid=$last_pid
+			HALO_CONTENT_ROOT="$join_content" $([ "$join_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); join_pid=$last_pid
 	fi
 	wait $join_pid $host_pid 2>/dev/null
 	hl=$out/host/run.log
