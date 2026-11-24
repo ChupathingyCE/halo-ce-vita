@@ -80,6 +80,9 @@ chooses stereo or 5.1 (port_config.c).
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#include <arm_neon.h>
+#endif
 
 #define OUTPUT_RATE 48000
 #define OUTPUT_CHANNELS 2 /* the stereo mix's, and the reverb's outputs */
@@ -115,6 +118,16 @@ however many frames the mixes have, a ramp going on from one mix into the
 next (mix_voice). An Xbox's took 1 to 2 ms: recorded by the OpenH1 team, a
 step of each settled from 10% to 90% within them */
 #define PARAMETER_RAMP_FRAMES 64
+
+/* the default mix's blocks (mix_voice): at most MIX_BLOCK_FRAMES output
+frames, over which the voice's frames move on at most MIX_BLOCK_SPAN (with
+the low pass's reach on each side, inside RESAMPLER_HISTORY). MIXER_BLOCKS 0
+mixes every voice a frame at a time */
+#define MIX_BLOCK_FRAMES 32
+#define MIX_BLOCK_SPAN 64
+#ifndef MIXER_BLOCKS
+#define MIXER_BLOCKS 1
+#endif
 
 /* The output's level (audio.loudness: output_loudness_read). An Xbox played
 every sound at exactly half of the sum (-6.02 dB), 2D and 3D voices, the
@@ -377,7 +390,31 @@ the reverb fed silence decays into the denormals, which many CPUs work out
 slowly, and neither x86 nor ARM flushes them to zero by default */
 static float flush_denormal(float value)
 {
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+	/* (the same, without the compare's move of the flags to the core: on
+	a Cortex-A9 that waits for every float instruction before it, and the
+	mixer and the reverb flush a value a frame or more each) */
+	float32x2_t values = vdup_n_f32(value);
+	uint32x2_t tiny = vcalt_f32(values, vdup_n_f32(1.0e-20f));
+
+	return vget_lane_f32(vreinterpret_f32_u32(vbic_u32(vreinterpret_u32_f32(values), tiny)), 0);
+#else
 	return fabsf(value) < 1.0e-20f ? 0.0f : value;
+#endif
+}
+
+/* a float's magnitude (its bits without the sign; a NaN's 0), which orders as
+the magnitudes do, read from memory as an integer: the limiter's and the
+reverb's tests of their samples, which a float compare would make wait for the
+float instructions before it on a Cortex-A9 (flush_denormal) */
+#define FLOAT_ONE 0x3f800000u
+static uint32_t float_magnitude(const float *value)
+{
+	uint32_t bits;
+
+	memcpy(&bits, value, sizeof(bits));
+	bits &= 0x7fffffffu;
+	return bits > 0x7f800000u ? 0 : bits;
 }
 
 /* cos(2 pi f / OUTPUT_RATE) of a filter's frequency f, within what the
@@ -1467,172 +1504,321 @@ static void mix_voice(struct sdl_stream *stream, float *output, float *send, uns
 	voice_history_count = stream->history_count;
 	voice_silence = stream->silence;
 	voice_channels = stream->channels;
-	for (frame = 0; frame < frames; frame++)
+	if (MIXER_BLOCKS && !surround && !binaural && resampling_mode == RESAMPLING_XBOX)
 	{
-		float sample_left = 0.0f, sample_right = 0.0f;
-		long tap;
-
-		/* the frames ahead the low pass reaches; after the last packet,
-		silence, until what was taken has played out */
-		while ((long)(voice_history_count - voice_center) <= width)
+		/* the default mix (stereo, the Xbox's low pass, no HRTF), in blocks:
+		the same arithmetic as a frame at a time (below), in the same
+		order, in three passes over up to MIX_BLOCK_FRAMES frames. First
+		each frame's place in the voice's frames (its center, and the row
+		and blend of xbox_phases), then the frames the low pass reaches
+		taken (and the voice's end found), then the frames mixed. A block
+		ends where a ramp does, so the gains' and low passes' tests hold
+		for all of its frames: none of the float compares, and only one
+		float-to-integer move, a frame (on a Cortex-A9 each waits for the
+		float instructions before it) */
+		frame = 0;
+		while (frame < frames)
 		{
-			unsigned long slot = voice_history_count % RESAMPLER_HISTORY;
-			float taken[2];
+			unsigned long centers[MIX_BLOCK_FRAMES + 1], rows[MIX_BLOCK_FRAMES];
+			float blends[MIX_BLOCK_FRAMES];
+			double phases[MIX_BLOCK_FRAMES + 1], steps[MIX_BLOCK_FRAMES + 1];
+			double block_ramp_step = ramp_step;
+			unsigned long count = frames - frame, planned, mixed, index;
+			unsigned long block_center = voice_center;
+			BOOL quiet, direct_on, room_on;
 
-			if (take_frame(stream, taken))
+			if (count > MIX_BLOCK_FRAMES)
+				count = MIX_BLOCK_FRAMES;
+			if (ramp_frames > frame && ramp_frames - frame < count)
+				count = ramp_frames - frame;
+			/* (a block's centers move on at most MIX_BLOCK_SPAN frames, so that
+			the frames its last takes leave the first's in the history) */
+			for (planned = 0; planned < count && voice_center - block_center <= MIX_BLOCK_SPAN; planned++)
 			{
-				voice_silence = 0;
+				double position = voice_phase * RESAMPLER_TABLE_STEPS;
+				unsigned long row = (unsigned long)position, whole;
+
+				centers[planned] = voice_center;
+				phases[planned] = voice_phase;
+				steps[planned] = step;
+				rows[planned] = row;
+				blends[planned] = (float)(position - (double)row);
+				voice_phase += step;
+				/* (the whole frames passed, taken off at once: each 1.0 taken
+				off by itself was exact, and so is their sum) */
+				whole = (unsigned long)voice_phase;
+				voice_phase -= (double)whole;
+				voice_center += whole;
+				if (frame + planned + 1 == ramp_frames)
+				{
+					step = target_step;
+					ramp_step = 0.0;
+				}
+				else
+					step += ramp_step;
 			}
-			else
+			centers[planned] = voice_center;
+			phases[planned] = voice_phase;
+			steps[planned] = step;
+			/* the frames ahead the low pass reaches; after the last packet,
+			silence, until what was taken has played out */
+			for (mixed = 0; mixed < planned; mixed++)
 			{
-				taken[0] = taken[1] = 0.0f;
-				voice_silence++;
+				while ((long)(voice_history_count - centers[mixed]) <= width)
+				{
+					unsigned long slot = voice_history_count % RESAMPLER_HISTORY;
+					float taken[2];
+
+					if (take_frame(stream, taken))
+					{
+						voice_silence = 0;
+					}
+					else
+					{
+						taken[0] = taken[1] = 0.0f;
+						voice_silence++;
+					}
+					stream->history[0][slot] = stream->history[0][slot + RESAMPLER_HISTORY] = taken[0];
+					stream->history[1][slot] = stream->history[1][slot + RESAMPLER_HISTORY] = taken[1];
+					voice_history_count++;
+				}
+				if (voice_silence > (unsigned long)(2 * width))
+					break;
 			}
-			stream->history[0][slot] = stream->history[0][slot + RESAMPLER_HISTORY] = taken[0];
-			stream->history[1][slot] = stream->history[1][slot + RESAMPLER_HISTORY] = taken[1];
-			voice_history_count++;
-		}
-		if (voice_silence > (unsigned long)(2 * width))
-			break;
-
-		if (!left && !right && !room && !ramp_left && !ramp_right && !ramp_room && !binaural)
-		{
-			/* a voice turned all the way down (out of earshot), and not
-			sending to the reverb, only moves on */
-		}
-		else if (resampling_mode == RESAMPLING_LINEAR)
-		{
-			unsigned long a = voice_center % RESAMPLER_HISTORY;
-			const float *left_frames = stream->history[0] + a, *right_frames = stream->history[1] + a;
-			float fraction = (float)voice_phase;
-
-			sample_left = left_frames[0] + (left_frames[1] - left_frames[0]) * fraction;
-			sample_right = right_frames[0] + (right_frames[1] - right_frames[0]) * fraction;
-		}
-		else if (resampling_mode == RESAMPLING_XBOX)
-		{
-			/* the Xbox's own low pass (xbox_phases), never narrowed */
-			double position = voice_phase * RESAMPLER_TABLE_STEPS;
-			unsigned long row = (unsigned long)position;
-			float blend = (float)(position - (double)row);
-			unsigned long first = (voice_center + 1 - XBOX_RESAMPLER_ZERO_CROSSINGS) % RESAMPLER_HISTORY;
-
-			sample_left = xbox_dot(stream->history[0] + first, xbox_phases[row], xbox_deltas[row], blend);
-			sample_right = voice_channels == 1 ? sample_left :
-				xbox_dot(stream->history[1] + first, xbox_phases[row], xbox_deltas[row], blend);
-		}
-		else if (scale == 1.0f)
-		{
-			double position = voice_phase * RESAMPLER_TABLE_STEPS;
-			unsigned long row = (unsigned long)position;
-			float blend = (float)(position - (double)row);
-			unsigned long first = (voice_center + 1 - RESAMPLER_ZERO_CROSSINGS) % RESAMPLER_HISTORY;
-
-			/* (a mono voice's two channels are the same: take_frame) */
-			if (voice_channels == 1)
+			if (mixed < planned)
 			{
-				sample_left = sample_right = resampler_dot(stream->history[0] + first, resampler_phases[row],
-					resampler_deltas[row], blend);
+				/* (it ran dry: the frames from there on are not mixed) */
+				voice_phase = phases[mixed];
+				voice_center = centers[mixed];
+				step = steps[mixed];
+				ramp_step = block_ramp_step;
 			}
-			else
+			quiet = !left && !right && !room && !ramp_left && !ramp_right && !ramp_room;
+			direct_on = direct_lowpass || ramp_direct_lowpass;
+			room_on = room || ramp_room;
+			for (index = 0; index < mixed; index++, frame++)
 			{
-				resampler_dot2(stream->history[0] + first, stream->history[1] + first, resampler_phases[row],
-					resampler_deltas[row], blend, &sample_left, &sample_right);
-			}
-		}
-		else
-		{
-			unsigned long first = (voice_center + 1 - (unsigned long)width) % RESAMPLER_HISTORY;
-			const float *left_frames = stream->history[0] + first, *right_frames = stream->history[1] + first;
+				float sample_left = 0.0f, sample_right = 0.0f;
 
-			for (tap = 1 - width; tap <= width; tap++)
-			{
-				float weight = scale * resampler_weight(fabsf((float)tap - (float)voice_phase) * scale * RESAMPLER_TABLE_STEPS);
+				/* (a voice turned all the way down, and not sending to the
+				reverb, only moves on) */
+				if (!quiet)
+				{
+					unsigned long first = (centers[index] + 1 - XBOX_RESAMPLER_ZERO_CROSSINGS) % RESAMPLER_HISTORY;
+					const float *weights = xbox_phases[rows[index]], *deltas = xbox_deltas[rows[index]];
 
-				sample_left += left_frames[tap + width - 1] * weight;
-				if (voice_channels == 2)
-					sample_right += right_frames[tap + width - 1] * weight;
-			}
-			if (voice_channels == 1)
-				sample_right = sample_left;
-		}
-		/* the room send, with its own low pass */
-		if (room || ramp_room)
-		{
-			float mono = voice_channels == 1 ? sample_left : 0.5f * (sample_left + sample_right);
+					sample_left = xbox_dot(stream->history[0] + first, weights, deltas, blends[index]);
+					sample_right = voice_channels == 1 ? sample_left :
+						xbox_dot(stream->history[1] + first, weights, deltas, blends[index]);
+				}
+				if (room_on)
+				{
+					float mono = voice_channels == 1 ? sample_left : 0.5f * (sample_left + sample_right);
 
-			room_state = flush_denormal(mono + room_lowpass * (room_state - mono));
-			send[frame] += room_state * room;
-		}
-		/* the direct path, muffled, or as it is; a mono voice's mix bins or pan
-		split it across the speakers */
-		if (direct_lowpass || ramp_direct_lowpass)
-		{
-			sample_left = flush_denormal(sample_left + direct_lowpass * (direct_state[0] - sample_left));
-			sample_right = flush_denormal(sample_right + direct_lowpass * (direct_state[1] - sample_right));
-		}
-		direct_state[0] = sample_left;
-		direct_state[1] = sample_right;
-		if (binaural)
-			hrtf_mono[frame] = voice_channels == 1 ? sample_left : 0.5f * (sample_left + sample_right);
-		if (surround)
-		{
-			/* the first row's gains take the left (a mono voice's only)
-			channel, the second the right */
-			float *speakers = output + frame * output_channels;
-			float first = sample_left;
-			float second = voice_channels == 2 ? sample_right : 0.0f;
-
-			for (speaker = 0; speaker < output_channels; speaker++)
-			{
-				speakers[speaker] += first * surround_gains[0][speaker] + second * surround_gains[1][speaker];
-				surround_gains[0][speaker] += ramp_surround[0][speaker];
-				surround_gains[1][speaker] += ramp_surround[1][speaker];
+					room_state = flush_denormal(mono + room_lowpass * (room_state - mono));
+					send[frame] += room_state * room;
+				}
+				if (direct_on)
+				{
+					sample_left = flush_denormal(sample_left + direct_lowpass * (direct_state[0] - sample_left));
+					sample_right = flush_denormal(sample_right + direct_lowpass * (direct_state[1] - sample_right));
+				}
+				direct_state[0] = sample_left;
+				direct_state[1] = sample_right;
+				if (!quiet)
+				{
+					output[frame * 2] += sample_left * left;
+					output[frame * 2 + 1] += sample_right * right;
+				}
+				if (frame + 1 == ramp_frames)
+				{
+					left = target_left;
+					right = target_right;
+					room = target_room;
+					direct_lowpass = target_direct_lowpass;
+					room_lowpass = target_room_lowpass;
+					ramp_left = ramp_right = ramp_room = ramp_direct_lowpass = ramp_room_lowpass = 0.0f;
+				}
+				else
+				{
+					left += ramp_left;
+					right += ramp_right;
+					room += ramp_room;
+					direct_lowpass += ramp_direct_lowpass;
+					room_lowpass += ramp_room_lowpass;
+				}
 			}
-		}
-		else if (voice_channels == 1)
-		{
-			output[frame * 2] += sample_left * left;
-			output[frame * 2 + 1] += sample_left * right;
-		}
-		else
-		{
-			output[frame * 2] += sample_left * left;
-			output[frame * 2 + 1] += sample_right * right;
-		}
-		voice_phase += step;
-		while (voice_phase >= 1.0)
-		{
-			voice_phase -= 1.0;
-			voice_center++;
-		}
-		/* (at the ramp's end, exactly the new ones, held) */
-		if (frame + 1 == ramp_frames)
-		{
-			left = target_left;
-			right = target_right;
-			room = target_room;
-			direct_lowpass = target_direct_lowpass;
-			room_lowpass = target_room_lowpass;
-			step = target_step;
-			ramp_left = ramp_right = ramp_room = ramp_direct_lowpass = ramp_room_lowpass = 0.0f;
-			ramp_step = 0.0;
-			if (surround)
-			{
-				memcpy(surround_gains, target_surround, sizeof(surround_gains));
-				memset(ramp_surround, 0, sizeof(ramp_surround));
-			}
-		}
-		else
-		{
-			left += ramp_left;
-			right += ramp_right;
-			room += ramp_room;
-			direct_lowpass += ramp_direct_lowpass;
-			room_lowpass += ramp_room_lowpass;
-			step += ramp_step;
+			if (mixed < planned)
+				break;
 		}
 	}
+	else
+		for (frame = 0; frame < frames; frame++)
+		{
+			float sample_left = 0.0f, sample_right = 0.0f;
+			long tap;
+
+			/* the frames ahead the low pass reaches; after the last packet,
+			silence, until what was taken has played out */
+			while ((long)(voice_history_count - voice_center) <= width)
+			{
+				unsigned long slot = voice_history_count % RESAMPLER_HISTORY;
+				float taken[2];
+
+				if (take_frame(stream, taken))
+				{
+					voice_silence = 0;
+				}
+				else
+				{
+					taken[0] = taken[1] = 0.0f;
+					voice_silence++;
+				}
+				stream->history[0][slot] = stream->history[0][slot + RESAMPLER_HISTORY] = taken[0];
+				stream->history[1][slot] = stream->history[1][slot + RESAMPLER_HISTORY] = taken[1];
+				voice_history_count++;
+			}
+			if (voice_silence > (unsigned long)(2 * width))
+				break;
+
+			if (!left && !right && !room && !ramp_left && !ramp_right && !ramp_room && !binaural)
+			{
+				/* a voice turned all the way down (out of earshot), and not
+				sending to the reverb, only moves on */
+			}
+			else if (resampling_mode == RESAMPLING_LINEAR)
+			{
+				unsigned long a = voice_center % RESAMPLER_HISTORY;
+				const float *left_frames = stream->history[0] + a, *right_frames = stream->history[1] + a;
+				float fraction = (float)voice_phase;
+
+				sample_left = left_frames[0] + (left_frames[1] - left_frames[0]) * fraction;
+				sample_right = right_frames[0] + (right_frames[1] - right_frames[0]) * fraction;
+			}
+			else if (resampling_mode == RESAMPLING_XBOX)
+			{
+				/* the Xbox's own low pass (xbox_phases), never narrowed */
+				double position = voice_phase * RESAMPLER_TABLE_STEPS;
+				unsigned long row = (unsigned long)position;
+				float blend = (float)(position - (double)row);
+				unsigned long first = (voice_center + 1 - XBOX_RESAMPLER_ZERO_CROSSINGS) % RESAMPLER_HISTORY;
+
+				sample_left = xbox_dot(stream->history[0] + first, xbox_phases[row], xbox_deltas[row], blend);
+				sample_right = voice_channels == 1 ? sample_left :
+					xbox_dot(stream->history[1] + first, xbox_phases[row], xbox_deltas[row], blend);
+			}
+			else if (scale == 1.0f)
+			{
+				double position = voice_phase * RESAMPLER_TABLE_STEPS;
+				unsigned long row = (unsigned long)position;
+				float blend = (float)(position - (double)row);
+				unsigned long first = (voice_center + 1 - RESAMPLER_ZERO_CROSSINGS) % RESAMPLER_HISTORY;
+
+				/* (a mono voice's two channels are the same: take_frame) */
+				if (voice_channels == 1)
+				{
+					sample_left = sample_right = resampler_dot(stream->history[0] + first, resampler_phases[row],
+						resampler_deltas[row], blend);
+				}
+				else
+				{
+					resampler_dot2(stream->history[0] + first, stream->history[1] + first, resampler_phases[row],
+						resampler_deltas[row], blend, &sample_left, &sample_right);
+				}
+			}
+			else
+			{
+				unsigned long first = (voice_center + 1 - (unsigned long)width) % RESAMPLER_HISTORY;
+				const float *left_frames = stream->history[0] + first, *right_frames = stream->history[1] + first;
+
+				for (tap = 1 - width; tap <= width; tap++)
+				{
+					float weight = scale * resampler_weight(fabsf((float)tap - (float)voice_phase) * scale * RESAMPLER_TABLE_STEPS);
+
+					sample_left += left_frames[tap + width - 1] * weight;
+					if (voice_channels == 2)
+						sample_right += right_frames[tap + width - 1] * weight;
+				}
+				if (voice_channels == 1)
+					sample_right = sample_left;
+			}
+			/* the room send, with its own low pass */
+			if (room || ramp_room)
+			{
+				float mono = voice_channels == 1 ? sample_left : 0.5f * (sample_left + sample_right);
+
+				room_state = flush_denormal(mono + room_lowpass * (room_state - mono));
+				send[frame] += room_state * room;
+			}
+			/* the direct path, muffled, or as it is; a mono voice's mix bins or pan
+			split it across the speakers */
+			if (direct_lowpass || ramp_direct_lowpass)
+			{
+				sample_left = flush_denormal(sample_left + direct_lowpass * (direct_state[0] - sample_left));
+				sample_right = flush_denormal(sample_right + direct_lowpass * (direct_state[1] - sample_right));
+			}
+			direct_state[0] = sample_left;
+			direct_state[1] = sample_right;
+			if (binaural)
+				hrtf_mono[frame] = voice_channels == 1 ? sample_left : 0.5f * (sample_left + sample_right);
+			if (surround)
+			{
+				/* the first row's gains take the left (a mono voice's only)
+				channel, the second the right */
+				float *speakers = output + frame * output_channels;
+				float first = sample_left;
+				float second = voice_channels == 2 ? sample_right : 0.0f;
+
+				for (speaker = 0; speaker < output_channels; speaker++)
+				{
+					speakers[speaker] += first * surround_gains[0][speaker] + second * surround_gains[1][speaker];
+					surround_gains[0][speaker] += ramp_surround[0][speaker];
+					surround_gains[1][speaker] += ramp_surround[1][speaker];
+				}
+			}
+			else if (voice_channels == 1)
+			{
+				output[frame * 2] += sample_left * left;
+				output[frame * 2 + 1] += sample_left * right;
+			}
+			else
+			{
+				output[frame * 2] += sample_left * left;
+				output[frame * 2 + 1] += sample_right * right;
+			}
+			voice_phase += step;
+			while (voice_phase >= 1.0)
+			{
+				voice_phase -= 1.0;
+				voice_center++;
+			}
+			/* (at the ramp's end, exactly the new ones, held) */
+			if (frame + 1 == ramp_frames)
+			{
+				left = target_left;
+				right = target_right;
+				room = target_room;
+				direct_lowpass = target_direct_lowpass;
+				room_lowpass = target_room_lowpass;
+				step = target_step;
+				ramp_left = ramp_right = ramp_room = ramp_direct_lowpass = ramp_room_lowpass = 0.0f;
+				ramp_step = 0.0;
+				if (surround)
+				{
+					memcpy(surround_gains, target_surround, sizeof(surround_gains));
+					memset(ramp_surround, 0, sizeof(ramp_surround));
+				}
+			}
+			else
+			{
+				left += ramp_left;
+				right += ramp_right;
+				room += ramp_room;
+				direct_lowpass += ramp_direct_lowpass;
+				room_lowpass += ramp_room_lowpass;
+				step += ramp_step;
+			}
+		}
 	stream->phase = voice_phase;
 	stream->center = voice_center;
 	stream->history_count = voice_history_count;
@@ -1704,6 +1890,50 @@ static void subsonic(float *output, unsigned long frames)
 {
 	unsigned long frame, channel, section;
 
+	if (output_channels == 2)
+	{
+		/* (stereo: both channels' two sections a frame at a time, the same
+		arithmetic as below, four filters' work side by side instead of each
+		waiting on its last result) */
+		const double *k = subsonic_sections[0], *q = subsonic_sections[1];
+		double l1 = subsonic_state[0][0][0], l2 = subsonic_state[0][0][1];
+		double r1 = subsonic_state[1][0][0], r2 = subsonic_state[1][0][1];
+		double m1 = subsonic_state[0][1][0], m2 = subsonic_state[0][1][1];
+		double n1 = subsonic_state[1][1][0], n2 = subsonic_state[1][1][1];
+
+		for (frame = 0; frame < frames; frame++)
+		{
+			double left = output[frame * 2], right = output[frame * 2 + 1];
+			double left_out = k[0] * left + l1, right_out = k[0] * right + r1;
+			double left_second, right_second;
+
+			l1 = k[1] * left - k[3] * left_out + l2;
+			r1 = k[1] * right - k[3] * right_out + r2;
+			l2 = k[2] * left - k[4] * left_out;
+			r2 = k[2] * right - k[4] * right_out;
+			/* (the second section takes the first's output as the float it
+			was stored as) */
+			left = (float)left_out;
+			right = (float)right_out;
+			left_second = q[0] * left + m1;
+			right_second = q[0] * right + n1;
+			m1 = q[1] * left - q[3] * left_second + m2;
+			n1 = q[1] * right - q[3] * right_second + n2;
+			m2 = q[2] * left - q[4] * left_second;
+			n2 = q[2] * right - q[4] * right_second;
+			output[frame * 2] = (float)left_second;
+			output[frame * 2 + 1] = (float)right_second;
+		}
+		subsonic_state[0][0][0] = fabs(l1) < 1e-30 ? 0.0 : l1;
+		subsonic_state[0][0][1] = fabs(l2) < 1e-30 ? 0.0 : l2;
+		subsonic_state[1][0][0] = fabs(r1) < 1e-30 ? 0.0 : r1;
+		subsonic_state[1][0][1] = fabs(r2) < 1e-30 ? 0.0 : r2;
+		subsonic_state[0][1][0] = fabs(m1) < 1e-30 ? 0.0 : m1;
+		subsonic_state[0][1][1] = fabs(m2) < 1e-30 ? 0.0 : m2;
+		subsonic_state[1][1][0] = fabs(n1) < 1e-30 ? 0.0 : n1;
+		subsonic_state[1][1][1] = fabs(n2) < 1e-30 ? 0.0 : n2;
+		return;
+	}
 	for (channel = 0; channel < output_channels; channel++)
 	{
 		for (section = 0; section < 2; section++)
@@ -1776,37 +2006,61 @@ static void limit(float *output, unsigned long frames)
 		limiter.history_sum = LIMITER_LOOKAHEAD;
 		limiter.initialized = TRUE;
 	}
+	uint32_t ceiling = float_magnitude(&limiter_ceiling);
+
 	for (frame = 0; frame < frames; frame++)
 	{
 		float *sample = output + frame * output_channels;
 		unsigned long position = limiter.position;
 		unsigned long oldest = (position + 1) % LIMITER_LOOKAHEAD;
-		float peak = 0.0f, lowest, gain;
+		uint32_t peak = 0;
+		float lowest, gain;
 
-		/* the new frame takes the slot of the oldest, which has played */
+		/* the new frame takes the slot of the oldest, which has played. (The
+		tests are of the floats' magnitudes as integers: float_magnitude) */
 		for (channel = 0; channel < output_channels; channel++)
 		{
-			if (fabsf(sample[channel]) > peak)
-				peak = fabsf(sample[channel]);
+			uint32_t magnitude = float_magnitude(&sample[channel]);
+
+			if (magnitude > peak)
+				peak = magnitude;
 			limiter.delay[position][channel] = sample[channel];
 		}
-		limiter.limiting -= limiter.needed[position] < 1.0f;
-		limiter.needed[position] = peak > limiter_ceiling ? limiter_ceiling / peak : 1.0f;
-		limiter.limiting += limiter.needed[position] < 1.0f;
-		lowest = 1.0f;
-		if (limiter.limiting)
+		limiter.limiting -= float_magnitude(&limiter.needed[position]) < FLOAT_ONE;
+		if (peak > ceiling)
 		{
-			lowest = limiter.needed[0];
+			float loudest;
+
+			memcpy(&loudest, &peak, sizeof(loudest));
+			limiter.needed[position] = limiter_ceiling / loudest;
+		}
+		else
+			limiter.needed[position] = 1.0f;
+		limiter.limiting += float_magnitude(&limiter.needed[position]) < FLOAT_ONE;
+		if (!limiter.limiting)
+		{
+			/* (1, which the held gain is never under) */
+			lowest = 1.0f;
+			limiter.held += (lowest - limiter.held) * release;
+		}
+		else
+		{
+			/* the smallest gain needed (none is negative) */
+			uint32_t smallest = float_magnitude(&limiter.needed[0]);
+
 			for (index = 1; index < LIMITER_LOOKAHEAD; index++)
 			{
-				if (limiter.needed[index] < lowest)
-					lowest = limiter.needed[index];
+				uint32_t needed = float_magnitude(&limiter.needed[index]);
+
+				if (needed < smallest)
+					smallest = needed;
 			}
+			memcpy(&lowest, &smallest, sizeof(lowest));
+			if (lowest < limiter.held)
+				limiter.held = lowest;
+			else
+				limiter.held += (lowest - limiter.held) * release;
 		}
-		if (lowest < limiter.held)
-			limiter.held = lowest;
-		else
-			limiter.held += (lowest - limiter.held) * release;
 		limiter.history_sum += limiter.held - limiter.history[position];
 		limiter.history[position] = limiter.held;
 		gain = (float)(limiter.history_sum / LIMITER_LOOKAHEAD);
