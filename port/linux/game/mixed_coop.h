@@ -107,6 +107,11 @@ campaign level's name, levels\a10\a10 or a10) as MCC's file of that level:
 in a network game, with no Xbox file of the level and MCC's there; its
 stem into `stem` (MCC_CONTENT_STEM_BYTES, may be NULL) */
 int mixed_coop_mcc_alias(char const *map_name, char *stem);
+/* (1.1.3, the owner's 8m: co-op hosted from the menus on MCC's own mission) the campaign level MCC's mission
+`map_name` (mods\mcc_a10) is, by the Xbox's name (levels\a10\a10) into `xbox_name`, when this machine hosts it as
+the Xbox's for every machine - mixed co-op on, no Xbox file of the level and MCC's there, not the crossplay wire - the
+cache loader then taking MCC's file (mixed_coop_mcc_alias); FALSE (`xbox_name` untouched) otherwise */
+int mixed_coop_host_campaign_name(char const *map_name, char *xbox_name, long size);
 
 /* ---------- the map's load */
 
