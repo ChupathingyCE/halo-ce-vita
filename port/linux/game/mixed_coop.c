@@ -2970,6 +2970,18 @@ static void mixed_collision_free_held(
 static boolean mixed_collision_host_lacks(
 	int level)
 {
+	/* (the maps whose MCC host spawns other weapons than an Xbox machine would - Boarding Action's netgame
+	equipment spawns Halo PC's needler on MCC's files where the Xbox's spawns its sniper rifles and assault rifles,
+	which the digests do not see: tested Nov 24 2026, the two machines' objects parted from the first tick. An MCC
+	host's game there stays refused to an Xbox machine, as before 1.1.3's flag stand collision) */
+	static char const *const unoffered[] = { "boardingaction" };
+	short index;
+
+	for (index = 0; level >= 0 && level < MIXED_COOP_LEVELS && index < (short)NUMBEROF(unoffered); index++)
+	{
+		if (!strcmp(mixed_coop_level_stems[level], unoffered[index]))
+			return FALSE;
+	}
 	return level >= 0 && mixed_coop_level_is_multiplayer(level) && !mixed_coop_rebuilt_level(level) &&
 		mixed_coop_local_family(level) == _mixed_coop_family_mcc && global_network_game_server_get() != NULL;
 }
@@ -5807,7 +5819,7 @@ void mixed_coop_placed_hash(
 }
 
 /* (test: HALO_MIXED_STAND_PROBE=1 with HALO_MIXED_COOP_HASH=1, every 5 s of the game) what a flag stand and a teleporter
-base are to this machine's simulation: a ray down onto each one's middle from 3 wu above - the stand's own top when it
+base are to this machine's simulation: a ray down onto each one's middle from over it - the stand's own top when it
 collides, the ground under it when it does not (MCC's files' stand on an MCC host that holds no collision) - and where
 each CTF flag is: lines both machines of a mixed game must agree on */
 static void mixed_coop_stand_probe(
@@ -5830,10 +5842,12 @@ static void mixed_coop_stand_probe(
 		{
 			struct collision_result result;
 			real_point3d point = object->object.bounding_sphere_center;
-			real_vector3d down = { 0.0f, 0.0f, -6.0f };
+			real_vector3d down = { 0.0f, 0.0f, 0.0f };
 			boolean hit;
 
-			point.z += 3.0f;
+			/* (from just over its bounding sphere: under an overhang too) */
+			point.z += object->object.bounding_sphere_radius + 0.1f;
+			down.k = -2.0f * object->object.bounding_sphere_radius - 0.2f;
 			hit = collision_test_vector(FLAG(_collision_test_structure_bit) | FLAG(_collision_test_front_facing_surfaces_bit) |
 				FLAG(_collision_test_objects_bit) | FLAG(_collision_test_objects_scenery_bit), &point, &down, NONE, &result);
 			platform_log("mixed stand probe: %ld %s %04lx at %.3f %.3f %.3f: %s z %.3f", (long)game_time_get(),
