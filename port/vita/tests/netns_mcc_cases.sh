@@ -151,6 +151,14 @@ mixed_vita_case() {
 	else
 		grep -aq "network test: starting the game" "$hl" && fail "the host's game was started early (the test's, not the lobby's countdown)"
 		grep -aq "mixed co-op: a10's MCC level in network co-op loaded" "$hl" || fail "the MCC host never loaded a10"
+		# (1.1.3, the owner's 8m: this Vita's few MCC files leave the lobby's first maps - the Xbox's names a10 and
+		# carousel, before the co-op level is set - unloadable; their "Couldn't load" is taken back once the lobby is
+		# on a10, never left on the host's screen)
+		local said withdrawn
+		said=$(grep -ac "Halo: map: Couldn't load" "$hl")
+		withdrawn=$(grep -ac "Halo: map: withdrawn: Couldn't load" "$hl")
+		echo "the host's \"Couldn't load\" messages: $said said, $withdrawn withdrawn"
+		[ "$said" -le "$withdrawn" ] || fail "the host kept a stale \"Couldn't load\" message ($(grep -a "Halo: map: Couldn't load" "$hl" | head -1))"
 	fi
 }
 
@@ -301,6 +309,17 @@ mixed_case() {
 		if [ $host_family = mcc ] && [ $join_family = xbox ] && [ -z "${HALO_TEST_MIXED_DECISIONS:-}" ]; then
 			[ "$two" = 0 ] || fail "the Xbox joiner played the MCC host's game with no decision ($two s)"
 			grep -aq "this map needs an Xbox-files host" "$jl" || fail "the Xbox joiner was not told the map needs an Xbox-files host"
+			# (1.1.3, the owner Nov 24: refused only for what can come into play in this game - every stock map places
+			# two flag stands, in every game type: mixed_coop_xbox_host_tag_in_play names them)
+			grep -aq "mixed play: in this game: flag_base placed 2 times" "$jl" ||
+				fail "the Xbox joiner's refusal did not name the flag stands in play"
+			# (a teleporter base or the needler that is not in this game is no reason: said, not counted)
+			grep -a "mixed play: differs, not in this game" "$jl" | head -3
+			# (nothing stale on the host's screen: "Couldn't load" of a map its lobby left - the owner's 8m)
+			grep -a "Halo: map: Couldn't load" "$hl" | head -2
+			if grep -aq "Halo: map: Couldn't load" "$hl" && ! grep -aq "Halo: map: withdrawn: Couldn't load" "$hl"; then
+				fail "the host's lobby kept a stale \"Couldn't load\" message"
+			fi
 			return
 		fi
 		[ "$two" -ge 60 ] || fail "the joiner played the host's game for $two s with two players"

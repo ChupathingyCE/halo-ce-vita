@@ -552,6 +552,28 @@ int mixed_coop_mcc_alias(
 	return TRUE;
 }
 
+int mixed_coop_host_campaign_name(
+	char const *map_name,
+	char *xbox_name,
+	long size)
+{
+	char stem[MCC_CONTENT_STEM_BYTES];
+	int level;
+
+	if (!map_name || !xbox_name || size <= 0 || !mixed_coop_capable() || network_wire_crossplay() ||
+		mcc_content_name_stem(tag_name_strip_path(map_name), stem) != _mcc_content_campaign)
+	{
+		return FALSE;
+	}
+	level = mixed_coop_level_index(stem);
+	if (level < 0 || mixed_coop_level_is_multiplayer(level) || mixed_coop_xbox_file(level) || !mixed_coop_mcc_file(level))
+		return FALSE;
+	snprintf(xbox_name, (size_t)size, "levels\\%s\\%s", stem, stem);
+	platform_log("mixed co-op: hosting MCC's %s under the Xbox's name (%s): Xbox and MCC machines can join", map_name,
+		xbox_name);
+	return TRUE;
+}
+
 static boolean mixed_coop_host_rename(
 	char *map_name,
 	long size,
@@ -732,6 +754,13 @@ static struct mixed_coop_rule const mixed_coop_rules_table[] =
 	{ "netgame_equipment", 0x10, 0x40, _mixed_rule_skip, 0 },
 	{ "netgame_equipment", 0x40, 0x50, _mixed_rule_floats, 0 },
 	{ "netgame_equipment", 0x54, 0x84, _mixed_rule_skip, 0 },
+	/* (a control's on, off and denied effects, which no schema lists: their
+	name pointers, which a loader points at its own empty string - an
+	address in the executable, another in every build - not hashed; their
+	groups and indices are) */
+	{ "control_definition", 0x2ec, 0x2f0, _mixed_rule_skip, 0 },
+	{ "control_definition", 0x2fc, 0x300, _mixed_rule_skip, 0 },
+	{ "control_definition", 0x30c, 0x310, _mixed_rule_skip, 0 },
 };
 
 /* ---------- the owner's decisions (Nov 22 2026, 09:27 "All I want is the mcc maps to play with Xbox
@@ -844,6 +873,146 @@ static boolean mixed_coop_xbox_host_decides_tag(
 			return TRUE;
 	}
 	return FALSE;
+}
+
+/* ---------- (1.1.3) whether what an MCC host's game lacks of the Xbox's can come into play */
+
+/* (game_engine.c's netgame equipment types past the game engines: every game, every game but CTF, every game but
+CTF and Race) */
+enum
+{
+	_mixed_coop_game_type_all = 12,
+	_mixed_coop_game_type_all_non_team,
+	_mixed_coop_game_type_all_normal,
+};
+
+/* game_engine.c's match_game_type with a game engine: whether an entry of netgame or starting equipment of `types`
+spawns in a game of `game_type` */
+static boolean mixed_coop_game_type_matches(
+	short const *types,
+	long count,
+	short game_type)
+{
+	long index;
+
+	for (index = 0; index < count; index++)
+	{
+		if (types[index] == game_type || types[index] == _mixed_coop_game_type_all ||
+			(types[index] == _mixed_coop_game_type_all_non_team && game_type != game_engine_ctf) ||
+			(types[index] == _mixed_coop_game_type_all_normal && game_type != game_engine_ctf && game_type != game_engine_race))
+		{
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/* the scenery placements of the scenario that place `name` (the engine places every one in every game: no game type
+keeps one out, objects.c's object_new_from_scenario) */
+static long mixed_coop_scenery_placed(
+	struct scenario const *scenario,
+	char const *name)
+{
+	/* (a scenery placement: the object's, then its permutation - scenery.c) */
+	long const size = (long)(sizeof(struct scenario_object_datum) + sizeof(struct scenario_object_permutation));
+	long index, count = 0;
+
+	if (!scenario || !scenario->scenery.address || !scenario->scenery_palette.address)
+		return 0;
+	for (index = 0; index < scenario->scenery.count; index++)
+	{
+		struct scenario_object_datum const *datum =
+			(struct scenario_object_datum const *)((byte const *)scenario->scenery.address + index * size);
+
+		if (datum->palette_entry_index >= 0 && datum->palette_entry_index < scenario->scenery_palette.count &&
+			mixed_coop_tag_is(((struct scenario_object_palette_entry const *)scenario->scenery_palette.address)
+				[datum->palette_entry_index].reference.index, name))
+		{
+			count++;
+		}
+	}
+	return count;
+}
+
+/* the game types (bit game_engine_ctf ... game_engine_race) in which the scenario's netgame or starting equipment
+spawns the item collection `name` (game_engine.c's item spawns and custom starting equipment) */
+static unsigned mixed_coop_collection_game_types(
+	struct scenario const *scenario,
+	char const *name)
+{
+	unsigned types = 0;
+	short game_type;
+	long index, slot;
+
+	if (!scenario)
+		return 0;
+	for (game_type = game_engine_ctf; game_type <= game_engine_race; game_type++)
+	{
+		for (index = 0; scenario->netgame_equipment.address && index < scenario->netgame_equipment.count; index++)
+		{
+			struct scenario_netgame_equipment const *equipment =
+				(struct scenario_netgame_equipment const *)scenario->netgame_equipment.address + index;
+
+			if (mixed_coop_tag_is(equipment->item_collection.index, name) &&
+				mixed_coop_game_type_matches(equipment->game_type, NUMBEROF(equipment->game_type), game_type))
+			{
+				types |= 1u << game_type;
+			}
+		}
+		for (index = 0; scenario->scenario_starting_equipment.address && index < scenario->scenario_starting_equipment.count; index++)
+		{
+			struct scenario_starting_equipment const *equipment =
+				(struct scenario_starting_equipment const *)scenario->scenario_starting_equipment.address + index;
+
+			for (slot = 0; slot < NUMBEROF(equipment->item_collection); slot++)
+			{
+				if (mixed_coop_tag_is(equipment->item_collection[slot].index, name) &&
+					mixed_coop_game_type_matches(equipment->game_type, NUMBEROF(equipment->game_type), game_type))
+				{
+					types |= 1u << game_type;
+				}
+			}
+		}
+	}
+	return types;
+}
+
+/* whether the tag of mixed_coop_xbox_host_decides `name` (the Xbox's flag stand and teleporter base, which MCC's files
+have no collision for; the needler item collection, which spawns Halo PC's mp_needler from MCC's) can come into play in
+a game of `game_type` on the loaded level - an MCC host's game, an Xbox machine in it, refused only when one can (the
+owner, Nov 24: no cut, refuse only where it matters); `why` (may be NULL) says where it is */
+static boolean mixed_coop_xbox_host_tag_in_play(
+	char const *name,
+	short game_type,
+	char *why,
+	size_t why_size)
+{
+	struct cache_file_tag_instance_view *scenario_instance = mixed_coop_instance(mixed_coop.scenario_index);
+	struct scenario const *scenario = scenario_instance ? scenario_instance->base_address : NULL;
+	char const *dot;
+
+	if (why && why_size)
+		why[0] = 0;
+	if (!name || !scenario)
+		return TRUE;
+	dot = strrchr(name, '\\');
+	if (!strncasecmp(name, "item collections\\", 17))
+	{
+		unsigned types = mixed_coop_collection_game_types(scenario, name);
+
+		if (why && why_size)
+			snprintf(why, why_size, "%s spawns in %s game types (mask 0x%02x)", dot ? dot + 1 : name,
+				types ? "some" : "no", types);
+		/* (an unknown game type: as if it could) */
+		return game_type < game_engine_ctf || game_type > game_engine_race || (types & (1u << game_type)) != 0;
+	}
+	{
+		long placed = mixed_coop_scenery_placed(scenario, name);
+
+		if (why && why_size)
+			snprintf(why, why_size, "%s placed %ld times (every game type)", dot ? dot + 1 : name, placed);
+		return placed != 0;
+	}
 }
 
 /* a multiplayer map's level is loaded (its rules: mixed_coop_tags_loaded) */
@@ -2695,6 +2864,14 @@ void mixed_coop_tags_loaded(
 		spawns: race_vehicles.c) */
 		mixed_coop_race_vehicle_flags = TRUE;
 #endif
+		/* (1.1.3: what of an MCC host's game an Xbox machine is refused for can come into play here,
+		mixed_coop_xbox_host_tag_in_play) */
+		platform_log("mixed play: %s (%s files): flag stands placed %ld, teleporter bases placed %ld, the needler item "
+			"collection spawns in game types 0x%02x (bits: 1 CTF, 2 Slayer, 3 Oddball, 4 King, 5 Race)",
+			mixed_coop_level_stems[mixed_coop.level], custom_edition ? "MCC" : "Xbox",
+			mixed_coop_scenery_placed(scenario, mixed_coop_xbox_host_decides[0]),
+			mixed_coop_scenery_placed(scenario, mixed_coop_xbox_host_decides[1]),
+			mixed_coop_collection_game_types(scenario, mixed_coop_xbox_host_decides[2]));
 	}
 	mixed_coop.scenario_index = scenario_index;
 	mixed_coop.tag_count = halo_loaded_tag_count;
@@ -4155,6 +4332,10 @@ static void mixed_coop_dictionary_take(
 	uint32_t offset = 0;
 	uint16_t host_graph, animation_count;
 	uint8_t const *name_hashes;
+	/* (the game's game type: what of an MCC host's game can come into play, mixed_coop_xbox_host_tag_in_play) */
+	struct network_game const *game_settings = network_game_get_game();
+	short game_type = game_settings ? (short)game_settings->variant.game_engine_index : game_engine_none;
+	char in_play[160];
 
 	first_difference[0] = 0;
 	if (!mixed_coop_dictionary_read(bytes, length, &dictionary, why, sizeof(why)))
@@ -4233,10 +4414,27 @@ static void mixed_coop_dictionary_take(
 			{
 				platform_log("mixed co-op: gameplay differs, accepted (the owner's decisions, or network.mixed_coop_accept): %s", text);
 			}
+			else if (mixed_coop.tags[(short)local].kind == _mixed_tag_gameplay &&
+				dictionary.family == _mixed_coop_family_mcc && mixed_coop.family == _mixed_coop_family_xbox &&
+				mixed_coop_xbox_host_decides_tag(mixed_coop_instances()[(short)local].name) &&
+				!mixed_coop_xbox_host_tag_in_play(mixed_coop_instances()[(short)local].name, game_type, in_play, sizeof(in_play)))
+			{
+				/* (1.1.3, the owner, Nov 24: an MCC host's game with an Xbox machine in it is refused for the flag
+				stand, the teleporter base or the needler only when one can come into play in this game) */
+				platform_log("mixed play: differs, not in this game (%s): %s", in_play, text);
+			}
 			else if (mixed_coop.tags[(short)local].kind == _mixed_tag_gameplay)
 			{
 				if (mixed_coop_xbox_host_decides_tag(mixed_coop_instances()[(short)local].name))
+				{
 					xbox_host_needed++;
+					if (dictionary.family == _mixed_coop_family_mcc && mixed_coop.family == _mixed_coop_family_xbox &&
+						mixed_coop_xbox_host_tag_in_play(mixed_coop_instances()[(short)local].name, game_type, in_play,
+							sizeof(in_play)))
+					{
+						platform_log("mixed play: in this game: %s", in_play);
+					}
+				}
 				if (!gameplay_differences++)
 					snprintf(first_difference, sizeof(first_difference), "%s", text);
 				platform_log("mixed co-op: gameplay differs: %s (host %08x, here %08x)", text, (unsigned)tag.digest,

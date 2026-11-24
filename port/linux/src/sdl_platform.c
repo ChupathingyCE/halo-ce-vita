@@ -977,6 +977,24 @@ void platform_show_message_box(const char *title, const char *message)
 	pthread_mutex_unlock(&platform_message_lock);
 }
 
+/* (1.1.3: menu_functions.c's h3_dialog_port_withdraw) the game's dialog's messages of `title` and `text` taken back */
+void (*platform_dialog_withdraw_hook)(const char *title, const char *text);
+
+/* a message shown with platform_show_message taken back, every copy of it, while it waits or is up in the game's
+dialog: one no longer true (a host's lobby map that could not be loaded, the host since on another) */
+void platform_withdraw_message(const char *title, const char *message)
+{
+	if (!title || !message)
+		return;
+	pthread_mutex_lock(&platform_message_lock);
+	if (platform_message_pending && !strcmp(platform_message_title, title) && !strcmp(platform_message_text, message))
+		platform_message_pending = FALSE;
+	pthread_mutex_unlock(&platform_message_lock);
+	if (platform_dialog_withdraw_hook)
+		platform_dialog_withdraw_hook(title, message);
+	platform_log("%s: withdrawn: %s", title, message);
+}
+
 /* ---------- a question and a progress line for the player (map sharing:
 port/linux/game/map_share.c) */
 

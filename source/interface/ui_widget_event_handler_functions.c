@@ -6733,6 +6733,18 @@ boolean ui_widget_port_cooperative_campaign_host_level(
 
 	csstrncpy(map_name, level ? level : "", sizeof(map_name) - 1);
 	map_name[sizeof(map_name) - 1] = 0;
+#ifdef HALO_LINUX
+	/* (1.1.3, the owner's 8m: MCC's own mission, mods\mcc_a10, on a machine with MCC's files alone, is hosted as
+	mixed co-op hosts it - the Xbox's name on the wire, levels\a10\a10, MCC's file loaded here: Vitas and PCs with
+	either file set join; mixed_coop_host_campaign_name) */
+	{
+		int mixed_coop_host_campaign_name(char const *map_name, char *xbox_name, long size);
+		char xbox_name[128];
+
+		if (mixed_coop_host_campaign_name(map_name, xbox_name, (long)sizeof(xbox_name)))
+			csstrncpy(map_name, xbox_name, sizeof(map_name) - 1);
+	}
+#endif
 	/* (a mod's Halo: CE Anniversary map plays offline only: it is no
 	campaign level a network game takes, custom_edition_mods.h) */
 	if (custom_edition_mods_level_name(map_name))
