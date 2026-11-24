@@ -354,7 +354,10 @@ PY
 		# values.
 		pad="wait:150:3000 down:150:800 down:150:800 a:150:4000 a:150:6000 up:150:800 a:150:3500 a:150:6000"
 		pad="$pad right:150:800 a:150:3000 right:150:800 a:150:5000 a:150:4000"
-		pad="$pad up:150:800 a:150:4000 down:150:800 down:150:800 a:150:4000 b:150:3000 b:150:3000"
+		# (MULTIPLAYER: OpenCE's Multiplayer screen on MCC's ui.map, fd29f7787 - its EDIT GAMETYPES the eighth row, Classic+'s
+		# game types on MCC's files, 1.1.3-insider.8m)
+		d7="down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600 down:150:600"
+		pad="$pad up:150:800 a:150:4000 $d7 a:150:4000 b:150:3000 b:150:3000"
 		pad="$pad down:150:800 down:150:800 a:150:4000 down:150:800 a:150:4000 b:150:3000"
 		pad="$pad down:150:800 down:150:800 down:150:800 down:150:800 a:150:4000 down:150:800 a:150:4000"
 		pad="$pad up:150:800 up:150:800 a:150:3000 left:150:700 down:150:600 down:150:600 down:150:600 right:150:600 a:150:3000"
@@ -377,11 +380,17 @@ PY
 			grep -aq "ui: screen ui.shell.main_menu.settings_select.player_setup.player_profile_edit.$screen" "$log" ||
 				missing="$missing $screen"
 		done
-		for screen in profile_manager.player_profile_manager multiplayer_type_select.multiplayer_type_select_screen \
-			settings_select.multiplayer_setup.playlist_select.gametype_select_screen campaign_select.campaign_menu \
-			solo_level_select.solo_level_select_screen campaign_select.load_level_select_screen; do
+		for screen in profile_manager.player_profile_manager campaign_select.campaign_menu campaign_select.load_level_select_screen; do
 			grep -aq "ui: screen ui.shell.main_menu.$screen" "$log" || missing="$missing $screen"
 		done
+		# (MULTIPLAYER: OpenCE's screen, and its EDIT GAMETYPES the game types; NEW GAME's SELECT LEVEL: MCC's ui.map
+		# has no solo_level_select_screen, and the Halo 3 set's campaign picker stands for it - flagged to the owner
+		# in the 1.1.3 Classic+ audit, Menu style Classic's own question)
+		grep -aq "ui: screen pc.mp.screen" "$log" || missing="$missing pc.mp.screen"
+		grep -aqE "ui: screen (pc.cp.gametypes.screen|ui.shell.main_menu.settings_select.multiplayer_setup.playlist_select.gametype_select_screen)" "$log" ||
+			missing="$missing gametype_select_screen"
+		grep -aqE "ui: screen (pc.h3.campaign.screen|ui.shell.main_menu.solo_level_select.solo_level_select_screen)" "$log" ||
+			missing="$missing solo_level_select_screen"
 		if ! grep -aq "menus: the menu map is MCC's halo1.maps.ui.map (no Xbox ui.map in the maps folder)" "$debug" ||
 			! grep -aq "custom edition: loading 'd:.mcc.halo1.maps.ui.map'" "$debug" ||
 			! grep -aq "ui: screen ui.shell.main_menu.main_menu" "$log"; then
@@ -396,7 +405,7 @@ PY
 			! grep -aq "ui: handler of ui.shell.error.confirm_delete_profile_button_ok: event 0, function 76" "$log" ||
 			! grep -aq "menus: Halo PC's PROFILES: profile .* played with" "$log"; then
 			fail "mccmenu: PROFILES did not make, list, delete and choose a profile ($out/mccmenu)"
-		elif ! grep -aqE "menus: Halo PC's list playlist_select_list: [1-9][0-9]* items" "$log"; then
+		elif ! grep -aqE "menus: Halo PC's list playlist_select_list: [1-9][0-9]* items|ui: screen pc.cp.gametypes.screen" "$log"; then
 			fail "mccmenu: EDIT GAMETYPES did not list the game types ($out/mccmenu)"
 		elif ! grep -aq "menus: Halo PC's CONTROLS SETUP opened" "$log" ||
 			! grep -aq "menus: Halo PC's list color_select_list_2: 18 items" "$log" ||
@@ -408,7 +417,7 @@ PY
 		elif ! grep -aq "menus: Halo PC's CAMPAIGN: profile .* has no save: a new game" "$log" ||
 			! grep -aq "menus: Halo PC's CHOOSE DIFFICULTY: starting mods.mcc_a10" "$log" ||
 			! grep -aq "menus: Halo PC's CAMPAIGN: profile .* has a save" "$log" ||
-			! grep -aq "menus: Halo PC's list solo_level_select_list: " "$log" ||
+			! grep -aqE "menus: Halo PC's list solo_level_select_list: |ui: screen pc.h3.campaign.screen" "$log" ||
 			! grep -aq "menus: Halo PC's list load_level_select_list: 1 items" "$log" ||
 			! grep -aq "menus: Halo PC's campaign: profile .*'s save resumed: levels.a10.a10" "$log" ||
 			! grep -aq "campaign save: .* resuming" "$log"; then
@@ -434,7 +443,7 @@ PY
 		log=$(menu_log mcconline)
 		if grep -aq "OpenCE's multiplayer screens not added" "$log"; then
 			fail "mcconline: the menus folder's screens were not added with MCC's ui.map alone ($out/mcconline)"
-		elif ! grep -aq "connected.pregame.connected_pregame_screen: an empty widget stands in for it" "$log"; then
+		elif ! grep -aqE "connected.pregame.connected_pregame_screen: (an empty widget stands in for it|Classic\+'s own in its place)" "$log"; then
 			fail "mcconline: no stand-in for the Xbox's lobby screen ($out/mcconline)"
 		elif ! grep -aq "menus: online screen pc.online.main.screen for pc.h3.main.screen" "$log" ||
 			! grep -aq "menus: Halo 3 screen h3/main/screen for ui.shell.main_menu.main_menu" "$log"; then

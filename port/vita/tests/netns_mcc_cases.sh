@@ -16,6 +16,12 @@
 #             joiner takes its layout); HALO_TEST_MCCMENUS_ONLINE=false: the joiner on its own connection (Same
 #             Wi-Fi, the Vita's default) - INTERNET switches it to Online (1.1.3-insider.8k, the owner: it only
 #             said "Internet play is off ... restart the game")
+#   mcclanmenus  System Link from Classic+'s menus on two MCC-only machines (1.1.3, the Classic+ audit): the
+#             host's CREATE LAN - the Xbox's SELECT PROFILE (start to join), System Link list, SELECT MAP,
+#             SELECT GAMETYPE and lobby, classic/xbox_netscreens.xml -, the joiner's JOIN LAN: SELECT PROFILE,
+#             the System Link list lists the host's game, A on it, the lobby; the host's A starts it and both
+#             play. Never a Halo 3 screen, the Halo 3 LAN browser, an empty stand-in or a widget that failed to
+#             spawn (screenshots: HALO_TEST_SHOTS)
 #   mccxbox   an MCC-only host's System Link game, an Xbox machine (no MCC files) joins: refused as a mixed
 #             game (custom_edition_maps_family_mixed) with "This game's maps are a different version from
 #             yours; mixed games are coming", stays up, never in the game, no download offered
@@ -61,6 +67,11 @@
 mcc_root=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
 # (MCC's own folder, as pcmapjoin takes HALO_TEST_MCC_ROOT, holding halo1: its halo1)
 [ -d "$mcc_root/halo1/maps" ] && mcc_root=$mcc_root/halo1
+
+# (each MCC-only machine's scripted player, HALO_TEST_INPUT=bot, kept off the menus by a pad of one wait - the
+# scripted player plays only in a level when a pad is given, xinput_sdl.c: since the Classic+ audit an MCC-only
+# machine's network lobby is the Xbox's, as an Xbox-files one's, where its presses opened Y PLAYERS and the
+# host's KICK kicked the joiner as it came in)
 
 # mcc_setup: the MCC-only data folder ($out/mcc-none, its maps folder empty) and the content folder
 # ($out/mcc-content/halo1/maps: links to MCC's files)
@@ -116,7 +127,7 @@ mixed_vita_case() {
 		run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false HALO_NET_COOP_LEVEL=a10 \
 			HALO_NETWORK_TEST=host:a10 HALO_NETWORK_TEST_START=150 HALO_TEST_INPUT=bot:1:look HALO_NET_COOP_PLAYERS=2 \
 			HALO_NET_WHO_CAN_JOIN=vita_pc HALO_MENU_STYLE=classic HALO_UI_LOG=1 HALO_CONTENT_ROOT="$out/mcc-vita" \
-			HALO_MIXED_COOP_HASH=1; host_pid=$last_pid
+			HALO_MIXED_COOP_HASH=1 HALO_TEST_PAD=wait:150:1000; host_pid=$last_pid
 		sleep 5
 		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2:look \
 			HALO_CONTENT_ROOT=none HALO_MIXED_COOP_HASH=1; join_pid=$last_pid
@@ -269,10 +280,11 @@ mixed_case() {
 		echo "mixedold: the older host $host_vita"
 	fi
 	run_copy host "$host_machine" "$host_vita" "$cpu_a" $host_env HALO_NET_ONLINE=false \
-		HALO_NETWORK_TEST=host:$host_name:$game HALO_CONTENT_ROOT="$host_content" HALO_MIXED_COOP_HASH=1 $decisions; host_pid=$last_pid
+		HALO_NETWORK_TEST=host:$host_name:$game HALO_CONTENT_ROOT="$host_content" HALO_MIXED_COOP_HASH=1 $decisions \
+		$([ "$host_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); host_pid=$last_pid
 	sleep 5
 	run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2 \
-		HALO_CONTENT_ROOT="$join_content" HALO_MIXED_COOP_HASH=1 $decisions; join_pid=$last_pid
+		HALO_CONTENT_ROOT="$join_content" HALO_MIXED_COOP_HASH=1 $decisions $([ "$join_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); join_pid=$last_pid
 	wait $join_pid $host_pid 2>/dev/null
 	hl=$out/host/run.log
 	jl=$out/joiner/run.log
@@ -335,9 +347,54 @@ mixed_case() {
 	esac
 }
 
+# mcc_lan_menus_case: mcclanmenus (both machines' screens from their pads: HALO_NETWORK_TEST=watch)
+mcc_lan_menus_case() {
+	local side shots bad
+	mcc_setup
+	mcc_lan_machine
+	copy_data_host=$out/mcc-none
+	copy_data_joiner=$out/mcc-none
+	shots() { [ -n "${HALO_TEST_SHOTS:-}" ] && echo "HALO_SCREENSHOT_DIR=$HALO_TEST_SHOTS/netns-$mode-$1"; }
+	[ -n "${HALO_TEST_SHOTS:-}" ] && mkdir -p "$HALO_TEST_SHOTS/netns-$mode-host" "$HALO_TEST_SHOTS/netns-$mode-joiner"
+	# (the host: MULTIPLAYER, CREATE LAN, A to join, A for its profile, A again: the System Link list, A (no game
+	# listed: a new one), the first map, the first game type: the lobby; the joiner's in, its A starts the game)
+	local d="down:150:500"
+	run_copy host "$host_machine" "$vita" "$cpu_a" HALO_NET_ONLINE=false HALO_NETWORK_TEST=watch HALO_UI_LOG=1 \
+		HALO_CONTENT_ROOT="$out/mcc-content" HALO_TEST_INPUT=bot:1 $(shots host) \
+		"HALO_TEST_PAD=wait:150:4000 $d a:150:3500 $d $d $d $d a:150:4000 a:150:2000 a:150:2000 a:150:3500 @list a:150:4000 @map a:150:4000 @gametype a:150:4000 @lobby wait:150:${HALO_TEST_LANMENUS_WAIT:-40000} @lobby_two a:150:6000 @starting"; host_pid=$last_pid
+	sleep 5
+	# (the joiner: MULTIPLAYER, JOIN LAN, A to join, A for its profile, A again: the System Link list; the
+	# host's game listed, A on it: the lobby)
+	run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=watch HALO_UI_LOG=1 \
+		HALO_CONTENT_ROOT="$out/mcc-content" HALO_TEST_INPUT=bot:2 $(shots joiner) \
+		"HALO_TEST_PAD=wait:150:4000 $d a:150:3500 $d a:150:4000 @join a:150:2000 @profile a:150:2000 @ready a:150:12000 @list a:150:5000 @lobby wait:150:8000 @lobby_two"; join_pid=$last_pid
+	wait $join_pid $host_pid 2>/dev/null
+	for side in host joiner; do
+		echo "--- $side"
+		grep -a "ui: screen" "$out/$side/run.log" | sed 's/.*ui: screen //' | uniq | tr '\n' ' ' | cut -c1-700; echo
+		mcc_no_assertion $side
+		mcc_unavailable $side
+		bad=$(grep -aE "an empty widget stands in|stands for nothing|the handler opens nothing|LAN browser in its place|menus: Halo 3 screen|ui: screen pc\.(h3|online)\." "$out/$side/run.log" | head -2)
+		[ -n "$bad" ] && fail "$side: $bad"
+		grep -aqE "failed to spawn widget|may not run event handler function" "$out/$side/data/debug.txt" 2>/dev/null &&
+			fail "$side: debug.txt: $(grep -aE "failed to spawn widget|may not run event handler function" "$out/$side/data/debug.txt" | head -1)"
+		for screen in 'connected.4way_profile_select.4way_start2join_screen' 'connected.server_list.server_list_screen' \
+			'connected.pregame.connected_pregame_screen'; do
+			grep -aqE "ui: screen .*$screen" "$out/$side/run.log" || fail "$side: $screen did not open"
+		done
+	done
+	for screen in connected_map_select_wrapper gametype_select_screen_wrapper; do
+		grep -aqE "ui: screen .*$screen" "$out/host/run.log" || fail "host: $screen did not open"
+	done
+	two=$(grep -a "network test: tick" "$out/joiner/run.log" | grep -a "| playing" | grep -aEc "player [0-9]+:.* player [0-9]+:")
+	echo "joiner's seconds with two players playing: $two"
+	[ "$two" -ge 20 ] || fail "the joiner played the host's game for $two s with two players"
+}
+
 mcc_case() {
 	local host_data=$data join_data=$data host_content=none join_content=none host_game=host:bloodgulch:slayer
 	case $mode in mixedmp|mixedrebuilt|mixedold) mixed_case; return ;; mixedvitajoin|mixedvitahost) mixed_vita_case; return ;; esac
+	[ $mode = mcclanmenus ] && { mcc_lan_menus_case; return; }
 	case $mode in
 	mcclan|mccmenus) host_data=$out/mcc-none join_data=$out/mcc-none host_content=$out/mcc-content
 		join_content=$out/mcc-content host_game=host:mcc_bloodgulch:slayer ;;
@@ -355,9 +412,12 @@ mcc_case() {
 	if [ $mode = mccmenus ]; then
 		# (internet play: the host's game public; the joiner's Classic+ menus - MULTIPLAYER, INTERNET: the
 		# profile, then the server browser, A on the host's row; then the System Link list, joined by itself)
+		# (the host's scripted player kept off its lobby's buttons - a pad of its own, one wait: since the
+		# Classic+ audit the MCC host's lobby is the Xbox's, whose Y opens PLAYERS, and the scripted player's
+		# presses there kicked the joiner as it came in)
 		run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NETWORK_TEST=$host_game \
 			HALO_CONTENT_ROOT="$host_content" HALO_NETWORK_TEST_START=${HALO_TEST_MENUS_START:-75} \
-			HALO_NET_LOBBY_NAME=MccHost HALO_NET_HOST_PUBLIC=true; host_pid=$last_pid
+			HALO_NET_LOBBY_NAME=MccHost HALO_NET_HOST_PUBLIC=true HALO_TEST_PAD=wait:150:1000; host_pid=$last_pid
 		code=$(wait_code)
 		[ -n "$code" ] || { fail "the host never showed a code"; tail -20 "$out/host/run.log"; exit 1; }
 		echo "host's code: $code"
@@ -368,10 +428,10 @@ mcc_case() {
 	else
 		mcc_lan_machine
 		run_copy host "$host_machine" "$vita" "$cpu_a" $host_env HALO_NET_ONLINE=false HALO_NETWORK_TEST=$host_game \
-			HALO_CONTENT_ROOT="$host_content"; host_pid=$last_pid
+			HALO_CONTENT_ROOT="$host_content" $([ "$host_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); host_pid=$last_pid
 		sleep 5
 		run_copy joiner "$lan" "$vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2 \
-			HALO_CONTENT_ROOT="$join_content"; join_pid=$last_pid
+			HALO_CONTENT_ROOT="$join_content" $([ "$join_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); join_pid=$last_pid
 	fi
 	wait $join_pid $host_pid 2>/dev/null
 	hl=$out/host/run.log

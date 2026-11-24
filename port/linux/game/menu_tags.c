@@ -133,7 +133,7 @@ their pickers...) */
 #define MAXIMUM_H3_SCREENS 64
 /* (Classic+ on an MCC-only install) the Xbox screens' widgets the classic set stands in for:
 classic/xbox_screens.xml's cp/xb/<path> for ui\shell\main_menu\<path> */
-#define MAXIMUM_XBOX_SCREEN_WIDGETS 192
+#define MAXIMUM_XBOX_SCREEN_WIDGETS 384
 #define XBOX_SCREEN_WIDGET_PREFIX "cp/xb/"
 #define XBOX_SCREEN_TAG_PREFIX "ui\\shell\\main_menu\\"
 /* the Xbox screens' widgets Menu style Halo CE adds rows to (classic_patch=) */
@@ -619,6 +619,14 @@ static struct
 	that name, cp/xb/<path under ui\shell\main_menu>: classic/xbox_screens.xml) */
 	long xbox_count;
 	long xbox_tags[MAXIMUM_XBOX_SCREEN_WIDGETS];
+	/* (1.1.3-insider.8m, the Classic+ audit: built whatever the Menu style the map loads in, each tag's
+	two definitions kept - the classic set's and the map's own (a stand-in, or Halo PC's) - and swapped
+	as the Menu style changes, xbox_screens_style_apply: a player who chose Classic+ in the settings
+	panel after starting in ElDewrito or Halo 3 got the Halo 3 screens for these until a restart -
+	the owner's 8l: the System Link list, the lobby and split screen's SELECT PROFILE) */
+	void *xbox_patched[MAXIMUM_XBOX_SCREEN_WIDGETS];
+	void *xbox_original[MAXIMUM_XBOX_SCREEN_WIDGETS];
+	int xbox_applied;
 } menu_tags;
 
 /* the build under way */
@@ -639,9 +647,14 @@ static struct
 	boolean failed;
 	/* a level's map (the in-game set) */
 	boolean ingame;
+	/* (the in-game set's screens and handlers for the other kind of level - the campaign's pause on a
+	multiplayer map, the multiplayer pause on a campaign map -: counted, said once, ingame_other_kind) */
+	long other_kind;
 	/* a Halo PC ui.map (MCC's): the Xbox's screens it has not stand in (a child's halo_pc=) */
 	boolean halo_pc_ui;
 } build;
+
+static boolean ingame_other_kind(char const *path);
 
 /* ---------- private code */
 
@@ -1253,7 +1266,8 @@ static void handler_build(struct ui_widget_event_handler_reference *handler, str
 		questions) */
 		if (build.ingame && strchr(targets[0], '\\') && tag_loaded(UI_WIDGET_DEFINITION_TAG, targets[0]) == NONE)
 		{
-			platform_log("menus: %s:%ld: this map has no %s: the handler opens nothing here", source->file,
+			if (!ingame_other_kind(targets[0]))
+				platform_log("menus: %s:%ld: this map has no %s: the handler opens nothing here", source->file,
 				source->line, targets[0]);
 			SET_FLAG(handler->flags, _event_handler_open_widget_bit, FALSE);
 			SET_FLAG(handler->flags, _event_handler_replace_self_with_widget_bit, FALSE);
@@ -1610,8 +1624,15 @@ static void *widget_build(long widget_index)
 	map's; said once, the set still added) */
 	if (source->extends && tag_loaded(UI_WIDGET_DEFINITION_TAG, source->extends) == NONE)
 	{
-		platform_log("menus: %s:%ld: this map has no %s for %s to extend: left out here", source->file, source->line,
-			source->extends, source->name);
+		/* (and on the Xbox's ui.map a Halo PC row's twin, <name>_pc - main.xml's PROFILES and QUIT for MCC's
+		ui.map -: not used there, not a gap) */
+		size_t name_length = strlen(source->name);
+		boolean halo_pc_twin = !build.ingame && !build.halo_pc_ui && name_length > 3 &&
+			!strcmp(source->name + name_length - 3, "_pc");
+
+		if (!ingame_other_kind(source->extends) && !halo_pc_twin)
+			platform_log("menus: %s:%ld: this map has no %s for %s to extend: left out here", source->file, source->line,
+				source->extends, source->name);
 		return definition;
 	}
 	if (source->type)
@@ -1888,6 +1909,35 @@ screens open these by name and the Halo 3 and Online styles put their own in the
 the map's would be, it is opened by name and stood for, and where nothing stands for it
 (Halo CE's styles, which would show the Xbox's screen) it is empty, not another screen
 made up. Said in the log, once per name. */
+/* (a level's map, the in-game set) a screen of the game's this map has not because it is the other
+kind of level: the campaign's pause and its questions on a multiplayer map (no ui\shell\solo_game
+pause), the multiplayer pause on a campaign map (no 1p_pause_game) - not a gap, nothing opens it here
+(the 1.1.3 Classic+ audit: these were logged as "stands for nothing" and read as bugs) */
+static boolean ingame_other_kind(
+	char const *path)
+{
+	boolean campaign_map, multiplayer_map;
+
+	if (!build.ingame || !path)
+		return FALSE;
+	campaign_map = tag_loaded(UI_WIDGET_DEFINITION_TAG, "ui\\shell\\solo_game\\pause_game\\pause_game") != NONE;
+	multiplayer_map = tag_loaded(UI_WIDGET_DEFINITION_TAG, "ui\\shell\\multiplayer_game\\pause_game\\1p_pause_game") != NONE;
+	if (!campaign_map && (!strncmp(path, "ui\\shell\\solo_game\\", sizeof("ui\\shell\\solo_game\\") - 1) ||
+		!strncmp(path, "ui\\shell\\error\\confirm_restart", sizeof("ui\\shell\\error\\confirm_restart") - 1) ||
+		!strncmp(path, "ui\\shell\\error\\warning_saving_file_screen", sizeof("ui\\shell\\error\\warning_saving_file_screen") - 1) ||
+		!strcmp(path, "ui\\shell\\error\\confirm_quit_modal_halfscreen")))
+	{
+		build.other_kind++;
+		return TRUE;
+	}
+	if (!multiplayer_map && !strncmp(path, "ui\\shell\\multiplayer_game\\", sizeof("ui\\shell\\multiplayer_game\\") - 1))
+	{
+		build.other_kind++;
+		return TRUE;
+	}
+	return FALSE;
+}
+
 static char const *const xbox_only_widgets[] =
 {
 	"ui\\shell\\main_menu\\multiplayer_type_select\\connected\\4way_profile_select\\4way_start2join_screen",
@@ -1939,12 +1989,55 @@ static void xbox_screen_widgets_apply(
 			platform_log("menus: too many of the Xbox screens' widgets; %s left as the map has it", path);
 			continue;
 		}
+		menu_tags.xbox_original[menu_tags.xbox_count] = instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(target)].base_address;
+		menu_tags.xbox_patched[menu_tags.xbox_count] = definition;
 		instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(target)].base_address = definition;
 		menu_tags.xbox_tags[menu_tags.xbox_count++] = target;
 		applied++;
 	}
+	menu_tags.xbox_applied = applied ? 1 : 0;
 	if (applied)
 		platform_log("menus: Classic+ on Halo PC's ui.map: %ld of the Xbox screens' widgets as the Xbox has them", applied);
+}
+
+/* (a tag the classic set's Xbox screen widget stands for, xbox_screen_widgets_apply) */
+static boolean xbox_screen_tag(
+	long tag_index)
+{
+	long index;
+
+	for (index = 0; tag_index != NONE && index < menu_tags.xbox_count; index++)
+	{
+		if (menu_tags.xbox_tags[index] == tag_index)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+/* (each screen that opens, classic_patches_apply) the classic set's Xbox screen widgets the
+definitions of their tags while Menu style is Classic+, the map's own (its stand-ins, Halo PC's)
+in the other styles - which open the Halo 3 or ElDewrito set's screens for those */
+static void xbox_screens_style_apply(void)
+{
+	int classic = halo_menu_style_classic_plus();
+	struct cache_file_tag_instance *instances;
+	long count, index;
+
+	if (!menu_tags.xbox_count || menu_tags.xbox_applied == (classic ? 1 : -1))
+		return;
+	instances = cache_files_tag_instances(&count);
+	if (!instances)
+		return;
+	for (index = 0; index < menu_tags.xbox_count; index++)
+	{
+		long absolute = DATUM_INDEX_TO_ABSOLUTE_INDEX(menu_tags.xbox_tags[index]);
+
+		if (absolute >= 0 && absolute < count)
+			instances[absolute].base_address = classic ? menu_tags.xbox_patched[index] : menu_tags.xbox_original[index];
+	}
+	menu_tags.xbox_applied = classic ? 1 : -1;
+	platform_log("menus: Menu style %s: for the Xbox screens Halo PC's ui.map has not, %s", classic ? "Classic+" : "not Classic+",
+		classic ? "the classic set's (classic/xbox_screens.xml)" : "the map's own stand-ins (the Halo 3 set's screens open for them)");
 }
 
 static long next_tag(void)
@@ -2026,21 +2119,27 @@ static void classic_patches_apply(void)
 	struct cache_file_tag_instance *instances;
 	long count, index;
 
-	if (!menu_tags.classic_count || menu_tags.classic_applied == (classic ? 1 : -1))
-		return;
-	instances = cache_files_tag_instances(&count);
-	if (!instances)
-		return;
-	for (index = 0; index < menu_tags.classic_count; index++)
+	/* (a tag both patch - PROFILES' edit screen -: Classic+ puts the Xbox screen in, then its own patch over
+	it; the other styles take the patch off, then the Xbox screen off, the map's own left whichever of the
+	two was built over the other) */
+	if (classic)
+		xbox_screens_style_apply();
+	if (menu_tags.classic_count && menu_tags.classic_applied != (classic ? 1 : -1) &&
+		(instances = cache_files_tag_instances(&count)) != NULL)
 	{
-		long absolute = DATUM_INDEX_TO_ABSOLUTE_INDEX(menu_tags.classic_tags[index]);
+		for (index = 0; index < menu_tags.classic_count; index++)
+		{
+			long absolute = DATUM_INDEX_TO_ABSOLUTE_INDEX(menu_tags.classic_tags[index]);
 
-		if (absolute >= 0 && absolute < count)
-			instances[absolute].base_address = classic ? menu_tags.classic_patched[index] : menu_tags.classic_original[index];
+			if (absolute >= 0 && absolute < count)
+				instances[absolute].base_address = classic ? menu_tags.classic_patched[index] : menu_tags.classic_original[index];
+		}
+		menu_tags.classic_applied = classic ? 1 : -1;
+		platform_log("menus: Menu style %s: the Xbox screens' %ld widgets %s", classic ? "Halo CE" : "Halo 3",
+			menu_tags.classic_count, classic ? "with the port's rows" : "as the map has them");
 	}
-	menu_tags.classic_applied = classic ? 1 : -1;
-	platform_log("menus: Menu style %s: the Xbox screens' %ld widgets %s", classic ? "Halo CE" : "Halo 3",
-		menu_tags.classic_count, classic ? "with the port's rows" : "as the map has them");
+	if (!classic)
+		xbox_screens_style_apply();
 }
 
 /* ---------- the player's Halo PC data */
@@ -3043,7 +3142,6 @@ void menu_tags_loaded(
 		instance_set(instances, UI_WIDGET_DEFINITION_TAG, stub_tag, xbox_only_widgets[index], "", stub);
 		/* (named as the Xbox's is, for tag_loaded) */
 		instances[DATUM_INDEX_TO_ABSOLUTE_INDEX(stub_tag)].name = (char *)xbox_only_widgets[index];
-		platform_log("menus: this ui.map has no %s: an empty widget stands in for it", xbox_only_widgets[index]);
 	}
 	/* the tags: the bitmaps and strings first, which the widgets name; the
 	widgets' names in the table before any is built, which they find there */
@@ -3116,8 +3214,17 @@ void menu_tags_loaded(
 	or Halo PC's widget -, so every screen and handler that opens it by name gets the Xbox's. Menu
 	style is read as the map loads, as for the stand-ins) */
 	menu_tags.xbox_count = 0;
-	if (!build.failed && !ingame && build.halo_pc_ui && halo_menu_style_classic_plus())
+	menu_tags.xbox_applied = 0;
+	if (!build.failed && !ingame && build.halo_pc_ui)
+	{
 		xbox_screen_widgets_apply(instances);
+		/* (the map's own again before anything is built unless Menu style is Classic+: the classic set's
+		patches, classic_patch=, extend - and keep as the original to put back - what the tag is while they
+		are built; the Xbox screen there made Menu style Classic's PROFILES and SETTINGS Classic+'s screens,
+		the Classic+ audit's mccmenu, Nov 24) */
+		if (menu_tags.xbox_count && !halo_menu_style_classic_plus())
+			xbox_screens_style_apply();
+	}
 	for (index = 0; index < widget_count && (!build.failed); index++)
 	{
 		if (strncmp(menus->widgets[index].name, XBOX_SCREEN_WIDGET_PREFIX, strlen(XBOX_SCREEN_WIDGET_PREFIX)))
@@ -3125,6 +3232,20 @@ void menu_tags_loaded(
 	}
 	if (build.failed)
 		goto failed;
+	/* (the classic set's Xbox screens built for every style - extends= copies of them taken -: the map's own
+	again unless Menu style is Classic+, xbox_screens_style_apply) */
+	if (menu_tags.xbox_count && !halo_menu_style_classic_plus())
+		xbox_screens_style_apply();
+	/* (each stand-in: what opens for it - an empty one is a screen no style can show, a bug) */
+	for (index = 0; index < menu_tags.stub_count; index++)
+	{
+		char const *stub_name = tag_get_name(menu_tags.stub_tags[index]);
+
+		if (xbox_screen_tag(menu_tags.stub_tags[index]))
+			platform_log("menus: this ui.map has no %s: Classic+'s own in its place (classic/xbox_screens.xml, xbox_netscreens.xml)", stub_name);
+		else
+			platform_log("menus: this ui.map has no %s: an empty widget stands in for it", stub_name);
+	}
 	menu_tags.root_tag = ingame || menu_tags.alone ? NONE : build.widget_tags[widget_named(menus->root)];
 	/* (the Halo 3 set: each screen and the Xbox screen it stands for, both
 	there) */
@@ -3140,7 +3261,9 @@ void menu_tags_loaded(
 		{
 			/* (a level's map without the screen: a multiplayer map has no
 			campaign pause screen to stand for) */
-			if (ingame && from == NONE && widget != NONE)
+			if (ingame && from == NONE && widget != NONE && ingame_other_kind(screen->replaces))
+				;
+			else if (ingame && from == NONE && widget != NONE)
 				platform_log("menus: this map has no %s: %s stands for nothing here", screen->replaces, screen->root);
 			else
 				problem(screen->file, screen->line, from == NONE ? "the map has no screen" : "no widget is named",
@@ -3238,6 +3361,10 @@ void menu_tags_loaded(
 		halo_pc_menus_state = 1;
 	if (!menu_tags.alone)
 		menu_tags_art_preread();
+	if (ingame && build.other_kind)
+		platform_log("menus: a %s level: %ld of the in-game set's screens and handlers are the other kind of level's "
+			"(not on this map, not needed here)", tag_loaded(UI_WIDGET_DEFINITION_TAG,
+			"ui\\shell\\solo_game\\pause_game\\pause_game") != NONE ? "campaign" : "multiplayer", build.other_kind);
 	platform_log("menus: %s: %ld widgets, %ld string lists and %ld bitmaps added to "
 		"%s.map's %ld tags in %lu us (the Halo PC files checked %lu, the XML read %lu, the tags %lu; the pictures "
 		"and text are read when they first open)", ingame ? (menu_tags.alone ? "the HUD fonts alone" : "the in-game screens") :
@@ -3458,6 +3585,9 @@ boolean menu_tags_empty_stand_in(
 {
 	long index;
 
+	/* (one the classic set's Xbox screen stands in for, Classic+: not empty) */
+	if (menu_tags.xbox_applied > 0 && xbox_screen_tag(tag_index))
+		return FALSE;
 	for (index = 0; tag_index != NONE && index < menu_tags.stub_count; index++)
 	{
 		if (menu_tags.stub_tags[index] == tag_index)
@@ -3475,12 +3605,10 @@ static boolean menu_tags_classic_plus_missing(
 
 	if (tag_index == NONE || !menu_tags.stub_count || (!halo_menu_style_classic_plus() && !menu_tags.original_stand_ins))
 		return FALSE;
-	/* (rc.9: one the classic set has the Xbox's look for, xbox_screen_widgets_apply: that one) */
-	for (index = 0; index < menu_tags.xbox_count; index++)
-	{
-		if (menu_tags.xbox_tags[index] == tag_index)
-			return FALSE;
-	}
+	/* (rc.9: one the classic set has the Xbox's look for, xbox_screen_widgets_apply: that one, while it is
+	applied - Classic+ -) */
+	if (menu_tags.xbox_applied > 0 && xbox_screen_tag(tag_index))
+		return FALSE;
 	for (index = 0; index < menu_tags.stub_count; index++)
 	{
 		if (menu_tags.stub_tags[index] == tag_index)
@@ -3507,6 +3635,23 @@ long menu_tags_screen(
 		return tag_index;
 	/* (the Xbox screens with Menu style Halo CE's rows, or without) */
 	classic_patches_apply();
+	/* (1.1.3-insider.8m, the Classic+ audit: Classic+ on an MCC-only install - Halo PC's ui.map -,
+	MULTIPLAYER's EDIT GAMETYPES opened Halo PC's own SELECT GAMETYPE TO EDIT, whose list Halo PC's
+	functions fill (halo_pc_menus.c, Menu style Classic alone): an empty list, A did nothing. Classic+'s
+	own game types editor in its place - GAME MODES' GAMETYPES PLUS, classic/standins.xml -, which
+	lists, edits, copies and saves them; on the Xbox's files the Xbox's screen, as ever) */
+	if (halo_menu_style_classic_plus() && menu_tags.stub_count &&
+		tag_index == tag_loaded(UI_WIDGET_DEFINITION_TAG,
+			"ui\\shell\\main_menu\\settings_select\\multiplayer_setup\\playlist_select\\gametype_select_screen"))
+	{
+		long editor = menu_tags_ingame_screen("cp/gametypes/screen");
+
+		if (editor != NONE)
+		{
+			platform_log("menus: Classic+ on Halo PC's ui.map: EDIT GAMETYPES opens Classic+'s game types");
+			return editor;
+		}
+	}
 	/* (a Forge game: its menu for the level's pause screen, which would
 	save the game and offer the campaign's checkpoints) */
 	if (forge_game_active())

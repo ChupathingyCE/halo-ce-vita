@@ -770,6 +770,7 @@
 # (the crossplay guardrails, port/linux/src/crossplay_guard.c and its callers: a large or co-op PC game asked about, split screen, the server browser's badges)
 "Halo: large PC game" = "Halo: partida de PC grande"
 "Large PC game: more than 16 players can make the Vita lag. Join anyway?" = "Partida de PC grande: con más de 16 jugadores la Vita puede ir lenta. ¿Unirte de todos modos?"
+"Co-op can't be hosted on MCC's own missions: they play on this Vita alone. Host co-op with the Xbox's campaign maps, or join a co-op game from INTERNET or LAN." = "No se puede alojar el cooperativo en las misiones propias de MCC: se juegan solo en esta Vita. Aloja el cooperativo con los mapas de campaña de Xbox, o únete a una partida cooperativa desde INTERNET o LAN."
 "Halo: PC co-op game" = "Halo: partida cooperativa de PC"
 "PC co-op game: experimental on the Vita. The host's AI and extra enemies can make it lag. Join anyway?" = "Partida cooperativa de PC: experimental en la Vita. La IA del anfitrión y sus enemigos extra pueden hacer que vaya lenta. ¿Unirte de todos modos?"
 "PC co-op game with more than 4 players: experimental on the Vita. More players and the host's extra enemies can make it lag. Join anyway?" = "Partida cooperativa de PC con más de 4 jugadores: experimental en la Vita. Más jugadores y los enemigos extra del anfitrión pueden hacer que vaya lenta. ¿Unirte de todos modos?"
@@ -3585,6 +3586,11 @@
 "INVERT FLIGHT CONTROL:" = "INVERTIR VUELO:"
 "AUTO-CENTER:" = "AUTOCENTRAR:"
 
+# classic/xbox_netscreens.xml: Classic+ on an MCC-only install, the Xbox's System Link list (1.1.3)
+"= CREATE GAME" = "= CREAR PARTIDA"
+"Looking for games...\n\nPress %a-button or %y-button to start\nyour own game" = "Buscando partidas...\n\nPulsa %a-button o %y-button para crear\ntu propia partida"
+"Game Status:\nMap:\nGame Rules:\nMode:\nNumber of Players:\nScore Limit:" = "Estado:\nMapa:\nReglas:\nModo:\nJugadores:\nLímite:"
+
 # ---------- GAME MANAGER: DOWNLOAD FROM STEAM (halo3/steam.xml, menu_functions.c h3_steam_*, vita_steam.c)
 "DOWNLOAD FROM STEAM" = "DESCARGAR DESDE STEAM"
 "Your own MCC files" = "Tus archivos de MCC"
@@ -3850,3 +3856,5 @@
 "The host's %s and yours have different flags (teleporters, CTF flags, hills): Xbox and MCC files can't play this map together." = "Tu %s y el del anfitrión tienen banderas distintas (teletransportadores, banderas de CTF, colinas): los archivos de Xbox y de MCC no pueden jugar este mapa juntos."
 "Halo PC rebuilt %s (%s), and MCC's files have Halo PC's. With Xbox and MCC files together %s needs an Xbox-files host: ask a player with the Xbox's maps to host." = "Halo PC rehízo %s (%s), y los archivos de MCC tienen los de Halo PC. Con archivos de Xbox y de MCC juntos, %s necesita un anfitrión con archivos de Xbox: pide a alguien con los mapas de Xbox que sea el anfitrión."
 "Halo PC rebuilt %s (%s), and MCC's files have Halo PC's. Mixed games on %s will need an Xbox-files host and aren't ready yet: everyone needs the same files for now." = "Halo PC rehízo %s (%s), y los archivos de MCC tienen los de Halo PC. Las partidas mixtas en %s necesitarán un anfitrión con archivos de Xbox y aún no están listas: por ahora todos necesitan los mismos archivos."
+"Halo: Menu style" = "Halo: Estilo de menú"
+"Menu style Classic is used from the next start of the game. Close the game and start it again to see it." = "El estilo de menú Clásico se usa desde el próximo inicio del juego. Cierra el juego y vuelve a iniciarlo para verlo."

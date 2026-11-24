@@ -556,7 +556,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -4302,6 +4302,106 @@ PY
 			esac
 		done
 		;;
+	cpaudit)
+		# (1.1.3-insider.8m, the owner's Classic+ audit, Nov 23: "I'm finding the same bugs over and over
+		# again". Every Classic+ screen a player reaches, each run on BOTH data sets - the Xbox files (the
+		# menus data) and MCC's files alone (HALO_TEST_MCC_ROOT's halo1 linked into a content folder, no
+		# Xbox map: the owner's own Vita) -: each flow opens its screens, Back comes back to the main menu,
+		# and the log has none of the lines that were the owner's bugs - an empty stand-in, a screen or
+		# handler that "stands for nothing", "event handler failed to spawn widget", a Halo 3 or ElDewrito
+		# screen in Classic+, the Halo 3 LAN browser in the System Link list's place, an assertion. The
+		# network rows run with the test's unroutable brokers ($offnet / $h3net): nothing live is reached)
+		cp_mcc=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
+		cp_setups="xbox"
+		if [ -r "$cp_mcc/maps/ui.map" ] && [ -r "$cp_mcc/maps/custom_edition/bitmaps.map" ]; then
+			cp_setups="xbox mcc"
+			rm -rf "$out/cp-content" "$out/cp-none"
+			mkdir -p "$out/cp-content/halo1/maps" "$out/cp-none/maps"
+			for file in "$cp_mcc"/maps/*.map "$cp_mcc"/maps/custom_edition; do ln -sfn "$file" "$out/cp-content/halo1/maps/"; done
+			for file in "$cp_mcc"/*; do [ "$(basename "$file")" = maps ] || ln -sfn "$file" "$out/cp-content/halo1/"; done
+		else
+			echo "--- cpaudit"; echo "SKIP (cpaudit, MCC's files alone): no MCC halo1 folder at $cp_mcc (HALO_TEST_MCC_ROOT); the Xbox files' flows alone"
+		fi
+		cp_profile=${campaign_profile:-}
+		d="down:150:500"
+		cpmp="wait:150:4000 $d a:150:3500"
+		# NAME|SECONDS|PAD|SCREENS (each a regex of a "ui: screen" line, in order; a,b: either)|ENV
+		cp_flows=(
+			"main_campaign|40|wait:150:4000 a:150:3500 a:150:3500 b:150:3000 b:150:3000 wait:150:1500|load_campaign_player_profile solo_level_select_screen load_campaign_player_profile main_menu.main_menu|"
+			"main_profiles|64|wait:150:4000 $d $d a:150:3500 a:150:3500 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:4000 b:150:3500 $d a:150:3000 wait:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|player_profile_select_screen player_profile_edit_screen controller_options_screen player_profile_edit_screen advanced_controls_screen player_profile_edit_screen color_select_screen player_profile_edit_screen pc.cp.custom.screen player_profile_edit_screen pc.ce.keys.screen player_profile_edit_screen player_profile_select_screen main_menu.main_menu|"
+			"main_newprofile|50|wait:150:4000 $d $d a:150:3500 y:150:3500 a:150:3500 a:150:3500 wait:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|player_profile_select_screen create_and_edit_player_profile_screen profile_name_screen create_and_edit_player_profile_screen main_menu.main_menu|HALO_TEST_TEXT_INPUT=Rookie"
+			"main_settings|40|wait:150:4000 $d $d $d a:150:3500 a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 b:150:3000 wait:150:1500|pc.ce.settings.screen pc.ce.mods.screen pc.ce.settings.screen pc.ce.fileshare.screen pc.ce.settings.screen pc.classic.friends.screen pc.ce.settings.screen main_menu.main_menu|"
+			"main_quit|26|wait:150:4000 $d $d $d $d a:150:3000 b:150:3000 wait:150:1500|pc.ce.quit.screen main_menu.main_menu|"
+			"mp_code|30|$cpmp $d $d a:150:4000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen pc.code.screen pc.mp.screen main_menu.main_menu|$offnet"
+			"mp_setup|30|$cpmp $d $d $d a:150:4000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen pc.setup.screen pc.mp.screen main_menu.main_menu|$offnet"
+			"mp_coop|44|$cpmp $d $d $d $d $d a:150:4000 a:150:3500 a:150:3500 b:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen solo_game_player_profile_select_screen solo_level_select_screen difficulty_select_list_screen solo_level_select_screen solo_game_player_profile_select_screen pc.mp.screen main_menu.main_menu|"
+			"mp_split|40|$cpmp $d $d $d $d $d $d a:150:4000 a:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen split_screen.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|"
+			"mp_gametypes|40|$cpmp $d $d $d $d $d $d $d a:150:4000 a:150:3500 wait:150:2000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen gametype_select_screen,pc.cp.gametypes.screen gametype_edit_screen,pc.cp.gtbase.screen pc.mp.screen main_menu.main_menu|"
+			"mp_modes|60|$cpmp $d $d $d $d $d $d $d $d a:150:3500 a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 $d a:150:4000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.modes.screen pc.cp.forge.lobby pc.ce.modes.screen pc.cp.command.lobby pc.ce.modes.screen pc.cp.firefight.lobby pc.ce.modes.screen pc.cp.gametypes.screen pc.ce.modes.screen pc.mp.screen main_menu.main_menu|"
+			"mp_lan|40|$cpmp $d a:150:4000 a:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
+			"mp_lanlist|46|$cpmp $d a:150:4000 a:150:2000 a:150:2000 a:150:5000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen connected.4way_profile_select.4way_start2join_screen connected.server_list.server_list_screen connected.4way_profile_select.4way_start2join_screen pc.mp.screen main_menu.main_menu|$offnet"
+			# (Menu style Classic chosen in the settings panel from Classic+: the Xbox files switch at once; MCC's ui.map
+			# keeps Classic+ till the next start - its PROFILES crashed the game, Nov 24)
+			"style_to_classic|45|wait:150:5000 $d $d a:150:4000 a:150:4000 b:150:3000 b:150:3000 wait:150:2000|main_menu.main_menu player_profile_select_screen main_menu.main_menu|HALO_TEST_MENU_STYLE_SWITCH=2000:original"
+			# (the game modes' START rows: Forge starts its game; Command and Firefight open the packs' prepare box, B
+			# back to the lobby)
+			"modes_forge|70|$cpmp $d $d $d $d $d $d $d $d a:150:3500 a:150:4000 $d $d a:150:8000 wait:150:20000|pc.ce.modes.screen pc.cp.forge.lobby|"
+			"modes_command|60|$cpmp $d $d $d $d $d $d $d $d a:150:3500 $d a:150:4000 $d $d $d $d a:150:6000 b:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.modes.screen pc.cp.command.lobby pc.cp.command.prepare.screen pc.cp.command.lobby pc.ce.modes.screen pc.mp.screen main_menu.main_menu|"
+			"modes_firefight|60|$cpmp $d $d $d $d $d $d $d $d a:150:3500 $d $d a:150:4000 $d a:150:6000 b:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.modes.screen pc.cp.firefight.lobby pc.cp.command.prepare.screen pc.cp.firefight.lobby pc.ce.modes.screen pc.mp.screen main_menu.main_menu|"
+			# (a level's pause: RESTART AT CHECKPOINT and RESTART LEVEL confirmed; the quit row - the Xbox files' SAVE
+			# AND QUIT, MCC's own pause's QUIT, @QUIT@ - back to the main menu)
+			"pause_restart|150|wait:150:4000 a:150:3500 a:150:3500 a:150:3500 a:150:3500 level:150:20000 wait:150:6000 start:150:3000 $d a:150:3000 a:150:8000 start:150:3000 $d $d a:150:3000 a:150:10000|solo_game.pause_game.pause_game confirm_restartatsave_modal_fullscreen solo_game.pause_game.pause_game confirm_restartlevel_modal_fullscreen|HALO_TEST_COMMANDS=L150:@skip"
+			"pause_quit|130|wait:150:4000 a:150:3500 a:150:3500 a:150:3500 a:150:3500 level:150:20000 wait:150:6000 start:150:3000 @QUIT@ a:150:4000 wait:150:10000|solo_game.pause_game.pause_game main_menu.main_menu|HALO_TEST_COMMANDS=L150:@skip"
+			# (multiplayer, a local game with bots on Blood Gulch - @MAP@, MCC's own copy on MCC's files -: the pause,
+			# its PLAYERS screen and back; a game to its end: the carnage report (the postgame), its game types, back)
+			"mp_pause|70|wait:150:32000 start:150:3000 down:150:1200 a:150:3000 b:150:2500 down:150:1200 a:150:2000 up:150:1000 up:150:1000 a:150:3000 wait:150:6000|splitscreen_pregame_wrapper_normal 1p_pause_game pc.cp.players.screen 1p_pause_game|$offnet HALO_NETWORK_TEST=local:@MAP@:team_slayer HALO_NETWORK_TEST_PROFILE=1 HALO_NETWORK_TEST_START=3 HALO_BOTS=1"
+			"mp_carnage|110|wait:150:62000 a:150:4000 wait:150:4000 a:150:4000 wait:150:4000 b:150:3000 wait:150:6000|splitscreen_map_select_postgame_wrapper gametype_select_screen_wrapper splitscreen_map_select_postgame_wrapper|$offnet HALO_NETWORK_TEST=local:@MAP@:team_slayer HALO_NETWORK_TEST_PROFILE=1 HALO_NETWORK_TEST_START=3 HALO_NETWORK_TEST_END=40 HALO_BOTS=3"
+		)
+		for cp_flow in "${cp_flows[@]}"; do
+			IFS='|' read -r cp_name cp_seconds cp_pad0 cp_screens cp_env0 <<< "$cp_flow"
+			# (HALO_TEST_CP_FLOWS: some flows alone, by name)
+			[ -n "${HALO_TEST_CP_FLOWS:-}" ] && [[ " $HALO_TEST_CP_FLOWS " != *" $cp_name "* ]] && continue
+			for cp_setup in $cp_setups; do
+				# (@MAP@: Blood Gulch, MCC's own copy on MCC's files; @QUIT@: the pause's quit row, the Xbox files'
+				# fourth (SAVE AND QUIT), MCC's own pause's fifth (QUIT, after CHANGE SETTINGS))
+				if [ "$cp_setup" = mcc ]; then cp_map=mcc_bloodgulch cp_quit="$d $d $d $d"; else cp_map=bloodgulch cp_quit="$d $d $d"; fi
+				cp_pad=${cp_pad0//@QUIT@/$cp_quit} cp_env=${cp_env0//@MAP@/$cp_map}
+				if [ "$cp_setup" = mcc ]; then
+					profile_from=$cp_profile run "cpaudit_${cp_setup}_$cp_name" "$out/cp-none" "$cp_seconds" "$cp_pad" HALO_SCENE_PACKS=0 \
+						HALO_CONTENT_ROOT="$out/cp-content" $cp_env &
+				else
+					profile_from=$cp_profile run "cpaudit_${cp_setup}_$cp_name" "$menus_data" "$cp_seconds" "$cp_pad" HALO_SCENE_PACKS=0 $cp_env &
+				fi
+				# (a local game hosts on the game's network port: one data set at a time, or the second is refused)
+				[[ "$cp_env" == *HALO_NETWORK_TEST=* ]] && wait
+			done
+			wait
+			for cp_setup in $cp_setups; do
+				cp_run=cpaudit_${cp_setup}_$cp_name
+				log=$out/$cp_run/run.log
+				echo "--- cpaudit ($cp_setup: $cp_name)"
+				grep -a "ui: screen" "$log" | sed 's/.*ui: screen //' | uniq | tr '\n' ' ' | cut -c1-400; echo
+				[ "$(cat "$out/$cp_run/exit")" = 0 ] || fail cpaudit "$cp_setup $cp_name: exit $(cat "$out/$cp_run/exit")"
+				grep -av "render assertion skipped" "$log" | grep -aqiE "assert|exception|halt_and_catch_fire|segmentation" &&
+					fail cpaudit "$cp_setup $cp_name: an assertion, exception or halt"
+				cp_bad=$(grep -aE "an empty widget stands in|stands for nothing|the handler opens nothing|LAN browser in its place|menus: Halo 3 screen|ui: screen pc\.(h3|online)\." "$log" | head -3)
+				[ -n "$cp_bad" ] && fail cpaudit "$cp_setup $cp_name: $cp_bad"
+				grep -aqE "failed to spawn widget|may not run event handler function" "$out/$cp_run/data/debug.txt" 2>/dev/null &&
+					fail cpaudit "$cp_setup $cp_name: debug.txt: $(grep -aE "failed to spawn widget|may not run event handler function" "$out/$cp_run/data/debug.txt" | head -1)"
+				# (Forge's START: the game started)
+				[ $cp_name = modes_forge ] && ! grep -aq "forge: the Forge game of .* starts" "$log" &&
+					fail cpaudit "$cp_setup $cp_name: START did not start the Forge game"
+				# (each screen wanted, in order)
+				cp_rest=$(grep -a "ui: screen" "$log" | sed 's/.*ui: screen //')
+				for cp_want in $cp_screens; do
+					cp_line=$(printf '%s\n' "$cp_rest" | grep -anE "${cp_want//,/|}" | head -1 | cut -d: -f1)
+					if [ -z "$cp_line" ]; then
+						fail cpaudit "$cp_setup $cp_name: $cp_want did not open (in turn)"; break
+					fi
+					cp_rest=$(printf '%s\n' "$cp_rest" | tail -n +$((cp_line + 1)))
+				done
+			done
+		done ;;
 	*)
 		echo "usage: $0 [$(echo $all_cases $pc_cases | tr ' ' '|')]..." >&2; exit 2 ;;
 	esac

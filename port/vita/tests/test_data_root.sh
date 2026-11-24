@@ -2,9 +2,10 @@
 # custom-maps-dl, vita-save-backups and other builds' worktrees the tests' defaults name. That is the folder
 # beside the main checkout ($root/..); a git worktree elsewhere (git worktree add ~/halo-test-out/...) has none
 # of them beside it, and every data-driven test skipped there unless its HALO_TEST_* were set: the main
-# checkout's parent then, found by the worktree's common git folder.
+# checkout's parent then, found by the worktree's common git folder. (Both wanted: ~/halo-test-out has a triage
+# link but no data2276, and the Xbox-maps cases halted there with "no valid map directory", Nov 24.)
 data_root=$root/..
-if [ ! -e "$data_root/triage" ] && [ ! -e "$data_root/data2276" ]; then
+if [ ! -e "$data_root/triage" ] || [ ! -e "$data_root/data2276" ]; then
 	test_data_git=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) &&
 		[ -e "$(dirname "$test_data_git")/../triage" ] && data_root=$(cd "$(dirname "$test_data_git")/.." && pwd)
 	unset test_data_git
