@@ -57,7 +57,9 @@ its layout too, r4); an MCC host's game on one refuses an Xbox machine
 yet is refused by default, one line each (mixed_coop.c's
 mixed_coop_decisions).
 
-Never on the crossplay wire (OpenCE hosts have none of it).
+On the crossplay wire (a PC host's game) only with a ChupathingyCE host that
+says it plays mixed over its Delta Peer (mixed_coop_delta.h): the same
+messages there, the same checks; OpenCE hosts have none of it.
 */
 
 #ifndef HALO_MIXED_COOP_H
@@ -128,6 +130,11 @@ void mixed_coop_server_handle_lobby(struct network_game_server *server, struct n
 /* (custom_edition_maps.c) a client's check of the host's level, its
 identity: whether this machine may play it (FALSE: refused, why said) */
 int mixed_coop_host_level_acceptable(char const *level_name, unsigned long host_identity);
+/* (custom_edition_maps.c, a PC host's game on the crossplay wire) whether this
+machine may wait for the host to say it plays mixed over Delta Peer
+(mixed_coop_delta.h) rather than being refused at once: a level mixed play
+knows, of which this machine has MCC's file alone */
+int mixed_coop_crossplay_may_play(char const *level_name);
 /* (network_client_manager.c, each frame) FALSE once this machine must leave
 the game (a level that differs, a host that cannot play mixed co-op): the
 player told why */

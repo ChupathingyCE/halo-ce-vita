@@ -47,6 +47,7 @@ when what the game reads in them is alike.
 #include "units/biped_definitions.h"
 #include "main/main.h"
 #include "models/model_animation_definitions.h"
+#include "bungie_net/network/transport.h"
 #include "networking/network_game_globals.h"
 #include "networking/network_game_manager.h"
 #include "networking/network_messages.h"
@@ -70,6 +71,7 @@ when what the game reads in them is alike.
 /* (collision_bsp.c) the collision BSP whose invisible surfaces collide with nothing, or NULL */
 extern struct collision_bsp const *collision_bsp_invisible_masked;
 #include "mixed_coop.h"
+#include "mixed_coop_delta.h"
 #include "network_distributed.h"
 #include "network_wire.h"
 #include "tag_schema.h"
@@ -299,6 +301,21 @@ static void mixed_coop_free(
 	if (pointer)
 		free(pointer);
 }
+
+/* (the crossplay wire: a PC host's game) whether the host is a ChupathingyCE host that said it plays mixed, over
+Delta Peer (mixed_coop_delta.h) - none else plays mixed on that wire */
+static boolean mixed_coop_crossplay_host(
+	void)
+{
+	return network_wire_crossplay() && mixed_coop_delta_agreed() && mixed_coop.host_said;
+}
+
+/* (the crossplay wire) the pieces of the host's dictionary and layout as they come over Delta Peer, into the
+reassemblies' own bytes */
+static struct mixed_coop_delta_pieces mixed_coop_delta_dictionary;
+static struct mixed_coop_delta_pieces mixed_coop_delta_layout;
+/* how often a client says again what it still wants of them (Delta Peer's datagrams may be lost) */
+#define MIXED_COOP_DELTA_WANT_MILLISECONDS 500
 
 /* ---------- the level and its files */
 
@@ -732,6 +749,13 @@ static struct mixed_coop_rule const mixed_coop_rules_table[] =
 	{ "netgame_equipment", 0x10, 0x40, _mixed_rule_skip, 0 },
 	{ "netgame_equipment", 0x40, 0x50, _mixed_rule_floats, 0 },
 	{ "netgame_equipment", 0x54, 0x84, _mixed_rule_skip, 0 },
+	/* (a control's on, off and denied effects, which no schema lists: their
+	name pointers, which a loader points at its own empty string - an
+	address in the executable, another in every build - not hashed; their
+	groups and indices are) */
+	{ "control_definition", 0x2ec, 0x2f0, _mixed_rule_skip, 0 },
+	{ "control_definition", 0x2fc, 0x300, _mixed_rule_skip, 0 },
+	{ "control_definition", 0x30c, 0x310, _mixed_rule_skip, 0 },
 };
 
 /* ---------- the owner's decisions (Nov 22 2026, 09:27 "All I want is the mcc maps to play with Xbox
@@ -2668,7 +2692,10 @@ void mixed_coop_tags_loaded(
 	a mixed multiplayer map, whatever its game) */
 	game = network_game_get_game();
 	mixed_coop.network_coop = (game_connection() == _game_connection_network_client ||
-		game_connection() == _game_connection_network_server) && !network_wire_crossplay() && game &&
+		game_connection() == _game_connection_network_server) && game &&
+		/* (a PC host's game, the crossplay wire: only a ChupathingyCE host that said it plays mixed, over Delta
+		Peer - mixed_coop_delta.h) */
+		(!network_wire_crossplay() || mixed_coop_crossplay_host()) &&
 		(mixed_coop_level_is_multiplayer(mixed_coop.level) || game->variant.game_engine_index == 0);
 	/* (a multiplayer map's scenario has one name in both families' files:
 	the game's name says which game - MCC's own, mcc_chillout, is not mixed) */
@@ -3166,6 +3193,7 @@ static boolean mixed_coop_server_send(
 
 static void mixed_coop_client_start_update(void);
 static void mixed_coop_layout_send(long machine_index);
+static void mixed_coop_client_delta_wants(void);
 
 void mixed_coop_frame(
 	void)
@@ -3177,6 +3205,9 @@ void mixed_coop_frame(
 	short count, index;
 	int family;
 
+	/* (a joiner of a PC host's game: Delta Peer's datagrams, and what it still wants of the host's streams) */
+	mixed_coop_delta_frame();
+	mixed_coop_client_delta_wants();
 	/* (r4, a joiner's: its game's start held for the host's layout) */
 	if (mixed_coop.start_pending)
 		mixed_coop_client_start_update();
@@ -3379,13 +3410,14 @@ void mixed_coop_server_handle_lobby(
 
 /* ---------- the lobby: a client's */
 
+static void mixed_coop_client_take_hello(struct network_game_client *client, struct mixed_coop_lobby_message const *message);
+
 void mixed_coop_client_handle_lobby(
 	struct network_game_client *client,
 	unsigned short *message,
 	short message_size)
 {
-	struct mixed_coop_lobby_message hello, answer;
-	void *encoded;
+	struct mixed_coop_lobby_message hello;
 
 	if (!mixed_coop_lobby_decode(message, message_size, _message_server_mixed_coop, MIXED_COOP_CLASS_SERVER_PREGAME, &hello) ||
 		hello.command != _mixed_coop_lobby_hello)
@@ -3393,6 +3425,29 @@ void mixed_coop_client_handle_lobby(
 		network_event("mixed co-op: a host's message that could not be decoded or checked");
 		return;
 	}
+	mixed_coop_client_take_hello(client, &hello);
+}
+
+/* (the crossplay wire) a ChupathingyCE host's MIXED_HELLO over Delta Peer (mixed_coop_delta.h), checked there as
+the Bungie message is */
+void mixed_coop_delta_heard_hello(
+	struct mixed_coop_lobby_message const *hello)
+{
+	struct network_game_client *client = global_network_game_client_get();
+
+	if (!client || !network_wire_crossplay())
+		return;
+	mixed_coop_client_take_hello(client, hello);
+}
+
+/* the host's hello, its family for its level: this machine's answered */
+static void mixed_coop_client_take_hello(
+	struct network_game_client *client,
+	struct mixed_coop_lobby_message const *message)
+{
+	struct mixed_coop_lobby_message hello = *message, answer;
+	void *encoded;
+
 	if (!mixed_coop_capable() || global_network_game_server_get())
 		return;
 	if (!mixed_coop.host_said || mixed_coop.host_session != hello.session)
@@ -3409,9 +3464,25 @@ void mixed_coop_client_handle_lobby(
 	answer.family = (uint8_t)mixed_coop_local_family(hello.level);
 	answer.level = hello.level;
 	answer.session = hello.session;
+	/* (a PC host's game: over Delta Peer) */
+	if (network_wire_crossplay())
+	{
+		if (!mixed_coop_delta_send_answer(&answer, 0, NULL))
+			network_event("mixed co-op: the answer could not be sent");
+		return;
+	}
 	encoded = create_network_game_message(_message_client_mixed_coop, &answer, sizeof(answer));
 	if (!encoded || !network_game_client_send_to_server(client, encoded))
 		network_event("mixed co-op: the answer could not be sent");
+}
+
+int mixed_coop_crossplay_may_play(
+	char const *level_name)
+{
+	int level = mixed_coop_level_index(level_name);
+
+	return level >= 0 && mixed_coop_capable() && !network_game_is_splitscreen_local() &&
+		mixed_coop_local_family(level) == _mixed_coop_family_mcc;
 }
 
 int mixed_coop_host_level_acceptable(
@@ -3496,7 +3567,9 @@ static boolean mixed_coop_client_awaits_hello(
 	int *level)
 {
 	*level = -1;
-	if (!game || !mixed_coop_capable() || global_network_game_server_get() || network_wire_crossplay() ||
+	/* (the crossplay wire too since a ChupathingyCE host may say it plays mixed, over Delta Peer:
+	mixed_coop_delta.h) */
+	if (!game || !mixed_coop_capable() || global_network_game_server_get() ||
 		network_game_is_splitscreen_local() || mixed_coop.host_said || game->map.version)
 	{
 		return FALSE;
@@ -3518,6 +3591,15 @@ static void mixed_coop_refuse_older_host(
 	platform_log("mixed play: the host never said it plays mixed (an older version): %s refused, %s", mixed_coop_level_stems[level],
 		where);
 	mixed_coop.leave_level = level + 1;
+	/* (a PC host's game, the crossplay wire: refused as before mixed play with PC hosts, in the same words -
+	custom_edition_maps.c's) */
+	if (network_wire_crossplay())
+	{
+		mixed_coop_delta_end();
+		mixed_coop_leave("%s", T("this is a PC game, and your maps are MCC's: a PC game can only "
+			"be joined with the Xbox's maps. Mixed MCC and Xbox games are played with Halo CE Vita hosts"));
+		return;
+	}
 	if (mixed_coop_level_is_multiplayer(level))
 	{
 		/* (no "co-op": a multiplayer game, 8l's Boarding Action on an official server) */
@@ -3530,6 +3612,33 @@ static void mixed_coop_refuse_older_host(
 		mixed_coop_leave(T("The host plays %s from the Xbox's files and its version can't play co-op with MCC's "
 			"files: update the host's game, or play with your Xbox files."), mixed_coop_level_stems[level]);
 	}
+}
+
+/* (the crossplay wire: a PC host's game) the host asked over Delta Peer whether it plays mixed (mixed_coop_delta.h);
+its MIXED_HELLO then comes as a Vita host's hello does */
+static boolean mixed_coop_crossplay_asked;
+
+static void mixed_coop_crossplay_ask(
+	struct network_game_client *client)
+{
+	struct transport_address address;
+	short machine_index = network_game_client_get_local_machine_index();
+
+	if (!network_wire_crossplay() || mixed_coop_crossplay_asked || machine_index == NONE)
+		return;
+	csmemset(&address, 0, sizeof(address));
+	network_game_client_get_remote_server_address(client, &address);
+	mixed_coop_delta_begin((unsigned long)address.address.ipv4_address, machine_index, network_wire_version());
+	mixed_coop_crossplay_asked = TRUE;
+}
+
+/* (the crossplay wire) whether the host's Delta Peer said it does not play mixed (LEGACY, a WELCOME without
+mixed_maps, or nothing in 4 s): refused at once rather than at the wait's end */
+static boolean mixed_coop_crossplay_said_no(
+	void)
+{
+	return network_wire_crossplay() && mixed_coop_crossplay_asked &&
+		(mixed_coop_delta_said_no() || (!mixed_coop_delta_active() && !mixed_coop_delta_agreed()));
 }
 
 /* (the lobby's) a host that has not said it plays mixed in MIXED_COOP_HELLO_WAIT_MILLISECONDS: refused there */
@@ -3557,9 +3666,12 @@ static void mixed_coop_client_lobby_update(
 		mixed_coop.lobby_hello_since = now ? now : 1;
 		platform_log("mixed play: the host's game is on %s, played here from MCC's files: waiting for the host to say it "
 			"plays mixed", mixed_coop_level_stems[level]);
-		return;
 	}
-	if (now - mixed_coop.lobby_hello_since >= MIXED_COOP_HELLO_WAIT_MILLISECONDS)
+	/* (a PC host's game: asked over Delta Peer, which a ChupathingyCE host with mixed play speaks - once this
+	machine has its machine index) */
+	mixed_coop_crossplay_ask(client);
+	/* (a PC host whose Delta Peer said no, or said nothing in its 4 s: refused now) */
+	if (now - mixed_coop.lobby_hello_since >= MIXED_COOP_HELLO_WAIT_MILLISECONDS || mixed_coop_crossplay_said_no())
 	{
 		mixed_coop.lobby_hello_since = 0;
 		mixed_coop_refuse_older_host(game, level, "in its lobby, before the map loads");
@@ -3585,6 +3697,11 @@ int mixed_coop_client_update(
 void mixed_coop_client_dispose(
 	void)
 {
+	/* (a PC host's game: Delta Peer's BYE) */
+	mixed_coop_delta_end();
+	mixed_coop_crossplay_asked = FALSE;
+	csmemset(&mixed_coop_delta_dictionary, 0, sizeof(mixed_coop_delta_dictionary));
+	csmemset(&mixed_coop_delta_layout, 0, sizeof(mixed_coop_delta_layout));
 	mixed_coop.host_said = FALSE;
 	mixed_coop.host_family = _mixed_coop_family_none;
 	mixed_coop.needs_dictionary = FALSE;
@@ -3620,6 +3737,17 @@ static void mixed_coop_layout_ask(
 	ask.family = _mixed_coop_family_mcc;
 	ask.level = (uint8_t)level;
 	ask.session = mixed_coop.host_session;
+	/* (a PC host's game: over Delta Peer, with the pieces still wanted) */
+	if (network_wire_crossplay())
+	{
+		uint16_t first;
+		uint8_t bits[MIXED_COOP_DELTA_LAYOUT_WANT_BITS / 8];
+
+		mixed_coop_delta_pieces_wanted(&mixed_coop_delta_layout, &first, bits, MIXED_COOP_DELTA_LAYOUT_WANT_BITS);
+		if (mixed_coop_delta_send_answer(&ask, first, bits))
+			mixed_coop.layout_asked_time = now ? now : 1;
+		return;
+	}
 	encoded = create_network_game_message(_message_client_mixed_coop, &ask, sizeof(ask));
 	if (encoded && network_game_client_send_to_server(client, encoded))
 		mixed_coop.layout_asked_time = now ? now : 1;
@@ -3631,7 +3759,7 @@ int mixed_coop_client_start_waits(
 	struct network_game *game = client ? network_game_client_get_game(client) : NULL;
 	int level;
 
-	if (!game || !mixed_coop_capable() || global_network_game_server_get() || network_wire_crossplay())
+	if (!game || !mixed_coop_capable() || global_network_game_server_get())
 		return FALSE;
 	/* (1.1.3, the owner's 8l: an MCC-only Vita joined an official server's game in progress - its 1.1.1 build plays
 	no mixed games - loaded MCC's Boarding Action whole, 15 s, and only then was refused) the game's start held for
@@ -3665,6 +3793,9 @@ int mixed_coop_client_start_waits(
 	if (!mixed_coop.layout_reassembly)
 		return FALSE;
 	mixed_coop_layout_reassembly_begin(mixed_coop.layout_reassembly, mixed_coop.host_session, (uint8_t)level);
+	/* (a PC host's game: its pieces over Delta Peer, into the same bytes) */
+	mixed_coop_delta_pieces_begin(&mixed_coop_delta_layout, _mixed_coop_delta_stream_layout, mixed_coop.host_session,
+		(uint8_t)level, mixed_coop.layout_reassembly->bytes, MIXED_COOP_LAYOUT_MAXIMUM_BYTES);
 	mixed_coop.layout_complete = FALSE;
 	mixed_coop.start_pending = client;
 	mixed_coop.start_pending_since = system_milliseconds();
@@ -3701,7 +3832,9 @@ static void mixed_coop_client_start_update(
 				network_event("network_game_client_game_has_started() failed");
 			return;
 		}
-		if (now - mixed_coop.start_pending_since >= MIXED_COOP_HELLO_WAIT_MILLISECONDS)
+		/* (a PC host's game: asked over Delta Peer; its no said at once) */
+		mixed_coop_crossplay_ask(client);
+		if (now - mixed_coop.start_pending_since >= MIXED_COOP_HELLO_WAIT_MILLISECONDS || mixed_coop_crossplay_said_no())
 		{
 			mixed_coop.start_waits_hello = FALSE;
 			mixed_coop.start_pending = NULL;
@@ -3725,8 +3858,11 @@ static void mixed_coop_client_start_update(
 			"host of this version with the Xbox's maps."), mixed_coop_level_stems[mixed_coop.host_level]);
 		return;
 	}
-	if (now - mixed_coop.layout_asked_time >= MIXED_COOP_LAYOUT_ASK_MILLISECONDS)
+	if (now - mixed_coop.layout_asked_time >= (network_wire_crossplay() ? MIXED_COOP_DELTA_WANT_MILLISECONDS :
+		MIXED_COOP_LAYOUT_ASK_MILLISECONDS))
+	{
 		mixed_coop_layout_ask(client, mixed_coop.host_level);
+	}
 }
 
 void mixed_coop_client_handle_layout(
@@ -3961,6 +4097,26 @@ void mixed_coop_handle_request(
 /* ---------- after the load: a client's */
 
 static uint32_t mixed_coop_client_session;
+/* (the crossplay wire) the request, said again with the pieces still wanted, and when it last was */
+static struct mixed_coop_request mixed_coop_delta_request;
+static unsigned long mixed_coop_delta_wanted_time;
+
+static void mixed_coop_client_delta_wants(
+	void)
+{
+	unsigned long now = system_milliseconds();
+	uint16_t first;
+	uint8_t bits[MIXED_COOP_DELTA_DICTIONARY_WANT_BITS / 8];
+
+	if (!network_wire_crossplay() || !mixed_coop.requested || mixed_coop.matched || mixed_coop.leaving ||
+		!mixed_coop.reassembly || !mixed_coop_delta_agreed() || now - mixed_coop_delta_wanted_time < MIXED_COOP_DELTA_WANT_MILLISECONDS)
+	{
+		return;
+	}
+	mixed_coop_delta_pieces_wanted(&mixed_coop_delta_dictionary, &first, bits, MIXED_COOP_DELTA_DICTIONARY_WANT_BITS);
+	mixed_coop_delta_send_request(&mixed_coop_delta_request, first, bits);
+	mixed_coop_delta_wanted_time = now ? now : 1;
+}
 
 int mixed_coop_client_ready_allowed(
 	void)
@@ -4012,7 +4168,19 @@ int mixed_coop_client_ready_allowed(
 		message.request.level = (uint8_t)mixed_coop.level;
 		message.request.session = mixed_coop_client_session;
 		message.request.digests = mixed_coop.digests;
-		distributed_send(&message, DISTRIBUTED_MESSAGE_MIXED_REQUEST, 1, (word)sizeof(message), _distributed_to_host_reliably);
+		/* (a PC host's game: over Delta Peer, said again with the pieces still wanted until the dictionary is whole,
+		mixed_coop_client_delta_wants) */
+		if (network_wire_crossplay())
+		{
+			mixed_coop_delta_request = message.request;
+			mixed_coop_delta_pieces_begin(&mixed_coop_delta_dictionary, _mixed_coop_delta_stream_dictionary,
+				mixed_coop_client_session, (uint8_t)mixed_coop.level, mixed_coop.reassembly->bytes,
+				MIXED_COOP_DICTIONARY_MAXIMUM_BYTES);
+			mixed_coop_delta_send_request(&mixed_coop_delta_request, 0, NULL);
+			mixed_coop_delta_wanted_time = now ? now : 1;
+		}
+		else
+			distributed_send(&message, DISTRIBUTED_MESSAGE_MIXED_REQUEST, 1, (word)sizeof(message), _distributed_to_host_reliably);
 		mixed_coop.requested = TRUE;
 		mixed_coop.requested_time = now;
 		platform_log("mixed co-op: the host plays %s from the %s files, this machine from the %s files: its dictionary asked for",
@@ -4413,6 +4581,70 @@ void mixed_coop_handle_dictionary(
 	}
 	if (result == _mixed_coop_fragment_complete)
 		mixed_coop_dictionary_take(mixed_coop.reassembly->bytes, mixed_coop.reassembly->total_bytes);
+}
+
+/* (the crossplay wire) a piece of the host's dictionary or layout over Delta Peer */
+void mixed_coop_delta_heard_piece(
+	uint8_t const *payload,
+	int size)
+{
+	int result;
+
+	if (!network_wire_crossplay() || size < 1)
+		return;
+	if (payload[0] == _mixed_coop_delta_stream_dictionary)
+	{
+		if (!mixed_coop.requested || mixed_coop.matched || mixed_coop.leaving || !mixed_coop.reassembly ||
+			mixed_coop_delta_dictionary.bytes != mixed_coop.reassembly->bytes ||
+			mixed_coop_delta_dictionary.received == mixed_coop_delta_dictionary.count && mixed_coop_delta_dictionary.count)
+		{
+			return;
+		}
+		result = mixed_coop_delta_take_piece(&mixed_coop_delta_dictionary, payload, size);
+		if (result == _mixed_coop_fragment_refused)
+			network_event("mixed co-op: a piece of the host's dictionary refused");
+		else if (result == _mixed_coop_fragment_complete)
+			mixed_coop_dictionary_take(mixed_coop.reassembly->bytes, mixed_coop_delta_dictionary.total_bytes);
+		return;
+	}
+	if (payload[0] == _mixed_coop_delta_stream_layout)
+	{
+		struct mixed_coop_layout layout;
+		char why[96];
+
+		if (!mixed_coop.start_pending || !mixed_coop.layout_reassembly || mixed_coop.layout_complete ||
+			mixed_coop_delta_layout.bytes != mixed_coop.layout_reassembly->bytes)
+		{
+			return;
+		}
+		result = mixed_coop_delta_take_piece(&mixed_coop_delta_layout, payload, size);
+		if (result == _mixed_coop_fragment_refused)
+		{
+			network_event("mixed play: a host's layout piece refused");
+			return;
+		}
+		if (result != _mixed_coop_fragment_complete)
+			return;
+		/* (as the Bungie message's reassembly has it whole: mixed_coop_client_start_waits checks it) */
+		mixed_coop.layout_reassembly->total_bytes = mixed_coop_delta_layout.total_bytes;
+		if (!mixed_coop_layout_read(mixed_coop.layout_reassembly->bytes, mixed_coop.layout_reassembly->total_bytes, &layout, why,
+			sizeof(why)))
+		{
+			mixed_coop.start_pending = NULL;
+			mixed_coop_leave(T("The host's placements of %s couldn't be read (%s)."), mixed_coop_level_stems[mixed_coop.host_level],
+				why);
+			return;
+		}
+		mixed_coop.layout_complete = TRUE;
+	}
+}
+
+/* (the crossplay wire) a structure BSP's collision digest over Delta Peer */
+void mixed_coop_delta_heard_bsp(
+	struct mixed_coop_bsp_digest const *bsp)
+{
+	if (network_wire_crossplay())
+		mixed_coop_handle_bsp_digest(bsp, 1);
 }
 
 void mixed_coop_handle_bsp_digest(
