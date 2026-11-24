@@ -332,6 +332,7 @@ FRAME_SPLIT_WRAPPED = (
     "rasterizer_frame_end",
     # (the Delta Guide's and the overlay's)
     "guide_update", "guide_process", "guide_render", "vita_ui_overlay_present", "posix_ui_font_advance",
+    "ui_overlay_text", "ui_overlay_text_glow", "ui_overlay_text_width", "ui_style_panel", "ui_style_card", "config_string",
 )
 # the platform layer's units that read nothing of the game's through a
 # pointer of no particular alignment, built without -fmax-type-align=1: the

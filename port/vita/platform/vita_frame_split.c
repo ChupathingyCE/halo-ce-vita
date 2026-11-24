@@ -119,6 +119,12 @@ enum
 	_split_overlay_present,
 	_split_font_glyph,
 	_split_font_advance,
+	_split_overlay_text,
+	_split_overlay_text_glow,
+	_split_overlay_text_width,
+	_split_style_panel,
+	_split_style_card,
+	_split_config_string,
 	NUMBER_OF_SPLITS
 };
 
@@ -135,6 +141,7 @@ static const char *const split_names[NUMBER_OF_SPLITS] = {
 	"type_update", "damage", "unit", "biped", "vehicle", "weapon", "item", "projectile", "device", "garbage",
 	"physics", "collision_vector", "node_matrices",
 	"guide_update", "guide_process", "guide_render", "overlay_present", "font_glyph", "font_advance",
+	"overlay_text", "overlay_text_glow", "overlay_text_width", "style_panel", "style_card", "config_string",
 };
 
 static int split_enabled = -1;
@@ -238,6 +245,17 @@ WRAP_VOID(guide_render, _split_guide_render, (void), ())
 WRAP_VOID(vita_ui_overlay_present, _split_overlay_present, (void), ())
 WRAP_RESULT(float, posix_ui_font_advance, _split_font_advance, (int font, float height, unsigned int codepoint,
 	unsigned int previous), (font, height, codepoint, previous))
+WRAP_RESULT(float, ui_overlay_text, _split_overlay_text, (int font, float size, float x, float y, int align,
+	unsigned int color, const char *text), (font, size, x, y, align, color, text))
+WRAP_RESULT(float, ui_overlay_text_glow, _split_overlay_text_glow, (int font, float size, float x, float y, int align,
+	unsigned int color, unsigned int glow, const char *text), (font, size, x, y, align, color, glow, text))
+WRAP_RESULT(float, ui_overlay_text_width, _split_overlay_text_width, (int font, float size, const char *text),
+	(font, size, text))
+WRAP_VOID(ui_style_panel, _split_style_panel, (float x, float y, float width, float height, float share),
+	(x, y, width, height, share))
+WRAP_VOID(ui_style_card, _split_style_card, (float left, float right, float y, const char *name, const char *status,
+	unsigned int color, const char *title), (left, right, y, name, status, color, title))
+WRAP_RESULT(const char *, config_string, _split_config_string, (const char *name), (name))
 WRAP_RESULT(boolean, player_control_update, _split_player_control, (real seconds), (seconds))
 WRAP_VOID(game_time_update, _split_tick, (real seconds), (seconds))
 WRAP_VOID(director_update, _split_director, (real seconds), (seconds))
