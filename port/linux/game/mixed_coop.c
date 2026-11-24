@@ -2648,6 +2648,11 @@ void mixed_coop_tags_loaded(
 	mixed_coop.matched = FALSE;
 	mixed_coop.requested = FALSE;
 	mixed_coop.needs_dictionary = FALSE;
+	/* (a host's: the machines that asked for the last map's dictionary ask again for this one's - its BSP digests
+	were sent to them as this map loaded, before the game's time began: a dedicated server's map cycle with an MCC
+	machine in it halted, game_time_get's assertion, as the next map loaded) */
+	for (index = 0; index < HALO_PORT_MAXIMUM_NETWORK_MACHINES; index++)
+		mixed_coop.machines[index].requested = FALSE;
 	mixed_coop.unmapped_tags = mixed_coop.unmapped_animations = 0;
 	scenario_instance = mixed_coop_instance(scenario_index);
 	if (getenv("HALO_MIXED_COOP_DIGEST_DUMP"))
@@ -3092,8 +3097,9 @@ void mixed_coop_structure_bsp_loaded(
 	/* (the test's probe on the host: its BSP as it is; a client's once it matched, mixed_coop_dictionary_take) */
 	if (global_network_game_server_get())
 		mixed_coop_collision_probe();
-	/* (the host: to every client that asked for its dictionary) */
-	if (global_network_game_server_get() && mixed_coop.network_coop)
+	/* (the host: to every client that asked for its dictionary - a BSP switched in play; the first, as the map loads
+	before the game's time begins, is in the dictionary each machine asks for) */
+	if (global_network_game_server_get() && mixed_coop.network_coop && game_time_initialized())
 	{
 		short slot;
 
