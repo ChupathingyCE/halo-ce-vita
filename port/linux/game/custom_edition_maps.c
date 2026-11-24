@@ -1791,8 +1791,9 @@ short custom_edition_maps_crossplay_check(
 			}
 			if (local.stock_problem && cache_files_multiplayer_family_is_mcc())
 			{
-				snprintf(why, (size_t)why_size, "%s", T("this is a PC game, and your maps are MCC's: a PC game can only "
-					"be joined with the Xbox's maps. Mixed MCC and Xbox games are played with Halo CE Vita hosts"));
+				snprintf(why, (size_t)why_size, "%s", T("this is a PC game, and your maps are MCC's: this PC host can only "
+					"be joined with the Xbox's maps. Mixed MCC and Xbox games need a Halo CE Vita host or a ChupathingyCE host with "
+					"mixed hosting on"));
 				error(_error_silent, "crossplay: the PC host plays the Xbox level '%s' and this machine has MCC's file of it "
 					"alone: refused before loading (a PC host sends no mixed play digests)", file);
 			}

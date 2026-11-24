@@ -2247,7 +2247,7 @@ crossrefuse)
 	mcc_root=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
 	[ -d "$mcc_root/halo1/maps" ] && mcc_root=$mcc_root/halo1
 	refuse_mcc=0
-	if [ -r "$mcc_root/maps/ui.map" ] && [ -r "$mcc_root/maps/bloodgulch.map" ] && grep -aq "a PC game can only be joined with the Xbox's maps" "$vita"; then
+	if [ -r "$mcc_root/maps/ui.map" ] && [ -r "$mcc_root/maps/bloodgulch.map" ] && grep -aq "can only be joined with the Xbox's maps" "$vita"; then
 		refuse_mcc=1
 		mkdir -p "$out/maps-none" "$out/mcc-content/halo1/maps"
 		for f in "$mcc_root"/maps/*.map "$mcc_root"/maps/custom_edition; do ln -sfn "$f" "$out/mcc-content/halo1/maps/"; done
@@ -2302,7 +2302,7 @@ crossrefuse)
 				result=refusal-message
 			fi ;;
 		refuse-mcc)
-			got=$(grep -ah "a PC game can only be joined with the Xbox's maps" "$clientlog" 2>/dev/null | head -1)
+			got=$(grep -ah "can only be joined with the Xbox's maps" "$clientlog" 2>/dev/null | head -1)
 			ticks=$(sed -n "/join: the host's map is .*bloodgulch/,\$ p" "$clientlog" 2>/dev/null | grep -ac "network test: tick [0-9]* ")
 			loaded=$(grep -ac "system link: in a network game" "$clientlog" 2>/dev/null)
 			echo "--- $name: our MCC-only client played ${ticks:-0} ticks of the host's game, in it ${loaded:-0} times; the refusal: ${got:-none}"

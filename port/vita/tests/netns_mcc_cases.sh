@@ -361,6 +361,16 @@ mixed_case() {
 		# HALO_TEST_MIXED_COLLISION=old the joiner is an older build, which never answers the ask: refused as before)
 		# (an older build either side - HALO_TEST_MIXED_HOST_BIN or HALO_TEST_MIXED_JOINER_BIN, and
 		# HALO_TEST_MIXED_COLLISION=old: no collision asked or sent, refused as before, naming the flag stands)
+		# (HALO_TEST_MIXED_COLLISION=tampered: the joiner - HALO_TEST_ENV_joiner=HALO_MIXED_COLLISION_TAMPER=1, a debug
+		# build - sends its flag stand a vertex off: the host never takes it, and the joiner is refused as before)
+		if [ $host_family = mcc ] && [ $join_family = xbox ] && [ "${HALO_TEST_MIXED_COLLISION:-}" = tampered ]; then
+			[ "$two" = 0 ] || fail "the Xbox joiner played with a damaged flag stand collision ($two s)"
+			grep -aq "flag_base collision not taken: its digest [0-9a-f]* is none of the Xbox's files'" "$hl" ||
+				fail "the host did not refuse the damaged collision by its digest"
+			grep -aq "plays with the Xbox's collision now" "$hl" && fail "the host played with a damaged collision"
+			grep -aq "this map needs an Xbox-files host" "$jl" || fail "the Xbox joiner was not told the map needs an Xbox-files host"
+			return
+		fi
 		if [ $host_family = mcc ] && [ $join_family = xbox ] && [ "${HALO_TEST_MIXED_COLLISION:-}" = old ]; then
 			[ "$two" = 0 ] || fail "the Xbox joiner played the older pair's MCC game ($two s)"
 			grep -aq "this map needs an Xbox-files host" "$jl" || fail "the Xbox joiner was not told the map needs an Xbox-files host"

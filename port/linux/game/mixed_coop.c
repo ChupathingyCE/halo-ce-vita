@@ -3113,6 +3113,13 @@ static boolean mixed_collision_take_model(
 	why[0] = 0;
 	crypto_blake2b(digest, sizeof(digest), bytes, length);
 	mixed_collision_digest_text(digest, digest_text);
+	/* (first its digest: only the Xbox's files' own bytes go further - then every check of them all the same) */
+	if (!mixed_collision_digest_known(model, digest) && !mixed_collision_tests_any_digest())
+	{
+		platform_log("mixed play: machine %ld's %s collision not taken: its digest %s is none of the Xbox's files'",
+			machine_index, mixed_collision_model_path(model), digest_text);
+		return FALSE;
+	}
 	if (!mixed_collision_model_rebuild(bytes, length, RESERVE, &region, &region_bytes, &root_offset, why, sizeof(why)))
 	{
 		platform_log("mixed play: machine %ld's %s collision not taken: %s", machine_index, mixed_collision_model_path(model),
@@ -3136,13 +3143,6 @@ static boolean mixed_collision_take_model(
 	{
 		platform_log("mixed play: machine %ld's %s collision not taken: the game's tag check refused it (%ld corrections)",
 			machine_index, mixed_collision_model_path(model), corrections);
-		mixed_coop_free(region);
-		return FALSE;
-	}
-	if (!mixed_collision_digest_known(model, digest) && !mixed_collision_tests_any_digest())
-	{
-		platform_log("mixed play: machine %ld's %s collision not taken: its digest %s is none of the Xbox's files'",
-			machine_index, mixed_collision_model_path(model), digest_text);
 		mixed_coop_free(region);
 		return FALSE;
 	}
@@ -4322,8 +4322,9 @@ static void mixed_coop_refuse_older_host(
 	if (network_wire_crossplay())
 	{
 		mixed_coop_delta_end();
-		mixed_coop_leave("%s", T("this is a PC game, and your maps are MCC's: a PC game can only "
-			"be joined with the Xbox's maps. Mixed MCC and Xbox games are played with Halo CE Vita hosts"));
+		mixed_coop_leave("%s", T("this is a PC game, and your maps are MCC's: this PC host can only "
+			"be joined with the Xbox's maps. Mixed MCC and Xbox games need a Halo CE Vita host or a ChupathingyCE host with "
+			"mixed hosting on"));
 		return;
 	}
 	if (mixed_coop_level_is_multiplayer(level))
@@ -5003,6 +5004,14 @@ static void mixed_coop_client_send_collision(
 			platform_log("mixed play: %s's collision from this machine's files: %lu bytes, digest %s",
 				mixed_collision_model_path(model), (unsigned long)bytes, text);
 		}
+#ifndef HALO_RELEASE
+		/* (test, debug builds: HALO_MIXED_COLLISION_TAMPER=1 sends a model a vertex off - the host must refuse it) */
+		if (getenv("HALO_MIXED_COLLISION_TAMPER") && bytes > MIXED_COLLISION_ROOT_BYTES + 8)
+		{
+			model_bytes[bytes - 8] ^= 0x40;
+			platform_log("mixed play: (test) %s's collision sent damaged", mixed_collision_model_path(model));
+		}
+#endif
 		mixed_collision_writer_model(&writer, (uint8_t)model, model_bytes, bytes);
 	}
 	length = mixed_collision_writer_end(&writer);
