@@ -5711,6 +5711,10 @@ void forge_packs_prebuild(
 	void)
 {
 	short pack;
+	short state;
+	/* (each pack's "none" said once: with the scene packs off - HALO_SCENE_PACKS=0 - a prebuild stays none
+	and this ran every frame of a lobby, ~6000 log lines a minute: the 1.1.3 Classic+ audit) */
+	static unsigned long said_none;
 
 	forge_packs_defaults();
 	for (pack = 0; pack < FORGE_PACK_COUNT; pack++)
@@ -5718,15 +5722,22 @@ void forge_packs_prebuild(
 		if ((forge_globals.packs_enabled & (1UL << pack)) &&
 			scene_packs_status(forge_packs[pack].name, NULL, NULL, 0) == _scene_pack_state_none)
 		{
-			platform_log("forge: packs: %s wanted for the lobby: %s", forge_packs[pack].name,
-				scene_packs_state_name(scene_packs_prebuild(forge_packs[pack].name)));
+			state = scene_packs_prebuild(forge_packs[pack].name);
+			if (state != _scene_pack_state_none || !(said_none & (1UL << pack)))
+				platform_log("forge: packs: %s wanted for the lobby: %s", forge_packs[pack].name, scene_packs_state_name(state));
+			if (state == _scene_pack_state_none)
+				said_none |= 1UL << pack;
 		}
 	}
 	/* (343 Guilty Spark, a network game's other monitors: forge_net.inc) */
 	if (scene_packs_status("menu_monitor", NULL, NULL, 0) == _scene_pack_state_none &&
 		scene_packs_recipe_available("menu_monitor", NULL, 0))
 	{
-		platform_log("forge: packs: menu_monitor wanted for the lobby: %s", scene_packs_state_name(scene_packs_prebuild("menu_monitor")));
+		state = scene_packs_prebuild("menu_monitor");
+		if (state != _scene_pack_state_none || !(said_none & (1UL << 31)))
+			platform_log("forge: packs: menu_monitor wanted for the lobby: %s", scene_packs_state_name(state));
+		if (state == _scene_pack_state_none)
+			said_none |= 1UL << 31;
 	}
 }
 

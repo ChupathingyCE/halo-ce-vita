@@ -238,6 +238,23 @@ static wchar_t *port_game_type_string(long tag_index, short string_index)
 	return NULL;
 }
 
+/* (port) whether a map's string names the keyboard's ESCAPE - Halo PC's prompts (by hand: the
+game's strings are 16-bit, the C library's wide functions are not on every build) */
+static boolean names_keyboard(wchar_t const *string)
+{
+	static wchar_t const word[] = L"ESCAPE";
+	long index, at;
+
+	for (index = 0; string[index]; index++)
+	{
+		for (at = 0; word[at] && string[index + at] == word[at]; at++)
+			;
+		if (!word[at])
+			return TRUE;
+	}
+	return FALSE;
+}
+
 /* the built-in string for a string list too short to hold string_index
 (an NTSC map's multiplayer string, a Custom Edition map's name or
 description), or NULL */
@@ -350,6 +367,16 @@ wchar_t *unicode_string_list_get_string(long tag_index, short string_index)
 				else
 					result = L"";
 			}
+#ifdef HALO_LINUX
+			/* (port, the 1.1.3 Classic+ audit: an MCC level's own multiplayer text is Halo PC's, whose
+			prompts name the keyboard - the carnage report's "ESCAPE = Quit    ENTER = Continue", cut off
+			on a Vita -: the Xbox's words for them, with the Vita's buttons, where the port has them) */
+			if (result && names_keyboard(result) && fallback_string(tag_index, string_index) &&
+				!csstrcasecmp(tag_get_name(tag_index), MULTIPLAYER_GAME_TEXT_TAG_NAME))
+			{
+				result = fallback_string(tag_index, string_index);
+			}
+#endif
 		}
 #ifdef HALO_LINUX
 		else if (fallback_string(tag_index, string_index))
