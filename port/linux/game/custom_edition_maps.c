@@ -1779,6 +1779,16 @@ short custom_edition_maps_crossplay_check(
 			told why) */
 			local.stock_problem = xbox_level_stock(tag_name_strip_path(level_name)) &&
 				cache_files_xbox_map_problem(level_name, why, why_size);
+			/* (a level mixed play knows, this machine's copy MCC's alone: a ChupathingyCE host may say it plays
+			mixed, over Delta Peer - asked in the lobby, and refused there in the words below if it does not,
+			before the map loads: mixed_coop_delta.h) */
+			if (local.stock_problem && mixed_coop_crossplay_may_play(level_name))
+			{
+				local.stock_problem = FALSE;
+				why[0] = 0;
+				error(_error_silent, "crossplay: the PC host plays the Xbox level '%s' and this machine has MCC's file of it "
+					"alone: the host is asked whether it plays mixed", file);
+			}
 			if (local.stock_problem && cache_files_multiplayer_family_is_mcc())
 			{
 				snprintf(why, (size_t)why_size, "%s", T("this is a PC game, and your maps are MCC's: a PC game can only "
