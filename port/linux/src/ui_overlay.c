@@ -102,6 +102,8 @@ enum
 	MAXIMUM_QUADS = 16384,
 	ATLAS_SIZE = 2048,
 	MAXIMUM_GLYPHS = 4096,
+	/* (the glyphs' index: a slot each, twice as many as glyphs) */
+	GLYPH_SLOTS = 2 * MAXIMUM_GLYPHS,
 	MAXIMUM_TEXT = 64 * 1024,
 	MAXIMUM_TEXTS = 4096,
 	MAXIMUM_LAYERS = 6,
@@ -201,6 +203,9 @@ static struct
 
 	struct glyph glyphs[MAXIMUM_GLYPHS];
 	int glyph_count;
+	/* the glyphs by font, size and codepoint: each slot a glyph's index + 1,
+	0 empty (open addressing; emptied with the glyphs) */
+	unsigned short glyph_slots[GLYPH_SLOTS];
 	int shelf_x, shelf_y, shelf_height;
 	float last_scale;
 
@@ -1823,11 +1828,17 @@ static struct glyph *glyph(int font, int pixel_size, unsigned int codepoint, int
 	unsigned char *bitmap;
 	int index, width, height, x_offset, y_offset;
 
-	for (index = 0; index < overlay.glyph_count; index++)
+	unsigned int slot = (codepoint * 2654435761u ^ (unsigned int)pixel_size * 40503u ^ (unsigned int)font * 9973u) &
+		(GLYPH_SLOTS - 1);
+
+	/* (each string's glyphs looked up every frame: by the index, not a walk
+	of every glyph packed) */
+	while ((index = overlay.glyph_slots[slot]) != 0)
 	{
-		entry = &overlay.glyphs[index];
+		entry = &overlay.glyphs[index - 1];
 		if (entry->codepoint == codepoint && entry->pixel_size == pixel_size && entry->font == font)
 			return entry;
+		slot = (slot + 1) & (GLYPH_SLOTS - 1);
 	}
 	if (overlay.glyph_count >= MAXIMUM_GLYPHS)
 	{
@@ -1851,6 +1862,7 @@ static struct glyph *glyph(int font, int pixel_size, unsigned int codepoint, int
 		}
 	}
 	entry = &overlay.glyphs[overlay.glyph_count++];
+	overlay.glyph_slots[slot] = (unsigned short)overlay.glyph_count;
 	entry->font = font;
 	entry->pixel_size = pixel_size;
 	entry->codepoint = codepoint;
@@ -1907,6 +1919,7 @@ static struct glyph *glyph(int font, int pixel_size, unsigned int codepoint, int
 static void forget_glyphs(void)
 {
 	overlay.glyph_count = 0;
+	memset(overlay.glyph_slots, 0, sizeof(overlay.glyph_slots));
 	overlay.shelf_x = overlay.shelf_y = 2;
 	overlay.shelf_height = 0;
 }
