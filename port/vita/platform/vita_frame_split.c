@@ -195,8 +195,9 @@ static int split_on(void)
 		{
 			char line[160];
 
-			game_thread = vita_host_thread_id();
-			vita_host_thread_watch("game");
+			/* (the game's thread: the one that presents, from its first
+			present; the wrapped config_string and the Guide's calls come
+			from other threads before it) */
 			snprintf(line, sizeof(line), "frame-split: on, a line every %lu frames (HALO_FRAME_TIMING)", split_period);
 			vita_host_log(line);
 		}
@@ -458,6 +459,11 @@ void __wrap_render_frame_present(void const *index, void *bitmap)
 {
 	unsigned long long now;
 
+	if (!game_thread && (split_on(), split_enabled > 0))
+	{
+		game_thread = vita_host_thread_id();
+		vita_host_thread_watch("game");
+	}
 	SPLIT_BEGIN(_split_present);
 	__real_render_frame_present(index, bitmap);
 	SPLIT_END(_split_present);
