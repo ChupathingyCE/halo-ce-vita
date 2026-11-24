@@ -88,7 +88,7 @@ last=
 flow() {
 	name=$1 mode=$2 games=$3 expect=$4 cancel=$5 keep=$6
 	work=$out/flow-$name
-	if [ -n "$keep" ]; then cp -a "$out/flow-$keep" "$work"; rm -f "$work/transcript.txt" "$work/log.txt"
+	if [ -n "$keep" ]; then cp -a "$out/flow-$keep" "$work"; rm -f "$work/transcript.txt" "$work/log.txt" "$work/server.json"
 	else mkdir -p "$work"; fi
 	fifo=$work/stdin
 	rm -f "$fifo"
