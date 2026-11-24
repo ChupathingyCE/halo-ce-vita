@@ -24995,6 +24995,29 @@ static void sound_page_update(struct widget_instance *list)
 	}
 }
 
+/* (OpenCE's Multiplayer screen - Classic+'s MULTIPLAYER -, its INTERNET, JOIN BY CODE and CREATE GAME
+INTERNET rows) internet play on: the connection switched to Online if it is another, as the ElDewrito and
+Halo 3 browsers' network tabs switch it live (online_browser_network_step, h3_mp_network_set), internet play
+starting on the next frames, before anything is hosted or joined. 1.1.3-insider.8k, the owner: on the
+Vita's own connection (Same Wi-Fi) Classic+'s INTERNET only said "Internet play is off ... then restart
+the game" (mp/offline) - the server browser never opened. FALSE: it stays off (a game open, the switch
+refused), mp/offline says why */
+static boolean mp_go_online(char const *row)
+{
+	if (internet_play() || network_connection_wanted() == NETWORK_CONNECTION_ONLINE)
+		return TRUE;
+	if (global_network_game_server_get())
+	{
+		platform_log("menus: %s: internet play is off and a game is open: not switched", row);
+		return FALSE;
+	}
+	/* (a search client of the System Link list's would keep the connection from switching) */
+	dispose_global_network_game_client();
+	network_connection_choose(NETWORK_CONNECTION_ONLINE);
+	platform_log("menus: %s: internet play was off: the connection switched to Online", row);
+	return network_connection_wanted() == NETWORK_CONNECTION_ONLINE;
+}
+
 boolean pc_menu_event_function_invoke(
 	struct widget_instance *widget,
 	struct event_record *event,
@@ -25014,16 +25037,15 @@ boolean pc_menu_event_function_invoke(
 		return TRUE;
 	case _function_browser_profile_first:
 		/* (SERVER BROWSER: as SYSTEM LINK and CREATE GAME, the profile first;
-		internet play off: "port mp require online" opens why instead) */
-		menu_functions.browser_profile_pending = internet_play() ||
-			network_connection_wanted() == NETWORK_CONNECTION_ONLINE;
+		the connection switched to Online first if it is another, mp_go_online) */
+		menu_functions.browser_profile_pending = mp_go_online("INTERNET");
 		if (menu_functions.browser_profile_pending)
 			platform_log("menus: Server Browser: the profile, then the server browser");
 		return TRUE;
 	case _function_mp_require_online:
 		/* (ONLINE chosen: internet play starts at the next frame, before
 		anything is hosted or joined) */
-		return internet_play() || network_connection_wanted() == NETWORK_CONNECTION_ONLINE;
+		return mp_go_online("an internet row");
 	case _function_mp_require_lan:
 		return TRUE;
 	case _function_browser_init:
