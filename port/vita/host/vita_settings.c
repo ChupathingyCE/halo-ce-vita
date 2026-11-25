@@ -2071,6 +2071,11 @@ static int choice_last(const struct setting *setting)
 a pre-release build (update_check.h) */
 static int choice_disabled(const struct setting *setting, int choice)
 {
+	/* (1.1.3: without Halo Custom Edition's files - menu_tags.c ce_files_check - every Menu style but Classic,
+	the Xbox's menus, which need none) */
+	if (setting->variable && !strcmp(setting->variable, "HALO_MENU_STYLE") && halo_ce_files_state < 0 && choice >= 0 &&
+		choice < setting->count && strcmp(setting->values[choice], "original"))
+		return 1;
 	return setting->variable && !strcmp(setting->variable, "HALO_UPDATE_CHANNEL") && choice >= 0 &&
 		choice < setting->count && !strcmp(setting->values[choice], "stable") &&
 		update_build_is_prerelease(HALO_VITA_VERSION);
@@ -5366,6 +5371,11 @@ static const char *setting_help(const struct setting *setting)
 	static char camera_help[128];
 	int row = playstation_row(setting);
 
+	/* (1.1.3: the rows that need Halo Custom Edition's files, without them) */
+	if (halo_ce_files_state < 0 && ((setting->variable && !strcmp(setting->variable, "HALO_MENU_STYLE")) ||
+		(setting->kind == KIND_ACTION && setting->action == ACTION_WORKSHOP)))
+		return T("Needs the Custom Edition files (bitmaps.map, loc.map, sounds.map in the maps folder)");
+
 	if (setting->variable && !strcmp(setting->variable, "HALO_MAP_SHARE_FROM") && setting->choice >= 0 &&
 		setting->choice < 3)
 		return T(map_downloads_help[setting->choice]);
@@ -7410,7 +7420,11 @@ static void act(const struct setting *setting)
 	{
 		int state = multiplayer_state();
 
-		if (state == SYSTEM_LINK_STATE_PLAYING)
+		/* (1.1.3: the Workshop's maps are Custom Edition maps; Download from Steam stays - MCC's files bring
+		custom_edition's three) */
+		if (setting->action == ACTION_WORKSHOP && halo_ce_files_state < 0)
+			set_notice("%s", T("Needs the Custom Edition files"));
+		else if (state == SYSTEM_LINK_STATE_PLAYING)
 			set_notice("%s", T("Leave the level first: Start, then Quit"));
 		else if (state == SYSTEM_LINK_STATE_JOINING || state == SYSTEM_LINK_STATE_HOSTING || state == SYSTEM_LINK_STATE_LOBBY)
 			set_notice("%s", T("Leave the network game's lobby first"));
