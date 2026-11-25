@@ -3686,7 +3686,7 @@
 "CAN'T BE DOWNLOADED" = "NO SE PUEDE DESCARGAR"
 "UPDATE AVAILABLE" = "ACTUALIZACIÓN DISPONIBLE"
 "MARKED FOR DOWNLOAD" = "MARCADO PARA DESCARGAR"
-"NOT ON THIS VITA" = "NO ESTÁ EN ESTA VITA"
+"DOWNLOAD" = "DESCARGAR"
 "Reading what the item holds..." = "Leyendo lo que contiene..."
 "What it holds is not known: %.100s" = "No se sabe lo que contiene: %.100s"
 "Refused: %.100s" = "Rechazado: %.100s"
