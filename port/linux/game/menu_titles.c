@@ -19,7 +19,7 @@ CRC-32) is read - an Xbox ui.map has the 26, MCC's (Halo PC's, from
 bitmaps.map) 18.
 
 A heading that cannot be made - a letter none of the headings has (B, J,
-Q, W, Z; K on MCC; an accent), a word too wide, a ui.map without them (a
+Q, Z; an accent; X, W and K are made of Y, V, and I with X: title_tool.c), a word too wide, a ui.map without them (a
 Custom Edition one), HALO_MENU_TITLES=0 - is the port's drawn picture
 (tools/classic_menu_art.py), as before. Each made heading is kept in the
 game's data folder (t:\menu_titles_<lang>_<name>.rgba, with the pictures'
@@ -61,7 +61,7 @@ long menu_tags_generation(void);
 /* where a heading's first letter starts in its picture: the game's own
 headings' (29.75 of a 512 x 64 picture drawn at 35, 11) */
 #define HEADING_LEFT 29.75f
-#define TITLES_FILE_SIGNATURE 0x3254544DUL /* 'MTT2': made again when the way of making them changes */
+#define TITLES_FILE_SIGNATURE 0x3354544DUL /* 'MTT3': made again when the way of making them changes (MTT3: W and K made, 1.1.3) */
 
 /* ---------- the game's headings the letters are read from (ChupathingyCE's titles.json) */
 
@@ -160,6 +160,9 @@ static struct
 	{ "header_settings", "SETTINGS", HEADING_LEFT },
 	{ "header_game_modes", "GAME MODES", HEADING_LEFT },
 	{ "header_command", "COMMAND", HEADING_LEFT },
+	/* (classic/workshop.xml: Classic+'s STEAM WORKSHOP and DOWNLOAD FROM STEAM - W made of V, K on MCC's of I and X) */
+	{ "header_steam_workshop", "STEAM WORKSHOP", HEADING_LEFT },
+	{ "header_download_from_steam", "DOWNLOAD FROM STEAM", HEADING_LEFT },
 	{ "header_select_profile_to_edit", "SELECT PROFILE TO EDIT", HEADING_LEFT - 6 },
 	{ "header_advanced_controls", "ADVANCED CONTROLS", HEADING_LEFT - 6 },
 	/* (classic/xbox_netscreens.xml: the System Link list's, header_found_games on the Xbox's) */

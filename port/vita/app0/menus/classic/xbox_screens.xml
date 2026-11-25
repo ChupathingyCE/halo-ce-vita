@@ -30,6 +30,14 @@
 	<bitmap name="cp/xb/art/b_butn_sm">
 		<frame png="classic/b_butn_sm.png" width="32" height="32"/>
 	</bitmap>
+	<!-- (Halo PC's ui.map has arrow_sm_left and arrow_sm_right of its own, slivers in the Xbox's 6 x 12: these in
+	their place on it, menu_tags.c tag_named) -->
+	<bitmap name="cp/xb/art/arrow_sm_left">
+		<frame png="classic/arrow_sm_left.png" width="32" height="32"/>
+	</bitmap>
+	<bitmap name="cp/xb/art/arrow_sm_right">
+		<frame png="classic/arrow_sm_right.png" width="32" height="32"/>
+	</bitmap>
 	<bitmap name="cp/xb/art/arrow_big_left">
 		<frame png="classic/arrow_big_left_0.png" width="32" height="256"/>
 		<frame png="classic/arrow_big_left_1.png" width="32" height="256"/>

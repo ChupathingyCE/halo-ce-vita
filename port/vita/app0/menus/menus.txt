@@ -38,6 +38,7 @@ halo3/dialog_ui.xml
 # for h3/<name>: menu_tags.c menu_tags_online)
 classic/forge.xml
 classic/modes.xml
+classic/workshop.xml
 classic/customize.xml
 classic/standins.xml
 classic/players.xml

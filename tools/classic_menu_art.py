@@ -29,7 +29,9 @@ tools/fonts/OFL.txt). The same bytes each run.
   Xbox's (classic/xbox_screens.xml): y_butn.png, a_butn_sm.png,
   b_butn_sm.png, the button key's Y and the small A and B in the look of the
   game's A, B and X (a coloured disc, a pale rim, the letter);
-  arrow_big_<side>_<0|1>.png, the 3-wide lists' arrows; split_quarter.png
+  arrow_big_<side>_<0|1>.png, the 3-wide lists' arrows; arrow_sm_<side>.png,
+  the small arrows beside a value (Halo PC's ui.map has its own of that name,
+  a sliver: classic/xbox_screens.xml's stand in for them on it); split_quarter.png
   and split_quarter_border.png, split screen's START TO JOIN quarters;
   pregame_list_field.png, pregame_remote_field.png and
   pregame_message_field.png, the network lobby's (ENLISTED PLAYERS) fields:
@@ -73,7 +75,9 @@ HEADINGS = (('header_lobby_options', 'LOBBY OPTIONS'),
             ('header_sharing', 'SHARING'), ('header_send_to_a_friend', 'SEND TO A FRIEND'),
             # (classic/modes.xml: the main menu's SETTINGS, MULTIPLAYER's GAME MODES, the Command lobby)
             ('header_settings', 'SETTINGS'), ('header_game_modes', 'GAME MODES'),
-            ('header_command', 'COMMAND'))
+            ('header_command', 'COMMAND'),
+            # (classic/workshop.xml: Classic+'s STEAM WORKSHOP and DOWNLOAD FROM STEAM)
+            ('header_steam_workshop', 'STEAM WORKSHOP'), ('header_download_from_steam', 'DOWNLOAD FROM STEAM'))
 # (classic/xbox_screens.xml: an Xbox screen's heading an MCC-only install's ui.map has not, at the
 # size of the Xbox's own headings - capitals about 20 high, 18 a letter)
 XBOX_HEADINGS = (('header_select_profile_to_edit', 'SELECT PROFILE TO EDIT'),
@@ -242,6 +246,21 @@ def big_arrow(right, lit):
     return image.resize((32, 256), Image.LANCZOS)
 
 
+def small_arrow(right):
+    """the small arrow beside a value or a picture (32 x 32, drawn 1:1 into its 6 x 12 widget at the top
+    left): a solid wedge of the menus' blue pointing out, its edge a little lighter"""
+    scale = 8
+    image = Image.new('RGBA', (32 * scale, 32 * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    if right:
+        points = [(0.5 * scale, 0.5 * scale), (5.5 * scale, 6 * scale), (0.5 * scale, 11.5 * scale)]
+    else:
+        points = [(5.5 * scale, 0.5 * scale), (0.5 * scale, 6 * scale), (5.5 * scale, 11.5 * scale)]
+    draw.polygon(points, fill=(40, 150, 255, 255))
+    draw.line(points + [points[0]], fill=(110, 190, 255, 255), width=round(0.6 * scale))
+    return image.resize((32, 32), Image.LANCZOS)
+
+
 def quarter_panel():
     """split screen's START TO JOIN quarter (256 x 256, its widget 255 x 165): dark see-through
     blue, lighter at the top, in a light blue rounded frame"""
@@ -315,6 +334,8 @@ def main():
     for side in ('left', 'right'):
         for lit in (0, 1):
             big_arrow(side == 'right', lit).save(os.path.join(folder, 'arrow_big_%s_%d.png' % (side, lit)), optimize=True)
+    for side in ('left', 'right'):
+        small_arrow(side == 'right').save(os.path.join(folder, 'arrow_sm_%s.png' % side), optimize=True)
     quarter_panel().save(os.path.join(folder, 'split_quarter.png'), optimize=True)
     quarter_border().save(os.path.join(folder, 'split_quarter_border.png'), optimize=True)
     for name, canvas, size in FIELDS:

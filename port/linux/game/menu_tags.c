@@ -495,6 +495,8 @@ static char const *const port_function_names[] =
 	"port firefight lobby init",
 	"port forge start firefight",
 	"port forge firefight prepare",
+	/* (1.1.3: Classic+'s SETTINGS > WORKSHOP, classic/modes.xml) */
+	"port ce workshop row",
 };
 
 /* the port's game data functions (menu_functions.c), from
@@ -805,6 +807,26 @@ static long tag_named(long group_tag, char const *name, char const *file, long l
 
 	if (strchr(name, '\\'))
 	{
+		/* (a picture Halo PC's ui.map has of the Xbox's name but not of its look - the small arrows beside a
+		value, slivers there -: ours, classic/xbox_screens.xml's, in its place on it, for every widget of
+		the menus' sets that asks for it; the Xbox's ui.map keeps its own) */
+		if (group_tag == BITMAP_GROUP_TAG && build.halo_pc_ui && !build.ingame)
+		{
+			static char const *const redrawn[][2] = {
+				{ "ui\\shell\\bitmaps\\arrow_sm_left", XBOX_SCREEN_WIDGET_PREFIX "art/arrow_sm_left" },
+				{ "ui\\shell\\bitmaps\\arrow_sm_right", XBOX_SCREEN_WIDGET_PREFIX "art/arrow_sm_right" },
+			};
+			long which;
+
+			for (which = 0; which < (long)NUMBEROF(redrawn); which++)
+			{
+				if (!strcmp(name, redrawn[which][0]) &&
+					(index = find(redrawn[which][1], build.menus->bitmap_count, bitmap_name)) != NONE)
+				{
+					return build.bitmap_tags[index];
+				}
+			}
+		}
 		/* (a picture a Halo PC ui.map has not - MCC's has not the Xbox's Y button: ours drawn in its
 		place, classic/xbox_screens.xml's, for every widget that asks for it; any other: none shown.
 		The Xbox's ui.map has them all and never gets here) */

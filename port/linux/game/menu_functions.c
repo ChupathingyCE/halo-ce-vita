@@ -543,6 +543,8 @@ enum
 	_function_firefight_lobby_init,
 	_function_forge_start_firefight,
 	_function_forge_firefight_prepare,
+	/* (1.1.3: Classic+'s SETTINGS > WORKSHOP, classic/modes.xml) */
+	_function_ce_workshop_row,
 };
 
 /* in port_game_data_input_names' order */
@@ -12893,6 +12895,90 @@ static struct halo_mod_entry const *h3_mods_row_entry(struct widget_instance *wi
 	return h3_mods_chosen();
 }
 
+/* ---- Menu style Classic+'s DOWNLOAD FROM STEAM and STEAM WORKSHOP (classic/workshop.xml: cp/steam/screen and
+cp/workshop/screen, the classic set's for h3/steam/screen and h3/workshop/screen - 1.1.3, the owner's Classic+ plan
+part A). The Halo 3 screens' functions below run them; what differs - one column of rows, the Xbox's =WORD key, the
+picture and facts under the rows, the details page's places, the Custom Edition files required - is asked of the
+screen itself (cp_screen), never of the Menu style, so the Halo 3 and ElDewrito screens are as they were */
+
+#ifdef HALO_STEAM_WORKSHOP
+static int h3_workshop_wrapped(struct widget_instance *widget, char const *text, int first, int count);
+#endif
+#if defined(HALO_STEAM_DOWNLOAD) || defined(HALO_STEAM_WORKSHOP)
+/* (int platform_halo_pc_resource_map: xbox_files.c's) */
+int platform_halo_pc_resource_map(const char *maps_directory, const char *name, char *path, unsigned long path_size);
+
+/* whether a widget's screen is one of Classic+'s own (pc\cp\...) */
+static boolean cp_screen(struct widget_instance *widget)
+{
+	struct widget_instance *screen = screen_of(widget);
+	char const *name = screen && screen->definition_tag_index != NONE ? tag_get_name(screen->definition_tag_index) : NULL;
+
+	return name && !strncmp(name, "pc\\cp\\", 6);
+}
+
+/* (the owner, 1.1.3: the Custom Edition files are required) whether Halo PC's bitmaps.map, sounds.map or loc.map is
+missing - the maps folder's, or the Halo content folder's halo1\maps\custom_edition (platform_halo_pc_resource_map, as
+the menus and GAME MANAGER look for them): Classic+'s Steam screens then say "Needs the Custom Edition files" and start
+nothing. Looked at again every two seconds at most (a download may bring them) */
+static boolean cp_steam_needs_custom_edition(void)
+{
+	static unsigned long looked_at;
+	static boolean missing, said;
+	unsigned long now = system_milliseconds();
+
+	if (!looked_at || now - looked_at >= 2000)
+	{
+		static char const *const names[] = { "bitmaps", "sounds", "loc" };
+		int index;
+
+		looked_at = now ? now : 1;
+		missing = FALSE;
+		for (index = 0; index < (int)NUMBEROF(names) && !missing; index++)
+		{
+			char path[300];
+
+			if (!platform_halo_pc_resource_map(cache_files_map_directory(), names[index], path, sizeof(path)))
+			{
+				missing = TRUE;
+				if (!said)
+					platform_log("menus: classic steam: no %s.map of the Custom Edition files: the Steam screens say "
+						"\"Needs the Custom Edition files\"", names[index]);
+			}
+		}
+		said = missing;
+	}
+	return missing;
+}
+
+#endif
+
+/* (port ce workshop row: SETTINGS' WORKSHOP) TRUE opens STEAM WORKSHOP (the row's open=, Classic+'s cp/workshop/screen);
+FALSE without the Custom Edition files (the row's words say so) or in a build without the Workshop */
+static boolean cp_workshop_row(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	if (cp_steam_needs_custom_edition())
+	{
+		platform_log("menus: ce settings: WORKSHOP refused: needs the Custom Edition files");
+		return FALSE;
+	}
+	platform_log("menus: ce settings: WORKSHOP");
+	return TRUE;
+#else
+	return FALSE;
+#endif
+}
+
+#if defined(HALO_STEAM_DOWNLOAD) || defined(HALO_STEAM_WORKSHOP)
+/* a button key's word in the Xbox's form, "=SELECT" (the word translated, then in capitals) */
+static void cp_key_word(char const *word, char *out, size_t size)
+{
+	snprintf(out, size, "=%s", word);
+	h3_capitals(out);
+}
+#endif
+
 /* ---- GAME MANAGER's DOWNLOAD FROM STEAM (halo3/steam.xml; port/steamdl/steam_job.c, docs/steam_download_security.md):
 the player's own Halo CE files from their Steam account. First the notice and the rows (the sound banks on or off, then
 the sign-in), then the QR the Steam app scans (drawn over the panel, h3_steam_qr_draw), then the progress, then the end.
@@ -12929,14 +13015,22 @@ static void h3_steam_update(struct widget_instance *list)
 	struct steam_job_view view;
 	char text[1400], line[256];
 	int index = 0, download_mb, card_mb, signin, days_left = 0;
-	boolean choosing;
+	boolean choosing, classic = cp_screen(list), needs;
 
 	h3_steam.updated = system_milliseconds();
 	steam_job_view(&view);
 	choosing = view.phase == STEAM_JOB_IDLE;
+	/* (Classic+'s, the owner's 1.1.3 rule: without the Custom Edition files nothing is offered - the notice says
+	what is missing, the rows are not there; a job already running goes on as it was) */
+	needs = classic && choosing && cp_steam_needs_custom_edition();
+	if (needs)
+		choosing = FALSE;
 	signin = steam_job_signin_state(&days_left);
 	text[0] = 0;
-	switch (view.phase)
+	if (needs)
+		snprintf(text, sizeof(text), "%s\n\n%s", T("Needs the Custom Edition files"),
+			T("PC files (Custom Edition maps): not there. They are in MCC's halo1/maps/custom_edition."));
+	else switch (view.phase)
 	{
 	case STEAM_JOB_IDLE:
 	{
@@ -13026,6 +13120,13 @@ static void h3_steam_update(struct widget_instance *list)
 	if ((found = named(screen, "steam_text")) != NULL)
 	{
 		widget_instance_set_visibility_recursive(found, view.phase != STEAM_JOB_QR);
+#ifdef HALO_STEAM_WORKSHOP
+		/* (Classic+'s: broken into lines as the Workshop's notice is - by the text box's own font, small_ui, its
+		accented letters too) */
+		if (classic)
+			h3_workshop_wrapped(found, view.phase != STEAM_JOB_QR ? text : "", 0, 16);
+		else
+#endif
 		h3_dialog_text_wrapped(found, view.phase != STEAM_JOB_QR ? text : "");
 	}
 	if ((found = named(screen, "qr_text")) != NULL)
@@ -13072,7 +13173,18 @@ static void h3_steam_update(struct widget_instance *list)
 		widget_instance_set_visibility_recursive(found, choosing);
 	if ((found = named(screen, "select")) != NULL)
 		widget_instance_set_visibility_recursive(found, choosing);
-	text_show(named(screen, "back"), h3_steam_running(view.phase) && view.phase != STEAM_JOB_ENDING ? T("Cancel") : T("Back"));
+	if (classic)
+	{
+		/* (Classic+'s key, the Xbox's: "=BACK", "=CANCEL") */
+		/* (Back: the footer's word - "{footer}Back", Spanish "Atrás" -, as the Workshop's key has it) */
+		char const *back = T("{footer}Back");
+
+		cp_key_word(h3_steam_running(view.phase) && view.phase != STEAM_JOB_ENDING ? T("Cancel") :
+			strcmp(back, "{footer}Back") ? back : "Back", line, sizeof(line));
+		text_show(named(screen, "back"), line);
+	}
+	else
+		text_show(named(screen, "back"), h3_steam_running(view.phase) && view.phase != STEAM_JOB_ENDING ? T("Cancel") : T("Back"));
 #else
 	(void)list;
 #endif
@@ -13086,6 +13198,12 @@ static boolean h3_steam_row(struct widget_instance *widget)
 	int started;
 
 	h3_steam.message[0] = 0;
+	/* (Classic+'s, without the Custom Edition files: nothing starts - its rows are not shown either) */
+	if (cp_screen(widget) && cp_steam_needs_custom_edition())
+	{
+		platform_log("menus: steam: refused: needs the Custom Edition files");
+		return FALSE;
+	}
 	if (row == 0)
 	{
 		h3_steam.games ^= STEAM_GAME_HALO_CE_BANKS;
@@ -13166,7 +13284,9 @@ downloads it here, never from the host). Removing an item is a file operation of
 mods/<id> and its version record. Nothing is ever written to Steam (no subscribe, no vote) */
 #ifdef HALO_STEAM_WORKSHOP
 #define H3_WORKSHOP_CARDS 8
-#define H3_WORKSHOP_COLUMNS 4
+/* (Classic+'s, classic/workshop.xml: the page's eight as rows across the screen - the Xbox's list screens -, one column;
+Left and Right turn the page) */
+#define H3_WORKSHOP_COLUMNS (h3_workshop.classic ? 1 : 4)
 /* the cards' places (the menus' units: halo3/workshop.xml's), their pictures' inside them */
 #define H3_WORKSHOP_CARD_LEFT (-40)
 #define H3_WORKSHOP_CARD_TOP 86
@@ -13232,6 +13352,8 @@ static struct
 	/* the screen's last update (its drawing stops a moment after it closes, the textures let go) */
 	unsigned long updated;
 	boolean grid_shown, details_shown;
+	/* the screen up is Classic+'s (cp/workshop/screen: cp_screen), as last updated */
+	boolean classic;
 	/* the memory the browser costs (the C heap as the list opened, its most since; the job's pictures and the
 	decoder's most), logged as the list ends: docs/steam_download_security.md 9 */
 	boolean measuring;
@@ -13595,14 +13717,17 @@ static void h3_workshop_update(struct widget_instance *widget)
 	struct steam_job_workshop_details page;
 	char status_text[400], details[700], line[400], message[300];
 	int index, pages;
-	boolean browsing, idle, grid, details_mode, ended, progress;
+	boolean browsing, idle, grid, details_mode, ended, progress, classic = cp_screen(widget), needs;
 
 	h3_steam.updated = system_milliseconds();
 	h3_workshop.updated = h3_steam.updated;
+	h3_workshop.classic = classic;
 	steam_job_view(&view);
 	steam_job_workshop_view(&ws);
 	browsing = view.phase == STEAM_JOB_BROWSING;
 	idle = view.phase == STEAM_JOB_IDLE;
+	/* (Classic+'s without the Custom Edition files, the owner's 1.1.3 rule: the notice says so, no SIGN IN) */
+	needs = classic && idle && cp_steam_needs_custom_edition();
 	ended = view.phase == STEAM_JOB_DONE || view.phase == STEAM_JOB_FAILED || view.phase == STEAM_JOB_CANCELLED;
 	progress = view.phase == STEAM_JOB_PREPARING || view.phase == STEAM_JOB_DOWNLOADING || view.phase == STEAM_JOB_PAUSED;
 	if (!browsing && h3_workshop.details_open)
@@ -13677,6 +13802,12 @@ static void h3_workshop_update(struct widget_instance *widget)
 	{
 	case STEAM_JOB_IDLE:
 		snprintf(status_text, sizeof(status_text), "%s", T("Halo CE items of MCC's Steam Workshop, on this Vita."));
+		if (needs)
+		{
+			snprintf(details, sizeof(details), "%s\n\n%s", T("Needs the Custom Edition files"),
+				T("PC files (Custom Edition maps): not there. They are in MCC's halo1/maps/custom_edition."));
+			break;
+		}
 		snprintf(details, sizeof(details), "%s", T("Unofficial: this signs in to your own Steam account with the Steam app's QR code, lists Halo CE's Workshop items and downloads the ones you pick. The sign-in stays on this Vita for up to 14 days, sealed to this console (SIGN OUT in DOWNLOAD FROM STEAM removes it). Your account must own Halo: The Master Chief Collection. Campaign mods play from the mods folder, offline; multiplayer maps are in the multiplayer map lists, offline and online. No password is asked for or kept."));
 		if (h3_workshop.installed || h3_workshop.refused)
 		{
@@ -13766,6 +13897,41 @@ static void h3_workshop_update(struct widget_instance *widget)
 			found->animation.current_frame_index = index == h3_workshop.tab && !ws.search[0] ? 1 : 0;
 		}
 	}
+	if ((found = named(screen, "tab_label")) != NULL)
+	{
+		/* (Classic+'s: GAME MANAGER's tab line, "L R: POPULAR") */
+		static char const *const tab_names[4] = { N_("POPULAR"), N_("NEWEST"), N_("TOP RATED"), N_("SUBSCRIBED") };
+
+		widget_instance_set_visibility_recursive(found, grid);
+		snprintf(line, sizeof(line), "L R: %s", ws.search[0] ? T("SEARCH") : T(tab_names[h3_workshop.tab & 3]));
+		h3_capitals(line);
+		text_show(found, line);
+	}
+	if ((found = named(screen, "info")) != NULL)
+	{
+		/* (Classic+'s: the focused item's facts beside its picture, as FILE SHARE's under its rows) */
+		boolean shown = grid && !ws.loading && h3_workshop.focus < ws.count;
+
+		widget_instance_set_visibility_recursive(found, shown);
+		if (shown)
+		{
+			struct steam_job_workshop_row const *row = &ws.rows[h3_workshop.focus];
+			char size_text[32], by[120];
+			int state = h3_workshop_state(h3_workshop.row_installed[h3_workshop.focus],
+				h3_workshop.row_installed_gid[h3_workshop.focus], row->version);
+
+			if (row->author[0])
+				snprintf(by, sizeof(by), T("by %s"), row->author);
+			else
+				snprintf(by, sizeof(by), T("Item %s"), row->id);
+			h3_workshop_size(row->size_kb, size_text, sizeof(size_text));
+			snprintf(line, sizeof(line), "%.80s\n%.100s\n%s%s%s\n%s", row->title, by, size_text,
+				h3_workshop_kind(row->tags)[0] ? "  " : "", h3_workshop_kind(row->tags), !row->downloadable ?
+				T("CAN'T BE DOWNLOADED") : state == 2 ? T("UPDATE AVAILABLE") : state == 1 ? T("INSTALLED") :
+				h3_workshop_marked_index(row->id) >= 0 ? T("MARKED FOR DOWNLOAD") : T("NOT ON THIS PS VITA"));
+			h3_dialog_text(found, line);
+		}
+	}
 	if ((found = named(screen, "l_butn")) != NULL)
 		widget_instance_set_visibility_recursive(found, grid);
 	if ((found = named(screen, "r_butn")) != NULL)
@@ -13787,7 +13953,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 	}
 	if ((found = named(screen, "signin")) != NULL)
 	{
-		widget_instance_set_visibility_recursive(found, idle);
+		widget_instance_set_visibility_recursive(found, idle && !needs);
 		snprintf(line, sizeof(line), "%s", steam_job_signin_state(NULL) == 1 ? T("OPEN THE WORKSHOP (SIGNED IN TO STEAM)") :
 			T("SIGN IN WITH THE STEAM APP"));
 		h3_capitals(line);
@@ -13865,7 +14031,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 
 		if (!row->downloadable)
 			snprintf(message, sizeof(message), T("Can't be downloaded: %.100s"), T(row->reason));
-		else
+		else if (!classic)
 			snprintf(message, sizeof(message), "%.100s", row->title);
 	}
 	if ((found = named(screen, "message")) != NULL)
@@ -13883,6 +14049,10 @@ static void h3_workshop_update(struct widget_instance *widget)
 		for (part = 0; part < (int)NUMBEROF(parts); part++)
 			if ((found = named(screen, parts[part])) != NULL)
 				widget_instance_set_visibility_recursive(found, details_mode);
+		/* (Classic+'s: the arrows under the picture when the item has more than one; Left and Right, or L and R) */
+		for (part = 0; part < 2; part++)
+			if ((found = named(screen, part ? "d_right" : "d_left")) != NULL)
+				widget_instance_set_visibility_recursive(found, details_mode && page.state == 2 && page.pictures > 1);
 		if (details_mode && page.state == 2 && strcmp(h3_workshop.details_checked_id, page.id))
 		{
 			uint64_t id = 0, gid = 0;
@@ -14010,7 +14180,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 			int button;
 
 			snprintf(download_label, sizeof(download_label), T("Download (%d)"), h3_workshop.marked_count);
-			shown[0] = idle || (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
+			shown[0] = (idle && !needs) || (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
 			labels[0] = idle ? h3_workshop_footer_word("{footer}Select", "Select") : grid ? T("Details") : state == 2 ? T("Update") : state == 1 ?
 				T("Download again") : T("Download");
 			shown[1] = (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
@@ -14037,7 +14207,22 @@ static void h3_workshop_update(struct widget_instance *widget)
 				if ((found = named(screen, glyphs[button * 2 + 1])) != NULL)
 				{
 					widget_instance_set_visibility_recursive(found, shown[button]);
-					text_show(found, labels[button]);
+					if (classic)
+					{
+						/* (Classic+'s key, the Xbox's: "=DETAILS", "=DOWNLOAD (2)" after START) */
+						char word[96];
+
+						/* (Triangle's REMOVE asked once: the line over the key says "Triangle again removes...";
+						the key keeps its word, which fits) */
+						/* (Circle on the list: =BACK - it leaves the list and the session, as the Xbox's lists' Back
+						leaves them; DOWNLOAD FROM STEAM's SIGN OUT row removes a kept sign-in) */
+						cp_key_word(button == 2 && !grid ? T("Remove") : button == 0 && details_mode && state == 1 ?
+							T("Download") : button == 4 && browsing ? h3_workshop_footer_word("{footer}Back", "Back") :
+							labels[button], word, sizeof(word));
+						text_show(found, shown[button] ? word : "");
+					}
+					else
+						text_show(found, labels[button]);
 				}
 			}
 		}
@@ -14164,12 +14349,17 @@ static boolean h3_workshop_row(struct widget_instance *widget)
 	struct steam_job_workshop_view ws;
 	struct steam_job_view view;
 
-	(void)widget;
 	steam_job_view(&view);
 	if (view.phase == STEAM_JOB_IDLE)
 	{
 		int started;
 
+		/* (Classic+'s without the Custom Edition files: no SIGN IN - the notice says what is missing) */
+		if (cp_screen(widget) && cp_steam_needs_custom_edition())
+		{
+			platform_log("menus: workshop: sign-in refused: needs the Custom Edition files");
+			return FALSE;
+		}
 		h3_workshop_reset();
 		started = steam_job_start_workshop(h3_workshop_root());
 		if (started < 0)
@@ -14750,7 +14940,43 @@ static void h3_workshop_draw(void)
 	}
 	if (!h3_workshop.details_shown && h3_workshop.large_serial)
 		h3_workshop_textures_free(FALSE, TRUE);
-	if (h3_workshop.grid_shown && !ws.loading)
+	if (h3_workshop.grid_shown && !ws.loading && h3_workshop.classic)
+	{
+		/* (Classic+'s: the rows are the list's own server_item_bkds, lit on focus by the update; a marked row's small
+		blue square at its left end; the focused item's picture under the blue line at the left, as FILE SHARE's map
+		picture, in the menus' blue frame, its rating's pips under its facts in the menus' blue) */
+		int px = 24, py = 296, pw = 176, ph = 88;
+
+		for (index = 0; index < ws.count && index < H3_WORKSHOP_CARDS; index++)
+			if (h3_workshop_marked_index(ws.rows[index].id) >= 0)
+				h3_workshop_box(23, 104 + index * 18, 30, 111 + index * 18, 0xFF2896FFUL);
+		if (h3_workshop.focus < ws.count)
+		{
+			struct bitmap_data *bitmap = ws.rows[h3_workshop.focus].picture == 1 ? h3_workshop_texture(h3_workshop.focus) : NULL;
+			int pip, lit = (ws.rows[h3_workshop.focus].score + 10) / 20;
+
+			if (bitmap)
+				h3_workshop_picture_quad(bitmap, (real)px, (real)py, (real)(px + pw), (real)(py + ph), 1.f, 1.f);
+			else
+			{
+				h3_workshop_box(px, py, px + pw, py + ph, 0xC0081428UL);
+				if (ws.rows[h3_workshop.focus].picture == 0)
+					h3_workshop_box(px + 70 + (int)(system_milliseconds() / 120 % 5) * 8, py + 42,
+						px + 74 + (int)(system_milliseconds() / 120 % 5) * 8, py + 46, 0xA02896FFUL);
+			}
+			h3_workshop_frame(px, py, px + pw, py + ph, 1, 0xFF2896FFUL);
+			for (pip = 0; ws.rows[h3_workshop.focus].score >= 0 && pip < 5; pip++)
+				h3_workshop_box(214 + pip * 9, 376, 214 + pip * 9 + 7, 383, pip < lit ? 0xFF2896FFUL : 0x60284878UL);
+		}
+		/* (the other rows' pictures are not shown: let go as they come) */
+		for (index = 0; index < H3_WORKSHOP_CARDS; index++)
+			if (index != h3_workshop.focus && h3_workshop.card_serials[index])
+			{
+				menu_tags_texture_free(&h3_workshop.card_textures[index]);
+				h3_workshop.card_serials[index] = 0;
+			}
+	}
+	else if (h3_workshop.grid_shown && !ws.loading)
 	{
 		for (index = 0; index < ws.count && index < H3_WORKSHOP_CARDS; index++)
 		{
@@ -14800,8 +15026,11 @@ static void h3_workshop_draw(void)
 	{
 		struct steam_job_workshop_details page;
 		struct bitmap_data *bitmap;
-		int x0 = H3_WORKSHOP_LARGE_LEFT, y0 = H3_WORKSHOP_LARGE_TOP;
-		int x1 = x0 + H3_WORKSHOP_LARGE_WIDTH, y1 = y0 + H3_WORKSHOP_LARGE_HEIGHT;
+		/* (Classic+'s: the picture at the left under the heading, 272 x 136, framed in the menus' blue) */
+		boolean classic = h3_workshop.classic;
+		int x0 = classic ? 24 : H3_WORKSHOP_LARGE_LEFT, y0 = classic ? 104 : H3_WORKSHOP_LARGE_TOP;
+		int x1 = x0 + (classic ? 272 : H3_WORKSHOP_LARGE_WIDTH), y1 = y0 + (classic ? 136 : H3_WORKSHOP_LARGE_HEIGHT);
+		unsigned long lit = classic ? 0xFF2896FFUL : 0xFFE08A2EUL;
 
 		steam_job_workshop_details(&page);
 		h3_workshop_box(x0, y0, x1, y1, 0xC0081428UL);
@@ -14809,31 +15038,33 @@ static void h3_workshop_draw(void)
 		if (bitmap)
 			h3_workshop_picture_quad(bitmap, (real)x0, (real)y0, (real)x1, (real)y1, 1.f, 1.f);
 		else if (page.state == 1 || (page.state == 2 && page.picture == 0))
-			h3_workshop_box(x0 + 172 + (int)(system_milliseconds() / 120 % 5) * 8, y0 + 94,
-				x0 + 176 + (int)(system_milliseconds() / 120 % 5) * 8, y0 + 98, 0xA0A0B4CDUL);
+			h3_workshop_box((x0 + x1) / 2 - 20 + (int)(system_milliseconds() / 120 % 5) * 8, (y0 + y1) / 2,
+				(x0 + x1) / 2 - 16 + (int)(system_milliseconds() / 120 % 5) * 8, (y0 + y1) / 2 + 4, 0xA0A0B4CDUL);
 		else
-			h3_workshop_frame(x0 + 180, y0 + 84, x0 + 204, y0 + 108, 1, 0x60A0B4CDUL);
-		h3_workshop_frame(x0, y0, x1, y1, 1, 0x40A0B4CDUL);
-		/* (the pictures' dots under it, the one shown orange) */
+			h3_workshop_frame((x0 + x1) / 2 - 12, (y0 + y1) / 2 - 12, (x0 + x1) / 2 + 12, (y0 + y1) / 2 + 12, 1, 0x60A0B4CDUL);
+		h3_workshop_frame(x0, y0, x1, y1, 1, classic ? 0xFF2896FFUL : 0x40A0B4CDUL);
+		/* (the pictures' dots under it, the one shown orange - Classic+'s blue -, between Classic+'s arrows) */
 		if (page.state == 2 && page.pictures > 1)
 		{
-			int dot, left = x0 + H3_WORKSHOP_LARGE_WIDTH / 2 - page.pictures * 6;
+			int dot, left = (x0 + x1) / 2 - page.pictures * 6;
 
 			for (dot = 0; dot < page.pictures; dot++)
 				h3_workshop_box(left + dot * 12, y1 + 6, left + dot * 12 + 7, y1 + 13,
-					dot == page.picture_index ? 0xFFE08A2EUL : 0x80A0B4CDUL);
+					dot == page.picture_index ? lit : 0x80A0B4CDUL);
 		}
 	}
 	if (view.phase == STEAM_JOB_DOWNLOADING || view.phase == STEAM_JOB_PREPARING || view.phase == STEAM_JOB_PAUSED)
 	{
 		/* (the item's bytes: a navy track, the orange done) */
-		int x0 = -36, x1 = 676, y0 = 224, filled = x0;
+		/* (Classic+'s: inside the screen's 640, over the blue line, the done part in the menus' blue) */
+		int x0 = h3_workshop.classic ? 40 : -36, x1 = h3_workshop.classic ? 600 : 676;
+		int y0 = h3_workshop.classic ? 266 : 224, filled = x0;
 
 		if (view.total_kb)
 			filled = x0 + (int)((long long)(x1 - x0) * (long long)view.done_kb / (long long)view.total_kb);
 		h3_workshop_box(x0, y0, x1, y0 + 8, 0xC0203458UL);
 		if (filled > x0)
-			h3_workshop_box(x0, y0, filled > x1 ? x1 : filled, y0 + 8, 0xFFE08A2EUL);
+			h3_workshop_box(x0, y0, filled > x1 ? x1 : filled, y0 + 8, h3_workshop.classic ? 0xFF2896FFUL : 0xFFE08A2EUL);
 	}
 #endif
 }
@@ -24457,6 +24688,8 @@ static struct
 	{ "fileshare", N_("Your saved map variants and game types, shared with your friends."), 0 },
 	{ "transfers", N_("What you are sending to your friends, and getting from them."), HALO_SETTINGS_PANEL_FSFRIENDS },
 	{ "games", N_("Your custom maps and mods, and their files."), 0 },
+	/* (1.1.3: Classic+'s SETTINGS, its WORKSHOP row - classic/modes.xml) */
+	{ "workshop", N_("Halo CE's mods and maps of MCC's Steam Workshop: browse them and download them to this PS Vita with your own Steam account."), 0 },
 	{ "screenshots", N_("Not in this version yet."), 0 },
 	{ "news", N_("This build's version, and whether a newer one is out."), HALO_SETTINGS_PANEL_GAME },
 	{ "controls", N_("Look sensitivity, inversion, button layout, gyro and touch."), HALO_SETTINGS_PANEL_CONTROLS },
@@ -24557,6 +24790,16 @@ static void ce_settings_update(struct widget_instance *list)
 #if !defined(HALO_VITA)
 		shown = row == NONE || !start_rows[row].panel;
 #endif
+		/* (WORKSHOP: a build with the Workshop alone; without the Custom Edition files it is there, dimmed, and says
+		so - port ce workshop row opens nothing) */
+		if (row != NONE && !strcmp(start_rows[row].row, "workshop"))
+		{
+#ifdef HALO_STEAM_WORKSHOP
+			child->alpha_modifier = cp_steam_needs_custom_edition() ? 0.5f : 1.f;
+#else
+			shown = FALSE;
+#endif
+		}
 		if (!shown)
 		{
 			if (child->visible || !child->disabled)
@@ -24573,6 +24816,17 @@ static void ce_settings_update(struct widget_instance *list)
 	if (first_shown && (!list->focused_child || list->focused_child->disabled))
 		ui_widget_port_give_focus(list, first_shown);
 	row = start_row_of(list->focused_child);
+#ifdef HALO_STEAM_WORKSHOP
+	if (row != NONE && !strcmp(start_rows[row].row, "workshop") && cp_steam_needs_custom_edition())
+	{
+		char words[400];
+
+		snprintf(words, sizeof(words), "%s\n\n%s", T("Needs the Custom Edition files"),
+			T("PC files (Custom Edition maps): not there. They are in MCC's halo1/maps/custom_edition."));
+		classic_text_fit(named(screen, "desc"), words);
+	}
+	else
+#endif
 	classic_text_fit(named(screen, "desc"), row != NONE ? T(start_rows[row].description) : "");
 	if (row != NONE && strcmp(start_rows[row].row, said))
 	{
@@ -26395,6 +26649,8 @@ boolean pc_menu_event_function_invoke(
 		h3_mods.tab = (short)(1 - h3_mods.tab);
 		platform_log("menus: game manager: the %s tab", h3_mods.tab ? "MODS" : "GAMES");
 		return TRUE;
+	case _function_ce_workshop_row:
+		return cp_workshop_row();
 	case _function_h3_steam_row:
 		return h3_steam_row(widget);
 	case _function_h3_steam_back:
@@ -27268,7 +27524,8 @@ int menu_functions_mouse_kind(struct widget_instance *widget)
 
 #ifdef HALO_STEAM_WORKSHOP
 	/* (STEAM WORKSHOP, any Menu style: its cards and tabs) */
-	if (name && h3_workshop.grid_shown && mouse_on_screen(widget, "pc\\h3\\workshop\\screen") &&
+	if (name && h3_workshop.grid_shown && (mouse_on_screen(widget, "pc\\h3\\workshop\\screen") ||
+		mouse_on_screen(widget, "pc\\cp\\workshop\\screen")) &&
 		(mouse_number_after(name, "card_") != NONE || mouse_number_after(name, "tab_") != NONE))
 	{
 		return 1;
@@ -27312,7 +27569,7 @@ void menu_functions_mouse_click(struct widget_instance *widget)
 	if (!name)
 		return;
 #ifdef HALO_STEAM_WORKSHOP
-	if (mouse_on_screen(widget, "pc\\h3\\workshop\\screen"))
+	if (mouse_on_screen(widget, "pc\\h3\\workshop\\screen") || mouse_on_screen(widget, "pc\\cp\\workshop\\screen"))
 	{
 		h3_workshop_click(name);
 		return;
