@@ -5971,6 +5971,125 @@ static void test_settings_load_safe(void)
 	vita_settings_load();
 }
 
+/* (1.1.3, settings_rows.h) Menu style Classic+'s option screens' rows (classic_options.h) looked up in the panel's
+own table by name: every one found, its words the panel's own (the same text, not a copy), a choice row's choices
+and the choice now the panel's; each set as the Classic+ screens set it (setting_set: vita_settings_set through
+halo_test_setting_hook) to another choice it offers - the panel's row follows, the environment has it, settings.txt
+keeps it -, then back; the text rows typed; the actions that need no panel screen done (Reset controls, Check for
+updates, Extract PC files); the Profile row's Custom never offered, the languages the panel found listed */
+#include "../../linux/game/classic_options.h"
+
+static const char *test_settings_text(void)
+{
+	static char text[65536];
+	FILE *file;
+	size_t size = 0;
+
+	vita_settings_save_wait();
+	file = fopen(SETTINGS_FILE, "r");
+	if (file)
+	{
+		size = fread(text, 1, sizeof(text) - 1, file);
+		fclose(file);
+	}
+	text[size] = 0;
+	return text;
+}
+
+static void test_settings_rows(void)
+{
+	int index, found = 1, same = 1, kept = 1, rows = 0, choices = 0, row, profile, language, reset;
+	char line[160];
+
+	for (index = 0; index < (int)(sizeof(classic_options_rows) / sizeof(classic_options_rows[0])); index++)
+	{
+		const char *name = classic_options_rows[index].name;
+		int choice, now, other, count;
+		char was[64];
+
+		if (!name || !strcmp(name, CLASSIC_OPTIONS_PANEL))
+			continue;
+		rows++;
+		row = halo_settings_row_find(name);
+		if (row < 0)
+		{
+			printf("  not one of the panel's rows: %s\n", name);
+			found = 0;
+			continue;
+		}
+		same &= halo_settings_row_label(row) == settings[row].label && halo_settings_row_help(row) == settings[row].help;
+		if (halo_settings_row_kind(row) == SETTINGS_ROW_TEXT)
+		{
+			snprintf(was, sizeof(was), "%s", getenv(name) ? getenv(name) : "");
+			vita_settings_set(name, "Classic room");
+			kept &= !strcmp(getenv(name), "Classic room");
+			if (strcmp(name, "HALO_NET_LOBBY_PASSWORD"))
+			{
+				snprintf(line, sizeof(line), "%s=Classic room\n", name);
+				kept &= strstr(test_settings_text(), line) != NULL;
+			}
+			vita_settings_set(name, was);
+			continue;
+		}
+		if (halo_settings_row_kind(row) != SETTINGS_ROW_CHOICE)
+			continue;
+		count = halo_settings_row_count(row);
+		now = halo_settings_row_choice(row);
+		same &= count == settings[row].count && now == settings[row].choice;
+		/* (the Game folder is kept in a file of its own, not settings.txt) */
+		if (!strcmp(name, GAME_FOLDER_ROW))
+			continue;
+		for (other = -1, choice = 1; choice < count && other < 0; choice++)
+			if (halo_settings_row_offered(row, (now + choice) % count))
+				other = (now + choice) % count;
+		if (other < 0)
+		{
+			printf("  no other choice offered: %s\n", name);
+			kept = 0;
+			continue;
+		}
+		snprintf(was, sizeof(was), "%s", halo_settings_row_value(row, now));
+		vita_settings_set(name, halo_settings_row_value(row, other));
+		snprintf(line, sizeof(line), "%s=%s\n", name, halo_settings_row_value(row, other));
+		if (halo_settings_row_choice(row) != other || !getenv(name) || strcmp(getenv(name), halo_settings_row_value(row, other)) ||
+			!strstr(test_settings_text(), line))
+		{
+			printf("  not set and kept: %s=%s\n", name, halo_settings_row_value(row, other));
+			kept = 0;
+		}
+		vita_settings_set(name, was);
+		choices++;
+	}
+	snprintf(line, sizeof(line), "Classic+'s option screens: their %d rows are the panel's own", rows);
+	check(found && rows > 90, line);
+	check(same, "Classic+'s option screens: the panel's labels, help, choices and choice now (one table)");
+	snprintf(line, sizeof(line), "Classic+'s option screens: each of %d choice rows set as they set it - in the panel, the "
+		"environment and settings.txt", choices);
+	check(kept && choices > 80, line);
+	check(halo_settings_row_find("HALO_NO_SUCH_ROW") < 0 && halo_settings_row_find("") < 0, "settings rows: no such row");
+	profile = halo_settings_row_find("HALO_PROFILE");
+	check(profile >= 0 && !halo_settings_row_offered(profile, 3) && !strcmp(halo_settings_row_value(profile, 3), "custom") &&
+		halo_settings_row_offered(profile, 0), "settings rows: the Profile row's Custom is read, not offered");
+	language = halo_settings_row_find("HALO_LANGUAGE");
+	for (index = 0, found = 0; language >= 0 && index < halo_settings_row_count(language); index++)
+		found |= !strcmp(halo_settings_row_value(language, index), "es");
+	check(found, "settings rows: Language lists the languages the panel found (es)");
+	check(halo_settings_row_kind(halo_settings_row_find("Reset controls")) == SETTINGS_ROW_ACTION &&
+		halo_settings_row_kind(halo_settings_row_find("HALO_NET_LOBBY_NAME")) == SETTINGS_ROW_TEXT,
+		"settings rows: an action, a text row");
+	vita_settings_set("XV_LOOK_SENS", "200");
+	reset = halo_settings_row_find("Reset controls");
+	check(halo_settings_row_act(reset) == 0 && !strcmp(getenv("XV_LOOK_SENS"), "100") &&
+		strstr(test_settings_text(), "XV_LOOK_SENS=100\n"), "settings rows: Reset controls, as the panel's press");
+	index = update_requests;
+	check(halo_settings_row_act(halo_settings_row_find("Check for updates")) == 0 && update_requests == index + 1,
+		"settings rows: Check for updates asks (update_check_request)");
+	index = installer_starts;
+	halo_settings_row_act(halo_settings_row_find("Extract PC files"));
+	check(installer_starts == index + 1, "settings rows: Extract PC files starts the installer's extraction");
+	check(halo_settings_row_act(halo_settings_row_find("HALO_GYRO")) < 0, "settings rows: a choice row is no action");
+}
+
 int main(void)
 {
 	char line[128];
@@ -7261,6 +7380,7 @@ int main(void)
 	test_save_off_thread();
 	test_save_any_thread();
 	test_settings_load_safe();
+	test_settings_rows();
 	printf("-- %d of %d checks failed\n", failures, checks);
 	return failures ? 1 : 0;
 }
