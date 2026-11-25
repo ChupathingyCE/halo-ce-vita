@@ -2328,7 +2328,7 @@ crossrefuse)
 	;;
 crossmcc)
 	# (1.1.3, the owner Nov 24 2026: mixed play with hosts that know nothing of it) a PC host (XPPC_CHUPA's
-	# ChupathingyCE, else OpenCE) on a LAN of its own hosts each of XPPC_MCC_MAPS (default "longest bloodgulch") from
+	# ChupathingyCE, else OpenCE) on a LAN of its own hosts each of XPPC_MCC_MAPS (default "chillout bloodgulch": Longest's corridors give the test bots few hits, with Xbox files too) from
 	# the Xbox's files; our MCC-only client (no Xbox maps, MCC's halo1) joins it: it asks the host's Delta Peer, hears no
 	# mixed play, plays by this build's table ("played by this build's table"), matches it and plays the game
 	# (crossplay_check.py's steps, two copies); a map Halo PC rebuilt is answered yes (HALO_TEST_MIXED_DIFFERS_ANSWER)
@@ -2341,14 +2341,14 @@ crossmcc)
 	mcc_host=opence
 	[ -n "$chupa" ] && [ -x "$chupa" ] && mcc_host=chupa
 	export XPPC_TWO_COPIES=1
-	for map in ${XPPC_MCC_MAPS:-longest bloodgulch}; do
+	for map in ${XPPC_MCC_MAPS:-chillout bloodgulch}; do
 		# (HALO_NET_MAPS_URL empty: ChupathingyCE 0.9.1 looks its maps up at maps.chupathingy.org otherwise)
 		host_extra="HALO_NET_MAPS_URL=" client_maps=$out/maps-none host_game=$map host_variants=${XPPC_MCC_GAME:-slayer} \
 			client_extra="HALO_CONTENT_ROOT=$out/mcc-content HALO_TEST_MIXED_DIFFERS_ANSWER=yes HALO_MIXED_COOP_HASH=1" \
 			pair mcc-$map lan $mcc_host ours
 	done
 	wait_pairs
-	for map in ${XPPC_MCC_MAPS:-longest bloodgulch}; do
+	for map in ${XPPC_MCC_MAPS:-chillout bloodgulch}; do
 		name=mcc-$map clientlog=$out/mcc-$map/client/run.log
 		took=$(grep -a "mixed play: the host never said it plays mixed (a PC host): $map played by this build's table" "$clientlog" | head -1)
 		matched=$(grep -ac "mixed co-op: the host's level matches this machine's" "$clientlog")
