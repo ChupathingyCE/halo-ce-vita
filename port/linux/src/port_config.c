@@ -353,6 +353,17 @@ static const struct config_setting config_settings[] =
 		"next round the campaign's next level; empty hosts the lobby's\n"
 		"multiplayer game. For tests: the Vita hosts co-op from the Campaign\n"
 		"menu (Y on the difficulty screen)." },
+	{ "network.mixed_client_only", _config_boolean, "true", "HALO_MIXED_CLIENT_ONLY", _environment_value, _platform_all,
+		"Mixed play with any host (1.1.3): with only MCC's files of a stock\n"
+		"level, join a host that knows nothing of mixed play (an older build,\n"
+		"an OpenCE or ChupathingyCE host) by this build's own tables of the\n"
+		"Xbox's level. False refuses such a game, as 1.1.3's insiders did." },
+	{ "network.mixed_differs_accepted", _config_string, "\"\"", "HALO_MIXED_DIFFERS_ACCEPTED", _environment_value, _platform_all,
+		"The maps Halo PC rebuilt (bloodgulch, beavercreek, carousel,\n"
+		"hangemhigh, sidewinder) this machine plays on MCC's files with a\n"
+		"host that can't send its layout, the player having said yes once to\n"
+		"\"some walls and scenery won't match the host's\": commas between.\n"
+		"Empty asks again." },
 	{ "network.mixed_coop_accept", _config_string, "\"\"", "HALO_MIXED_COOP_ACCEPT", _environment_value, _platform_all,
 		"Mixed co-op (Xbox and MCC files in one co-op game): gameplay tags whose\n"
 		"Xbox and MCC versions differ that this machine plays together anyway, by\n"

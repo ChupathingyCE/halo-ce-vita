@@ -58,6 +58,15 @@
 #             loads the map - refused in the lobby or as the game starts, told the host's version can't play it
 #             with MCC's files, never "co-op" in a multiplayer game -, stays up; an Xbox joiner plays 60 s with two
 #             players as before
+#   mixedstock  (1.1.3, the owner Nov 24 2026: mixed play with hosts that know nothing of it) an MCC joiner of a host
+#             that never says it plays mixed - HALO_TEST_MIXED_OLD_HOST (an older build: v1.1.2), else this build
+#             hosting as one (HALO_TEST_MIXED_HOST_SILENT=1, so both machines' state hashes are logged) - on an Xbox
+#             level (HALO_TEST_MIXED="xbox mcc MAP GAME", default "xbox mcc longest ctf"): the joiner plays by its
+#             built-in table ("played by this build's table"), matches it, plays 60 s at least with two players,
+#             the scoreboards agree, and with this build hosting the state hashes agree (a map Halo PC rebuilt:
+#             the placed objects' count, their tags MCC's where it stands in). A map Halo PC rebuilt asks the
+#             player first (HALO_TEST_MIXED_ANSWER, default yes: HALO_TEST_MIXED_DIFFERS_ANSWER); no: the joiner
+#             is told "Not joined" before the map loads and never plays
 #   mixedvitajoin  the dev Vita's MCC-only join (Nov 22 2026): an Xbox host's Longest CTF, an MCC-only joiner
 #             with only the files that Vita had (ui.map, bitmaps.map, a10.map, longest.map, custom_edition's
 #             bitmaps.map and loc.map), Menu style Halo 3, its game thread held 6.5 s as it enters the game
@@ -241,7 +250,7 @@ PY
 # debug.txt) differ for runs of 90 ticks at most (the host's word reaches the joiner ticks later) and agree at
 # the end; the objects the map placed ("mixed placed") are the same
 mixed_hashes() {
-	python3 -I - "$out/host/data/debug.txt" "$out/joiner/data/debug.txt" <<'PY' || fail "the host's and joiner's state hashes did not agree"
+	MIXED_HASH_PLACED=${MIXED_HASH_PLACED:-hash} python3 -I - "$out/host/data/debug.txt" "$out/joiner/data/debug.txt" <<'PY' || fail "the host's and joiner's state hashes did not agree"
 import re, sys
 def load(path):
     ticks, placed = {}, None
@@ -265,7 +274,11 @@ longest = max((b - a + 1 for a, b in runs), default=0)
 ends = bool(ticks) and h[ticks[-1]] != j[ticks[-1]]
 print('the state hashes: %d ticks in both, %d differing runs, longest %d ticks%s; placed objects host %s joiner %s' %
       (len(ticks), len(runs), longest, ', ends differing' if ends else '', hp, jp))
-sys.exit(0 if len(ticks) >= 600 and longest <= 90 and not ends and hp and hp == jp else 1)
+import os
+# (MIXED_HASH_PLACED=count, a map Halo PC rebuilt played by a table: the same count of placed objects - MCC's own
+# objects stand in for a few of the Xbox's)
+placed_ok = hp and jp and (hp[0] == jp[0] if os.environ.get('MIXED_HASH_PLACED') == 'count' else hp == jp)
+sys.exit(0 if len(ticks) >= 600 and longest <= 90 and not ends and placed_ok else 1)
 PY
 }
 
@@ -321,6 +334,7 @@ mixed_case() {
 	local host_family join_family map game host_name
 	local mixed_default="mcc xbox chillout slayer"
 	[ $mode = mixedold ] && mixed_default="xbox mcc boardingaction ctf"
+	[ $mode = mixedstock ] && mixed_default="xbox mcc longest ctf"
 	set -- ${HALO_TEST_MIXED:-$mixed_default}
 	host_family=$1 join_family=$2 map=$3 game=${4:-slayer}
 	mcc_setup
@@ -340,12 +354,25 @@ mixed_case() {
 		[ $host_family = xbox ] || { echo "mixedold: an older host plays the Xbox's files (HALO_TEST_MIXED's HOST xbox)"; exit 2; }
 		echo "mixedold: the older host $host_vita"
 	fi
+	local join_extra=""
+	# (mixedold: the refusal of 1.1.3's insiders, table play off; mixedstock: table play, the question answered)
+	[ $mode = mixedold ] && join_extra="HALO_MIXED_CLIENT_ONLY=false"
+	if [ $mode = mixedstock ]; then
+		join_extra="HALO_TEST_MIXED_DIFFERS_ANSWER=${HALO_TEST_MIXED_ANSWER:-yes}"
+		if [ -n "${HALO_TEST_MIXED_OLD_HOST:-}" ]; then
+			host_vita=$HALO_TEST_MIXED_OLD_HOST
+			echo "mixedstock: the older host $host_vita"
+		else
+			host_env="$host_env HALO_TEST_MIXED_HOST_SILENT=1"
+			echo "mixedstock: this build hosting as one without mixed play (HALO_TEST_MIXED_HOST_SILENT)"
+		fi
+	fi
 	run_copy host "$host_machine" "$host_vita" "$cpu_a" $host_env HALO_NET_ONLINE=false \
 		HALO_NETWORK_TEST=host:$host_name:$game HALO_CONTENT_ROOT="$host_content" HALO_MIXED_COOP_HASH=1 HALO_MIXED_STAND_PROBE=1 $decisions \
 		$([ "$host_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); host_pid=$last_pid
 	sleep 5
 	run_copy joiner "$lan" "$join_vita" "$cpu_b" HALO_NET_ONLINE=false HALO_NETWORK_TEST=join HALO_TEST_INPUT=bot:2 \
-		HALO_CONTENT_ROOT="$join_content" HALO_MIXED_COOP_HASH=1 HALO_MIXED_STAND_PROBE=1 $decisions $([ "$join_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); join_pid=$last_pid
+		HALO_CONTENT_ROOT="$join_content" HALO_MIXED_COOP_HASH=1 HALO_MIXED_STAND_PROBE=1 $decisions $join_extra $([ "$join_content" != none ] && echo HALO_TEST_PAD=wait:150:1000); join_pid=$last_pid
 	wait $join_pid $host_pid 2>/dev/null
 	hl=$out/host/run.log
 	jl=$out/joiner/run.log
@@ -437,6 +464,30 @@ mixed_case() {
 			fail "the MCC joiner was not told (Halo: map) the host's version can't play it with MCC's files"
 		grep -a "Halo: map: \|Halo: co-op: " "$jl" | grep -aqi "co-op" && fail "the multiplayer refusal says co-op"
 		echo "the MCC joiner, refused: $(grep -a "Halo: map: " "$jl" | head -1)" ;;
+	mixedstock)
+		grep -a "mixed play: the host never said\|mixed play: .* by the table\|mixed play: .*placed as the host's\|mixed play: the player\|the player said\|the host decides: corrected" "$jl" | head -8
+		if [ "${HALO_TEST_MIXED_ANSWER:-yes}" = no ]; then
+			[ "$two" = 0 ] || fail "the MCC joiner played after saying no ($two s)"
+			grep -aq "Halo: map: Not joined: " "$jl" || fail "the MCC joiner was not told it did not join"
+			grep -aq "MCC level in network co-op loaded" "$jl" && fail "the MCC joiner loaded the level after saying no"
+			return
+		fi
+		[ "$two" -ge 60 ] || fail "the MCC joiner played the host's game for $two s with two players"
+		grep -aq "mixed play: the host never said it plays mixed (.*): $map played by this build's table" "$jl" ||
+			fail "the MCC joiner did not play by its table"
+		grep -aq "mixed co-op: the host's level matches this machine's" "$jl" || fail "the MCC joiner never matched its table"
+		grep -aq "mixed co-op: refused\|platform: message" "$jl" &&
+			fail "the joiner was refused or told something ($(grep -a "mixed co-op: refused\|platform: message" "$jl" | head -1))"
+		case $map in bloodgulch|beavercreek|sidewinder)
+			grep -aq "mixed play: $map placed as the host's (Xbox) layout" "$jl" || fail "the MCC joiner did not place the table's layout" ;;
+		esac
+		echo "the joiner's corrections by the host's collision: $(grep -ac "mixed play: the host decides: corrected" "$jl")"
+		mcc_scoreboards
+		if [ -z "${HALO_TEST_MIXED_OLD_HOST:-}" ]; then
+			case $map in bloodgulch|beavercreek|sidewinder|carousel|hangemhigh) MIXED_HASH_PLACED=count mixed_hashes ;;
+			*) mixed_hashes ;; esac
+		fi
+		true ;;
 	mixedrebuilt)
 		[ "$two" = 0 ] || fail "the joiner played the host's game on a map Halo PC rebuilt ($two s)"
 		grep -aq "a map Halo PC rebuilt: refused" "$jl" || fail "the joiner was not refused the rebuilt map"
@@ -491,7 +542,7 @@ mcc_lan_menus_case() {
 
 mcc_case() {
 	local host_data=$data join_data=$data host_content=none join_content=none host_game=host:bloodgulch:slayer
-	case $mode in mixedmp|mixedrebuilt|mixedold) mixed_case; return ;; mixedvitajoin|mixedvitahost) mixed_vita_case; return ;; esac
+	case $mode in mixedmp|mixedrebuilt|mixedold|mixedstock) mixed_case; return ;; mixedvitajoin|mixedvitahost) mixed_vita_case; return ;; esac
 	[ $mode = mcclanmenus ] && { mcc_lan_menus_case; return; }
 	case $mode in
 	mcclan|mccmenus) host_data=$out/mcc-none join_data=$out/mcc-none host_content=$out/mcc-content

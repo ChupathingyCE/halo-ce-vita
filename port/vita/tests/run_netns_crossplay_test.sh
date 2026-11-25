@@ -348,7 +348,7 @@ expected_fail=${XPPC_EXPECTED_FAIL:-}
 mode=${1:-}
 
 case $mode in
-pcself|chupaopence|opencelan|opencehost|crosstls|chupahost|chupaserver|damnserver|openceserver|crossrefuse|crossbig|crossmixed|crosscoop|crossctf) ;;
+pcself|chupaopence|opencelan|opencehost|crosstls|chupahost|chupaserver|damnserver|openceserver|crossrefuse|crossbig|crossmixed|crosscoop|crossctf|crossmcc) ;;
 pcjoinsvita|pccap|browserboth|crosspassword|crosscoophost|net32|crosschat|opencerefuse|crossstandin) ;;
 net29)
 	[ -n "${XPPC_OPENCE29:-}" ] && [ -x "$XPPC_OPENCE29" ] ||
@@ -2254,7 +2254,8 @@ crossrefuse)
 		for f in "$mcc_root"/*; do [ "$(basename "$f")" = maps ] || ln -sfn "$f" "$out/mcc-content/halo1/"; done
 		mcc_host=opence
 		[ -n "$chupa" ] && [ -x "$chupa" ] && mcc_host=chupa
-		client_maps=$out/maps-none client_extra="HALO_CONTENT_ROOT=$out/mcc-content" pair refuse-mcc lan $mcc_host ours
+		# (1.1.3: table play off - the switch, network.mixed_client_only; on, it plays: crossmcc)
+		client_maps=$out/maps-none client_extra="HALO_CONTENT_ROOT=$out/mcc-content HALO_MIXED_CLIENT_ONLY=false" pair refuse-mcc lan $mcc_host ours
 	fi
 	wait_pairs
 	for name in refuse-split refuse-map refuse-mcc; do
@@ -2323,6 +2324,45 @@ crossrefuse)
 		# (the host must have hosted, or the check proves nothing)
 		grep -aq "network test: hosting" "$out/$name/host/run.log" ||
 			{ controls_ok=0; echo "BROKEN ($mode): the OpenCE host of $name never hosted"; }
+	done
+	;;
+crossmcc)
+	# (1.1.3, the owner Nov 24 2026: mixed play with hosts that know nothing of it) a PC host (XPPC_CHUPA's
+	# ChupathingyCE, else OpenCE) on a LAN of its own hosts each of XPPC_MCC_MAPS (default "longest bloodgulch") from
+	# the Xbox's files; our MCC-only client (no Xbox maps, MCC's halo1) joins it: it asks the host's Delta Peer, hears no
+	# mixed play, plays by this build's table ("played by this build's table"), matches it and plays the game
+	# (crossplay_check.py's steps, two copies); a map Halo PC rebuilt is answered yes (HALO_TEST_MIXED_DIFFERS_ANSWER)
+	mcc_root=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
+	[ -d "$mcc_root/halo1/maps" ] && mcc_root=$mcc_root/halo1
+	[ -r "$mcc_root/maps/ui.map" ] || { echo "SKIP ($mode): no MCC halo1 folder at $mcc_root (HALO_TEST_MCC_ROOT)"; exit 0; }
+	mkdir -p "$out/maps-none" "$out/mcc-content/halo1/maps"
+	for f in "$mcc_root"/maps/*.map "$mcc_root"/maps/custom_edition; do ln -sfn "$f" "$out/mcc-content/halo1/maps/"; done
+	for f in "$mcc_root"/*; do [ "$(basename "$f")" = maps ] || ln -sfn "$f" "$out/mcc-content/halo1/"; done
+	mcc_host=opence
+	[ -n "$chupa" ] && [ -x "$chupa" ] && mcc_host=chupa
+	export XPPC_TWO_COPIES=1
+	for map in ${XPPC_MCC_MAPS:-longest bloodgulch}; do
+		client_maps=$out/maps-none host_game=$map host_variants=${XPPC_MCC_GAME:-slayer} \
+			client_extra="HALO_CONTENT_ROOT=$out/mcc-content HALO_TEST_MIXED_DIFFERS_ANSWER=yes HALO_MIXED_COOP_HASH=1" \
+			pair mcc-$map lan $mcc_host ours
+	done
+	wait_pairs
+	for map in ${XPPC_MCC_MAPS:-longest bloodgulch}; do
+		name=mcc-$map clientlog=$out/mcc-$map/client/run.log
+		took=$(grep -a "mixed play: the host never said it plays mixed (a PC host): $map played by this build's table" "$clientlog" | head -1)
+		matched=$(grep -ac "mixed co-op: the host's level matches this machine's" "$clientlog")
+		refused=$(grep -a "mixed co-op: refused\|can only be joined with the Xbox's maps" "$clientlog" | head -1)
+		delta=$(grep -a "mixed play: Delta Peer: \(WELCOME\|no answer\|the host answered\)" "$clientlog" | head -1 | sed 's/^.*mixed play: //')
+		corrected=$(grep -ac "mixed play: the host decides: corrected" "$clientlog")
+		echo "--- $name: Delta: ${delta:-none}; table: ${took:+taken}; matched $matched; corrections $corrected; refused: ${refused:-no}"
+		if [ -z "$took" ]; then result=no-table
+		elif [ "$matched" = 0 ]; then result=not-matched
+		elif [ -n "$refused" ]; then result=refused
+		elif ! check_pair "$name"; then result=${check_stage:-play}
+		else result=pass; fi
+		our_results="$our_results $name:$result"
+		grep -aq "network test: hosting" "$out/$name/host/run.log" ||
+			{ controls_ok=0; echo "BROKEN ($mode): the PC host of $name never hosted"; }
 	done
 	;;
 crossmaps)

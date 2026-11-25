@@ -74,6 +74,7 @@ extern struct collision_bsp const *collision_bsp_invisible_masked;
 #include "mixed_coop.h"
 #include "mixed_collision_protocol.h"
 #include "mixed_coop_delta.h"
+#include "mixed_coop_tables.h"
 #include "network_distributed.h"
 #include "network_wire.h"
 #include "tag_schema.h"
@@ -314,6 +315,13 @@ static struct
 	long stand_ins;
 	/* this machine's map placed as the host's layout */
 	boolean layout_taken;
+	/* (1.1.3) the host never said it plays mixed (an older build, an OpenCE or ChupathingyCE host): this machine
+	plays by its built-in table of the Xbox's level (mixed_coop_tables.h), as if the host had sent it */
+	boolean client_only;
+	/* (1.1.3) a map Halo PC rebuilt played so: the player asked (the level), its answer awaited; the game's start
+	held for it */
+	int differs_asked_level;
+	boolean start_waits_answer;
 } mixed_coop;
 
 /* the game's free asserts on NULL (debug_memory.c) */
@@ -2168,6 +2176,11 @@ static struct
 };
 
 
+static boolean mixed_coop_table_writing;
+static void mixed_coop_table_hex(char const *what, char const *family, uint8_t const *bytes, uint32_t length);
+static void mixed_coop_table_dump_layout(char const *family, struct scenario const *scenario);
+static boolean mixed_coop_client_only_layout(struct scenario const *scenario, struct tag_schema_definition const *scenario_schema);
+
 /* (the host's) its layout's stream, as its map loads */
 static void mixed_coop_layout_build(
 	struct scenario const *scenario,
@@ -2231,8 +2244,10 @@ static void mixed_coop_layout_build(
 	mixed_coop_writer_u8(&writer, MIXED_COOP_LAYOUT_NETGAME_FLAGS);
 	mixed_coop_writer_u8(&writer, 0);
 	mixed_coop_writer_u16(&writer, MIXED_COOP_NETGAME_FLAG_BYTES);
-	mixed_coop_writer_u32(&writer, (uint32_t)(scenario->netgame_flags.address ? scenario->netgame_flags.count : 0));
-	for (index = 0; scenario->netgame_flags.address && index < scenario->netgame_flags.count; index++)
+	/* (1.1.3, a built-in table's: no netgame flags - a client by a table keeps its own) */
+	mixed_coop_writer_u32(&writer, (uint32_t)(scenario->netgame_flags.address && !mixed_coop_table_writing ?
+		scenario->netgame_flags.count : 0));
+	for (index = 0; scenario->netgame_flags.address && !mixed_coop_table_writing && index < scenario->netgame_flags.count; index++)
 	{
 		struct scenario_netgame_flag const *flag = (struct scenario_netgame_flag const *)scenario->netgame_flags.address + index;
 		uint32_t words[4];
@@ -2426,7 +2441,9 @@ static boolean mixed_coop_layout_apply(
 			placements_block->count = (long)count;
 		}
 	}
-	/* (the netgame flags: the host's, its teleporters, CTF flags, hills and checkpoints) */
+	/* (the netgame flags: the host's, its teleporters, CTF flags, hills and checkpoints; by a table, this file's own:
+	the host's places unknown) */
+	if (!mixed_coop.client_only)
 	{
 		uint32_t count = layout.blocks[MIXED_COOP_LAYOUT_NETGAME_FLAGS].count;
 		uint8_t const *bytes = layout.blocks[MIXED_COOP_LAYOUT_NETGAME_FLAGS].elements;
@@ -3314,7 +3331,7 @@ void mixed_coop_tags_loaded(
 		game_connection() == _game_connection_network_server) && game &&
 		/* (a PC host's game, the crossplay wire: only a ChupathingyCE host that said it plays mixed, over Delta
 		Peer - mixed_coop_delta.h) */
-		(!network_wire_crossplay() || mixed_coop_crossplay_host()) &&
+		(!network_wire_crossplay() || mixed_coop_crossplay_host() || mixed_coop.client_only) &&
 		(mixed_coop_level_is_multiplayer(mixed_coop.level) || game->variant.game_engine_index == 0);
 	/* (a multiplayer map's scenario has one name in both families' files:
 	the game's name says which game - MCC's own, mcc_chillout, is not mixed) */
@@ -3367,7 +3384,13 @@ void mixed_coop_tags_loaded(
 
 		if (xbox_host || force)
 			mixed_coop_stand_ins_apply();
-		if (xbox_host)
+		/* (1.1.3, tools/mixed_tables.py: the MCC file's placements, as a client by a table finds them) */
+		if (force && !mixed_coop.network_coop)
+			mixed_coop_table_dump_layout("mcc", (struct scenario const *)scenario_instance->base_address);
+		/* (1.1.3, a host that never said it plays mixed: the layout this build's table gives) */
+		if (xbox_host && mixed_coop.client_only)
+			mixed_coop_client_only_layout((struct scenario const *)scenario_instance->base_address, scenario_group->definition);
+		if (xbox_host && !mixed_coop.leaving)
 			mixed_coop_layout_apply((struct scenario *)scenario_instance->base_address, scenario_group->definition);
 	}
 	/* (an MCC level played in network co-op: the Xbox's) */
@@ -3727,6 +3750,84 @@ static boolean mixed_coop_bsp_accepted(
 	return FALSE;
 }
 
+static boolean mixed_coop_build_stream(void);
+
+/* (1.1.3, tools/mixed_tables.py) a stream as hex lines in the log ("mixed table hex: <what> <level> <family>
+<offset> <hex>"), which the tool reads back */
+static void mixed_coop_table_hex(
+	char const *what,
+	char const *family,
+	uint8_t const *bytes,
+	uint32_t length)
+{
+	uint32_t at;
+
+	for (at = 0; at < length; at += 256)
+	{
+		char hex[2 * 256 + 1];
+		uint32_t byte_index, count = MIN(256u, length - at);
+
+		for (byte_index = 0; byte_index < count; byte_index++)
+			snprintf(hex + 2 * byte_index, 3, "%02x", bytes[at + byte_index]);
+		hex[2 * count] = 0;
+		platform_log("mixed table hex: %s %s %s %lu %s", what, mixed_coop_level_stems[mixed_coop.level], family,
+			(unsigned long)at, hex);
+	}
+	platform_log("mixed table: %s's %s (%s files) written to the log (%lu bytes)", mixed_coop_level_stems[mixed_coop.level],
+		what, family, (unsigned long)length);
+}
+
+/* (1.1.3) a map's layout for a built-in table (an Xbox machine's once its objects are placed, the placements' BSP
+flags its own; an MCC machine's as the client by a table finds it, before the Xbox's is made of it) */
+static void mixed_coop_table_dump_layout(
+	char const *family,
+	struct scenario const *scenario)
+{
+	struct tag_schema_group const *scenario_group = mixed_coop_schema_group('scnr', FALSE);
+
+	if (!getenv("HALO_MIXED_TABLE_OUT") || !getenv("HALO_MIXED_COOP_FORCE") || !mixed_coop_host_layout_level(mixed_coop.level) ||
+		!scenario || !scenario_group || !scenario_group->definition)
+	{
+		return;
+	}
+	mixed_coop_table_writing = TRUE;
+	mixed_coop_layout_build(scenario, scenario_group->definition);
+	mixed_coop_table_writing = FALSE;
+	if (mixed_coop.layout_stream && mixed_coop.layout_length)
+		mixed_coop_table_hex("layout", family, mixed_coop.layout_stream, mixed_coop.layout_length);
+	mixed_coop_free(mixed_coop.layout_stream);
+	mixed_coop.layout_stream = NULL;
+	mixed_coop.layout_length = 0;
+}
+
+/* (1.1.3, tools/mixed_tables.py) a built-in table's stream written: an Xbox-files machine with
+HALO_MIXED_COOP_FORCE and HALO_MIXED_TABLE_OUT=1 loading a mixed level alone writes the dictionary an
+Xbox-files host would send for it, without the netgame flags' places, as hex lines in its log, once its first
+structure BSP is loaded (its collision digests in it; later BSPs' 0, not compared) */
+static void mixed_coop_table_write(
+	void)
+{
+	if (!getenv("HALO_MIXED_TABLE_OUT") || !getenv("HALO_MIXED_COOP_FORCE") || mixed_coop.family != _mixed_coop_family_xbox ||
+		mixed_coop.network_coop || game_connection() == _game_connection_network_client ||
+		game_connection() == _game_connection_network_server)
+	{
+		return;
+	}
+	mixed_coop_free(mixed_coop.stream);
+	mixed_coop.stream = NULL;
+	mixed_coop_table_writing = TRUE;
+	if (!mixed_coop_build_stream())
+	{
+		mixed_coop_table_writing = FALSE;
+		platform_log("mixed table: %s's stream could not be built", mixed_coop_level_stems[mixed_coop.level]);
+		return;
+	}
+	mixed_coop_table_writing = FALSE;
+	mixed_coop_table_hex("table", "xbox", mixed_coop.stream, mixed_coop.stream_length);
+	mixed_coop_free(mixed_coop.stream);
+	mixed_coop.stream = NULL;
+}
+
 void mixed_coop_structure_bsp_loaded(
 	short bsp_index,
 	struct structure_bsp const *structure_bsp)
@@ -3742,6 +3843,8 @@ void mixed_coop_structure_bsp_loaded(
 	mixed_coop.bsp_digests[bsp_index][0] = digest;
 	mixed_coop.bsp_digests[bsp_index][1] = digest_offset;
 	platform_log("mixed co-op: structure BSP %d's collision %08x %08x", bsp_index, (unsigned)digest, (unsigned)digest_offset);
+	if (bsp_index == 0)
+		mixed_coop_table_write();
 	/* (the test's probe on the host: its BSP as it is; a client's once it matched, mixed_coop_dictionary_take) */
 	if (global_network_game_server_get())
 		mixed_coop_collision_probe();
@@ -3791,8 +3894,13 @@ static struct network_game_server *mixed_coop_hosted_server(
 	struct network_game *game;
 
 	*level = -1;
-	if (!server || network_wire_crossplay() || network_game_is_splitscreen_local() || !mixed_coop_capable())
+	/* (tests, 1.1.3: HALO_TEST_MIXED_HOST_SILENT=1 hosts as a build without mixed play does - no hello, no answer -
+	for a client playing by its table: the state hashes of both still logged) */
+	if (!server || network_wire_crossplay() || network_game_is_splitscreen_local() || !mixed_coop_capable() ||
+		getenv("HALO_TEST_MIXED_HOST_SILENT"))
+	{
 		return NULL;
+	}
 	game = network_game_server_get_game(server);
 	if (!game)
 		return NULL;
@@ -4058,6 +4166,9 @@ void mixed_coop_server_handle_lobby(
 	unsigned short *message,
 	short message_size)
 {
+	/* (tests: a host without mixed play drops these unread) */
+	if (getenv("HALO_TEST_MIXED_HOST_SILENT"))
+		return;
 	struct mixed_coop_lobby_message answer;
 	long machine_index = NONE;
 
@@ -4189,6 +4300,12 @@ static void mixed_coop_client_take_hello(
 
 	if (!mixed_coop_capable() || global_network_game_server_get())
 		return;
+	/* (1.1.3: playing by this build's table already - a hello this late is the game's no more) */
+	if (mixed_coop.client_only)
+	{
+		platform_log("mixed play: the host's hello came after this machine took its table: the table stays");
+		return;
+	}
 	if (!mixed_coop.host_said || mixed_coop.host_session != hello.session)
 		platform_log("mixed co-op: the host plays %s from the %s files; this machine from the %s files",
 			mixed_coop_level_stems[hello.level], mixed_coop_family_name(hello.family),
@@ -4356,6 +4473,304 @@ static void mixed_coop_refuse_older_host(
 	}
 }
 
+/* ---------- (1.1.3) a host that never says it plays mixed: played by the built-in table */
+
+void platform_ask_question(char const *title, char const *text);
+int platform_question_answer(void);
+int config_write_string(const char *name, const char *value);
+
+/* whether the player said yes, once, to playing this map Halo PC rebuilt on MCC's files with a host that can't send
+its layout (network.mixed_differs_accepted: the levels' stems, commas between) */
+static boolean mixed_coop_differs_remembered(
+	int level)
+{
+	char const *list = config_string("network.mixed_differs_accepted");
+	char const *stem = mixed_coop_level_stems[level];
+	size_t length = strlen(stem);
+
+	while (list && *list)
+	{
+		char const *end = strchr(list, ',');
+		size_t part = end ? (size_t)(end - list) : strlen(list);
+
+		while (part && *list == ' ')
+			list++, part--;
+		while (part && list[part - 1] == ' ')
+			part--;
+		if (part == length && !strncasecmp(list, stem, length))
+			return TRUE;
+		if (!end)
+			break;
+		list = end + 1;
+	}
+	return FALSE;
+}
+
+static void mixed_coop_differs_remember(
+	int level)
+{
+	char const *list = config_string("network.mixed_differs_accepted");
+	char updated[256];
+
+	if (mixed_coop_differs_remembered(level))
+		return;
+	snprintf(updated, sizeof(updated), "%s%s%s", list && list[0] ? list : "", list && list[0] ? "," : "",
+		mixed_coop_level_stems[level]);
+	if (!config_write_string("network.mixed_differs_accepted", updated))
+		platform_log("mixed play: the answer for %s could not be kept", mixed_coop_level_stems[level]);
+}
+
+/* (tests) HALO_TEST_MIXED_DIFFERS_ANSWER=yes or no answers the question at once: 1, 0, or -1 (asked) */
+static int mixed_coop_differs_test_answer(
+	void)
+{
+	char const *answer = getenv("HALO_TEST_MIXED_DIFFERS_ANSWER");
+
+	if (!answer || !answer[0])
+		return -1;
+	return !strcasecmp(answer, "yes") || !strcmp(answer, "1") ? 1 : 0;
+}
+
+/* whether this machine plays `level` by its table: 1 yes (a map whose files match, or a map Halo PC rebuilt the
+player said yes to, now or once before), 0 the player said no (the game left, told so), -1 the player is asked (the
+game's start held, asked again each frame) */
+static int mixed_coop_client_only_answer(
+	int level)
+{
+	int answer;
+
+	if (!mixed_coop_rebuilt_level(level) || mixed_coop_differs_remembered(level))
+		return 1;
+	if (mixed_coop.differs_asked_level != level + 1)
+	{
+		mixed_coop.differs_asked_level = level + 1;
+		answer = mixed_coop_differs_test_answer();
+		if (answer < 0)
+		{
+			platform_log("mixed play: %s is Halo PC's version on this machine's files and the host can't send its "
+				"layout: the player is asked", mixed_coop_level_stems[level]);
+			platform_ask_question(T("Halo: map"), T("This map is Halo PC's version on your files: some walls and "
+				"scenery won't match the host's. Play anyway?"));
+			return -1;
+		}
+	}
+	else
+	{
+		answer = platform_question_answer();
+		if (answer < 0)
+			return -1;
+	}
+	mixed_coop.differs_asked_level = 0;
+	platform_log("mixed play: %s on Halo PC's version, the host's layout unknown: the player said %s",
+		mixed_coop_level_stems[level], answer ? "play anyway" : "no");
+	if (!answer)
+	{
+		mixed_coop.leave_level = level + 1;
+		mixed_coop_leave(T("Not joined: %s is Halo PC's version on your MCC files, and this host can't send its layout. "
+			"Join with the Xbox's maps to play it as the host does."), custom_edition_maps_level_title(
+			mixed_coop_level_stems[level]));
+		return 0;
+	}
+	mixed_coop_differs_remember(level);
+	return 1;
+}
+
+/* (1.1.3) the host never said it plays mixed (an older build, an OpenCE or ChupathingyCE host): this machine plays
+by its built-in table of the Xbox's level, as it would by the host's dictionary - 1; the player asked, -1; else
+refused as before (no table, network.mixed_client_only off, or the player said no) - 0 */
+static int mixed_coop_client_only_take(
+	struct network_game *game,
+	int level,
+	char const *where)
+{
+	int answer;
+
+	if (mixed_coop.client_only && mixed_coop.host_level == level)
+		return 1;
+	if (level < 0 || level >= MIXED_COOP_LEVELS || !mixed_coop_table_present(level) ||
+		!config_boolean("network.mixed_client_only"))
+	{
+		mixed_coop_refuse_older_host(game, level, where);
+		return 0;
+	}
+	answer = mixed_coop_client_only_answer(level);
+	if (answer <= 0)
+		return answer;
+	/* (Delta Peer, a PC host's: its HELLO offered mixed_maps - this machine said what it plays; the host said
+	nothing of it: BYE) */
+	if (network_wire_crossplay())
+		mixed_coop_delta_end();
+	mixed_coop.client_only = TRUE;
+	mixed_coop.host_said = TRUE;
+	mixed_coop.host_family = _mixed_coop_family_xbox;
+	mixed_coop.host_level = level;
+	mixed_coop.host_session = 0;
+	platform_log("mixed play: the host never said it plays mixed (%s): %s played by this build's table of the Xbox's "
+		"level%s, %s", network_wire_crossplay() ? "a PC host" : "an older build", mixed_coop_level_stems[level],
+		mixed_coop_rebuilt_level(level) ? " (Halo PC rebuilt it: the host's collision decides)" : "", where);
+	return 1;
+}
+
+/* (1.1.3) the layout a table gives Blood Gulch, Battle Creek or Sidewinder: the Xbox's placements' structure, each
+at the place of the MCC placement the table names (its tag the Xbox's), or that MCC placement itself standing in -
+made into a stream as the host's (MXL1), into the layout's reassembly (mixed_coop_layout_apply reads it as the
+host's) */
+static boolean mixed_coop_client_only_layout(
+	struct scenario const *scenario,
+	struct tag_schema_definition const *scenario_schema)
+{
+	uint8_t *table = NULL;
+	uint32_t length = 0, skeleton_length;
+	struct mixed_coop_layout skeleton;
+	struct mixed_coop_dictionary_writer writer;
+	char why[96];
+	uint8_t const *sources;
+	uint32_t source_count = 0, source_at = 0;
+	short block;
+	boolean ok = FALSE;
+
+	if (!mixed_coop_table_layout(mixed_coop.level, &table, &length))
+	{
+		mixed_coop_leave(T("This build has no table of %s's placements: Xbox and MCC files can't play it together "
+			"with this host."), mixed_coop_level_stems[mixed_coop.level]);
+		return FALSE;
+	}
+	if (length < 8 || mixed_coop_read_u32(table) != MIXED_COOP_TABLE_LAYOUT_MAGIC ||
+		(skeleton_length = mixed_coop_read_u32(table + 4)) > length - 8 ||
+		!mixed_coop_layout_read(table + 8, skeleton_length, &skeleton, why, sizeof(why)) ||
+		skeleton.level != (uint8_t)mixed_coop.level)
+	{
+		platform_log("mixed play: %s's layout table could not be read", mixed_coop_level_stems[mixed_coop.level]);
+		goto done;
+	}
+	sources = table + 8 + skeleton_length;
+	source_count = (length - 8 - skeleton_length) / 4;
+	if (!mixed_coop.layout_reassembly)
+		mixed_coop.layout_reassembly = malloc(sizeof(*mixed_coop.layout_reassembly));
+	if (!mixed_coop.layout_reassembly)
+		goto done;
+	mixed_coop_layout_reassembly_begin(mixed_coop.layout_reassembly, 0, (uint8_t)mixed_coop.level);
+	mixed_coop_writer_begin(&writer, mixed_coop.layout_reassembly->bytes, MIXED_COOP_LAYOUT_MAXIMUM_BYTES);
+	mixed_coop_writer_u32(&writer, MIXED_COOP_LAYOUT_MAGIC);
+	mixed_coop_writer_u16(&writer, MIXED_COOP_LAYOUT_VERSION);
+	mixed_coop_writer_u8(&writer, (uint8_t)mixed_coop.level);
+	mixed_coop_writer_u8(&writer, (uint8_t)(2 * NUMBEROF(mixed_coop_layout_blocks) + 1));
+	for (block = 0; block < NUMBEROF(mixed_coop_layout_blocks); block++)
+	{
+		int palette_kind = mixed_coop_layout_blocks[block].palette_kind, kind = mixed_coop_layout_blocks[block].placements_kind;
+		struct tag_block const *local_palette = (struct tag_block const *)((byte const *)scenario +
+			mixed_coop_layout_blocks[block].palette_offset);
+		struct tag_block const *local = (struct tag_block const *)((byte const *)scenario +
+			mixed_coop_layout_blocks[block].placements_offset);
+		long element_size = mixed_coop_scenario_element_size(scenario_schema, mixed_coop_layout_blocks[block].placements);
+		uint32_t palette_count = skeleton.blocks[palette_kind].count, count = skeleton.blocks[kind].count, index;
+		uint32_t stand_ins = 0;
+		uint8_t const *palette_bytes = skeleton.blocks[palette_kind].elements;
+		uint8_t const *placement_bytes = skeleton.blocks[kind].elements;
+
+		if (!palette_bytes || !placement_bytes || skeleton.blocks[palette_kind].element_bytes != MIXED_COOP_LAYOUT_PALETTE_BYTES ||
+			skeleton.blocks[kind].element_bytes != (uint16_t)element_size || !local->address || source_at + count > source_count)
+		{
+			platform_log("mixed play: %s's layout table is another version's", mixed_coop_level_stems[mixed_coop.level]);
+			goto done;
+		}
+		/* (the stand-ins' tags: each one's MCC palette entry, after the Xbox's) */
+		for (index = 0; index < count; index++)
+		{
+			stand_ins += sources[4 * (source_at + index) + 2] == _mixed_coop_table_source_stand_in;
+		}
+		mixed_coop_writer_u8(&writer, (uint8_t)palette_kind);
+		mixed_coop_writer_u8(&writer, 0);
+		mixed_coop_writer_u16(&writer, MIXED_COOP_LAYOUT_PALETTE_BYTES);
+		mixed_coop_writer_u32(&writer, palette_count + stand_ins);
+		for (index = 0; index < palette_count * MIXED_COOP_LAYOUT_PALETTE_BYTES; index++)
+			mixed_coop_writer_u8(&writer, palette_bytes[index]);
+		for (index = 0; index < count; index++)
+		{
+			uint16_t source = (uint16_t)(sources[4 * (source_at + index)] | sources[4 * (source_at + index) + 1] << 8);
+			struct scenario_object_datum const *mcc;
+			short at;
+
+			if (sources[4 * (source_at + index) + 2] != _mixed_coop_table_source_stand_in)
+				continue;
+			if (source >= local->count)
+				goto bad_source;
+			mcc = (struct scenario_object_datum const *)((byte const *)local->address + source * element_size);
+			if (mcc->palette_entry_index < 0 || mcc->palette_entry_index >= local_palette->count || !local_palette->address)
+				goto bad_source;
+			{
+				struct scenario_object_palette_entry const *entry =
+					(struct scenario_object_palette_entry const *)local_palette->address + mcc->palette_entry_index;
+				struct cache_file_tag_instance_view *instance = mixed_coop_instance(entry->reference.index);
+
+				mixed_coop_writer_u32(&writer, instance ? (uint32_t)instance->group_tag : 0);
+				mixed_coop_writer_u32(&writer, instance && instance->name ? mixed_coop_tag_path_hash(entry->reference.index) : 0);
+				for (at = 0; at < MIXED_COOP_LAYOUT_PATH_BYTES; at++)
+					mixed_coop_writer_u8(&writer, 0);
+			}
+		}
+		mixed_coop_writer_u8(&writer, (uint8_t)kind);
+		mixed_coop_writer_u8(&writer, 0);
+		mixed_coop_writer_u16(&writer, (uint16_t)element_size);
+		mixed_coop_writer_u32(&writer, count);
+		{
+			uint32_t next_stand_in = palette_count;
+
+			for (index = 0; index < count; index++)
+			{
+				uint8_t const *xbox_element = placement_bytes + index * element_size;
+				uint16_t source = (uint16_t)(sources[4 * (source_at + index)] | sources[4 * (source_at + index) + 1] << 8);
+				uint8_t kind_of_source = sources[4 * (source_at + index) + 2];
+				uint8_t element[MIXED_COOP_LAYOUT_MAXIMUM_PLACEMENT_BYTES];
+				uint8_t const *mcc;
+				long at;
+
+				if (source >= local->count || element_size > (long)sizeof(element) || element_size < 32)
+					goto bad_source;
+				mcc = (uint8_t const *)local->address + source * element_size;
+				csmemcpy(element, xbox_element, (size_t)element_size);
+				/* (its place and turn: the MCC placement's - scenario_object_datum's position and rotation) */
+				csmemcpy(element + 8, mcc + 8, 24);
+				if (kind_of_source == _mixed_coop_table_source_stand_in)
+				{
+					/* (the MCC object itself, its own tag, at its place: an Xbox placement with nothing of its own near
+					on this machine's file, which holds the Xbox's index for the objects after it) */
+					short palette_index = (short)next_stand_in++;
+
+					csmemcpy(element, &palette_index, sizeof(palette_index));
+				}
+				for (at = 0; at < element_size; at++)
+					mixed_coop_writer_u8(&writer, element[at]);
+			}
+		}
+		platform_log("mixed play: %s's %s by the table: %lu Xbox placements (%lu stood in by MCC's own), this file's %ld",
+			mixed_coop_level_stems[mixed_coop.level], mixed_coop_layout_blocks[block].placements, (unsigned long)count,
+			(unsigned long)stand_ins, local->count);
+		source_at += count;
+	}
+	/* (no netgame flags: this machine keeps its own, mixed_coop_layout_apply) */
+	mixed_coop_writer_u8(&writer, MIXED_COOP_LAYOUT_NETGAME_FLAGS);
+	mixed_coop_writer_u8(&writer, 0);
+	mixed_coop_writer_u16(&writer, MIXED_COOP_NETGAME_FLAG_BYTES);
+	mixed_coop_writer_u32(&writer, 0);
+	mixed_coop.layout_reassembly->total_bytes = mixed_coop_writer_end(&writer);
+	if (!mixed_coop.layout_reassembly->total_bytes)
+		goto done;
+	mixed_coop.layout_complete = TRUE;
+	ok = TRUE;
+	goto done;
+bad_source:
+	platform_log("mixed play: %s's layout table names a placement this file has not", mixed_coop_level_stems[mixed_coop.level]);
+done:
+	mixed_coop_table_free(table);
+	if (!ok)
+	{
+		mixed_coop_leave(T("Your MCC files' %s isn't the one this build's table was made for: Xbox and MCC files can't "
+			"play it together with this host."), mixed_coop_level_stems[mixed_coop.level]);
+	}
+	return ok;
+}
+
 /* (the crossplay wire: a PC host's game) the host asked over Delta Peer whether it plays mixed (mixed_coop_delta.h);
 its MIXED_HELLO then comes as a Vita host's hello does */
 static boolean mixed_coop_crossplay_asked;
@@ -4415,8 +4830,11 @@ static void mixed_coop_client_lobby_update(
 	/* (a PC host whose Delta Peer said no, or said nothing in its 4 s: refused now) */
 	if (now - mixed_coop.lobby_hello_since >= MIXED_COOP_HELLO_WAIT_MILLISECONDS || mixed_coop_crossplay_said_no())
 	{
+		/* (1.1.3: played by this build's table; the player asked first on a map Halo PC rebuilt - each frame until
+		answered) */
+		if (mixed_coop_client_only_take(game, level, "in its lobby, before the map loads") < 0)
+			return;
 		mixed_coop.lobby_hello_since = 0;
-		mixed_coop_refuse_older_host(game, level, "in its lobby, before the map loads");
 	}
 }
 
@@ -4459,6 +4877,11 @@ void mixed_coop_client_dispose(
 	mixed_coop.start_pending = NULL;
 	mixed_coop.start_waits_hello = FALSE;
 	mixed_coop.lobby_hello_since = 0;
+	mixed_coop.client_only = FALSE;
+	mixed_coop.start_waits_answer = FALSE;
+	if (mixed_coop.differs_asked_level)
+		platform_ask_question(NULL, NULL);
+	mixed_coop.differs_asked_level = 0;
 }
 
 /* ---------- (r4) a joiner's: the host's layout before the map loads */
@@ -4519,6 +4942,27 @@ int mixed_coop_client_start_waits(
 		return TRUE;
 	}
 	level = mixed_coop_level_index(game->map.name);
+	/* (1.1.3, by a table: no layout to ask for - the table has it; a map Halo PC rebuilt asked about first) */
+	if (mixed_coop.client_only)
+	{
+		if (level < 0 || mixed_coop_local_family(level) != _mixed_coop_family_mcc)
+			return FALSE;
+		mixed_coop.host_level = level;
+		if (!mixed_coop_table_present(level))
+		{
+			mixed_coop.leave_level = level + 1;
+			mixed_coop_leave(T("This game's host plays %s from the Xbox's files on a version that can't play it with MCC's "
+				"files: the host needs to update its game, or join with your Xbox files."),
+				custom_edition_maps_level_title(game->map.name));
+			return FALSE;
+		}
+		if (mixed_coop_client_only_answer(level) >= 0)
+			return FALSE;
+		mixed_coop.start_waits_answer = TRUE;
+		mixed_coop.start_pending = client;
+		mixed_coop.start_pending_since = system_milliseconds();
+		return TRUE;
+	}
 	/* (the host's hello may name the map before this one - a map cycle's next game: the host's family as it said,
 	the map the game settings name; the host answers for the map it plays) */
 	if (!mixed_coop_host_layout_level(level) || !mixed_coop.host_said ||
@@ -4580,10 +5024,30 @@ static void mixed_coop_client_start_update(
 		mixed_coop_crossplay_ask(client);
 		if (now - mixed_coop.start_pending_since >= MIXED_COOP_HELLO_WAIT_MILLISECONDS || mixed_coop_crossplay_said_no())
 		{
+			/* (1.1.3: played by this build's table, the start held while the player is asked) */
+			int taken = mixed_coop_client_only_take(network_game_client_get_game(client), mixed_coop.host_level,
+				"as its game starts, before the map loads");
+
+			if (taken < 0)
+				return;
 			mixed_coop.start_waits_hello = FALSE;
 			mixed_coop.start_pending = NULL;
-			mixed_coop_refuse_older_host(network_game_client_get_game(client), mixed_coop.host_level, "as its game starts, before the map loads");
+			if (taken > 0 && !network_game_client_game_has_started(client))
+				network_event("network_game_client_game_has_started() failed");
 		}
+		return;
+	}
+	/* (1.1.3, by a table: a map cycle's next map Halo PC rebuilt, the player asked) */
+	if (mixed_coop.start_waits_answer)
+	{
+		int answer = mixed_coop_client_only_answer(mixed_coop.host_level);
+
+		if (answer < 0)
+			return;
+		mixed_coop.start_waits_answer = FALSE;
+		mixed_coop.start_pending = NULL;
+		if (answer > 0 && !network_game_client_game_has_started(client))
+			network_event("network_game_client_game_has_started() failed");
 		return;
 	}
 	if (mixed_coop.layout_complete)
@@ -4746,13 +5210,17 @@ static boolean mixed_coop_build_stream(
 		{
 			struct scenario_netgame_flag const *entry = (struct scenario_netgame_flag const *)scenario->netgame_flags.address + flag;
 			real const values[4] = { entry->position.x, entry->position.y, entry->position.z, entry->facing };
+			real const unplaced[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+			/* (1.1.3, the built-in tables, mixed_coop_tables.h: the flags' types and teams alone, no places - a
+			client playing by a table keeps its own file's places) */
+			real const *written = mixed_coop_table_writing ? unplaced : values;
 			short value;
 
 			for (value = 0; value < 4; value++)
 			{
 				uint32_t word;
 
-				csmemcpy(&word, &values[value], sizeof(word));
+				csmemcpy(&word, &written[value], sizeof(word));
 				mixed_coop_writer_u32(&writer, word);
 			}
 			mixed_coop_writer_u16(&writer, (uint16_t)entry->type);
@@ -4778,6 +5246,9 @@ void mixed_coop_handle_request(
 	void const *entries,
 	short count)
 {
+	/* (tests: a host without mixed play drops these unread) */
+	if (getenv("HALO_TEST_MIXED_HOST_SILENT"))
+		return;
 	struct mixed_coop_request request;
 	uint32_t offset;
 	uint16_t fragments, fragment;
@@ -4883,6 +5354,9 @@ void mixed_coop_handle_collision(
 	short count,
 	unsigned short entries_size)
 {
+	/* (tests: a host without mixed play drops these unread) */
+	if (getenv("HALO_TEST_MIXED_HOST_SILENT"))
+		return;
 	struct mixed_coop_fragment fragment;
 	struct mixed_collision_stream stream;
 	char why[160];
@@ -5061,6 +5535,8 @@ static void mixed_coop_client_send_collision(
 	mixed_coop_free(stream);
 }
 
+static void mixed_coop_dictionary_take(uint8_t const *bytes, uint32_t length);
+
 int mixed_coop_client_ready_allowed(
 	void)
 {
@@ -5078,8 +5554,12 @@ int mixed_coop_client_ready_allowed(
 	{
 		if (mixed_coop.family == _mixed_coop_family_mcc)
 		{
-			/* (refused before the load since 8l - mixed_coop_client_start_waits -; this one only if that was missed) */
-			mixed_coop_refuse_older_host(game, mixed_coop.level, "with the level loaded");
+			/* (refused before the load since 8l - mixed_coop_client_start_waits -; this one only if that was missed:
+			1.1.3, by a table where the level needs no layout) */
+			if (mixed_coop_host_layout_level(mixed_coop.level))
+				mixed_coop_refuse_older_host(game, mixed_coop.level, "with the level loaded");
+			else if (mixed_coop_client_only_take(game, mixed_coop.level, "with the level loaded") > 0)
+				return mixed_coop_client_ready_allowed();
 			return FALSE;
 		}
 		return TRUE;
@@ -5088,6 +5568,29 @@ int mixed_coop_client_ready_allowed(
 	if (mixed_coop.host_family == _mixed_coop_family_xbox && mixed_coop.family == _mixed_coop_family_xbox)
 		return TRUE;
 	mixed_coop.needs_dictionary = TRUE;
+	/* (1.1.3, by a table: the Xbox's level's dictionary this build carries, taken as a host's) */
+	if (mixed_coop.client_only)
+	{
+		if (!mixed_coop.requested)
+		{
+			uint8_t *table = NULL;
+			uint32_t length = 0;
+
+			mixed_coop.requested = TRUE;
+			mixed_coop.requested_time = now;
+			if (!mixed_coop_table_dictionary(mixed_coop.level, &table, &length))
+			{
+				mixed_coop_leave(T("This build has no table of %s: Xbox and MCC files can't play it together with this "
+					"host."), mixed_coop_level_stems[mixed_coop.level]);
+				return FALSE;
+			}
+			platform_log("mixed play: %s's dictionary from this build's table (%lu bytes)", mixed_coop_level_stems[mixed_coop.level],
+				(unsigned long)length);
+			mixed_coop_dictionary_take(table, length);
+			mixed_coop_table_free(table);
+		}
+		return mixed_coop.matched;
+	}
 	if (!mixed_coop.requested)
 	{
 		struct
@@ -5471,6 +5974,14 @@ static void mixed_coop_dictionary_take(
 				"together."), mixed_coop_level_stems[mixed_coop.level], first_difference);
 		return;
 	}
+	/* (1.1.3, by a table on a map Halo PC rebuilt: the Xbox's placements on MCC's places - the host's collision and
+	objects decide) */
+	if (layout_differs && mixed_coop.client_only && mixed_coop_rebuilt_level(mixed_coop.level))
+	{
+		platform_log("mixed play: %s's placements differ from the Xbox's on this machine's files (Halo PC rebuilt it): "
+			"played with the host's collision deciding", mixed_coop_level_stems[mixed_coop.level]);
+		layout_differs = FALSE;
+	}
 	if (layout_differs)
 	{
 		mixed_coop_leave(T("The host's %s and yours place the level's objects differently: Xbox and MCC files can't "
@@ -5485,13 +5996,22 @@ static void mixed_coop_dictionary_take(
 		struct scenario *scenario = global_scenario_get();
 		long flag, moved = 0;
 
-		if (!scenario || dictionary.netgame_flag_count != (uint32_t)scenario->netgame_flags.count)
+		/* (1.1.3, by a table on a map Halo PC rebuilt: this file's own flags, the host's unknown - teleporters a
+		little off are the host's to correct) */
+		if (mixed_coop.client_only && mixed_coop_rebuilt_level(mixed_coop.level))
+		{
+			platform_log("mixed play: %s's netgame flags this file's own (%ld; the Xbox's %lu)",
+				mixed_coop_level_stems[mixed_coop.level], scenario ? scenario->netgame_flags.count : 0L,
+				(unsigned long)dictionary.netgame_flag_count);
+		}
+		else if (!scenario || dictionary.netgame_flag_count != (uint32_t)scenario->netgame_flags.count)
 		{
 			mixed_coop_leave(T("The host's %s and yours have different flags (teleporters, CTF flags, hills): Xbox and MCC "
 				"files can't play this map together."), mixed_coop_level_stems[mixed_coop.level]);
 			return;
 		}
-		for (flag = 0; flag < scenario->netgame_flags.count; flag++)
+		for (flag = 0; !(mixed_coop.client_only && mixed_coop_rebuilt_level(mixed_coop.level)) &&
+			flag < scenario->netgame_flags.count; flag++)
 		{
 			struct scenario_netgame_flag const *entry = (struct scenario_netgame_flag const *)scenario->netgame_flags.address + flag;
 			struct mixed_coop_netgame_flag host;
@@ -5504,7 +6024,8 @@ static void mixed_coop_dictionary_take(
 				return;
 			}
 		}
-		for (flag = 0; flag < scenario->netgame_flags.count; flag++)
+		/* (by a table: the flags' types and teams checked above, their places this file's own - the table has none) */
+		for (flag = 0; !mixed_coop.client_only && flag < scenario->netgame_flags.count; flag++)
 		{
 			struct scenario_netgame_flag *entry = (struct scenario_netgame_flag *)scenario->netgame_flags.address + flag;
 			struct mixed_coop_netgame_flag host;
@@ -5796,6 +6317,8 @@ void mixed_coop_placed_hash(
 	uint32_t placed = MIXED_COOP_FNV_BASIS;
 	long objects = 0;
 
+	if (mixed_coop.loaded && mixed_coop.family == _mixed_coop_family_xbox && !mixed_coop.network_coop)
+		mixed_coop_table_dump_layout("xbox", global_scenario_get());
 	if (!getenv("HALO_MIXED_COOP_HASH") || !mixed_coop.loaded || !mixed_coop.network_coop)
 		return;
 	/* (every object the map placed, by its index and the path of its
