@@ -2342,7 +2342,8 @@ crossmcc)
 	[ -n "$chupa" ] && [ -x "$chupa" ] && mcc_host=chupa
 	export XPPC_TWO_COPIES=1
 	for map in ${XPPC_MCC_MAPS:-longest bloodgulch}; do
-		client_maps=$out/maps-none host_game=$map host_variants=${XPPC_MCC_GAME:-slayer} \
+		# (HALO_NET_MAPS_URL empty: ChupathingyCE 0.9.1 looks its maps up at maps.chupathingy.org otherwise)
+		host_extra="HALO_NET_MAPS_URL=" client_maps=$out/maps-none host_game=$map host_variants=${XPPC_MCC_GAME:-slayer} \
 			client_extra="HALO_CONTENT_ROOT=$out/mcc-content HALO_TEST_MIXED_DIFFERS_ANSWER=yes HALO_MIXED_COOP_HASH=1" \
 			pair mcc-$map lan $mcc_host ours
 	done

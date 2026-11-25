@@ -3804,9 +3804,13 @@ static void mixed_coop_table_dump_layout(
 HALO_MIXED_COOP_FORCE and HALO_MIXED_TABLE_OUT=1 loading a mixed level alone writes the dictionary an
 Xbox-files host would send for it, without the netgame flags' places, as hex lines in its log, once its first
 structure BSP is loaded (its collision digests in it; later BSPs' 0, not compared) */
+boolean pc_menu_tag(long tag_index);
+
 static void mixed_coop_table_write(
 	void)
 {
+	long table_full_count;
+
 	if (!getenv("HALO_MIXED_TABLE_OUT") || !getenv("HALO_MIXED_COOP_FORCE") || mixed_coop.family != _mixed_coop_family_xbox ||
 		mixed_coop.network_coop || game_connection() == _game_connection_network_client ||
 		game_connection() == _game_connection_network_server)
@@ -3815,14 +3819,28 @@ static void mixed_coop_table_write(
 	}
 	mixed_coop_free(mixed_coop.stream);
 	mixed_coop.stream = NULL;
+	/* (the map file's own tags alone: the menus' tags this machine added after them, menu_tags.c, are left out - they
+	are added or not as the menus load, and no stock host has them) */
+	{
+		long count = mixed_coop.tag_count;
+
+		while (count > 0 && pc_menu_tag(mixed_coop_instances()[count - 1].tag_index))
+			count--;
+		if (count != mixed_coop.tag_count)
+			platform_log("mixed table: %ld menu tags after the map's %ld left out", mixed_coop.tag_count - count, count);
+		table_full_count = mixed_coop.tag_count;
+		mixed_coop.tag_count = count;
+	}
 	mixed_coop_table_writing = TRUE;
 	if (!mixed_coop_build_stream())
 	{
+		mixed_coop.tag_count = table_full_count;
 		mixed_coop_table_writing = FALSE;
 		platform_log("mixed table: %s's stream could not be built", mixed_coop_level_stems[mixed_coop.level]);
 		return;
 	}
 	mixed_coop_table_writing = FALSE;
+	mixed_coop.tag_count = table_full_count;
 	mixed_coop_table_hex("table", "xbox", mixed_coop.stream, mixed_coop.stream_length);
 	mixed_coop_free(mixed_coop.stream);
 	mixed_coop.stream = NULL;

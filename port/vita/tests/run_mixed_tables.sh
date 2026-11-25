@@ -5,7 +5,7 @@
 # then tools/mixed_tables.py. With OUT.inc it writes that file; without, it compares with the tables built in and
 # exits 0 when they are the same (PASS). Needs HALO_TEST_DATA (the Xbox maps folder's parent, default
 # ~/github/vitaprojects/halo-ce/data2276) and HALO_TEST_MCC_ROOT (a Halo content folder: <root>/halo1/maps).
-bin=${1:?BIN} target=${2:-}
+bin=$(readlink -f "${1:?BIN}") target=${2:-}
 here=$(cd "$(dirname "$0")" && pwd); root=$(cd "$here/../../.." && pwd)
 data=${HALO_TEST_DATA:-$HOME/github/vitaprojects/halo-ce/data2276}
 mccroot=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection}
