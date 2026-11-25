@@ -2813,7 +2813,11 @@ is - once a start, until it is fixed. halo_ce_files_state is the settings panel'
 choices and Steam Workshop row greyed out: vita_settings.c) */
 
 void platform_translate_path(const char *xbox_path, char *host_path, unsigned long host_path_size);
+/* (posix_ce_installer.c: the Linux build's and the Vita's alone, not Windows' or Android's) */
+#if (defined(__linux__) && !defined(__ANDROID__)) || defined(HALO_VITA)
+#define CE_FILES_INSTALLER 1
 int ce_installer_find(const char *directory, char *path, int path_size, unsigned long long *size);
+#endif
 /* (system_link_shortcut.c's) 1 the files are there, -1 not (or not Custom Edition's), 0 not checked yet */
 extern volatile int halo_ce_files_state;
 
@@ -2892,6 +2896,7 @@ static void ce_files_check(boolean recheck)
 	if (recheck || ce_files_noticed || (getenv("HALO_CE_FILES_NOTICE") && !atoi(getenv("HALO_CE_FILES_NOTICE"))))
 		return;
 	/* (a Custom Edition installer copied in: the game takes the files from it at start - its own screens) */
+#ifdef CE_FILES_INSTALLER
 	{
 		char root[300], installer[512];
 		unsigned long long size;
@@ -2904,6 +2909,7 @@ static void ce_files_check(boolean recheck)
 			return;
 		}
 	}
+#endif
 	ce_files_noticed = TRUE;
 	snprintf(text, sizeof(text), "%s", T("Halo CE needs 3 files from Halo Custom Edition (PC): bitmaps.map, loc.map, "
 		"sounds.map."));
