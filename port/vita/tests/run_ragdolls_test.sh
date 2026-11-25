@@ -203,6 +203,16 @@ for c in $cases; do
 			HALO_RAGDOLLS=0 & ;;
 	a10) run "$c" 60 "$a10" "$a10_out;L600:@ragdoll kill 4 30;L630:@ragdoll stats;L1300:@ragdoll stats;L1300:@ragdoll check" & ;;
 	bloodgulch) run "$c" 50 "$bloodgulch" "L300:@kill 0;L310:@ragdoll stats;L700:@ragdoll stats;L700:@ragdoll check" & ;;
+	shots)
+		# (screenshots, the debug camera on the test's target: a grunt shot
+		# standing, a marine thrown by a grenade, a grunt struck by a melee
+		# blow; HALO_SCREENSHOT_DIR=$out/shotpics)
+		mkdir -p "$out/shotpics"
+		g=""; for t in 1501 1503 1506 1510 1515 1522 1530 1545 1570 1600; do g="$g;L$t:@ragdoll cam 0.9 90 25;L$t:@shot grunt-shot-$t"; done
+		m=""; for t in 1652 1656 1662 1670 1680 1695 1710 1730 1760 1800 1850; do m="$m;L$t:@ragdoll cam 1.6 90 20;L$t:@shot marine-grenade-$t"; done
+		p=""; for t in 1901 1903 1906 1910 1915 1922 1930 1945 1970 2000; do p="$p;L$t:@ragdoll cam 0.9 90 25;L$t:@shot grunt-melee-$t"; done
+		run "$c" 130 "$b30" "$b30_setup;L1500:@ragdoll shoot 1 60 grunt;L1500:@ragdoll cam 0.9 90 25$g;L1650:@ragdoll boom 1 60 marine;L1650:@ragdoll cam 1.6 90 20$m;L1900:@ragdoll punch 1 60 grunt;L1900:@ragdoll cam 0.9 90 25$p;L2005:@ragdoll stats;L2005:@ragdoll check" \
+			HALO_SCREENSHOT_DIR="$out/shotpics" & ;;
 	*) echo "unknown case $c"; exit 2 ;;
 	esac
 	started+=("$c")
@@ -214,10 +224,17 @@ for c in "${started[@]}"; do
 	log="$out/$c/run.log"
 	case $c in
 	b30)
-		s1=$(stats "$c" 1565 started) a1=$(stats "$c" 1565 most_awake) k1=$(stats "$c" 1565 most_kept)
-		expect "$c" "ragdolls made: $s1 by tick 1565 (grenades, then kills)" gt "${s1:-0}" 5
-		expect "$c" "marines' and grunts' bodies, an explosion's thrown" \
-			sh -c "grep -aq 'ragdolls: .*(marine.*started' '$log' && grep -aq 'ragdolls: .*(grunt) started' '$log' && grep -aq 'started in slot .*an explosion' '$log'"
+		# (each body plays its death animation first: the kills' ragdolls
+		# start some ticks after their deaths, the grenades' flying bodies
+		# later still, when they come down)
+		s1=$(stats "$c" 2400 started) a1=$(stats "$c" 2400 most_awake) k1=$(stats "$c" 2400 most_kept)
+		expect "$c" "ragdolls made: $s1 by tick 2400 (grenades, then kills)" gt "${s1:-0}" 5
+		expect "$c" "marines' and grunts' bodies, an explosion's thrown into the air" \
+			sh -c "grep -aq 'ragdolls: .*(marine.*started' '$log' && grep -aq 'ragdolls: .*(grunt) started' '$log' && grep -aq 'thrown (an explosion' '$log'"
+		expect "$c" "death animation first: ragdolls taken over partway through it ($(grep -acE 'due [0-9]+ ticks after its death: (falling|about to meet the level|the animation.s key frame|partway)' "$log") hand-offs), then followed a moment" \
+			sh -c "grep -aqE 'due [1-9][0-9]* ticks after its death: (falling|about to meet the level|the animation.s key frame|partway)' '$log' && grep -aq 'follows its death 8 ticks' '$log'"
+		expect "$c" "the bodies thrown flew in their airborne death and went limp as they met the ground or landed" \
+			sh -c "grep -aqE 'due [0-9]+ ticks after its death: (about to meet the level|landed) \(.*airborne-dead|landing-dead' '$log'"
 		expect "$c" "four awake at most ($a1), twelve kept at most ($k1)" sh -c "[ '${a1:-9}' -le 4 ] && [ '${k1:-99}' -le 12 ]"
 		expect "$c" "awake ones simulated: $(stats "$c" 1565 busy) busy ticks, $(stats "$c" 1565 vectors) collision vectors" \
 			gt "$(stats "$c" 1565 vectors)" 100
@@ -254,8 +271,8 @@ for c in "${started[@]}"; do
 	b30-punch)
 		s1=$(stats "$c" 1505 started)
 		expect "$c" "ragdolls made by melee blows: $s1 by tick 1505" gt "${s1:-0}" 0
-		expect "$c" "a melee blow throws the body at once (no death animation followed)" \
-			sh -c "grep -aq 'started in slot .*a melee blow .* follows its death 0 ticks' '$log' && ! grep -aq 'a melee blow .* follows its death [1-9]' '$log'"
+		expect "$c" "a melee blow throws the body at once (no death animation followed), or into the air in its airborne death" \
+			sh -c "(grep -aq 'started in slot .*a melee blow .* follows its death 0 ticks' '$log' || grep -aq 'thrown (a melee blow' '$log') && ! grep -aq 'a melee blow .* follows its death [1-9]' '$log'"
 		for t in 1700 2000; do
 			expect "$c" "tick $t: none in solid structure ($(check "$c" $t solid) of $(check "$c" $t particles) particles), none not a number ($(check "$c" $t nan)), no knee or elbow bent the wrong way ($(check "$c" $t wrong))" \
 				sh -c "[ '$(check "$c" $t solid)' = 0 ] && [ '$(check "$c" $t nan)' = 0 ] && [ '$(check "$c" $t wrong)' = 0 ]"
