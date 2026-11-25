@@ -942,6 +942,11 @@ static struct setting settings[] = {
 	kept. Read as each fetch is due) */
 	{ "PC versions list", "HALO_NET_CROSSPLAY_UPDATES", 0, 2, { "true", "false" }, { "Auto", "Built-in" },
 		"Auto: gets the signed list of PC versions you can join", 0, PAGE_CROSSPLAY },
+	/* (1.1.3, network.mixed_client_only: with only MCC's files of a stock level, join a host that knows nothing of
+	mixed play - an older version, an OpenCE or ChupathingyCE PC - by this build's own tables of the Xbox's level,
+	mixed_coop_tables.h; Off refuses such a game as the insiders did. Read live) */
+	{ "MCC files, any host", "HALO_MIXED_CLIENT_ONLY", 0, 2, { "true", "false" }, { "On", "Off" },
+		"MCC files: join hosts without mixed play (built-in tables)", 0, PAGE_CROSSPLAY },
 	/* (bots.online: the bots a game this Vita hosts Online fills its lobby
 	with, to its most players less one, leaving as players join: Full by
 	default; the Halo 3 GAME OPTIONS' BOTS sets it too. Live. On Vita and PC
@@ -2111,6 +2116,8 @@ player_cosmetics.c; changed only by a press, change) */
 	Built-in means no fetch from this press on, not from the next start) */
 	if (!strcmp(setting->variable, "HALO_NET_CROSSPLAY_UPDATES"))
 		config_set_override("network.crossplay_updates", value);
+	if (!strcmp(setting->variable, "HALO_MIXED_CLIENT_ONLY"))
+		config_set_override("network.mixed_client_only", value);
 }
 
 /* a Play page text set (typed, loaded or a test command's): kept

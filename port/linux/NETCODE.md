@@ -339,6 +339,62 @@ Xbox-files host (`mixed_coop_multiplayer_refusal`).
 Tests: `run_netns_online_test.sh mixedmp` (`HALO_TEST_MIXED="HOST JOINER MAP
 GAME"`: the scoreboards and the state hashes agree) and `mixedrebuilt`.
 
+### Mixed play with any host (1.1.3)
+
+A host of an older build (1.1.2 and before, the official servers), an OpenCE
+host or a ChupathingyCE host knows nothing of mixed play: it never says hello
+and sends no dictionary. Every such host plays the stock levels from the
+Xbox's files, and no host checks a joiner's file of an Xbox level (its map
+version is 0 on every wire; ChupathingyCE's Delta MAP names an Xbox map by
+its name alone). So a machine with only MCC's copy of the level plays by a
+**built-in table** of the Xbox's level instead
+(`port/linux/game/mixed_coop_tables.h`, `network.mixed_client_only`, on by
+default): exactly the dictionary an Xbox-files host of this build would send
+(tags by group and path hash, their digests, datums, animation-name hashes,
+the level's digests, the netgame flags' types and teams; no tag data, no
+geometry, no places), made by `tools/mixed_tables.py` from the Xbox's maps
+with this build's own digests (`port/vita/tests/run_mixed_tables.sh`) and
+read with the same checked reader as a host's.
+
+- **When.** A joiner whose host has not said hello within
+  `MIXED_COOP_HELLO_WAIT_MILLISECONDS` (8 s; on the crossplay wire as soon as
+  the host's Delta Peer says no, or nothing in 4 s - its HELLO offered
+  `mixed_maps`, so a ChupathingyCE host is told openly what the machine
+  plays) takes its table (`mixed_coop_client_only_take`) instead of leaving.
+  It then plays as with an Xbox-files host of this build that sent the same
+  dictionary: the same checks, the MCC-only placements left out, the Xbox
+  values in code, the same translation of tag and animation indices, and
+  nothing more sent to the host than any client sends.
+- **Exact** (the files match the Xbox's, as measured): the ten campaign
+  levels; Chill Out, Longest, Prisoner, Chiron TL-34, Rat Race, Wizard,
+  Boarding Action and Damnation. The netgame flags keep this file's places
+  (Halo PC moved two by at most 0.25 wu; the host's are not in the table).
+- **Halo PC rebuilt** (Derelict, Hang 'Em High, Battle Creek, Blood Gulch,
+  Sidewinder): played in the Xbox-host-decides mode (above), the player asked
+  first: "This map is Halo PC's version on your files: some walls and scenery
+  won't match the host's. Play anyway?" (`mixed_coop_client_only_answer`;
+  yes is kept per map in `network.mixed_differs_accepted`; no leaves with
+  "Not joined"). The host's collision decides where the player is; the
+  walls and scenery MCC's file has differently stay as they are on this
+  machine. On Blood Gulch, Battle Creek and Sidewinder, whose placements
+  Halo PC changed, the table also has the Xbox's placements' structure: its
+  scenery and vehicle palettes by path hash, each placement with its place
+  left out, naming the MCC placement whose place it takes (matched by tag and
+  nearest when the table was made), or an MCC placement that stands in at its
+  own place, with its own tag, for an Xbox one MCC's file has nothing near -
+  so every object the map places has the Xbox's index on every machine
+  (`mixed_coop_client_only_layout`, then `mixed_coop_layout_apply` as with a
+  host's layout).
+- **Trust.** Nothing new is read from the network: the tables are this
+  build's own. The host decides as for any client (its own acceptance
+  tolerance, damage, spawns, pickups); the client only corrects its own
+  player to the host's sooner (`MIXED_COOP_HOST_DECIDES_TOLERANCE`).
+- Tests: `run_netns_online_test.sh mixedstock` (`HALO_TEST_MIXED_OLD_HOST`
+  an older build, else this build with `HALO_TEST_MIXED_HOST_SILENT=1`;
+  `HALO_TEST_MIXED_ANSWER=no`), `run_netns_crossplay_test.sh crossmcc`
+  (ChupathingyCE hosts), `run_mixed_tables.sh` (the tables made again from
+  the maps must be the ones built in).
+
 ## Versions
 
 The native builds' network code has a version, an unsigned 16-bit number

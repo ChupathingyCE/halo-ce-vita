@@ -504,9 +504,15 @@ For Halo PC's own maps and the PC community's servers, see
 and every Vita in a game needs the same version of this port and Xbox maps
 of a supported build (NTSC 01.10.12.2276 or 01.08.15.1749, PAL
 01.01.14.2342), or Halo MCC's maps (build 01.03.43.0000, Steam's
-`halo1/maps`). For now MCC players play MCC players' games and Xbox
-players Xbox players' games; a game on the other kind of maps is refused
-with a message (mixed MCC + Xbox games are coming). Choose how your Vita connects in the settings panel
+`halo1/maps`). The Xbox files are the recommended way to play; MCC's files
+are supported for players who can't get them, and play with the Xbox
+files in one game: co-op on all ten campaign levels and the stock
+multiplayer maps, with hosts of 1.1.3 and with hosts that know nothing of
+it (older versions, OpenCE and ChupathingyCE PCs). On the maps Halo PC
+rebuilt (Blood Gulch, Battle Creek, Sidewinder, Derelict, Hang 'Em High)
+MCC's files have Halo PC's version: with a host that can't send its layout
+some walls and scenery look different on MCC files, and the game asks
+before you join. Choose how your Vita connects in the settings panel
 (**SELECT + D-pad down**), **Multiplayer**, **Connection** (it applies after
 a restart):
 
