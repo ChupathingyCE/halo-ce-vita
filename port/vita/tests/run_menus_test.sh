@@ -359,6 +359,20 @@
 #            Spanish, the Vita's buttons)
 #   h3workshoptouch  the same browser by touch (HALO_TEST_TAPS): a tap on a card opens its details page, a tap
 #            on Back closes it, a swipe turns the page, a tap on SUBSCRIBED changes the tab
+#   cpworkshop  (1.1.3, the owner's Classic+ plan part A, Nov 24) Menu style Classic+'s own STEAM WORKSHOP and DOWNLOAD
+#            FROM STEAM (menus/classic/workshop.xml: cp/workshop/screen and cp/steam/screen, standing for the Halo 3
+#            look's) against steam_fake_server.py (a Steam Workshop test build alone; else SKIP), on the Xbox files and
+#            on MCC's files alone (HALO_TEST_MCC_ROOT; SKIP without), at the Vita's picture and C heap: SETTINGS >
+#            WORKSHOP - the notice, SIGN IN, the QR, POPULAR's eight as rows, two marked (Square), a row's details
+#            page (its pictures, Right; its description, Down), the tabs (R), Right turns the page (2, 3), a search,
+#            Start downloads the two (2900000001 installed by the game's map check, 2900000002 refused), signed in
+#            again: INSTALLED, Triangle twice removes it -, then SETTINGS > GAME MANAGER > DOWNLOAD FROM STEAM >
+#            STEAM WORKSHOP: signed in, the list, B signs out, B back to DOWNLOAD FROM STEAM, B to GAME MANAGER. Never
+#            a Halo 3 screen; no "classic text does not fit"; no token written. Then the Custom Edition files required
+#            (the owner, 1.1.3): the Xbox files without sounds.map - WORKSHOP opens nothing, DOWNLOAD FROM STEAM says
+#            "Needs the Custom Edition files" and starts nothing. With HALO_TEST_SHOTS, each screen's picture
+#   cpworkshoptouch  the same screen by touch (HALO_TEST_TAPS, the Xbox files): a tap on a row opens its details
+#            page, a tap on the Circle key closes it, a swipe across the rows turns the page
 #   steampanel  (1.1.3-insider.4) the settings panel's Download from Steam and Steam Workshop rows
 #            (HALO_SYSTEM_LINK_TEST=steam, workshop) in every Menu style (original, classic, halo3,
 #            online) on every install: the Xbox files alone (HALO_TEST_DATA, HALO_CONTENT_ROOT=none:
@@ -561,7 +575,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox cefiles h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox cefiles h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit cpworkshop cpworkshoptouch"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -2568,14 +2582,23 @@ for case in $cases; do
 						fail $sp_name "an assertion, exception or halt"
 					grep -aq "system link: the settings panel's .*: the $( [ $sp_row = steam ] && echo DOWNLOAD FROM STEAM ||
 						echo STEAM WORKSHOP) screen opened" "$log" || fail $sp_name "the panel's row did not open its screen"
-					grep -aq "ui: screen pc.h3.$sp_row.screen" "$log" || fail $sp_name "the screen did not open"
+					# (1.1.3, Classic+ plan part A: Menu style Classic+ with the menus' sets - the Halo PC files there -
+					# opens Classic+'s own, classic/workshop.xml's cp/<row>/screen; the Steam screens alone are the
+					# Halo 3 look's, the only ones there. MCC's files alone with Menu style Classic have Classic+'s
+					# screens for those Halo PC's menus have not - mixed play r3 -, these among them)
+					sp_set=h3
+					[ $sp_style = classic ] && [ $sp_install != xbox ] && sp_set=cp
+					[ $sp_style = original ] && [ $sp_install = mcc ] && sp_set=cp
+					grep -aq "ui: screen pc.$sp_set.$sp_row.screen" "$log" || fail $sp_name "the screen did not open"
+					[ $sp_set = cp ] && grep -aq "ui: screen pc.h3.$sp_row.screen" "$log" && fail $sp_name "the Halo 3 look's screen in Classic+"
 					# (B: back to the screen it opened over - the main menu, whichever)
-					awk -v want="pc\\\\h3\\\\$sp_row\\\\screen" '/ui: screen / { name = $NF; if (name == want) { seen = 1; next }
+					awk -v want="pc\\\\$sp_set\\\\$sp_row\\\\screen" '/ui: screen / { name = $NF; if (name == want) { seen = 1; next }
 						if (!seen) before = name; else if (name == before) back = 1 } END { exit !back }' "$log" ||
 						fail $sp_name "B did not go back to the screen it opened over"
-					# (the Xbox files alone, or MCC's alone with Menu style Classic: the game's own menus, the Steam
-					# screens alone; else the whole set)
-					if [ $sp_install = xbox ] || { [ $sp_install = mcc ] && [ $sp_style = original ]; }; then
+					# (the Xbox files alone: the game's own menus, the Steam screens alone; else the whole set - MCC's
+					# alone with Menu style Classic too since mixed play r3: Halo PC's own menus with the sets' screens
+					# for what they have not)
+					if [ $sp_install = xbox ]; then
 						grep -aq "menus: the Steam screens alone (the game's own menus):" "$log" ||
 							fail $sp_name "the Steam screens alone were not added"
 						grep -aq "menus: OpenCE" "$log" && fail $sp_name "OpenCE's screens were added"
@@ -3977,15 +4000,17 @@ PY
 		;;
 	ceplusmain)
 		# (1.1.3, owner Nov 21: the main menu is Halo PC's five - CAMPAIGN, MULTIPLAYER, PROFILES, SETTINGS,
-		# QUIT -, as ChupathingyCE's. SETTINGS, the fourth row: on a PC GAME MANAGER, FILE SHARE and FRIENDS -
-		# 1.1.3's MEDIA -, the settings panel's rows not there (no panel); MULTIPLAYER's ninth row GAME MODES:
+		# QUIT -, as ChupathingyCE's. SETTINGS, the fourth row: on a PC GAME MANAGER, WORKSHOP (Classic+'s STEAM
+		# WORKSHOP, 1.1.3's Classic+ plan part A), FILE SHARE and FRIENDS - 1.1.3's MEDIA -, the settings panel's
+		# rows not there (no panel); MULTIPLAYER's ninth row GAME MODES:
 		# FORGE, COMMAND, FIREFIGHT and GAMETYPES PLUS - 1.1.3's EXTRAS and the Multiplayer screen's ninth
 		# row -; PROFILES, the third: the Xbox's SELECT PROFILE TO EDIT. Each in the original look; A, then
 		# B back to the main menu)
 		d="down:150:500"
 		modes="$d a:150:3000 $d $d $d $d $d $d $d $d a:150:3000"
-		for row in "mods|$d $d $d a:150:3000|pc.ce.mods.screen|2" "fileshare|$d $d $d a:150:3000 $d|pc.ce.fileshare.screen|2" \
-			"friends|$d $d $d a:150:3000 $d $d|pc.classic.friends.screen|2" "forge|$modes|pc.cp.forge.lobby|3" \
+		for row in "mods|$d $d $d a:150:3000|pc.ce.mods.screen|2" "workshop|$d $d $d a:150:3000 $d|pc.cp.workshop.screen|2" \
+			"fileshare|$d $d $d a:150:3000 $d $d|pc.ce.fileshare.screen|2" \
+			"friends|$d $d $d a:150:3000 $d $d $d|pc.classic.friends.screen|2" "forge|$modes|pc.cp.forge.lobby|3" \
 			"command|$modes $d|pc.cp.command.lobby|3" "firefight|$modes $d $d|pc.cp.firefight.lobby|3" \
 			"gametypes|$modes $d $d $d|pc.cp.gametypes.screen|3" \
 			"profiles|$d $d|ui.shell.main_menu.settings_select.player_setup.player_profile_select_screen|1"; do
@@ -4004,11 +4029,11 @@ PY
 			sed -n "/ui: screen $screen/,\$p" "$log" | grep -aq "ui: screen ui.shell.main_menu.main_menu" ||
 				fail ceplusmain "$name: B did not go back to the Xbox's main menu"
 		done
-		# (SETTINGS on a PC: its three rows, none of the panel's)
-		grep -a "menus: ce settings:" "$out/ceplusmain_friends/run.log" | grep -aqvE "ce settings: (games|fileshare|friends)$" &&
+		# (SETTINGS on a PC: its four rows, none of the panel's)
+		grep -a "menus: ce settings:" "$out/ceplusmain_friends/run.log" | grep -aqvE "ce settings: (games|workshop|fileshare|friends)$" &&
 			fail ceplusmain "SETTINGS showed a settings panel's row on a PC"
 		grep -aq "menus: ce settings: friends" "$out/ceplusmain_friends/run.log" ||
-			fail ceplusmain "SETTINGS' third row on a PC was not FRIENDS"
+			fail ceplusmain "SETTINGS' fourth row on a PC was not FRIENDS"
 		# (the main menu's PROFILES and QUIT words made of the game's own letters - Q of O and E's foot -)
 		grep -aq "menu words: PROFILES (focused) made of the game's letters" "$out/ceplusmain_profiles/run.log" ||
 			fail ceplusmain "PROFILES was not made of the game's letters"
@@ -4368,7 +4393,11 @@ PY
 			"main_campaign|40|wait:150:4000 a:150:3500 a:150:3500 b:150:3000 b:150:3000 wait:150:1500|load_campaign_player_profile solo_level_select_screen load_campaign_player_profile main_menu.main_menu|"
 			"main_profiles|64|wait:150:4000 $d $d a:150:3500 a:150:3500 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:4000 b:150:3500 $d a:150:3000 wait:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|player_profile_select_screen player_profile_edit_screen controller_options_screen player_profile_edit_screen advanced_controls_screen player_profile_edit_screen color_select_screen player_profile_edit_screen pc.cp.custom.screen player_profile_edit_screen pc.ce.keys.screen player_profile_edit_screen player_profile_select_screen main_menu.main_menu|"
 			"main_newprofile|50|wait:150:4000 $d $d a:150:3500 y:150:3500 a:150:3500 a:150:3500 wait:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|player_profile_select_screen create_and_edit_player_profile_screen profile_name_screen create_and_edit_player_profile_screen main_menu.main_menu|HALO_TEST_TEXT_INPUT=Rookie"
-			"main_settings|40|wait:150:4000 $d $d $d a:150:3500 a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 b:150:3000 wait:150:1500|pc.ce.settings.screen pc.ce.mods.screen pc.ce.settings.screen pc.ce.fileshare.screen pc.ce.settings.screen pc.classic.friends.screen pc.ce.settings.screen main_menu.main_menu|"
+			"main_settings|46|wait:150:4000 $d $d $d a:150:3500 a:150:3500 b:150:3000 $d $d a:150:3500 b:150:3000 $d a:150:3500 b:150:3000 b:150:3000 wait:150:1500|pc.ce.settings.screen pc.ce.mods.screen pc.ce.settings.screen pc.ce.fileshare.screen pc.ce.settings.screen pc.classic.friends.screen pc.ce.settings.screen main_menu.main_menu|"
+			# (1.1.3, Classic+ plan part A: SETTINGS' WORKSHOP opens Classic+'s STEAM WORKSHOP; GAME MANAGER's DOWNLOAD FROM
+			# STEAM Classic+'s own, its STEAM WORKSHOP row the same Classic+ screen - never the Halo 3 look's, Nov 24)
+			"main_workshop|40|wait:150:4000 $d $d $d a:150:3500 $d a:150:3500 b:150:3000 b:150:3000 wait:150:1500|pc.ce.settings.screen pc.cp.workshop.screen pc.ce.settings.screen main_menu.main_menu|"
+			"main_steam|50|wait:150:4000 $d $d $d a:150:3500 a:150:3500 $d a:150:3500 $d $d a:150:3500 b:150:3000 b:150:3000 b:150:3000 b:150:3000 wait:150:1500|pc.ce.settings.screen pc.ce.mods.screen pc.cp.steam.screen pc.cp.workshop.screen pc.cp.steam.screen pc.ce.mods.screen pc.ce.settings.screen main_menu.main_menu|"
 			"main_quit|26|wait:150:4000 $d $d $d $d a:150:3000 b:150:3000 wait:150:1500|pc.ce.quit.screen main_menu.main_menu|"
 			"mp_code|30|$cpmp $d $d a:150:4000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen pc.code.screen pc.mp.screen main_menu.main_menu|$offnet"
 			"mp_setup|30|$cpmp $d $d $d a:150:4000 b:150:3000 b:150:3000 wait:150:1500|pc.mp.screen pc.setup.screen pc.mp.screen main_menu.main_menu|$offnet"
@@ -4440,6 +4469,149 @@ PY
 				done
 			done
 		done ;;
+	cpworkshop|cpworkshoptouch)
+		if ! grep -aq "port ce workshop row" "$binary" || ! grep -aq "HALO_STEAM_TEST_IMAGES" "$binary"; then
+			echo "--- $case"; echo "SKIP ($case): not a Steam Workshop test build (configure.py --steam-workshop --steam-test-ca)"
+			continue
+		fi
+		cw_mcc=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
+		ws_map=${HALO_TEST_WORKSHOP_MAP:-$cw_mcc/maps/chillout.map}
+		if [ ! -f "$ws_map" ]; then
+			echo "--- $case"; echo "SKIP ($case): no MCC map to serve (HALO_TEST_WORKSHOP_MAP)"
+			continue
+		fi
+		cw_setups="xbox"
+		if [ "$case" = cpworkshop ] && [ -r "$cw_mcc/maps/ui.map" ] && [ -r "$cw_mcc/maps/custom_edition/bitmaps.map" ]; then
+			cw_setups="xbox mcc"
+			rm -rf "$out/cw-content" "$out/cw-none"
+			mkdir -p "$out/cw-content/halo1/maps" "$out/cw-none/maps"
+			for file in "$cw_mcc"/maps/*.map "$cw_mcc"/maps/custom_edition; do ln -sfn "$file" "$out/cw-content/halo1/maps/"; done
+			for file in "$cw_mcc"/*; do [ "$(basename "$file")" = maps ] || ln -sfn "$file" "$out/cw-content/halo1/"; done
+		elif [ "$case" = cpworkshop ]; then
+			echo "--- $case"; echo "SKIP ($case, MCC's files alone): no MCC halo1 folder at $cw_mcc (HALO_TEST_MCC_ROOT)"
+		fi
+		d="down:150:500"
+		# (the main menu's SETTINGS, its WORKSHOP - after GAME MANAGER; the panel's rows are the Vita's alone -: the
+		# notice; A: SIGN IN, the QR, approved; the list)
+		cw_reach="wait:150:5000 $d $d $d a:150:3500 $d a:150:3500 @ws_notice wait:150:300 a wait:150:500 @ws_qr wait:150:14000 @ws_grid"
+		if [ "$case" = cpworkshop ]; then
+			# (Square marks row 0, Down, Square row 1; Up, Cross: row 0's details; Right: its second picture; Down: the
+			# description on; B. R four times: NEWEST, TOP RATED, SUBSCRIBED, POPULAR again. Right, Right: pages 2 and
+			# 3. Triangle: a search typed. Start: the two downloaded; the end, B (SETTINGS). A: WORKSHOP again, A:
+			# signed in, Cross: 2900000001's page (INSTALLED), Triangle twice: removed; B, B: signed out; B. Then
+			# GAME MANAGER (up), DOWNLOAD FROM STEAM, its STEAM WORKSHOP, A: signed in, the list; B signs out, B, B)
+			cw_pad="$cw_reach x:150:700 $d x:150:700 wait:150:500 @ws_marked wait:150:300 up:150:700 a wait:150:4500 @ws_details wait:150:300 right:150:3000 @ws_details_picture wait:150:300 $d @ws_details_scrolled wait:150:300 b wait:150:1500 rt wait:150:4000 @ws_newest wait:150:300 rt wait:150:4000 @ws_top wait:150:300 rt wait:150:4000 @ws_subscribed wait:150:300 rt wait:150:4000 right:150:5000 @ws_page2 wait:150:300 right:150:5000 @ws_page3 wait:150:300 y wait:150:4000 @ws_search wait:150:300 start wait:150:1200 @ws_progress wait:150:20000 @ws_done wait:150:300 b wait:150:3000 a wait:150:3000 @ws_reopened wait:150:300 a wait:150:15500 @ws_again wait:150:300 a wait:150:4500 @ws_installed wait:150:300 y wait:150:800 @ws_remove_ask wait:150:300 y wait:150:1500 @ws_removed wait:150:300 b wait:150:1500 b wait:150:5000 @ws_end wait:150:300 b wait:150:3000 up:150:500 a:150:3500 $d a:150:3500 @steam_notice wait:150:300 $d $d a:150:3500 a wait:150:12000 @gm_ws_grid wait:150:300 b wait:150:5000 b:150:3000 @steam_back b:150:3000 b:150:3000"
+			cw_seconds=400
+			cw_taps=
+		else
+			# (taps in the menus' units: row 2's middle, then the Circle key, a finger from right to left across the
+			# rows; the pad signs out at the end)
+			cw_pad="$cw_reach wait:150:26000 b wait:150:5000 b wait:150:3000"
+			cw_seconds=90
+			cw_taps="HALO_TEST_TAPS=34000:320,144 40000:370,427 45000:560,180>220,180"
+		fi
+		for cw_setup in $cw_setups; do
+			cw_name=$case-$cw_setup
+			mkdir -p "$out/$cw_name-fake"
+			rm -f "$out/$cw_name-fake/stdin" "$out/$cw_name-fake/transcript.txt"; mkfifo "$out/$cw_name-fake/stdin"
+			python3 -I "$here/steam_fake_server.py" --work "$out/$cw_name-fake" --chunk-kb 1024 --workshop-map "$ws_map" \
+				--mode slow < "$out/$cw_name-fake/stdin" > "$out/$cw_name-fake/server.json" &
+			fake_pid=$!
+			exec 7> "$out/$cw_name-fake/stdin"
+			for i in $(seq 300); do [ -s "$out/$cw_name-fake/server.json" ] && break; sleep 0.1; done
+			fake_cm=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cm"])' "$out/$cw_name-fake/server.json")
+			fake_cdn=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["cdn"])' "$out/$cw_name-fake/server.json")
+			fake_token=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$out/$cw_name-fake/server.json")
+			cw_shots=$out/$cw_name-shots
+			rm -rf "$cw_shots"; mkdir -p "$cw_shots"
+			if [ $cw_setup = mcc ]; then
+				cw_data=$out/cw-none cw_env="HALO_CONTENT_ROOT=$out/cw-content"
+			else
+				cw_data=$menus_data cw_env="HALO_CONTENT_ROOT=none"
+			fi
+			profile_from=$campaign_profile run $cw_name "$cw_data" $cw_seconds "$cw_pad" $cw_env HALO_SCENE_PACKS=0 \
+				HALO_STEAM_TEST_CM="ws://127.0.0.1:$fake_cm/cmsocket/" HALO_STEAM_TEST_CDN="http://127.0.0.1:$fake_cdn" \
+				HALO_STEAM_TEST_IMAGES="http://127.0.0.1:$fake_cdn" HALO_STEAM_TEST_ROOT="$out/$cw_name/card" \
+				HALO_TEST_TEXT_INPUT=rebalanced HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1 HALO_SCREENSHOT_DIR="$cw_shots" \
+				HALO_SCREENSHOT_EVERY=100000000 HALO_HEAP_LIMIT_KB=48988 HALO_WINDOW_FLOOR_KB=66752 ${cw_taps:+"$cw_taps"} \
+				HALO_BUTTON_ICONS=playstation ${HALO_TEST_STEAM_SPANISH:+HALO_LANGUAGE=es "HALO_TEST_LANG_DIR=$root/port/vita/app0/lang"}
+			exec 7>&-
+			wait "$fake_pid" 2>/dev/null || true
+			log=$out/$cw_name/run.log
+			transcript=$out/$cw_name-fake/transcript.txt
+			echo "--- $cw_name"
+			grep -a "ui: screen" "$log" | sed 's/.*ui: screen //' | uniq | tr '\n' ' ' | cut -c1-400; echo
+			[ "$(cat "$out/$cw_name/exit")" = 0 ] || fail $cw_name "exit $(cat "$out/$cw_name/exit")"
+			grep -av "render assertion skipped" "$log" | grep -aqiE "assert|exception|halt_and_catch_fire|segmentation" &&
+				fail $cw_name "an assertion, exception or halt"
+			cw_bad=$(grep -aE "ui: screen pc\.(h3|online)\.|menus: Halo 3 screen|stands for nothing|classic text does not fit: pc.cp.(workshop|steam)" "$log" | head -3)
+			[ -n "$cw_bad" ] && fail $cw_name "$cw_bad"
+			grep -aq "ui: screen pc.cp.workshop.screen" "$log" || fail $cw_name "Classic+'s STEAM WORKSHOP did not open"
+			grep -aq "menus: workshop: sign-in begun" "$log" || fail $cw_name "the sign-in did not begin"
+			grep -aq "steam job: QR 1 up" "$log" || fail $cw_name "no QR"
+			grep -aq "steam job: workshop page 1 (list 0): 8 items of 19" "$log" || fail $cw_name "POPULAR's page 1 not listed"
+			grep -aE "img: (2900000015|2900000001 9)" "$transcript" && fail $cw_name "a picture fetched from a host not Steam's image CDN"
+			grep -aqF "$fake_token" "$log" && fail $cw_name "the token is in the log"
+			grep -raqF "$fake_token" "$out/$cw_name/data" "$out/$cw_name/save" && fail $cw_name "the token is in a file written"
+			ls "$cw_shots"/*.bmp > /dev/null 2>&1 || fail $cw_name "no screen's picture saved"
+			if [ -n "${HALO_TEST_SHOTS:-}" ]; then
+				mkdir -p "$HALO_TEST_SHOTS/$cw_name"
+				cp "$cw_shots"/*.bmp "$HALO_TEST_SHOTS/$cw_name/" 2>/dev/null
+			fi
+			if [ "$case" = cpworkshoptouch ]; then
+				grep -aq "menus: workshop: card 2 tapped" "$log" && grep -aq "menus: workshop: details of 2900000003" "$log" ||
+					fail $cw_name "a tap on row 2 did not open its details page"
+				grep -aq "menus: workshop: details closed" "$log" || fail $cw_name "a tap on the Circle key did not close the details page"
+				grep -aq "menus: workshop: a swipe to page 2" "$log" && grep -aq "steam job: workshop page 2 (list 0)" "$log" ||
+					fail $cw_name "a swipe did not turn the page"
+				continue
+			fi
+			grep -aq "menus: workshop: 2900000001 marked (1)" "$log" && grep -aq "menus: workshop: 2900000002 marked (2)" "$log" ||
+				fail $cw_name "the two rows were not marked"
+			grep -aq "menus: workshop: details of 2900000001" "$log" &&
+				grep -aq "steam job: workshop details picture 1: made" "$log" || fail $cw_name "the details page or its pictures"
+			grep -aq "steam job: workshop page 1 (list 1)" "$log" && grep -aq "steam job: workshop page 1 (list 2)" "$log" &&
+				grep -aq "steam job: workshop page 1 (list 4): 3 items of 3" "$log" || fail $cw_name "the tabs (NEWEST, TOP RATED, SUBSCRIBED)"
+			grep -aq "steam job: workshop page 2 (list 0): 8 items of 19" "$log" && grep -aq "steam job: workshop page 3 (list 0): 3 items" "$log" ||
+				fail $cw_name "Right did not turn to pages 2 and 3"
+			grep -aq "steam job: workshop page 1 (list 0, a search): 1 items of 1" "$log" || fail $cw_name "the search did not list its item"
+			grep -aq "steam job: workshop: 2 items chosen" "$log" || fail $cw_name "Start did not download the two"
+			grep -aq "menus: workshop: 2900000001 installed in mods" "$log" || fail $cw_name "2900000001 (a real map) not installed"
+			grep -aq "menus: workshop: 2900000002 refused: maps/fakegulch.map refused" "$log" ||
+				fail $cw_name "2900000002 (a made-up map) not refused by the game's map check"
+			grep -aq "menus: workshop: 2900000001 removed from mods" "$log" || fail $cw_name "Triangle twice did not remove 2900000001"
+			[ -e "$out/$cw_name/data/mods/2900000001" ] && fail $cw_name "mods/2900000001 is still there"
+			[ "$(grep -acE "$steam_ended_ok" "$log")" -ge 3 ] || fail $cw_name "the three sessions did not each end done and logged off"
+			# (GAME MANAGER's route: Classic+'s DOWNLOAD FROM STEAM, its STEAM WORKSHOP the same Classic+ screen, back up)
+			awk '/ui: screen pc.ce.mods.screen/ { m = 1 } m && /ui: screen pc.cp.steam.screen/ { s = 1 } s && /ui: screen pc.cp.workshop.screen/ { w = 1 }
+				w && /steam job: workshop page 1 \(list 0\)/ { l = 1 } l && /ui: screen pc.cp.steam.screen/ { b = 1 } b && /ui: screen pc.ce.mods.screen/ { ok = 1 }
+				END { exit !ok }' "$log" || fail $cw_name "GAME MANAGER > DOWNLOAD FROM STEAM > STEAM WORKSHOP and back did not go as Classic+'s screens"
+		done
+		[ "$case" = cpworkshop ] || continue
+		# (the Custom Edition files required, the owner 1.1.3: the Xbox files with Halo PC's bitmaps.map and loc.map - the
+		# menus' sets load - but no sounds.map: WORKSHOP opens nothing, DOWNLOAD FROM STEAM says so, A starts nothing)
+		rm -rf "$out/cw-noce" "$out/cpworkshop-noce-shots"; mkdir -p "$out/cw-noce/maps" "$out/cpworkshop-noce-shots"
+		for file in "$menus_data"/maps/*.map; do
+			[ "$(basename "$file")" = sounds.map ] || ln -sfn "$(readlink -f "$file")" "$out/cw-noce/maps/"
+		done
+		run cpworkshop-noce "$out/cw-noce" 50 "wait:150:5000 $d $d $d a:150:3500 $d a:150:3500 @noce_settings wait:150:300 up:150:500 a:150:3500 $d a:150:3500 @noce_steam wait:150:300 a:150:1000 $d a:150:1000 $d a:150:1500 b:150:3000 b:150:3000 b:150:3000" \
+			HALO_CONTENT_ROOT=none HALO_SCENE_PACKS=0 HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1 \
+			HALO_SCREENSHOT_DIR="$out/cpworkshop-noce-shots" HALO_SCREENSHOT_EVERY=100000000 HALO_BUTTON_ICONS=playstation
+		log=$out/cpworkshop-noce/run.log
+		echo "--- cpworkshop-noce"
+		grep -a "ui: screen" "$log" | sed 's/.*ui: screen //' | uniq | tr '\n' ' ' | cut -c1-400; echo
+		[ "$(cat "$out/cpworkshop-noce/exit")" = 0 ] || fail cpworkshop-noce "exit $(cat "$out/cpworkshop-noce/exit")"
+		grep -aq "menus: ce settings: WORKSHOP refused: needs the Custom Edition files" "$log" ||
+			fail cpworkshop-noce "WORKSHOP was not refused without the Custom Edition files"
+		grep -aq "ui: screen pc.cp.workshop.screen" "$log" && fail cpworkshop-noce "STEAM WORKSHOP opened without the Custom Edition files"
+		grep -aq "ui: screen pc.cp.steam.screen" "$log" || fail cpworkshop-noce "Classic+'s DOWNLOAD FROM STEAM did not open"
+		grep -aqE "steam job: started|sign-in begun" "$log" && fail cpworkshop-noce "a Steam job started without the Custom Edition files"
+		grep -aE "ui: screen pc\.(h3|online)\." "$log" | head -1 | grep -aq . && fail cpworkshop-noce "a Halo 3 screen opened"
+		if [ -n "${HALO_TEST_SHOTS:-}" ]; then
+			mkdir -p "$HALO_TEST_SHOTS/cpworkshop-noce"
+			cp "$out/cpworkshop-noce-shots"/*.bmp "$HALO_TEST_SHOTS/cpworkshop-noce/" 2>/dev/null
+		fi
+		;;
 	*)
 		echo "usage: $0 [$(echo $all_cases $pc_cases | tr ' ' '|')]..." >&2; exit 2 ;;
 	esac

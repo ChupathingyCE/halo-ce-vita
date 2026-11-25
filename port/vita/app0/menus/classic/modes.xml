@@ -51,6 +51,7 @@
 		<string text="GAME MANAGER"/>
 		<string text="FILE SHARE"/>
 		<string text="FRIENDS"/>
+		<string text="WORKSHOP"/>
 	</strings>
 	<strings name="ce/modes_text">
 		<string text="FORGE"/>
@@ -112,6 +113,15 @@
 		<child widget="ce/settings/games/row_name"/>
 		<child widget="ce/settings/row_name_small"/>
 	</widget>
+	<!-- (1.1.3, the owner's Classic+ plan part A: Classic+'s own STEAM WORKSHOP - classic/workshop.xml's cp/workshop/screen,
+	standing for h3/workshop/screen -, after GAME MANAGER; a build without the Workshop hides it, and without the Custom
+	Edition files it says so and opens nothing: port ce workshop row) -->
+	<widget name="ce/settings/workshop/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="9"/>
+	<widget name="ce/settings/workshop" left="0" width="224" height="32" bitmap="list_item_bkd">
+		<on event="a start" run="port ce workshop row" open="h3/workshop/screen"/>
+		<child widget="ce/settings/workshop/row_name"/>
+		<child widget="ce/settings/row_name_small"/>
+	</widget>
 	<widget name="ce/settings/fileshare/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="7"/>
 	<widget name="ce/settings/fileshare" left="0" width="224" height="32" bitmap="list_item_bkd">
 		<on event="a start" run="port fileshare enter" open="ce/fileshare/screen"/>
@@ -133,8 +143,9 @@
 		<child widget="ce/settings/online" x="51" y="206"/>
 		<child widget="ce/settings/advanced" x="51" y="238"/>
 		<child widget="ce/settings/games" x="51" y="270"/>
-		<child widget="ce/settings/fileshare" x="51" y="302"/>
-		<child widget="ce/settings/friends" x="51" y="334"/>
+		<child widget="ce/settings/workshop" x="51" y="302"/>
+		<child widget="ce/settings/fileshare" x="51" y="334"/>
+		<child widget="ce/settings/friends" x="51" y="366"/>
 	</widget>
 	<widget name="ce/settings/desc" type="text" left="290" top="92" width="290" height="290" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
 	<widget name="ce/settings/description" left="275" top="78" width="320" height="322" bitmap="list_field">

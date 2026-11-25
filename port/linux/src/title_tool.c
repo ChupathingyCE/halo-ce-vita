@@ -42,7 +42,7 @@ color and opacity.
 
 SPDX-FileCopyrightText: 2026 The Chupathingy contributors
 SPDX-FileCopyrightText: 2026 Milenko x Horrible Dev
-SPDX-FileCopyrightText: 2026 Halo CE for PS Vita contributors (the set words, X, the plate's stretch)
+SPDX-FileCopyrightText: 2026 Halo CE for PS Vita contributors (the set words, X, W, K, the plate's stretch)
 SPDX-License-Identifier: GPL-3.0-or-later
 */
 
@@ -976,6 +976,156 @@ static int letter_x_make(struct title_tool *tool)
 	return 1;
 }
 
+/* (title_tool_set) a column of a shape's field, between columns (linear), 0 outside it */
+static float field_column(const float *field, int row, float column)
+{
+	int c0 = (int)floorf(column);
+	float t = column - (float)c0;
+	float a = c0 >= 0 && c0 < FIELD_WIDTH ? field[row * FIELD_WIDTH + c0] : 0;
+	float b = c0 + 1 >= 0 && c0 + 1 < FIELD_WIDTH ? field[row * FIELD_WIDTH + c0 + 1] : 0;
+
+	return a + (b - a) * t;
+}
+
+/* the first and last rows a shape's ink is in, and the longest first run of ink of a row in its top fifth (a
+stroke's width across there, in field columns: the first row's alone is its anti-aliased edge); FALSE if it has
+none */
+static int shape_rows(const float *field, int *top, int *bottom, int *stroke)
+{
+	int row, x;
+
+	*top = *bottom = -1;
+	*stroke = 0;
+	for (row = 0; row < FIELD_HEIGHT; row++)
+	{
+		for (x = 0; x < FIELD_WIDTH && field[row * FIELD_WIDTH + x] < 0.5f; x++)
+			;
+		if (x == FIELD_WIDTH)
+			continue;
+		if (*top < 0)
+			*top = row;
+		*bottom = row;
+	}
+	for (row = *top; row >= 0 && row <= *top + (*bottom - *top) / 5; row++)
+	{
+		int run = 0;
+
+		for (x = 0; x < FIELD_WIDTH && field[row * FIELD_WIDTH + x] < 0.5f; x++)
+			;
+		while (x < FIELD_WIDTH && field[row * FIELD_WIDTH + x] >= 0.5f)
+		{
+			run++;
+			x++;
+		}
+		if (run > *stroke)
+			*stroke = run;
+	}
+	return *top >= 0 && *stroke > 0;
+}
+
+/* (this port, 1.1.3: Classic+'s STEAM WORKSHOP and DOWNLOAD FROM STEAM headings) W, which no title has, made of V's:
+two V's side by side, the second's left arm on the first's right arm at the top (the stroke's width over), the pair
+narrowed to two fifths wider than V; FALSE if there is no V */
+static int letter_w_make(struct title_tool *tool)
+{
+	const float *v_field = tool->shapes['V'].field;
+	const struct shape *v = &tool->shapes['V'];
+	float *field;
+	int top, bottom, stroke, row, x;
+	float left, width, offset, squeeze, wide;
+
+	if (!v_field || tool->shapes['W'].field)
+		return v_field != NULL;
+	if (!shape_rows(v_field, &top, &bottom, &stroke))
+		return 0;
+	left = (v->ink_left - LEFT) * GRID;
+	width = (v->ink_right - v->ink_left) * GRID;
+	offset = width - (float)stroke;
+	if (width <= 0 || offset <= 0)
+		return 0;
+	/* (as wide again as two fifths of V - the font's W -, no wider than the field holds) */
+	wide = width * 1.4f;
+	if (left + wide > FIELD_WIDTH - 2)
+		wide = FIELD_WIDTH - 2 - left;
+	if (wide < width)
+		return 0;
+	squeeze = (width + offset) / wide;
+	field = calloc(FIELD_WIDTH * FIELD_HEIGHT, sizeof(float));
+	if (!field)
+		return 0;
+	for (row = 0; row < FIELD_HEIGHT; row++)
+	{
+		for (x = 0; x < FIELD_WIDTH; x++)
+		{
+			float from = left + ((float)x - left) * squeeze;
+			float a = field_column(v_field, row, from), b = field_column(v_field, row, from - offset);
+
+			field[row * FIELD_WIDTH + x] = a > b ? a : b;
+		}
+	}
+	tool->shapes['W'].field = field;
+	shape_measure(&tool->shapes['W']);
+	return 1;
+}
+
+/* (this port, 1.1.3: the STEAM WORKSHOP heading on MCC's ui.map, whose titles have no K) K, made of I's stem and X's
+right half - its arms meeting the stem halfway up, as X's do in its middle -; FALSE without I or X */
+static int letter_k_make(struct title_tool *tool)
+{
+	const float *i_field = tool->shapes['I'].field, *x_field = tool->shapes['X'].field;
+	const struct shape *i = &tool->shapes['I'], *xs = &tool->shapes['X'];
+	float *field;
+	int top, bottom, stroke, row, x;
+	float middle, shift;
+
+	if (tool->shapes['K'].field)
+		return 1;
+	if (!i_field || !x_field || !shape_rows(i_field, &top, &bottom, &stroke))
+		return 0;
+	middle = ((xs->ink_left + xs->ink_right) / 2 - LEFT) * GRID;
+	/* (X's middle on the stem's right edge, a little in) */
+	shift = (i->ink_right - LEFT) * GRID - (float)stroke * 0.25f - middle;
+	if ((xs->ink_right - LEFT) * GRID + shift >= FIELD_WIDTH)
+		return 0;
+	field = calloc(FIELD_WIDTH * FIELD_HEIGHT, sizeof(float));
+	if (!field)
+		return 0;
+	for (row = 0; row < FIELD_HEIGHT; row++)
+	{
+		for (x = 0; x < FIELD_WIDTH; x++)
+		{
+			float a = i_field[row * FIELD_WIDTH + x], b = 0, from = (float)x - shift;
+
+			if (from >= middle - (float)stroke * 0.5f)
+				b = field_column(x_field, row, from);
+			field[row * FIELD_WIDTH + x] = a > b ? a : b;
+		}
+	}
+	tool->shapes['K'].field = field;
+	shape_measure(&tool->shapes['K']);
+	return 1;
+}
+
+/* a made letter's sides (title_tool_set's spacing): its model's left side, its right side the model's moved by
+how much wider its ink reaches */
+static void letter_sides_from(struct title_tool *tool, int made, int model_left, int model_right)
+{
+	int m = made - PAIR_FIRST, l = model_left - PAIR_FIRST, r = model_right - PAIR_FIRST;
+
+	if (tool->side_known[m] || !tool->shapes[made].field)
+		return;
+	if (tool->side_known[l] & 2)
+	{
+		tool->left_side[m] = tool->left_side[l] + (tool->shapes[made].ink_left - tool->shapes[model_left].ink_left);
+		tool->side_known[m] |= 2;
+	}
+	if (tool->side_known[r] & 1)
+	{
+		tool->right_side[m] = tool->right_side[r] + (tool->shapes[made].ink_right - tool->shapes[model_right].ink_right);
+		tool->side_known[m] |= 1;
+	}
+}
+
 /* (title_tool_set) the advances, sides and baseline the titles show: each
 pair's advance seen side by side (pair_advance), and for each letter a
 right side and a left side whose sum gives the advance of a pair never
@@ -1197,6 +1347,11 @@ struct title_tool *title_tool_new(const struct title_tool_title *titles, long co
 		tool->left_side['X' - PAIR_FIRST] = tool->left_side['Y' - PAIR_FIRST];
 		tool->side_known['X' - PAIR_FIRST] = tool->side_known['Y' - PAIR_FIRST];
 	}
+	/* (this port: W made of V, K of I and X - the Steam screens' headings -, spaced from their models) */
+	if (letter_w_make(tool))
+		letter_sides_from(tool, 'W', 'V', 'V');
+	if (letter_k_make(tool))
+		letter_sides_from(tool, 'K', 'I', 'X');
 	return tool;
 }
 

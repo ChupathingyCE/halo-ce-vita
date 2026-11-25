@@ -495,6 +495,8 @@ static char const *const port_function_names[] =
 	"port firefight lobby init",
 	"port forge start firefight",
 	"port forge firefight prepare",
+	/* (1.1.3: Classic+'s SETTINGS > WORKSHOP, classic/modes.xml) */
+	"port ce workshop row",
 };
 
 /* the port's game data functions (menu_functions.c), from
@@ -805,6 +807,26 @@ static long tag_named(long group_tag, char const *name, char const *file, long l
 
 	if (strchr(name, '\\'))
 	{
+		/* (a picture Halo PC's ui.map has of the Xbox's name but not of its look - the small arrows beside a
+		value, slivers there -: ours, classic/xbox_screens.xml's, in its place on it, for every widget of
+		the menus' sets that asks for it; the Xbox's ui.map keeps its own) */
+		if (group_tag == BITMAP_GROUP_TAG && build.halo_pc_ui && !build.ingame)
+		{
+			static char const *const redrawn[][2] = {
+				{ "ui\\shell\\bitmaps\\arrow_sm_left", XBOX_SCREEN_WIDGET_PREFIX "art/arrow_sm_left" },
+				{ "ui\\shell\\bitmaps\\arrow_sm_right", XBOX_SCREEN_WIDGET_PREFIX "art/arrow_sm_right" },
+			};
+			long which;
+
+			for (which = 0; which < (long)NUMBEROF(redrawn); which++)
+			{
+				if (!strcmp(name, redrawn[which][0]) &&
+					(index = find(redrawn[which][1], build.menus->bitmap_count, bitmap_name)) != NONE)
+				{
+					return build.bitmap_tags[index];
+				}
+			}
+		}
 		/* (a picture a Halo PC ui.map has not - MCC's has not the Xbox's Y button: ours drawn in its
 		place, classic/xbox_screens.xml's, for every widget that asks for it; any other: none shown.
 		The Xbox's ui.map has them all and never gets here) */
@@ -2795,6 +2817,7 @@ int ce_installer_find(const char *directory, char *path, int path_size, unsigned
 /* (system_link_shortcut.c's) 1 the files are there, -1 not (or not Custom Edition's), 0 not checked yet */
 extern volatile int halo_ce_files_state;
 
+unsigned long system_milliseconds(void);
 static boolean ce_files_noticed;
 
 /* the folders players put the files in by mistake (the game's folder itself, a custom_edition or maps folder
@@ -2805,7 +2828,7 @@ static char const *const ce_wrong_folders[] = {
 	"d:\\maps\\Halo Custom Edition\\maps\\", "d:\\maps\\Halo\\maps\\",
 };
 
-static void ce_files_check(void)
+static void ce_files_check(boolean recheck)
 {
 	static char const *const names[] = { "bitmaps", "loc", "sounds" };
 	static enum resource_map_type const types[] = { _resource_map_bitmaps, _resource_map_locale, _resource_map_sounds };
@@ -2849,11 +2872,15 @@ static void ce_files_check(void)
 				platform_translate_path(ce_wrong_folders[folder], host, sizeof(host));
 				snprintf(line, sizeof(line), T("%s.map is in %s: move it into %s"), names[index], host, maps_host);
 				snprintf(moves + strlen(moves), sizeof(moves) - strlen(moves), "\n%s", line);
-				platform_log("ce files: %s.map found in the wrong folder: %s (wanted in %s)", names[index], host, maps_host);
+				if (!recheck)
+					platform_log("ce files: %s.map found in the wrong folder: %s (wanted in %s)", names[index], host, maps_host);
 				break;
 			}
 		}
 	}
+	/* (a recheck - the Classic+ Steam screens', every 2 s: a download may bring them - says only a change) */
+	if (recheck && halo_ce_files_state == (bad ? -1 : 1))
+		return;
 	halo_ce_files_state = bad ? -1 : 1;
 	if (!bad)
 	{
@@ -2862,7 +2889,7 @@ static void ce_files_check(void)
 	}
 	platform_log("ce files: missing [%s], not Custom Edition's [%s]: the ElDewrito, Halo 3 and Classic+ menus, the "
 		"Steam Workshop, Custom Edition maps and the online menus are off (the Classic menus)", missing, damaged);
-	if (ce_files_noticed || (getenv("HALO_CE_FILES_NOTICE") && !atoi(getenv("HALO_CE_FILES_NOTICE"))))
+	if (recheck || ce_files_noticed || (getenv("HALO_CE_FILES_NOTICE") && !atoi(getenv("HALO_CE_FILES_NOTICE"))))
 		return;
 	/* (a Custom Edition installer copied in: the game takes the files from it at start - its own screens) */
 	{
@@ -2901,6 +2928,22 @@ static void ce_files_check(void)
 	snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s", line);
 	snprintf(text + strlen(text), sizeof(text) - strlen(text), "%s", T("\n\nContinue anyway: Cross"));
 	platform_show_message(T("Custom Edition files needed"), text);
+}
+
+/* (menu_functions.c's Classic+ Steam screens: the one Custom Edition files check, ce_files_check) whether one of
+bitmaps.map, loc.map and sounds.map is missing or not Custom Edition's; looked at again every two seconds at most
+(a download may bring them) */
+boolean menu_tags_ce_files_missing(void)
+{
+	static unsigned long looked_at;
+	unsigned long now = system_milliseconds();
+
+	if (!halo_ce_files_state || !looked_at || now - looked_at >= 2000)
+	{
+		looked_at = now ? now : 1;
+		ce_files_check(TRUE);
+	}
+	return halo_ce_files_state < 0;
 }
 
 /* ---------- public code */
@@ -3123,7 +3166,7 @@ void menu_tags_loaded(
 		menu_tags_pc_files_missing = FALSE;
 	/* (1.1.3: the Custom Edition files, each time the main menu's map loads) */
 	if (!ingame)
-		ce_files_check();
+		ce_files_check(FALSE);
 	if (!menu_resource_files_present())
 	{
 		if (!ingame && custom_edition_cache_menus_are_mcc_ui())

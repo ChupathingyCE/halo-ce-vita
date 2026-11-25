@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Menu style Classic+'s STEAM WORKSHOP and DOWNLOAD FROM STEAM (1.1.3, the owner's Classic+ plan part A, Nov 24:
+     Classic+ opened the Halo 3 look's screens from GAME MANAGER). cp/workshop/screen stands for halo3/workshop.xml's
+     h3/workshop/screen and cp/steam/screen for halo3/steam.xml's h3/steam/screen while the style is Classic+
+     (menu_tags.c's classic set), so every way in - SETTINGS' WORKSHOP row, GAME MANAGER's DOWNLOAD FROM STEAM and its
+     STEAM WORKSHOP row, the settings panel's rows - opens these. The same backend (menu_functions.c "port h3 steam
+     ...", "port h3 workshop ...": their widgets found by their last names); only the look is this file's, the Xbox's
+     list screens as Classic+'s GAME MANAGER and FILE SHARE have it: ui.map's gradient, the heading at 35,11, the rows
+     across the screen on server_item_bkds in small_ui, the focused one lit, under the blue line the focused item's
+     picture and facts, the button key at the foot in the Xbox's =WORD form. The Workshop's details page: the picture
+     at the left, the facts at the right, the description and the maps inside under them. The pictures, the marks, the
+     rating's pips and the download's bar are drawn over the screen (menu_functions.c h3_workshop_draw, its Classic+
+     part), the QR as DOWNLOAD FROM STEAM's (h3_steam_qr_draw). Without the Custom Edition files both say so and
+     start nothing (menu_functions.c cp_steam_needs_custom_edition). No picture or line of text of Bungie's here: the
+     pictures and fonts are the player's ui.map's, the headings made of its letters (menu_titles.c) or the port's
+     drawn ones (tools/classic_menu_art.py) -->
+<menus>
+	<bitmap name="cp/workshop/header_art">
+		<frame png="classic/{lang}/header_steam_workshop.png" width="512" height="64"/>
+	</bitmap>
+	<bitmap name="cp/steam/header_art">
+		<frame png="classic/{lang}/header_download_from_steam.png" width="512" height="64"/>
+	</bitmap>
+	<strings name="cp/workshop_text">
+		<string text="START"/>
+		<string text="=SELECT"/>
+	</strings>
+
+	<!-- ==== DOWNLOAD FROM STEAM: the notice (or the QR's words at the left, the QR drawn at the right), the four rows
+	(the sound banks, SIGN IN, STEAM WORKSHOP, SIGN OUT) under the blue line, the key -->
+	<widget name="cp/steam/header" left="35" top="11" width="512" height="64" bitmap="cp/steam/header_art"/>
+	<widget name="cp/steam/steam_text" type="text" left="40" top="84" width="560" height="196" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/steam/qr_text" type="text" left="40" top="100" width="320" height="180" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/steam/rule" left="24" top="286" width="592" height="2" bitmap="ui\shell\bitmaps\blue"/>
+	<widget name="cp/steam/row_1" type="text" width="600" height="17" bitmap="server_item_bkds" font="ui\small_ui" color="#FF2896FF" text_x="12" text_y="1">
+		<on event="a start" run="port h3 steam row"/>
+	</widget>
+	<widget name="cp/steam/row_2" type="text" width="600" height="17" bitmap="server_item_bkds" font="ui\small_ui" color="#FF2896FF" text_x="12" text_y="1">
+		<on event="a start" run="port h3 steam row"/>
+	</widget>
+	<!-- (STEAM WORKSHOP: h3/workshop/screen, which Classic+'s cp/workshop/screen stands for) -->
+	<widget name="cp/steam/row_3" type="text" width="600" height="17" bitmap="server_item_bkds" font="ui\small_ui" color="#FF2896FF" text_x="12" text_y="1">
+		<on event="a start" run="port h3 steam row" open="h3/workshop/screen"/>
+	</widget>
+	<widget name="cp/steam/row_4" type="text" width="600" height="17" bitmap="server_item_bkds" font="ui\small_ui" color="#FF2896FF" text_x="12" text_y="1">
+		<on event="a start" run="port h3 steam row"/>
+	</widget>
+	<widget name="cp/steam/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<data input="port h3 steam"/>
+		<child widget="cp/steam/row_1" y="0"/>
+		<child widget="cp/steam/row_2" y="18"/>
+		<child widget="cp/steam/row_3" y="36"/>
+		<child widget="cp/steam/row_4" y="54"/>
+	</widget>
+	<widget name="cp/steam/b_butn" left="352" top="414" width="21" height="26" bitmap="ui\shell\bitmaps\b_butn"/>
+	<widget name="cp/steam/back" type="text" left="373" top="414" width="112" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/steam/a_butn" left="488" top="414" width="21" height="26" bitmap="ui\shell\bitmaps\a_butn"/>
+	<widget name="cp/steam/select" type="text" left="509" top="414" width="127" height="24" font="ui\large_ui" color="#FF2896FF" string_list="cp/workshop_text" string_index="1" text_flags="no_focus_test"/>
+	<widget name="cp/steam/screen" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<on event="b back" run="port h3 steam back" back="true"/>
+		<child widget="cp/steam/header"/>
+		<child widget="cp/steam/steam_text"/>
+		<child widget="cp/steam/qr_text"/>
+		<child widget="cp/steam/rule"/>
+		<child widget="cp/steam/b_butn"/>
+		<child widget="cp/steam/back"/>
+		<child widget="cp/steam/a_butn"/>
+		<child widget="cp/steam/select"/>
+		<child widget="cp/steam/list" x="20" y="300"/>
+	</widget>
+
+	<!-- ==== STEAM WORKSHOP -->
+	<widget name="cp/workshop/header" left="35" top="11" width="512" height="64" bitmap="cp/workshop/header_art"/>
+	<!-- (GAME MANAGER's tab line: "L R: POPULAR") -->
+	<widget name="cp/workshop/tab_label" type="text" left="24" top="74" width="300" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/status" type="text" left="24" top="390" width="592" height="18" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/rule" left="24" top="286" width="592" height="2" bitmap="ui\shell\bitmaps\blue"/>
+	<widget name="cp/workshop/notice" type="text" left="40" top="84" width="560" height="196" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/qr_text" type="text" left="40" top="100" width="320" height="180" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/signin" type="text" left="40" top="330" width="560" height="32" bitmap="ui\shell\bitmaps\list_item_bkd" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="5" text_flags="no_focus_test"/>
+	<!-- the page's eight items: a row each (title; size, kind, INSTALLED or UPDATE at the right) -->
+	<widget name="cp/workshop/card_0_title" type="text" left="0" top="0" width="330" height="16" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_0_meta" type="text" left="0" top="0" width="246" height="16" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_0" left="0" top="0" width="600" height="17" bitmap="server_item_bkds">
+		<child widget="cp/workshop/card_0_title" x="12" y="1"/>
+		<child widget="cp/workshop/card_0_meta" x="350" y="1"/>
+	</widget>
+	<widget name="cp/workshop/card_1_title" type="text" left="0" top="0" width="330" height="16" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_1_meta" type="text" left="0" top="0" width="246" height="16" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_1" left="0" top="0" width="600" height="17" bitmap="server_item_bkds">
+		<child widget="cp/workshop/card_1_title" x="12" y="1"/>
+		<child widget="cp/workshop/card_1_meta" x="350" y="1"/>
+	</widget>
+	<widget name="cp/workshop/card_2_title" type="text" left="0" top="0" width="330" height="16" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_2_meta" type="text" left="0" top="0" width="246" height="16" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_2" left="0" top="0" width="600" height="17" bitmap="server_item_bkds">
+		<child widget="cp/workshop/card_2_title" x="12" y="1"/>
+		<child widget="cp/workshop/card_2_meta" x="350" y="1"/>
+	</widget>
+	<widget name="cp/workshop/card_3_title" type="text" left="0" top="0" width="330" height="16" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_3_meta" type="text" left="0" top="0" width="246" height="16" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_3" left="0" top="0" width="600" height="17" bitmap="server_item_bkds">
+		<child widget="cp/workshop/card_3_title" x="12" y="1"/>
+		<child widget="cp/workshop/card_3_meta" x="350" y="1"/>
+	</widget>
+	<widget name="cp/workshop/card_4_title" type="text" left="0" top="0" width="330" height="16" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_4_meta" type="text" left="0" top="0" width="246" height="16" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_4" left="0" top="0" width="600" height="17" bitmap="server_item_bkds">
+		<child widget="cp/workshop/card_4_title" x="12" y="1"/>
+		<child widget="cp/workshop/card_4_meta" x="350" y="1"/>
+	</widget>
+	<widget name="cp/workshop/card_5_title" type="text" left="0" top="0" width="330" height="16" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_5_meta" type="text" left="0" top="0" width="246" height="16" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_5" left="0" top="0" width="600" height="17" bitmap="server_item_bkds">
+		<child widget="cp/workshop/card_5_title" x="12" y="1"/>
+		<child widget="cp/workshop/card_5_meta" x="350" y="1"/>
+	</widget>
+	<widget name="cp/workshop/card_6_title" type="text" left="0" top="0" width="330" height="16" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_6_meta" type="text" left="0" top="0" width="246" height="16" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_6" left="0" top="0" width="600" height="17" bitmap="server_item_bkds">
+		<child widget="cp/workshop/card_6_title" x="12" y="1"/>
+		<child widget="cp/workshop/card_6_meta" x="350" y="1"/>
+	</widget>
+	<widget name="cp/workshop/card_7_title" type="text" left="0" top="0" width="330" height="16" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_7_meta" type="text" left="0" top="0" width="246" height="16" align="right" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/card_7" left="0" top="0" width="600" height="17" bitmap="server_item_bkds">
+		<child widget="cp/workshop/card_7_title" x="12" y="1"/>
+		<child widget="cp/workshop/card_7_meta" x="350" y="1"/>
+	</widget>
+	<widget name="cp/workshop/cards">
+		<data input="port h3 workshop"/>
+		<child widget="cp/workshop/card_0" x="20" y="100"/>
+		<child widget="cp/workshop/card_1" x="20" y="118"/>
+		<child widget="cp/workshop/card_2" x="20" y="136"/>
+		<child widget="cp/workshop/card_3" x="20" y="154"/>
+		<child widget="cp/workshop/card_4" x="20" y="172"/>
+		<child widget="cp/workshop/card_5" x="20" y="190"/>
+		<child widget="cp/workshop/card_6" x="20" y="208"/>
+		<child widget="cp/workshop/card_7" x="20" y="226"/>
+	</widget>
+	<!-- the focused item's facts beside its picture (drawn at 24,296), as FILE SHARE's under its rows -->
+	<widget name="cp/workshop/info" type="text" left="214" top="294" width="402" height="80" font="ui\small_ui" color="#FFCCCCCC" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/message" type="text" left="24" top="267" width="592" height="17" font="ui\small_ui" color="#FFCCCCCC" text_flags="no_focus_test"/>
+	<!-- the details page: the picture drawn at 24,104 (272 x 136), the arrows under it when it has more than one -->
+	<widget name="cp/workshop/d_left" left="24" top="244" width="6" height="12" bitmap="ui\shell\bitmaps\arrow_sm_left"/>
+	<widget name="cp/workshop/d_right" left="290" top="244" width="6" height="12" bitmap="ui\shell\bitmaps\arrow_sm_right"/>
+	<widget name="cp/workshop/d_title" type="text" left="310" top="100" width="316" height="40" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/d_author" type="text" left="310" top="140" width="316" height="16" font="ui\small_ui" color="#FFCCCCCC" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/d_facts" type="text" left="310" top="157" width="316" height="82" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/d_state" type="text" left="310" top="240" width="316" height="24" font="ui\large_ui" color="#FFFFFFFF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/d_maps" type="text" left="310" top="292" width="316" height="94" font="ui\small_ui" color="#FFCCCCCC" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/d_desc" type="text" left="24" top="292" width="276" height="94" font="ui\small_ui" color="#FFCCCCCC" text_flags="no_focus_test"/>
+	<!-- the button key as GAME MANAGER's (Triangle, Square, then B and A where the Xbox's are); START's line over it -->
+	<widget name="cp/workshop/y_butn" left="40" top="414" width="20" height="25" bitmap="ui\shell\bitmaps\y_butn"/>
+	<widget name="cp/workshop/search" type="text" left="61" top="414" width="132" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/x_butn" left="196" top="414" width="20" height="25" bitmap="ui\shell\bitmaps\x_butn"/>
+	<widget name="cp/workshop/mark" type="text" left="217" top="414" width="132" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/start_butn" type="text" left="24" top="388" width="72" height="24" font="ui\large_ui" color="#FFFFFFFF" string_list="cp/workshop_text" string_index="0" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/download" type="text" left="96" top="388" width="250" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/b_butn" left="352" top="414" width="21" height="26" bitmap="ui\shell\bitmaps\b_butn"/>
+	<widget name="cp/workshop/back" type="text" left="373" top="414" width="112" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/a_butn" left="488" top="414" width="21" height="26" bitmap="ui\shell\bitmaps\a_butn"/>
+	<widget name="cp/workshop/select" type="text" left="509" top="414" width="127" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="cp/workshop/screen" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<on event="b back" run="port h3 workshop back" back="true"/>
+		<on event="a" run="port h3 workshop row"/>
+		<on event="x" run="port h3 workshop mark"/>
+		<on event="y" run="port h3 workshop search"/>
+		<on event="start" run="port h3 workshop download"/>
+		<on event="left_trigger" run="port h3 workshop tab previous"/>
+		<on event="right_trigger" run="port h3 workshop tab next"/>
+		<on event="left stick_left" run="port h3 workshop left"/>
+		<on event="right stick_right" run="port h3 workshop right"/>
+		<on event="up stick_up" run="port h3 workshop up"/>
+		<on event="down stick_down" run="port h3 workshop down"/>
+		<child widget="cp/workshop/header"/>
+		<child widget="cp/workshop/tab_label"/>
+		<child widget="cp/workshop/status"/>
+		<child widget="cp/workshop/rule"/>
+		<child widget="cp/workshop/notice"/>
+		<child widget="cp/workshop/qr_text"/>
+		<child widget="cp/workshop/signin"/>
+		<child widget="cp/workshop/cards"/>
+		<child widget="cp/workshop/info"/>
+		<child widget="cp/workshop/d_left"/>
+		<child widget="cp/workshop/d_right"/>
+		<child widget="cp/workshop/d_title"/>
+		<child widget="cp/workshop/d_author"/>
+		<child widget="cp/workshop/d_facts"/>
+		<child widget="cp/workshop/d_state"/>
+		<child widget="cp/workshop/d_maps"/>
+		<child widget="cp/workshop/d_desc"/>
+		<child widget="cp/workshop/message"/>
+		<child widget="cp/workshop/y_butn"/>
+		<child widget="cp/workshop/search"/>
+		<child widget="cp/workshop/x_butn"/>
+		<child widget="cp/workshop/mark"/>
+		<child widget="cp/workshop/start_butn"/>
+		<child widget="cp/workshop/download"/>
+		<child widget="cp/workshop/b_butn"/>
+		<child widget="cp/workshop/back"/>
+		<child widget="cp/workshop/a_butn"/>
+		<child widget="cp/workshop/select"/>
+	</widget>
+</menus>

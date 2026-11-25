@@ -3878,3 +3878,7 @@
 "\n\nContinue anyway: Cross" = "\n\nContinuar de todos modos: Cruz"
 "Needs the Custom Edition files (bitmaps.map, loc.map, sounds.map in the maps folder)" = "Necesita los archivos de Custom Edition (bitmaps.map, loc.map, sounds.map en la carpeta maps)"
 "Needs the Custom Edition files" = "Necesita los archivos de Custom Edition"
+"SEARCH" = "BÚSQUEDA"
+"Halo CE's mods and maps of MCC's Steam Workshop: browse them and download them to this PS Vita with your own Steam account." = "Mods y mapas de Halo CE del Steam Workshop de MCC: míralos y descárgalos a esta PS Vita con tu propia cuenta de Steam."
+"WORKSHOP" = "WORKSHOP"
+"START" = "START"

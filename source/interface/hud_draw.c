@@ -2586,6 +2586,11 @@ short hud_vita_menu_button_glyph(
 		return halo3_menu_glyph(base + 6);
 #endif
 	letter = base[0] ? strchr("abxy", base[0]) : NULL;
+	/* (and the port's own drawn twins of them for a Halo PC ui.map, which has not the Xbox's Y:
+	menus/classic/xbox_screens.xml's pc\cp\xb\y_butn_art - the yellow Y stood among the
+	PlayStation's icons on an MCC-only install, 1.1.3) */
+	if (letter && !strncmp(name, "pc\\", 3) && !strcmp(base + 1, "_butn_art"))
+		return hud_vita_button_glyph((short)(letter - "abxy"));
 	if (!letter || strncmp(base + 1, "_butn", 5) || (base[6] && strcmp(base + 6, "_sm")))
 		return VITA_GLYPH_NONE;
 
