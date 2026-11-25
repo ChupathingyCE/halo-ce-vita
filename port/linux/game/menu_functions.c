@@ -13944,7 +13944,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 				else if (h3_workshop_marked_index(page.id) >= 0)
 					snprintf(text, sizeof(text), "%s", T("MARKED FOR DOWNLOAD"));
 				else
-					snprintf(text, sizeof(text), "%s", T("NOT ON THIS VITA"));
+					snprintf(text, sizeof(text), "%s", T("DOWNLOAD"));
 				text_show(found, text);
 				found->animation.current_frame_index = page.state == 2 ? 1 : 0;
 			}
