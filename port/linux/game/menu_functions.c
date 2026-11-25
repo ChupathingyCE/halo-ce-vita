@@ -13928,7 +13928,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 			snprintf(line, sizeof(line), "%.80s\n%.100s\n%s%s%s\n%s", row->title, by, size_text,
 				h3_workshop_kind(row->tags)[0] ? "  " : "", h3_workshop_kind(row->tags), !row->downloadable ?
 				T("CAN'T BE DOWNLOADED") : state == 2 ? T("UPDATE AVAILABLE") : state == 1 ? T("INSTALLED") :
-				h3_workshop_marked_index(row->id) >= 0 ? T("MARKED FOR DOWNLOAD") : T("NOT ON THIS PS VITA"));
+				h3_workshop_marked_index(row->id) >= 0 ? T("MARKED FOR DOWNLOAD") : T("DOWNLOAD"));
 			h3_dialog_text(found, line);
 		}
 	}
