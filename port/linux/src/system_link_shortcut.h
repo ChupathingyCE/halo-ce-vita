@@ -206,6 +206,11 @@ set as ui.map loads): 1 yes (Halo PC's bitmaps.map and loc.map are there),
 -1 no (the Xbox's), 0 not known yet */
 extern volatile int halo_pc_menus_state;
 
+/* (1.1.3) Halo Custom Edition's bitmaps.map, loc.map and sounds.map (menu_tags.c ce_files_check, as ui.map
+loads): 1 there, -1 missing or not Custom Edition's (the ElDewrito, Halo 3 and Classic+ menus, the Steam
+Workshop, Custom Edition maps and the online menus off), 0 not checked yet */
+extern volatile int halo_ce_files_state;
+
 extern volatile int halo_system_link_request;
 extern volatile int halo_system_link_answer;
 extern volatile int halo_multiplayer_status[SYSTEM_LINK_STATUS_COUNT];

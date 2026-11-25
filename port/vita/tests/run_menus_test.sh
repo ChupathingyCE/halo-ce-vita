@@ -19,6 +19,11 @@
 #   h3xbox   Halo 3 without the Halo PC files: the Xbox's main menu (the
 #            Halo PC files are required, as for OpenCE's screens: the owner,
 #            Oct 18 2026)
+#   cefiles  1.1.3, the Custom Edition files required (the owner): the Xbox maps
+#            alone - the screen says all three are missing, where they go, and
+#            what is off (the Classic menus); a copy in the game's folder and in
+#            maps/custom_edition - told to move them; a bitmaps.map that is not
+#            Custom Edition's - told so; all three there - no screen
 #   h3broken a Halo 3 PNG missing: the set left out, the Xbox's main menu
 #   h3style  Halo CE at first, Halo 3 chosen while Multiplayer is open: back on
 #            the main menu, the Halo 3 screen
@@ -556,7 +561,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox cefiles h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 cases=${*:-$all_cases}
@@ -874,6 +879,39 @@ for case in $cases; do
 		run h3xbox "$data" 20 "$h3pad" HALO_MENU_STYLE=halo3 HALO_CONTENT_ROOT=none
 		check_h3 h3xbox classic
 		grep -aq "menus: OpenCE" "$out/h3xbox/run.log" && fail h3xbox "OpenCE's screens were added without the Halo PC files" ;;
+	cefiles)
+		ce_name="Custom Edition files needed"
+		# (1: the Xbox maps alone)
+		run cefiles "$data" 15 "$h3pad" HALO_MENU_STYLE=online HALO_CONTENT_ROOT=none
+		ce_log=$out/cefiles/run.log
+		grep -aq "ce files: missing \[bitmaps.map, loc.map, sounds.map\]" "$ce_log" || fail cefiles "the three not said missing"
+		grep -aq "^Missing: bitmaps.map, loc.map, sounds.map" "$ce_log" || fail cefiles "no screen naming the three"
+		grep -aq "^Put them in .*maps" "$ce_log" || fail cefiles "the screen does not say where they go"
+		[ "$(grep -ac "$ce_name: " "$ce_log")" = 1 ] || fail cefiles "the screen not shown once"
+		grep -aq "ui: screen ui.shell.main_menu.main_menu" "$ce_log" || fail cefiles "not on the Xbox's main menu after it"
+		# (2: copies in wrong folders, a bitmaps.map that is not Custom Edition's)
+		rm -rf "$out/cefiles-data"; mkdir -p "$out/cefiles-data/maps/custom_edition"
+		for f in "$data"/maps/*; do ln -s "$(readlink -f "$f")" "$out/cefiles-data/maps/$(basename "$f")"; done
+		ln -s "$(readlink -f "$menus_data/maps/loc.map")" "$out/cefiles-data/maps/custom_edition/loc.map"
+		head -c 300000 /dev/urandom > "$out/cefiles-data/maps/bitmaps.map"
+		mkdir -p "$out/cefiles-data/maps/maps"
+		ln -s "$(readlink -f "$menus_data/maps/sounds.map")" "$out/cefiles-data/maps/maps/sounds.map"
+		run cefiles2 "$out/cefiles-data" 15 "$h3pad" HALO_MENU_STYLE=online HALO_CONTENT_ROOT=none
+		ce_log=$out/cefiles2/run.log
+		grep -aq "ce files: sounds.map found in the wrong folder: .*maps/maps" "$ce_log" ||
+			fail cefiles "sounds.map in maps/maps not found"
+		grep -aq "ce files: loc.map found in the wrong folder: .*custom_edition" "$ce_log" ||
+			fail cefiles "loc.map in maps/custom_edition not found"
+		grep -aq "^loc.map is in .*custom_edition/*: move it into" "$ce_log" || fail cefiles "not told to move loc.map"
+		grep -aq "ce files: missing \[loc.map, sounds.map\], not Custom Edition's \[bitmaps.map\]" "$ce_log" ||
+			fail cefiles "the bad bitmaps.map not told apart"
+		grep -aq "^Not the Custom Edition file .*bitmaps.map" "$ce_log" || fail cefiles "not told bitmaps.map is wrong"
+		# (3: all three in place - no screen)
+		run cefiles3 "$menus_data" 15 "$h3pad" HALO_MENU_STYLE=online HALO_CONTENT_ROOT=none
+		ce_log=$out/cefiles3/run.log
+		grep -aq "ce files: bitmaps.map, loc.map and sounds.map are there" "$ce_log" || fail cefiles "the three not found in place"
+		grep -aq "$ce_name" "$ce_log" && fail cefiles "the screen shown with the files there"
+		echo "--- cefiles" ;;
 	h3broken)
 		rm -rf "$out/h3menus"
 		cp -r "$HALO_MENUS_FOLDER" "$out/h3menus"

@@ -159,12 +159,30 @@ PSVitaAlive or VitaDB are often versions behind.
   [ShaRKF00D](https://github.com/Rinnegatamante/ShaRKF00D/releases) once.
 - Free space on `ux0:`: about 2 GB with Xbox files, about 3.1 GB with MCC's
   (most of it MCC's dialogue and music).
-- Your own **Xbox** copy of Halo: Combat Evolved (disc or image) -
-  recommended - or, optional and fully supported, your own Halo: The Master
-  Chief Collection on Steam. The PC version's maps don't work.
-- For online play and Custom Edition maps: the free
+- **The game's files, one of:** your own **Xbox** copy of Halo: Combat
+  Evolved (disc or image) - recommended - or your own Halo: The Master Chief
+  Collection on Steam (optional, fully supported). The PC version's maps
+  don't work.
+- **And, required: the 3 Custom Edition files** `bitmaps.map`, `loc.map` and
+  `sounds.map` (see [Halo PC files](#halo-pc-files): the free
   [Halo Custom Edition installer](https://www.halomaps.org/hce/detail.cfm?fid=410)
-  (see [Halo PC files](#halo-pc-files)).
+  gives them). MCC's files already have them. Without them the game starts,
+  says what is missing, and only the Classic (Xbox) menus work: no ElDewrito,
+  Halo 3 or Classic+ menus, no Steam Workshop, no Custom Edition maps, no
+  online menus.
+
+What it looks like on the Vita with Xbox files:
+
+```
+ux0:data/haloce-vita/default.xbe
+ux0:data/haloce-vita/maps/           <- the Xbox disc's maps folder (a10.map ... ui.map)
+ux0:data/haloce-vita/maps/bitmaps.map   <- the 3 Custom Edition files, in the same maps folder
+ux0:data/haloce-vita/maps/loc.map
+ux0:data/haloce-vita/maps/sounds.map
+```
+
+With MCC's files instead: `ux0:data/haloce-vita/mcc/halo1/maps/` (its
+`custom_edition` folder has the 3 files; nothing to copy).
 
 ### Which folder? (Vita)
 
@@ -256,8 +274,9 @@ The tool isn't signed: if Windows says "Windows protected your PC", click
    (Steam MCC's files go in `ux0:data/haloce-vita/mcc/halo1/maps`, not here:
    see [Which folder?](#which-folder-vita).)
 
-4. **Optional:** add the [Halo PC files](#halo-pc-files) for online play and
-   the [movies](#movies-optional).
+4. **Required:** add the 3 [Halo PC files](#halo-pc-files) (`bitmaps.map`,
+   `loc.map`, `sounds.map`) to the same `maps` folder. **Optional:** the
+   [movies](#movies-optional).
 5. **Start the game.** Each level's first load takes a while.
 
 **Stuck on the loading picture with music playing?** The shader compiler is
@@ -272,10 +291,15 @@ another version is told which one is newer.
 
 ### Halo PC files
 
-Online play's menus (the server browser, Join by code, Create Game >
-Internet) and Custom Edition maps need **3 files from the PC version of
-Halo**: `bitmaps.map`, `sounds.map` and `loc.map`. They aren't included in
-this project. Get them **one** of these ways:
+**Required.** The ElDewrito, Halo 3 and Classic+ menus, the Steam
+Workshop, online play's menus (the server browser, Join by code, Create
+Game > Internet) and Custom Edition maps need **3 files from the PC version
+of Halo**: `bitmaps.map`, `sounds.map` and `loc.map`. They aren't included
+in this project. They go **in the maps folder itself**
+(`ux0:data/haloce-vita/maps/`), not in a `custom_edition` folder inside it
+and not next to `default.xbe`: if they are in a wrong folder, or aren't the
+Custom Edition files, the game says so at start. Get them **one** of these
+ways:
 
 #### Option A: the Halo Custom Edition installer (easiest)
 

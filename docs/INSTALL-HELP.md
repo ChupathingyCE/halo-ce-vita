@@ -60,7 +60,7 @@ also work).
 | Online | With players who have the Xbox maps | With players who have MCC's maps: Xbox and MCC players can't play together yet (planned) |
 | Intro and other movies | Yes, made from the disc (optional, Setup's Manual mode) | None (they are skipped) |
 | Loading screen | The Xbox's picture (from `default.xbe`) | A picture of the menus' live background, taken once from your own files |
-| Live background, menus, Forge | Yes | Yes. The plain Classic menu style shows Halo PC's own menus: use Classic+, ElDewrito or Halo 3 |
+| Live background, menus, Forge | Yes, with the 3 Custom Edition files (`bitmaps.map`, `loc.map`, `sounds.map`) in the maps folder - required. Without them only the Classic (Xbox) menus | Yes (MCC has the Custom Edition files). The plain Classic menu style shows Halo PC's own menus: use Classic+, ElDewrito or Halo 3 |
 | MCC campaign mods (Steam Workshop) | - | Experimental: Settings > Multiplayer > Modded maps > MCC mods |
 
 Both installs together also work: the campaign is the Xbox missions (MCC's

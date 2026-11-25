@@ -128,6 +128,7 @@ volatile int halo_system_link_request;
 volatile int halo_system_link_answer;
 volatile int halo_multiplayer_status[SYSTEM_LINK_STATUS_COUNT];
 volatile int halo_pc_menus_state;
+volatile int halo_ce_files_state;
 volatile int halo_text_input_state;
 volatile int halo_settings_panel_request;
 volatile int halo_adhoc_request;
@@ -5439,6 +5440,45 @@ shipped - the panel the classic one, the game's own carnage report and
 scoreboard (their rows left out), and OpenCE's Multiplayer screen not shown,
 so the panel keeps its Direct Link (Join by code) and Friends; Classic+
 ("classic", the Halo CE style before the split) as it was */
+/* (1.1.3) without Halo Custom Edition's files (menu_tags.c ce_files_check: halo_ce_files_state -1) every Menu
+style but Classic is greyed out with the reason, the saved one kept, and the Steam Workshop row says why and
+opens nothing; Download from Steam (which brings MCC's custom_edition) stays; the files back, all back */
+static void test_ce_files_missing(void)
+{
+	struct setting *style = setting_named("HALO_MENU_STYLE");
+	struct setting *workshop = NULL;
+	int index, choice, others = 1, saved = halo_ce_files_state;
+
+	for (index = 0; index < SETTING_COUNT; index++)
+		if (settings[index].kind == KIND_ACTION && settings[index].action == ACTION_WORKSHOP)
+			workshop = &settings[index];
+	vita_settings_set("HALO_MENU_STYLE", "online");
+	halo_ce_files_state = -1;
+	for (choice = 0; choice < style->count; choice++)
+		others &= choice_disabled(style, choice) == (strcmp(style->values[choice], "original") != 0);
+	check(others, "no Custom Edition files: every Menu style but Classic greyed out");
+	check(!strcmp(getenv("HALO_MENU_STYLE"), "online"), "no Custom Edition files: the saved Menu style kept");
+	check(strstr(setting_help(style), "Needs the Custom Edition files") != NULL, "no Custom Edition files: Menu style says why");
+	/* (a build with the Workshop: configure.py --steam-workshop) */
+	if (workshop)
+	{
+		check(strstr(setting_help(workshop), "Needs the Custom Edition files") != NULL,
+			"no Custom Edition files: Steam Workshop says why");
+		notice[0] = 0;
+		halo_system_link_request = 0;
+		act(workshop);
+		check(strstr(notice, "Needs the Custom Edition files") && halo_system_link_request != SYSTEM_LINK_REQUEST_WORKSHOP,
+			"no Custom Edition files: Steam Workshop opens nothing");
+	}
+	halo_ce_files_state = 1;
+	others = 1;
+	for (choice = 0; choice < style->count; choice++)
+		others &= !choice_disabled(style, choice);
+	check(others && !strstr(setting_help(style), "Needs the Custom Edition files"), "Custom Edition files back: every Menu style");
+	halo_ce_files_state = saved;
+	vita_settings_set("HALO_MENU_STYLE", "halo3");
+}
+
 static void test_menu_style_original(void)
 {
 	struct setting *report = setting_named("HALO_CLASSIC_CARNAGE_REPORT");
@@ -7255,6 +7295,7 @@ int main(void)
 	test_menu_style_row();
 	test_answer_press_held();
 	test_menu_style_original();
+	test_ce_files_missing();
 	test_carnage_report_row();
 	test_scoreboard_row();
 	test_restart_offer();

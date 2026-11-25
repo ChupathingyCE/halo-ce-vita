@@ -3867,3 +3867,15 @@
 "This build has no table of %s: Xbox and MCC files can't play it together with this host." = "Esta versión no tiene la tabla de %s: los archivos de Xbox y de MCC no pueden jugarlo juntos con este anfitrión."
 "MCC files, any host" = "Archivos MCC, cualquier anfitrión"
 "MCC files: join hosts without mixed play (built-in tables)" = "Archivos MCC: unirse a anfitriones sin juego mixto (tablas incluidas)"
+||||||| 3b2babb4e
+# 1.1.3: the Custom Edition files check (menu_tags.c ce_files_check, vita_settings.c)
+"Custom Edition files needed" = "Faltan los archivos de Custom Edition"
+"Halo CE needs 3 files from Halo Custom Edition (PC): bitmaps.map, loc.map, sounds.map." = "Halo CE necesita 3 archivos de Halo Custom Edition (PC): bitmaps.map, loc.map, sounds.map."
+"\n\nMissing: %s." = "\n\nFaltan: %s."
+"\n\nNot the Custom Edition file (damaged, or another game's): %s. Copy it again." = "\n\nNo es el archivo de Custom Edition (dañado o de otro juego): %s. Cópialo de nuevo."
+"%s.map is in %s: move it into %s" = "%s.map está en %s: muévelo a %s"
+"\n\nOff until then: the ElDewrito, Halo 3 and Classic+ menus, the Steam Workshop, Custom Edition maps, the online menus. The Classic menus are shown." = "\n\nDesactivado hasta entonces: los menús ElDewrito, Halo 3 y Clásico+, el Workshop de Steam, los mapas de Custom Edition, los menús en línea. Se muestran los menús Clásicos."
+"\n\nPut them in %s, or copy halocesetup_en_1.00.exe there, and restart (README: Halo PC files)." = "\n\nPonlos en %s, o copia allí halocesetup_en_1.00.exe, y reinicia (README: Halo PC files)."
+"\n\nContinue anyway: Cross" = "\n\nContinuar de todos modos: Cruz"
+"Needs the Custom Edition files (bitmaps.map, loc.map, sounds.map in the maps folder)" = "Necesita los archivos de Custom Edition (bitmaps.map, loc.map, sounds.map en la carpeta maps)"
+"Needs the Custom Edition files" = "Necesita los archivos de Custom Edition"
