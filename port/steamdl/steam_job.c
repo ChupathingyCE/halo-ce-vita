@@ -35,6 +35,10 @@ steam_job.h: the download's worker thread and its snapshot.
 #endif
 /* a lost session starts the flow again with a new QR, at most this often */
 #define JOB_RESTARTS 2
+/* (1.1.3 8v) a lost session whose sign-in got the download further (a chunk written, a file done) starts it again
+without counting as one of those, at most this often in one job: an hour's Workshop pack on a Vita's Wi-Fi may lose it
+more than twice and must carry on */
+#define JOB_PROGRESS_RESTARTS_MAXIMUM 20
 /* (sleeps of the device in one job that each start the flow again) */
 #define JOB_SLEEPS_MAXIMUM 50
 #define CM_DIRECTORY_URL "https://api.steampowered.com/ISteamDirectory/GetCMListForConnect/v1/?cellid=0&cmtype=websockets"
@@ -1237,7 +1241,7 @@ static void *worker(void *unused)
 	struct steam_download_result result;
 	const char *cdn[1];
 	char cm[STEAM_HOST_MAXIMUM + 32];
-	int attempt, final_phase;
+	int attempt, final_phase, progress_restarts = 0;
 	uint8_t secret[STEAM_SIGNIN_SECRET_MAXIMUM];
 	size_t secret_size;
 
@@ -1293,7 +1297,7 @@ static void *worker(void *unused)
 	{
 		set_phase(STEAM_JOB_CONNECTING);
 		pthread_mutex_lock(&job.lock);
-		job.status.attempts = attempt + 1;
+		job.status.attempts = attempt + 1 + progress_restarts;
 		pthread_mutex_unlock(&job.lock);
 		if (job.options.cm_url[0])
 			snprintf(cm, sizeof(cm), "%s", job.options.cm_url);
@@ -1330,6 +1334,12 @@ static void *worker(void *unused)
 		}
 		if (result.ok || result.cancelled || job.cancel || !result.session_lost || options.sign_out)
 			break;
+		if ((result.bytes_written || result.files_done || result.items_done) &&
+			progress_restarts < JOB_PROGRESS_RESTARTS_MAXIMUM)
+		{
+			progress_restarts++;
+			attempt--;
+		}
 		say(result.kept ? "steam job: the session was lost: connecting again with the kept sign-in (the download resumes)" :
 			"steam job: the session was lost: a new QR (the download resumes)");
 	}

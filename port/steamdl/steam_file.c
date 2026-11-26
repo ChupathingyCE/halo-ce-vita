@@ -72,22 +72,47 @@ static int hash_range(struct steam_file_job *job, FILE *file, uint64_t offset, u
 	return 1;
 }
 
-/* the whole file's SHA-1 against sha_content and its header: 1, or 0 */
-static int whole_file_ok(struct steam_file_job *job, FILE *file)
+/* the whole file's SHA-1 against sha_content and its header: 1, or 0 (why, if not NULL: which failed - 1.1.3 8v: the
+dev Vita's Snowtrap, Nov 26, said "SHA-1 or header", not which) */
+static int whole_file_ok(struct steam_file_job *job, FILE *file, char *why, size_t why_size)
 {
 	uint8_t digest[20], head[16], *block = malloc(READ_BLOCK);
 	size_t head_size;
-	int ok;
+	int ok, hashed;
 
+	if (why && why_size)
+		why[0] = 0;
 	if (!block)
 		return 0;
-	ok = !job->has_sha_content || (hash_range(job, file, 0, job->size, digest, block) &&
-		steam_equal(digest, job->sha_content, 20));
+	hashed = !job->has_sha_content || hash_range(job, file, 0, job->size, digest, block);
+	ok = hashed && (!job->has_sha_content || steam_equal(digest, job->sha_content, 20));
 	free(block);
-	if (!ok || !seek_to(file, 0))
+	if (!ok)
+	{
+		if (why && !hashed)
+			snprintf(why, why_size, "the file could not be read whole");
+		else if (why)
+		{
+			char got[41], listed[41];
+
+			steam_hex(digest, 20, got);
+			steam_hex(job->sha_content, 20, listed);
+			snprintf(why, why_size, "the whole file's SHA-1 is not the manifest's (%.8s, not %.8s)", got, listed);
+		}
+		return 0;
+	}
+	if (!seek_to(file, 0))
 		return 0;
 	head_size = fread(head, 1, sizeof(head), file);
-	return steam_plan_header_ok(job->kind, job->destination, head, head_size, job->size);
+	ok = steam_plan_header_ok(job->kind, job->destination, head, head_size, job->size);
+	if (!ok && why)
+	{
+		char hex[17];
+
+		steam_hex(head, head_size < 8 ? head_size : 8, hex);
+		snprintf(why, why_size, "its SHA-1 is right, its header is not one this game takes (%s)", hex);
+	}
+	return ok;
 }
 
 long steam_file_journal_parse(const char *text, size_t size, uint32_t depot, uint64_t gid, uint64_t file_size,
@@ -234,7 +259,7 @@ int steam_file_open_checked(struct steam_file_job *job, const char *path, uint32
 	if (file_size_of(path, &exists) == job->size && exists)
 	{
 		FILE *final = fopen(path, "rb");
-		int ok = final && whole_file_ok(job, final);
+		int ok = final && whole_file_ok(job, final, NULL, 0);
 
 		if (final)
 			fclose(final);
@@ -325,6 +350,7 @@ static void close_files(struct steam_file_job *job)
 
 int steam_file_finish(struct steam_file_job *job, char *error, int error_size)
 {
+	char why[160];
 	int ok;
 
 	if (!job->part || job->done_count != job->chunk_count)
@@ -332,7 +358,7 @@ int steam_file_finish(struct steam_file_job *job, char *error, int error_size)
 		snprintf(error, (size_t)error_size, "file not complete");
 		return 0;
 	}
-	ok = whole_file_ok(job, job->part);
+	ok = whole_file_ok(job, job->part, why, sizeof(why));
 	close_files(job);
 	if (!ok && job->stopped)
 	{
@@ -343,7 +369,7 @@ int steam_file_finish(struct steam_file_job *job, char *error, int error_size)
 	}
 	if (!ok)
 	{
-		snprintf(error, (size_t)error_size, "%s: the whole file's SHA-1 or header does not match", job->path);
+		snprintf(error, (size_t)error_size, "%s: %s", job->path, why[0] ? why : "the whole file's check failed");
 		job->discarded = 1;
 		steam_file_discard(job);
 		return 0;
