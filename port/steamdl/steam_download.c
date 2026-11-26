@@ -1732,6 +1732,10 @@ void steam_download_run(const struct steam_download_options *options, const stru
 		state = steam_session_qr_poll(&session, url, sizeof(url), error, sizeof(error));
 		if (state == STEAM_QR_FAILED)
 		{
+			/* (the player's cancel during the wait cut the connection under the poll: cancelled, not expired - 8u
+			device test, Nov 26: Circle on the QR was logged "ended: The sign-in QR expired ...") */
+			if (callbacks->waiting && callbacks->waiting(callbacks->context))
+				goto cancelled;
 			/* (the QR left unscanned until Steam closed its connection, or refused the poll: said plainly - the screens
 			offer a new QR; the poll's own words in the log) */
 			say(callbacks, "steam: the QR sign-in ended unscanned: %s", error);

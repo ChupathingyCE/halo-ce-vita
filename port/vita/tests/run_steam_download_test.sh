@@ -529,6 +529,11 @@ signin_flow=1
 client_env="env STEAM_TEST_CANCEL=qr"
 flow job-cancel-qr normal 1 cancel
 cancel_check job-cancel-qr
+# (1.1.3-insider.8v: the cancel on the QR logged as such, not as the QR expired - 8u device test, Nov 26: Circle on the
+# QR, "sign-in 1 ended: The sign-in QR expired before it was approved"; the cancel cut the connection under the poll)
+grep -q "steam job: sign-in 1 ended: cancelled " "$out/flow-job-cancel-qr/log.txt" &&
+	! grep -q "QR sign-in ended unscanned\|QR expired" "$out/flow-job-cancel-qr/log.txt" ||
+	{ echo "FAIL job-cancel-qr: the cancel logged as the QR's expiry: $(grep "sign-in 1 ended" "$out/flow-job-cancel-qr/log.txt")"; status=1; }
 client_env="env STEAM_TEST_CANCEL=preparing"
 flow job-cancel-prep slow 1 cancel
 cancel_check job-cancel-prep
