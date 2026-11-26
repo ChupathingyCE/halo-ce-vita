@@ -1935,6 +1935,52 @@ static enum cache_file_status custom_edition_cache_runnable_verdict(
 	return status;
 }
 
+/* (port, 1.1.3 8v audit) the mods scan's reasons a map is not supported, which the mod manager says after "Not
+supported on PS Vita: " in its 96 bytes (custom_edition_mods.c, mod_unsupported): each at most 69 bytes in every
+language, checked by port/vita/tests/mods_reasons_fit.py (run_lang_test.sh), which reads them between these marks.
+The cache file statuses' own descriptions run to 103 characters (the load's message has room for them) */
+/* mods reasons: */
+static char const *const mod_map_reasons[] =
+{
+	N_("the scenario tag is missing, misplaced or not a scenario"),
+	N_("the scenario's scripts take parameters, which this build does not run"),
+	N_("the scenario's scripts are larger than this build has room for"),
+	N_("the scenario names more objects than this build has room for"),
+	N_("it needs Custom Edition's bitmaps.map, sounds.map and loc.map"),
+	N_("a Custom Edition campaign map: copy it into the maps folder"),
+	N_("this build cannot run it"),
+};
+/* :mods reasons */
+enum
+{
+	_mod_map_reason_scenario_tag,
+	_mod_map_reason_script_parameters,
+	_mod_map_reason_script_nodes,
+	_mod_map_reason_object_names,
+	_mod_map_reason_resource_maps,
+	_mod_map_reason_custom_edition_campaign,
+	_mod_map_reason_other,
+};
+
+/* the mods scan's reason for what mcc_cea_cache_runnable refused, in the player's language */
+static char const *mod_map_runnable_reason(
+	enum cache_file_status status)
+{
+	switch (status)
+	{
+	case _cache_file_status_bad_scenario_tag:
+		return T(mod_map_reasons[_mod_map_reason_scenario_tag]);
+	case _cache_file_status_script_parameters:
+		return T(mod_map_reasons[_mod_map_reason_script_parameters]);
+	case _cache_file_status_bad_script_nodes:
+		return T(mod_map_reasons[_mod_map_reason_script_nodes]);
+	case _cache_file_status_bad_object_names:
+		return T(mod_map_reasons[_mod_map_reason_object_names]);
+	default:
+		return T(mod_map_reasons[_mod_map_reason_other]);
+	}
+}
+
 short custom_edition_cache_mod_map_check(
 	char const *path,
 	char *why,
@@ -1974,8 +2020,7 @@ short custom_edition_cache_mod_map_check(
 				error(_error_silent, "mods: '%s' (a Custom Edition map) needs %s", path, resource_path);
 				if (why && why_size > 0)
 				{
-					snprintf(why, (size_t)why_size, "%s",
-						T("it needs Halo Custom Edition's bitmaps.map, sounds.map and loc.map in the maps folder"));
+					snprintf(why, (size_t)why_size, "%s", T(mod_map_reasons[_mod_map_reason_resource_maps]));
 				}
 				return NONE;
 			}
@@ -1992,7 +2037,7 @@ short custom_edition_cache_mod_map_check(
 		error(_error_silent, "mods: '%s' is left out: a Custom Edition campaign map (played from the maps folder)", path);
 		if (why && why_size > 0)
 		{
-			snprintf(why, (size_t)why_size, "%s", T("a Custom Edition campaign map: copy it into the maps folder"));
+			snprintf(why, (size_t)why_size, "%s", T(mod_map_reasons[_mod_map_reason_custom_edition_campaign]));
 		}
 		return NONE;
 	}
@@ -2022,8 +2067,9 @@ short custom_edition_cache_mod_map_check(
 			custom_edition_file_close(&file);
 			if (why_size > 0)
 			{
-				snprintf(why, (size_t)why_size, "%s", T(cache_file_status_describe(status)));
+				snprintf(why, (size_t)why_size, "%s", mod_map_runnable_reason(status));
 			}
+			error(_error_silent, "mods: '%s': %s", path, cache_file_status_describe(status));
 			return NONE;
 		}
 	}
