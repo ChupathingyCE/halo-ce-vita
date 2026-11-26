@@ -369,6 +369,12 @@
 #   h3workshopqr  (1.1.3 device test, Nov 25) the same browser's SIGN IN with the QR left unscanned: the fake
 #            closes the connection under its second poll (qr_drop) - the screen says so plainly ("The sign-in QR expired
 #            ...", never the poll's raw words) and Cross is New QR: a new sign-in, approved, the grid
+#   wscemap  (1.1.3 8v, the dev Vita, Nov 26: Snowtrap, 2904654154, a Halo PC Custom Edition map - "daeh" + 609 -
+#            on MCC's Workshop, refused at its download) the mods folder's Workshop item 2904654154 made at test
+#            time from a Custom Edition multiplayer map (HALO_TEST_CE_MAP, default ../custom-maps-dl/snowcast.map;
+#            SKIP without): the scan takes it as ws2904654154_snowtrap, the level list and the map picker offer it,
+#            the mod manager says it works in Multiplayer. With HALO_TEST_PROFILE: OFFLINE, MAP it, START GAME: it
+#            loads (its tags from the maps folder's bitmaps.map, sounds.map and loc.map) and the game starts on it
 #   wsunplayable  (1.1.3 device test, Nov 25: Sketpic BETA, a Workshop multiplayer map whose scripts take
 #            parameters, was offered to play, its load failed, the Xbox's ENLISTED PLAYERS then an empty message came
 #            up; the mod manager called the item an MCC mod copied in by hand that works in Campaign) the mods folder's
@@ -615,7 +621,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox cefiles h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit cpworkshop cpworkshoptouch wsunplayable h3workshopqr"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox cefiles h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit cpworkshop cpworkshoptouch wsunplayable h3workshopqr wscemap"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 # (1.1.3: Classic+'s option screens; 8v: the menus after a game, the Vita's memory)
@@ -3100,6 +3106,57 @@ for case in $cases; do
 				fail wsunplayable_load "a message came up again after the first was closed"
 		else
 			echo "(wsunplayable: no HALO_TEST_PROFILE: the load failure's way back not run)"
+		fi ;;
+	wscemap)
+		# (1.1.3 8v: a Steam Workshop item whose map is a Halo PC Custom Edition cache - "daeh" + 609 -, as MCC's
+		# Workshop carries them: the dev Vita, Nov 26, refused Snowtrap, 2904654154, at its download)
+		ws_ce_map=${HALO_TEST_CE_MAP:-$data_root/custom-maps-dl/snowcast.map}
+		if [ ! -f "$ws_ce_map" ] || [ "$(head -c 8 "$ws_ce_map" | od -An -tx1 | tr -d ' \n')" != 6461656861020000 ]; then
+			echo "--- wscemap"; echo "SKIP (wscemap): no Custom Edition multiplayer map (HALO_TEST_CE_MAP)"
+			continue
+		fi
+		wsc=$out/wsc-data
+		mods_data "$wsc"
+		rm -rf "$wsc/workshop"
+		mkdir -p "$wsc/workshop/installed" "$wsc/mods/2904654154/maps"
+		cp --reflink=auto "$(readlink -f "$ws_ce_map")" "$wsc/mods/2904654154/maps/snowtrap.map"
+		echo "781788483063501535" > "$wsc/workshop/installed/2904654154.gid"
+		printf 'title Halo CE - Snowtrap\n' > "$wsc/workshop/installed/2904654154.about"
+		# (the mod manager: MODS, the main menu; MULTIPLAYER, MAP: the picker, B)
+		wsc_pad="$h3modspad wait:150:3000 b wait:150:3000 b wait:150:3000 down:150:500 a wait:150:3000 down:150:500 a"
+		wsc_pad="$wsc_pad wait:150:3000 @wsc-picker:0:300 b wait:150:3000"
+		mods_from=$wsc/mods workshop_from=$wsc/workshop run wscemap "$wsc" 70 "$wsc_pad" HALO_MENU_STYLE=halo3 \
+			HALO_MAPS_DISABLED=mygulch
+		check_h3 wscemap halo3
+		log=$out/wscemap/run.log debug=$out/wscemap/data/debug.txt
+		grep -aE "menus: h3 mods: 2904654154|2904654154|Steam Workshop multiplayer maps|map picker" "$log" "$debug" | cut -c1-260
+		grep -aq "mods: .*2904654154.maps.snowtrap.map is the Steam Workshop multiplayer map ws2904654154_snowtrap" "$debug" ||
+			fail wscemap "the Custom Edition map was not taken as the item's multiplayer map"
+		grep -aq "workshop: 1 Steam Workshop multiplayer maps for the level list" "$debug" ||
+			fail wscemap "the Custom Edition map is not in the level list"
+		grep -aq "menus: h3 mp: the map picker: 14 maps (1 custom)" "$log" ||
+			fail wscemap "the map picker did not offer the Custom Edition Workshop map"
+		grep -aq "menus: h3 mods: 2904654154: Workshop item, on, [0-9]* KB, passed, works in Multiplayer, from Steam Workshop, title Halo CE - Snowtrap$" "$log" ||
+			fail wscemap "the mod manager did not say the item as a playable Workshop multiplayer item"
+		if [ -r "${HALO_TEST_PROFILE:-}" ]; then
+			# (OFFLINE (h3offline's), MAP: down thirteen past the Xbox's thirteen to the Workshop map, A; START GAME:
+			# split screen's SELECT PROFILE, A joins, A the profile, A the game: the map loads and the game runs)
+			off_d="down:150:500"
+			wsc_play="$h3mppad wait:150:1000 a:150:2000 $off_d $off_d a:150:2500 $off_d a:150:2500"
+			for row in $(seq 13); do wsc_play="$wsc_play down:150:300"; done
+			wsc_play="$wsc_play a:150:2500 $off_d $off_d a:150:3000 a:150:1500 a:150:1500 a:150:1000 wait:150:25000 @wsc-play:0:300"
+			profile_from=$HALO_TEST_PROFILE mods_from=$wsc/mods workshop_from=$wsc/workshop run wscemap_play "$wsc" 80 \
+				"$wsc_play" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch HALO_BOTS=1
+			check_h3 wscemap_play halo3
+			log=$out/wscemap_play/run.log debug=$out/wscemap_play/data/debug.txt
+			grep -aE "custom edition: loading|ws2904654154|could not be loaded|h3 mp: the local game" "$log" "$debug" | cut -c1-220
+			grep -aq "custom edition: loading '.*2904654154.maps.snowtrap.map' (build " "$debug" ||
+				fail wscemap_play "the Custom Edition Workshop map was not loaded"
+			grep -aq "could not be loaded" "$log" && fail wscemap_play "its load failed"
+			grep -aq "menus: the in-game screens: .* added to ws2904654154_snowtrap.map's" "$log" ||
+				fail wscemap_play "the game did not start on it"
+		else
+			echo "(wscemap: no HALO_TEST_PROFILE: the game on it not run)"
 		fi ;;
 	h3modspicker)
 		mods_data "$out/h3mods-data"

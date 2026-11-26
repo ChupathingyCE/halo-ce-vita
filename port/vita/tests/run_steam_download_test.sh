@@ -469,6 +469,18 @@ grep -q "items=0 failed=1" "$out/flow-ws-wrong-manifest/line" && \
 flow ws-hostile-list ws_hostile_list 2900000001 ok
 grep -q "items=0 failed=0" "$out/flow-ws-hostile-list/line" && \
 	grep -q "malformed" "$out/flow-ws-hostile-list/log.txt" || { echo "FAIL ws-hostile-list"; status=1; }
+# (1.1.3 8v, the dev Vita, Nov 26: Snowtrap, 2904654154, a Halo PC Custom Edition map - "daeh" + 609 - as MCC's
+# Workshop carries them, was refused at its download: "its SHA-1 is right, its header is not one this game takes
+# (6461656861020000)". A made-up one as item 2900000001's map: downloaded, the game's check (the test's, as the
+# game's) takes it, installed)
+python3 -I -c 'import os, sys; open(sys.argv[1], "wb").write(b"daeh" + (609).to_bytes(4, "little") + os.urandom(90000))' \
+	"$out/snowtrap.map"
+server_extra="--workshop-map $out/snowtrap.map"
+flow ws-cemap normal 2900000001 ok
+server_extra=
+grep -q "items=1 failed=0 installed=1" "$out/flow-ws-cemap/line" &&
+	cmp -s "$out/snowtrap.map" "$out/flow-ws-cemap/card/haloce-vita/mods/2900000001/maps/snowtrap.map" ||
+	{ echo "FAIL ws-cemap: the Custom Edition map not downloaded and installed: $(cat "$out/flow-ws-cemap/line")"; status=1; }
 # (1.1.3 8v, the dev Vita, Nov 26: Zuka - 25 files, 1.45 GB - and Cursed Halo - 19 maps, 3.0 GB - failed. A big map's
 # whole-file SHA-1 check (~90 s on the Vita) pumped no CM heartbeat, so Steam closed the session; each next sign-in
 # checked every finished file again - Workshop files had no verified record -, unpumped too, and lost it again at its

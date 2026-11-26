@@ -498,7 +498,14 @@ static void test_plan(void)
 		uint8_t head[16] = { 'd', 'a', 'e', 'h', 13, 0, 0, 0 };
 
 		CHECK(steam_plan_header_ok(STEAM_KIND_MCC_MAP, "x.map", head, 16, 1000));
+		CHECK(steam_plan_header_ok(STEAM_KIND_WORKSHOP_MAP, "x.map", head, 16, 1000));
 		head[4] = 7;
+		CHECK(!steam_plan_header_ok(STEAM_KIND_MCC_MAP, "x.map", head, 16, 1000));
+		CHECK(!steam_plan_header_ok(STEAM_KIND_WORKSHOP_MAP, "x.map", head, 16, 1000));
+		/* (1.1.3 8v: a Custom Edition cache, 609, as Snowtrap's: a Workshop map's, never a depot's MCC map) */
+		head[4] = 0x61;
+		head[5] = 0x02;
+		CHECK(steam_plan_header_ok(STEAM_KIND_WORKSHOP_MAP, "x.map", head, 16, 1000));
 		CHECK(!steam_plan_header_ok(STEAM_KIND_MCC_MAP, "x.map", head, 16, 1000));
 		CHECK(steam_plan_header_ok(STEAM_KIND_BANK, "x.fsb", (const uint8_t *)"FSB5....", 8, 1000));
 		CHECK(!steam_plan_header_ok(STEAM_KIND_BANK, "x.fsb", (const uint8_t *)"FSB4....", 8, 1000));
@@ -532,7 +539,8 @@ static int test_map_check(void *context, const char *path, char *why, size_t why
 	}
 	got = fread(head, 1, sizeof(head), file);
 	fclose(file);
-	if (got < 8 || memcmp(head, "daeh", 4) || head[4] != 13)
+	/* (as the game's: MCC's version 13, or a Custom Edition cache, 609 - 1.1.3 8v) */
+	if (got < 8 || memcmp(head, "daeh", 4) || !(head[4] == 13 || (head[4] == 0x61 && head[5] == 0x02)))
 	{
 		snprintf(why, why_size, "not a version 13 cache");
 		return 0;
@@ -555,7 +563,7 @@ static void test_workshop(const char *folder)
 
 	/* names: taken as written, '\\' made '/'; kinds by extension */
 	CHECK(steam_workshop_name("maps\\a10.map", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&
-		!strcmp(relative, "maps/a10.map") && kind == STEAM_KIND_MCC_MAP);
+		!strcmp(relative, "maps/a10.map") && kind == STEAM_KIND_WORKSHOP_MAP);
 	CHECK(steam_workshop_name("maps/Bitmaps.MAP", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&
 		kind == STEAM_KIND_RESOURCE);
 	CHECK(steam_workshop_name("CampaignInfo.json", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&

@@ -1567,14 +1567,21 @@ static boolean custom_edition_cache_identify_file(
 		if (cache_file_identify(&file.source, identity) == _cache_file_status_ok &&
 			(mcc_kind == _mcc_content_menu ?
 				identity->format == _cache_file_format_mcc_cea_cache :
-			mcc_kind == _mcc_content_multiplayer || workshop ?
+			mcc_kind == _mcc_content_multiplayer ?
 				identity->format == _cache_file_format_mcc_cea_cache && identity->scenario_type == _scenario_type_multiplayer :
+			/* (1.1.3 8v: a Workshop item's map is MCC's Halo: CE Anniversary cache or a Halo PC Custom Edition one,
+			which MCC's Workshop carries too - Snowtrap, 2904654154 -: custom_edition_cache_workshop_map) */
+			workshop ?
+				(identity->format == _cache_file_format_mcc_cea_cache ||
+					identity->format == _cache_file_format_custom_edition_cache) &&
+				identity->scenario_type == _scenario_type_multiplayer :
 			from_mods || mcc_kind == _mcc_content_campaign ?
 				identity->format == _cache_file_format_mcc_cea_cache && identity->scenario_type == _scenario_type_solo :
 				identity->format == _cache_file_format_custom_edition_cache))
 		{
 			identified = TRUE;
-			if (resource_maps_used && (mcc_kind != _mcc_content_none || workshop))
+			if (resource_maps_used && (mcc_kind != _mcc_content_none ||
+				(workshop && identity->format == _cache_file_format_mcc_cea_cache)))
 			{
 				/* (pixels from the bitmaps.map beside it, checked as it loads:
 				no tag of a resource map) */
@@ -1946,6 +1953,35 @@ short custom_edition_cache_mod_map_check(
 		return NONE;
 	}
 	status = cache_file_identify(&file.source, &identity);
+	/* (1.1.3 8v: a Halo PC Custom Edition cache of a multiplayer scenario too - a Steam Workshop item's map, as MCC's
+	Workshop carries them: the dev Vita's Snowtrap, Nov 26 -, played as the maps folder's Custom Edition maps are, with
+	their bitmaps.map, sounds.map and loc.map; the mods scan takes it only as a Workshop item's) */
+	if (status == _cache_file_status_ok && identity.format == _cache_file_format_custom_edition_cache &&
+		identity.scenario_type == _scenario_type_multiplayer)
+	{
+		uint32_t used = custom_edition_cache_resource_maps_used(&file.source, &identity);
+		short type;
+
+		custom_edition_file_close(&file);
+		for (type = _resource_map_bitmaps; type < NUMBER_OF_RESOURCE_MAP_TYPES; type++)
+		{
+			char resource_path[MAP_PATH_SIZE];
+
+			if (TEST_FLAG(used, type) &&
+				custom_edition_resource_map_path(&identity, (enum resource_map_type)type, resource_path) &&
+				!file_path_exists(resource_path))
+			{
+				error(_error_silent, "mods: '%s' (a Custom Edition map) needs %s", path, resource_path);
+				if (why && why_size > 0)
+				{
+					snprintf(why, (size_t)why_size, "%s",
+						T("it needs Halo Custom Edition's bitmaps.map, sounds.map and loc.map in the maps folder"));
+				}
+				return NONE;
+			}
+		}
+		return _scenario_type_multiplayer;
+	}
 	if (status != _cache_file_status_ok || identity.format != _cache_file_format_mcc_cea_cache)
 	{
 		custom_edition_file_close(&file);
@@ -2443,7 +2479,11 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 			halo_content_library_found()) &&
 		/* (port: a Steam Workshop item's multiplayer map, for any game: its
 		players each with their own copy, the host's identity compared) */
-		!(mcc_cea && workshop && from_mods && identity.scenario_type == _scenario_type_multiplayer))
+		!(mcc_cea && workshop && from_mods && identity.scenario_type == _scenario_type_multiplayer) &&
+		/* (1.1.3 8v: or a Halo PC Custom Edition cache, which MCC's Workshop carries too, loaded as a maps folder's
+		Custom Edition map is - its resource maps the maps folder's -, for any game as the item's other maps) */
+		!(!mcc_cea && workshop && from_mods && status == _cache_file_status_ok &&
+			identity.format == _cache_file_format_custom_edition_cache && identity.scenario_type == _scenario_type_multiplayer))
 	{
 		error(
 			_error_silent,
