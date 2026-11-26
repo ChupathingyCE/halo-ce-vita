@@ -5271,6 +5271,8 @@ actions: only the look. */
 #define ONLINE_HEADING 0xFFE8D2BCu
 #define ONLINE_TRACK 0x80D2B49Au
 #define ONLINE_KNOB 0xFFF8F0E8u
+/* (a choice this build does not offer: the value's colour, half seen) */
+#define ONLINE_GREYED 0x80EFE9E2u
 
 static unsigned int online_tabs(struct overlay_vertex *vertices, unsigned int count, float y, const char *tabs)
 {
@@ -5400,7 +5402,33 @@ static unsigned int online_panel(struct overlay_vertex *vertices, unsigned int c
 			h3_text(&h3.small, ONLINE_LEFT + 16.0f, baseline, ONLINE_LABEL, label, 1);
 			if (chosen && left)
 				h3_text(&h3.small, x - 12.0f, baseline, H3_ARROW, "<", 0);
-			h3_text(&h3.small, x, baseline, ONLINE_VALUE, value, 1);
+			x += h3_text(&h3.small, x, baseline, ONLINE_VALUE, value, 1);
+			/* (the choices this build does not offer, after a '\x07' each
+			(vita_settings.c choice_disabled): greyed out after the value,
+			as the classic panel's menu_row has them - Menu style without
+			the Custom Edition files; each while it fits before the >'s place.
+			Device test, Nov 25: the ElDewrito panel drew none) */
+			if (split)
+			{
+				const char *greyed = strchr(split, '\x07');
+
+				while (greyed)
+				{
+					const char *next = strchr(greyed + 1, '\x07');
+					size_t name_length = next ? (size_t)(next - greyed - 1) : strlen(greyed + 1);
+					char name[64];
+
+					if (name_length > sizeof(name) - 1)
+						name_length = sizeof(name) - 1;
+					memcpy(name, greyed + 1, name_length);
+					name[name_length] = 0;
+					x += 20.0f;
+					if (x + overlay_face_width(&h3.small, name, 1) > ONLINE_RIGHT - 34.0f)
+						break;
+					x += h3_text(&h3.small, x, baseline, ONLINE_GREYED, name, 1);
+					greyed = next;
+				}
+			}
 			/* (a value of a range of numbers: its slider, the knob where
 			the choice stands) */
 			if (last >= 3 && value[0] >= '0' && value[0] <= '9')

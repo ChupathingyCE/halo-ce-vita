@@ -5390,10 +5390,13 @@ static const char *setting_help(const struct setting *setting)
 	static char camera_help[128];
 	int row = playstation_row(setting);
 
-	/* (1.1.3: the rows that need Halo Custom Edition's files, without them) */
+	/* (1.1.3: the rows that need Halo Custom Edition's files, without them. The classic panel's help is one
+	line of 70 characters - the longer one ran off its right edge, device test, Nov 25 -; the ElDewrito panel wraps
+	the longer one) */
 	if (halo_ce_files_state < 0 && ((setting->variable && !strcmp(setting->variable, "HALO_MENU_STYLE")) ||
 		(setting->kind == KIND_ACTION && setting->action == ACTION_WORKSHOP)))
-		return T("Needs the Custom Edition files (bitmaps.map, loc.map, sounds.map in the maps folder)");
+		return classic_panel() ? T("Needs Custom Edition files in maps: bitmaps.map, loc.map, sounds.map") :
+			T("Needs the Custom Edition files (bitmaps.map, loc.map, sounds.map in the maps folder)");
 
 	if (setting->variable && !strcmp(setting->variable, "HALO_MAP_SHARE_FROM") && setting->choice >= 0 &&
 		setting->choice < 3)
@@ -6095,9 +6098,11 @@ static int list_text(char *text, int size, const struct line *lines, int count, 
 				if (online_panel_style() && last > 0)
 					length += snprintf(text + length, (size_t)(size - length), "\x0b%d/%d", setting->choice, last);
 				/* (the choices this build does not offer, greyed out after a
-				'\x07', after the arrow's place: vita_gxm.c menu_row) */
+				'\x07', after the arrow's place: vita_gxm.c menu_row and
+				online_panel; not the chosen one, shown already - a saved
+				ElDewrito without the Custom Edition files) */
 				for (choice = 0; choice <= last && length < size; choice++)
-					if (choice_disabled(setting, choice))
+					if (choice != setting->choice && choice_disabled(setting, choice))
 						length += snprintf(text + length, (size_t)(size - length), "\x07%s", T(setting->names[choice]));
 			}
 		}

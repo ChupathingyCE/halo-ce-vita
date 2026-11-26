@@ -69,8 +69,12 @@ static int test_pthread_cond_timedwait(pthread_cond_t *condition, pthread_mutex_
 #define pthread_cond_wait test_pthread_cond_wait
 #define pthread_cond_timedwait test_pthread_cond_timedwait
 /* (the shipped Menu style row offers Halo CE and ElDewrito; the checks below
-were written for the Halo 3 panel, kept as a hidden style) */
+were written for the Halo 3 panel, kept as a hidden style. A build with
+VITA_SETTINGS_TEST_SHIPPED_STYLE has the shipped row: VITA_SETTINGS_PANEL_TEXT
+alone, panel_text_dump) */
+#ifndef VITA_SETTINGS_TEST_SHIPPED_STYLE
 #define VITA_SETTINGS_TEST_HALO3_STYLE
+#endif
 #include "../host/vita_settings.c"
 #undef rename
 #undef pthread_cond_wait
@@ -5479,6 +5483,115 @@ static void test_ce_files_missing(void)
 	vita_settings_set("HALO_MENU_STYLE", "halo3");
 }
 
+/* Game > Menus' Menu style row chosen, in this language and Menu style (the panel opened again). (The style
+set with the Custom Edition files there: vita_settings_set of the choice already made, greyed out, would step
+past it for ever - change's step 0; the game sets no Menu style so) */
+static int ce_files_menus_page(const char *language, const char *style)
+{
+	int state = halo_ce_files_state;
+
+	vita_settings_set("HALO_LANGUAGE", language);
+	halo_ce_files_state = 1;
+	vita_settings_set("HALO_MENU_STYLE", style);
+	halo_ce_files_state = state;
+	if (panel_open)
+		close_panel();
+	open_panel();
+	return to_tab(T("Game")) && open_page(T("Menus")) && to_line(T("Menu style"));
+}
+
+/* the help line's characters (-1 without one) */
+static int help_characters(void)
+{
+	const char *help = strstr(menu, "\n\x05");
+
+	return help ? characters(help + 2, (int)strcspn(help + 2, "\n")) : -1;
+}
+
+/* (1.1.3, device test, Nov 25: the Custom Edition files missing) Game > Menus, Menu style chosen. The classic
+panel's help is one line of 70 characters (vita_gxm.c menu_build): "Needs the Custom Edition files (...)" ran off
+its right edge - a shorter one there, in English and in Spanish; the ElDewrito panel wraps the longer one. The
+greyed-out choices after the value, not the chosen one again (a saved ElDewrito: it was, after its own value). How
+the panels draw them: vita_panel_draw_test.c */
+static void test_ce_files_panel(void)
+{
+	static const char *const languages[] = { "en", "es" };
+	struct setting *workshop = NULL;
+	char line[192];
+	int index, saved = halo_ce_files_state;
+
+	for (index = 0; index < SETTING_COUNT; index++)
+		if (settings[index].kind == KIND_ACTION && settings[index].action == ACTION_WORKSHOP)
+			workshop = &settings[index];
+	halo_ce_files_state = -1;
+	for (index = 0; index < 2; index++)
+	{
+		check(ce_files_menus_page(languages[index], "original") && classic_panel() &&
+			strstr(menu, index ? "\n\x05Necesita bitmaps.map, loc.map y sounds.map de Custom Edition en maps\n" :
+			"\n\x05Needs Custom Edition files in maps: bitmaps.map, loc.map, sounds.map\n") &&
+			help_characters() <= 70, index ? "Spanish, no Custom Edition files: the classic panel's Menu style help fits "
+			"its line (70 characters)" : "no Custom Edition files: the classic panel's Menu style help fits its line "
+			"(70 characters; device test, Nov 25: off the panel's right edge)");
+		if (help_characters() > 70)
+			printf("too long: %s\n", strstr(menu, "\n\x05") + 2);
+		/* (a build with the Workshop: its row says the same) */
+		if (workshop)
+			check(lang_utf8_length(setting_help(workshop)) <= 70, index ? "Spanish, no Custom Edition files: the classic "
+				"panel's Steam Workshop help fits its line" : "no Custom Edition files: the classic panel's Steam Workshop "
+				"help fits its line");
+		check(ce_files_menus_page(languages[index], "online") && !classic_panel() &&
+			strstr(menu, index ? "\n\x05Necesita los archivos de Custom Edition (bitmaps.map" :
+			"\n\x05Needs the Custom Edition files (bitmaps.map") &&
+			!strcmp(menu_line(menu_selected, line, sizeof(line)), index ? "Estilo de menús\x02  ElDewrito >\x0b" "2/3"
+			"\x07Halo CE\x07Halo 3" : "Menu style\x02  ElDewrito >\x0b" "2/3\x07Halo CE\x07Halo 3"),
+			index ? "Spanish, no Custom Edition files: the ElDewrito panel's Menu style - its help the longer one (it "
+			"wraps), the other styles greyed out after ElDewrito, not ElDewrito again" : "no Custom Edition files: the "
+			"ElDewrito panel's Menu style - its help the longer one (it wraps), the other styles greyed out after "
+			"ElDewrito, not ElDewrito again");
+		if (!strstr(menu, "\x07Halo CE\x07Halo 3\n"))
+			printf("row: %s\n", menu_line(menu_selected, line, sizeof(line)));
+	}
+	close_panel();
+	halo_ce_files_state = saved;
+	vita_settings_set("HALO_LANGUAGE", "auto");
+	vita_settings_set("HALO_MENU_STYLE", "halo3");
+}
+
+/* VITA_SETTINGS_PANEL_TEXT=FOLDER (run_vita_settings_test.sh, a build with the shipped Menu style row,
+VITA_SETTINGS_TEST_SHIPPED_STYLE): the Custom Edition files missing, Game > Menus with Menu style chosen as the
+panel hands it to the renderer (vgxm_menu_set) - in the ElDewrito look (a saved ElDewrito) and the Classic one, in
+English and in Spanish -, each in FOLDER/<eldewrito|classic>-<en|es>.txt (the chosen line's index, then the text),
+for vita_panel_draw_test.c to draw */
+static int panel_text_dump(const char *folder)
+{
+	static const char *const languages[] = { "en", "es" };
+	static const char *const styles[] = { "online", "original" }, *const looks[] = { "eldewrito", "classic" };
+	int language, style, written = 0;
+
+	halo_ce_files_state = -1;
+	for (style = 0; style < 2; style++)
+		for (language = 0; language < 2; language++)
+		{
+			char path[1024];
+			FILE *file;
+
+			if (!ce_files_menus_page(languages[language], styles[style]))
+			{
+				printf("FAIL %s, %s: Game > Menus, Menu style not reached\n%s\n", looks[style], languages[language], menu);
+				continue;
+			}
+			snprintf(path, sizeof(path), "%s/%s-%s.txt", folder, looks[style], languages[language]);
+			file = fopen(path, "w");
+			if (!file)
+				continue;
+			fprintf(file, "%d\n%s", menu_selected, menu);
+			fclose(file);
+			written++;
+		}
+	printf("%d panels' text written in %s\n", written, folder);
+	return written == 4 ? 0 : 1;
+}
+
 static void test_menu_style_original(void)
 {
 	struct setting *report = setting_named("HALO_CLASSIC_CARNAGE_REPORT");
@@ -6021,6 +6134,11 @@ int main(void)
 	mkdir("ux0:data/haloce-vita", 0777);
 	mkdir("ux0:data/haloce-vita/maps", 0777);
 	setenv("HALO_MAPS_ROOT", "ux0:data/haloce-vita/maps", 1);
+	if (getenv("VITA_SETTINGS_PANEL_TEXT"))
+	{
+		vita_settings_load();
+		return panel_text_dump(getenv("VITA_SETTINGS_PANEL_TEXT"));
+	}
 
 	test_variables_kept();
 	setenv("HALO_VITA_NETWORK", "online", 1);
@@ -7296,6 +7414,7 @@ int main(void)
 	test_answer_press_held();
 	test_menu_style_original();
 	test_ce_files_missing();
+	test_ce_files_panel();
 	test_carnage_report_row();
 	test_scoreboard_row();
 	test_restart_offer();
