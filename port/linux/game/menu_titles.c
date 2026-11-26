@@ -49,6 +49,8 @@ in the data folder (t:\menu_titles_<lang>_<name>.pam).
 void platform_log(char const *format, ...);
 unsigned long long vita_host_time_us(void);
 long menu_tags_generation(void);
+void platform_heap_usage(unsigned long *in_use, unsigned long *capacity);
+boolean menu_titles_png(char const *png);
 
 /* ---------- constants */
 
@@ -299,20 +301,25 @@ static struct title_tool *menu_titles_tool(void)
 {
 	unsigned char *texels[TITLE_COUNT];
 	unsigned long long started;
+	unsigned long heap_before, heap_after, capacity;
 	long index;
 
 	if (menu_titles.tool || menu_titles.tool_tried)
 		return menu_titles.tool;
 	menu_titles.tool_tried = TRUE;
 	started = vita_host_time_us();
+	platform_heap_usage(&heap_before, &capacity);
 	for (index = 0; index < TITLE_COUNT; index++)
 	{
 		texels[index] = menu_titles.blocks[index] ? title_tool_dxt_decode(menu_titles.blocks[index],
 			menu_titles.widths[index], menu_titles.heights[index], menu_titles.formats[index]) : NULL;
 	}
 	menu_titles.tool = title_tool_new(titles, TITLE_COUNT, texels, menu_titles.widths, menu_titles.heights);
-	platform_log("menu titles: the game's heading letters %s in %lu ms", menu_titles.tool ? "made" : "could not be made",
-		(unsigned long)((vita_host_time_us() - started) / 1000));
+	platform_heap_usage(&heap_after, &capacity);
+	/* (and the C heap they hold until menu_titles_release) */
+	platform_log("menu titles: the game's heading letters %s in %lu ms (C heap %+ld KB, %lu KB in use)",
+		menu_titles.tool ? "made" : "could not be made", (unsigned long)((vita_host_time_us() - started) / 1000),
+		((long)heap_after - (long)heap_before) / 1024, heap_after / 1024);
 	return menu_titles.tool;
 }
 
@@ -420,7 +427,7 @@ unsigned char *menu_titles_frame(
 	long index, title;
 	int length;
 
-	if (!png || strncmp(png, "classic/{lang}/header_", 22) || width != HEADING_WIDTH || height != HEADING_HEIGHT ||
+	if (!menu_titles_png(png) || width != HEADING_WIDTH || height != HEADING_HEIGHT ||
 		!menu_titles_enabled())
 	{
 		return NULL;
@@ -491,6 +498,14 @@ unsigned char *menu_titles_frame(
 	heading_dump(code, name, pixels);
 	platform_log("menu titles: %s made of the game's letters", words);
 	return pixels;
+}
+
+/* (menu_tags.c) whether png (a frame's path as written) is one
+menu_titles_frame may make: after the last of them the letters can go */
+boolean menu_titles_png(
+	char const *png)
+{
+	return png && !strncmp(png, "classic/{lang}/header_", 22);
 }
 
 /* (menu_tags.c, the menus' pictures read) the letters and the pictures

@@ -2611,6 +2611,7 @@ static char const *menu_png_language_path(char const *png, char const *code, cha
 
 unsigned char *menu_words_frame(char const *png, long width, long height);
 unsigned char *menu_titles_frame(char const *png, long width, long height);
+boolean menu_titles_png(char const *png);
 void menu_titles_release(void);
 
 static boolean menu_png_frame_load(struct menu_png_frame const *frame)
@@ -2650,6 +2651,17 @@ static boolean menu_png_frame_load(struct menu_png_frame const *frame)
 			"the frame's size):", frame->png);
 		return FALSE;
 	}
+	/* (a picture of 1 MB or more - online/title.png, classic/pausebox.png -:
+	the C heap as it is read, its pixels held - the heading letters let go
+	before it, menu_tags_art_load) */
+	if (bitmap->width * bitmap->height * 4 >= 1024 * 1024)
+	{
+		unsigned long in_use, capacity;
+
+		platform_heap_usage(&in_use, &capacity);
+		platform_log("menus: %s (%dx%d) read with the C heap at %lu KB in use", frame->png, bitmap->width,
+			bitmap->height, in_use / 1024);
+	}
 made:
 	bitmap->base_address = pixels;
 	if (!rasterizer_bitmap_new(bitmap) || !bitmap->hardware_format)
@@ -2662,9 +2674,31 @@ made:
 	bitmap->base_address = NULL;
 	free(pixels);
 	if (!array_grow((void **)&menu_tags.bitmaps, menu_tags.bitmap_count, sizeof(*menu_tags.bitmaps)))
+	{
+		rasterizer_bitmap_delete(bitmap);
 		return FALSE;
+	}
 	menu_tags.bitmaps[menu_tags.bitmap_count++] = bitmap;
 	return TRUE;
+}
+
+/* (a menu_tags_art_load that failed) the textures it made, from the
+menus' bitmap first on, let go: the memory window as it was before it. Kept,
+the read made again (menu_tags_art_load_retried) made each one anew over
+the one before, whose texture no one let go again, ui.map's unload
+included (1.1.3 8u: 8796 KB of the window each time, 5464 KB of it left
+after a game on Amplitude; 8k: 92 KB) */
+static void menu_tags_art_unload(long first)
+{
+	long index;
+
+	for (index = first; index < menu_tags.bitmap_count; index++)
+	{
+		if (menu_tags.bitmaps[index]->hardware_format)
+			rasterizer_bitmap_delete(menu_tags.bitmaps[index]);
+	}
+	if (first < menu_tags.bitmap_count)
+		menu_tags.bitmap_count = first;
 }
 
 /* the pictures and the text of the player's, and the PNGs: the first time
@@ -2675,7 +2709,8 @@ static boolean menu_tags_art_load(void)
 	unsigned long long started = vita_host_time_us();
 	unsigned long heap_before, heap_capacity, window_before, window_free, heap_after, window_after;
 	boolean success = TRUE;
-	long index;
+	long first_bitmap = menu_tags.bitmap_count;
+	long index, pass;
 
 	/* (what was read ahead, once read: halo_menus_art_preread) */
 	halo_menus_art_wait();
@@ -2687,6 +2722,8 @@ static boolean menu_tags_art_load(void)
 		for (index = 0; index < menu_tags.png_frame_count && success; index++)
 			success = menu_png_frame_load(&menu_tags.png_frames[index]);
 		success = success && !build.failed && !menu_tags.bitmap_resource_count && !menu_tags.string_resource_count;
+		if (!success)
+			menu_tags_art_unload(first_bitmap);
 		platform_heap_usage(&heap_after, &heap_capacity);
 		platform_contiguous_usage(&window_after, &window_free);
 		platform_log("menus: the Steam screens' pictures %s in %lu ms (%ld PNGs); C heap %+ld KB, memory window %+ld KB "
@@ -2710,13 +2747,26 @@ static boolean menu_tags_art_load(void)
 		success = menu_resource_bitmap_load(&bitmaps, &menu_tags.bitmap_resources[index]);
 	for (index = 0; index < menu_tags.string_resource_count && success; index++)
 		success = menu_resource_strings_load(&locale, &menu_tags.string_resources[index]);
-	for (index = 0; index < menu_tags.png_frame_count && success; index++)
-		success = menu_png_frame_load(&menu_tags.png_frames[index]);
-	/* (the heading letters' memory, menu_titles.c) */
-	menu_titles_release();
+	/* (the headings first, then the heading letters' memory let go -
+	menu_titles.c: 6.4 MB of the C heap while they are made, as they are
+	after a game, the game's map's headings not the main menu's -, then the
+	other PNGs: held through them, online/title.png's 2 MB found no room
+	beside it and the Halo 3 set was left out, 1.1.3 8u after Amplitude and
+	8k after Blood Gulch) */
+	for (pass = 0; pass < 2; pass++)
+	{
+		for (index = 0; index < menu_tags.png_frame_count && success; index++)
+		{
+			if ((menu_titles_png(menu_tags.png_frames[index].png) ? 0 : 1) == pass)
+				success = menu_png_frame_load(&menu_tags.png_frames[index]);
+		}
+		menu_titles_release();
+	}
 	menu_resource_close(&bitmaps, TRUE);
 	menu_resource_close(&locale, TRUE);
 	success = success && !build.failed;
+	if (!success)
+		menu_tags_art_unload(first_bitmap);
 	platform_heap_usage(&heap_after, &heap_capacity);
 	platform_contiguous_usage(&window_after, &window_free);
 	/* (after the measure: what was read ahead was there before it too) */
