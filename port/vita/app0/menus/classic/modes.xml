@@ -5,14 +5,15 @@
      original menus' look as classic/forge.xml's FORGE lobby is (a cp/<name> widget stands for
      h3/<name> while the style is Classic+: menu_tags.c menu_tags_online).
      - SETTINGS (the main menu's): ChupathingyCE's SETTINGS - the game's settings, then its files -
-       as the Xbox's list screens: on the PS Vita the settings panel at each of its pages
-       (CONTROLS ... ADVANCED: menu_functions.c's port start panel, the START hub's rows of those
-       names; the panel stays whole, Start opens it too), then GAME MANAGER (Halo CE's files, the
+       as the Xbox's list screens: CONTROLS ... ADVANCED each Classic+'s own option screen of the
+       settings panel's rows (1.1.3, classic/options.xml: port ce options page; the panel stays whole,
+       Start opens it too, and ADVANCED's SETTINGS PANEL row), then GAME MANAGER (Halo CE's files, the
        mods, DOWNLOAD FROM STEAM and its WORKSHOP: ChupathingyCE's SETUP's maps and downloads),
        FILE SHARE and FRIENDS - 1.1.3's MEDIA, together as ElDewrito's START > MEDIA has them -, each
        opening Classic+'s own screen of it (classic/mods.xml, fileshare.xml, friends.xml); the
        focused row's words in the description's panel at the right (port ce settings). A PC has no
-       settings panel: its rows are not there (port ce settings).
+       settings panel: the option screens' rows are not there (port ce settings; the tests' harness
+       shows them, HALO_TEST_CLASSIC_OPTIONS=1).
      - GAME MODES (OpenCE's MULTIPLAYER screen's last row, multiplayer.xml: ChupathingyCE's
        Multiplayer screen holds its FORGE so): Forge, Command and Firefight, each opening its lobby as
        ElDewrito's main menu's rows do (h3/forge/lobby, h3/command/lobby, h3/firefight/lobby:
@@ -73,37 +74,37 @@
 	<widget name="ce/settings/row_name_small" type="text" left="13" top="9" width="197" height="16" font="ui\small_ui" color="#FF2896FF"/>
 	<widget name="ce/settings/controls/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="0"/>
 	<widget name="ce/settings/controls" left="0" width="224" height="32" bitmap="list_item_bkd">
-		<on event="a start" run="port start panel"/>
+		<on event="a start" run="port ce options page" open="ce/opt/screen"/>
 		<child widget="ce/settings/controls/row_name"/>
 		<child widget="ce/settings/row_name_small"/>
 	</widget>
 	<widget name="ce/settings/graphics/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="1"/>
 	<widget name="ce/settings/graphics" left="0" width="224" height="32" bitmap="list_item_bkd">
-		<on event="a start" run="port start panel"/>
+		<on event="a start" run="port ce options page" open="ce/opt/screen"/>
 		<child widget="ce/settings/graphics/row_name"/>
 		<child widget="ce/settings/row_name_small"/>
 	</widget>
 	<widget name="ce/settings/sound/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="2"/>
 	<widget name="ce/settings/sound" left="0" width="224" height="32" bitmap="list_item_bkd">
-		<on event="a start" run="port start panel"/>
+		<on event="a start" run="port ce options page" open="ce/opt/screen"/>
 		<child widget="ce/settings/sound/row_name"/>
 		<child widget="ce/settings/row_name_small"/>
 	</widget>
 	<widget name="ce/settings/interface/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="3"/>
 	<widget name="ce/settings/interface" left="0" width="224" height="32" bitmap="list_item_bkd">
-		<on event="a start" run="port start panel"/>
+		<on event="a start" run="port ce options page" open="ce/opt/screen"/>
 		<child widget="ce/settings/interface/row_name"/>
 		<child widget="ce/settings/row_name_small"/>
 	</widget>
 	<widget name="ce/settings/online/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="4"/>
 	<widget name="ce/settings/online" left="0" width="224" height="32" bitmap="list_item_bkd">
-		<on event="a start" run="port start panel"/>
+		<on event="a start" run="port ce options page" open="ce/opt/screen"/>
 		<child widget="ce/settings/online/row_name"/>
 		<child widget="ce/settings/row_name_small"/>
 	</widget>
 	<widget name="ce/settings/advanced/row_name" type="text" left="13" top="5" width="197" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/settings_text" string_index="5"/>
 	<widget name="ce/settings/advanced" left="0" width="224" height="32" bitmap="list_item_bkd">
-		<on event="a start" run="port start panel"/>
+		<on event="a start" run="port ce options page" open="ce/opt/screen"/>
 		<child widget="ce/settings/advanced/row_name"/>
 		<child widget="ce/settings/row_name_small"/>
 	</widget>

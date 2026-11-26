@@ -83,7 +83,11 @@ HEADINGS = (('header_lobby_options', 'LOBBY OPTIONS'),
 XBOX_HEADINGS = (('header_select_profile_to_edit', 'SELECT PROFILE TO EDIT'),
                  ('header_advanced_controls', 'ADVANCED CONTROLS'),
                  # (classic/xbox_netscreens.xml: the System Link list's)
-                 ('header_system_link_games', 'SYSTEM LINK GAMES'))
+                 ('header_system_link_games', 'SYSTEM LINK GAMES'),
+                 # (classic/options.xml: Classic+'s option screens, in ADVANCED CONTROLS' look; a page they open
+                 # keeps its parent's heading)
+                 ('header_controls', 'CONTROLS'), ('header_graphics', 'GRAPHICS'), ('header_sound', 'SOUND'),
+                 ('header_interface', 'INTERFACE'), ('header_online', 'ONLINE'), ('header_advanced', 'ADVANCED'))
 # (classic/xbox_netscreens.xml: the network lobby's fields MCC's ui.map has not - the picture's size,
 # the field's in it at the top left, drawn 1:1 into the Xbox's widget of that size; the other machines'
 # 95 high in their 104, as the Xbox's are, the three 97 apart)

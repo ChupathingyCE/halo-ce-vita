@@ -247,6 +247,7 @@ dialog" (how the system's dialog joins a group) is there too, out of the
 Multiplayer tab's way.
 */
 
+#ifndef VITA_SETTINGS_ROWS_ONLY
 #include <psp2/apputil.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/threadmgr.h>
@@ -285,6 +286,17 @@ Multiplayer tab's way.
 #include "vita_update.h"
 #include "vita_update_verify.h"
 #include "vita_version.h"
+#else
+/* (port/linux/src/settings_rows.c: the rows alone, for a build with no panel - the Linux harness the menus'
+tests run on -, settings_rows.h) */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "lang.h"
+#include "../include/vita_controls.h"
+#endif
+#include "settings_rows.h"
 
 /* (port/linux/game/experimental_modes.c: Command and Firefight behind
 game.experimental_modes, Blood Gulch alone) */
@@ -1191,6 +1203,205 @@ static struct setting settings[] = {
 };
 
 #define SETTING_COUNT ((int)(sizeof(settings) / sizeof(settings[0])))
+
+/* ---------- the rows looked up by name (settings_rows.h: 1.1.3, Menu style Classic+'s option screens -
+menu_functions.c, classic/options.xml - show the panel's own rows, one source of their words). On the PS Vita
+the rows as the panel has them now; built alone (VITA_SETTINGS_ROWS_ONLY: port/linux/src/settings_rows.c, a
+build with no panel) a row's choice is its variable's value, else the panel's default */
+
+#ifdef VITA_SETTINGS_ROWS_ONLY
+int update_check_request(void);
+
+/* (the Language row's choices: the languages lang.c has, as language_choices fills them) */
+static void rows_language_choices(struct setting *setting)
+{
+	int index;
+
+	for (index = 0; index < lang_count() && index + 1 < MAXIMUM_CHOICES; index++)
+	{
+		setting->values[index + 1] = lang_code(index);
+		setting->names[index + 1] = lang_name(index);
+	}
+	if (index)
+		setting->count = index + 1;
+}
+
+static int rows_choice_now(struct setting *setting)
+{
+	const char *value = setting->variable ? getenv(setting->variable) : NULL;
+	int index;
+
+	if (setting->variable && !strcmp(setting->variable, "HALO_LANGUAGE"))
+		rows_language_choices(setting);
+	for (index = 0; value && value[0] && index < setting->count; index++)
+		if (setting->values[index] && !strcmp(value, setting->values[index]))
+			return index;
+	return setting->choice;
+}
+
+static int rows_choice_disabled(const struct setting *setting, int choice)
+{
+	(void)setting;
+	(void)choice;
+	return 0;
+}
+#else
+static int choice_disabled(const struct setting *setting, int choice);
+static void reset_controls(void);
+
+static int rows_choice_now(struct setting *setting)
+{
+	return setting->choice;
+}
+
+static int rows_choice_disabled(const struct setting *setting, int choice)
+{
+	return choice_disabled(setting, choice);
+}
+#endif
+
+static struct setting *rows_row(int row)
+{
+	return row >= 0 && row < SETTING_COUNT ? &settings[row] : NULL;
+}
+
+int halo_settings_row_find(const char *name)
+{
+	int index;
+
+	for (index = 0; name && name[0] && index < SETTING_COUNT; index++)
+		if (settings[index].variable && !strcmp(settings[index].variable, name))
+			return index;
+	for (index = 0; name && name[0] && index < SETTING_COUNT; index++)
+		if (!settings[index].variable && settings[index].label && !strcmp(settings[index].label, name))
+			return index;
+	return -1;
+}
+
+const char *halo_settings_row_label(int row)
+{
+	return rows_row(row) ? rows_row(row)->label : "";
+}
+
+const char *halo_settings_row_help(int row)
+{
+	return rows_row(row) && rows_row(row)->help ? rows_row(row)->help : "";
+}
+
+int halo_settings_row_kind(int row)
+{
+	const struct setting *setting = rows_row(row);
+
+	if (!setting)
+		return SETTINGS_ROW_ACTION;
+	if (setting->kind == KIND_TEXT)
+		return SETTINGS_ROW_TEXT;
+	if (setting->kind == KIND_ACTION)
+		return setting->action == ACTION_PAGE ? SETTINGS_ROW_PAGE : SETTINGS_ROW_ACTION;
+	return SETTINGS_ROW_CHOICE;
+}
+
+int halo_settings_row_count(int row)
+{
+	struct setting *setting = rows_row(row);
+
+	if (!setting || setting->kind != KIND_CHOICE)
+		return 0;
+	/* (the languages: filled in as the choice is read) */
+	rows_choice_now(setting);
+	return setting->count;
+}
+
+const char *halo_settings_row_value(int row, int choice)
+{
+	const struct setting *setting = rows_row(row);
+
+	return setting && choice >= 0 && choice < setting->count && setting->values[choice] ? setting->values[choice] : "";
+}
+
+const char *halo_settings_row_name(int row, int choice)
+{
+	const struct setting *setting = rows_row(row);
+
+	return setting && choice >= 0 && choice < setting->count && setting->names[choice] ? setting->names[choice] : "";
+}
+
+int halo_settings_row_choice(int row)
+{
+	struct setting *setting = rows_row(row);
+
+	return setting && setting->kind == KIND_CHOICE ? rows_choice_now(setting) : -1;
+}
+
+int halo_settings_row_offered(int row, int choice)
+{
+	const struct setting *setting = rows_row(row);
+
+	if (!setting || setting->kind != KIND_CHOICE || choice < 0 || choice >= setting->count)
+		return 0;
+	/* (the Profile row's Custom is read, not chosen: choice_last) */
+	if (setting->variable && !strcmp(setting->variable, "HALO_PROFILE") && !strcmp(setting->values[choice], "custom"))
+		return 0;
+	return !rows_choice_disabled(setting, choice);
+}
+
+int halo_settings_row_restart(int row)
+{
+	return rows_row(row) ? rows_row(row)->restart : 0;
+}
+
+int halo_settings_row_act(int row)
+{
+	const struct setting *setting = rows_row(row);
+
+	if (!setting || setting->kind != KIND_ACTION)
+		return -1;
+	switch (setting->action)
+	{
+	case ACTION_UPDATE_CHECK:
+#ifndef VITA_SETTINGS_ROWS_ONLY
+		/* (as the panel's press: an update found is downloaded, vita_update.c) */
+		if (vita_update_running())
+			return 0;
+		if (vita_update_start() >= 0)
+			return 0;
+#endif
+		update_check_request();
+		return 0;
+	case ACTION_RESET_CONTROLS:
+#ifndef VITA_SETTINGS_ROWS_ONLY
+		reset_controls();
+#else
+	{
+		int index;
+
+		/* (reset_controls' rows, to the table's own choices) */
+		for (index = 0; index < SETTING_COUNT; index++)
+		{
+			const struct setting *each = &settings[index];
+
+			if (pages[each->page].tab != TAB_CONTROLS || each->kind != KIND_CHOICE ||
+				!strcmp(each->variable, "HALO_DEV_SETTINGS") || !strncmp(each->variable, "HALO_GYRO", 9) ||
+				!strcmp(each->variable, "HALO_BUTTON_ICONS") || !strcmp(each->variable, "HALO_UPDATE_CHANNEL"))
+				continue;
+			setenv(each->variable, each->values[each->choice], 1);
+		}
+		__atomic_add_fetch(&halo_settings_generation, 1, __ATOMIC_RELEASE);
+	}
+#endif
+		return 0;
+	case ACTION_CE_EXTRACT:
+#ifndef VITA_SETTINGS_ROWS_ONLY
+		return vita_ce_installer_start() == 0 ? 0 : -1;
+#else
+		return -1;
+#endif
+	default:
+		return -1;
+	}
+}
+
+#ifndef VITA_SETTINGS_ROWS_ONLY
 
 /* the page or tab a page's row is on (its own tab for a tab, or a page no
 row opens) */
@@ -9115,3 +9326,5 @@ int vita_settings_input(const struct vita_host_pad *pad)
 		show();
 	return 1;
 }
+
+#endif /* VITA_SETTINGS_ROWS_ONLY */

@@ -373,6 +373,21 @@
 #            "Needs the Custom Edition files" and starts nothing. With HALO_TEST_SHOTS, each screen's picture
 #   cpworkshoptouch  the same screen by touch (HALO_TEST_TAPS, the Xbox files): a tap on a row opens its details
 #            page, a tap on the Circle key closes it, a swipe across the rows turns the page
+#   cpsettings  (1.1.3, the owner's Classic+ plan part B) Menu style Classic+'s option screens (classic/options.xml,
+#            menu_functions.c ce_opt_*: SETTINGS' CONTROLS ... ADVANCED, the settings panel's rows in the Xbox's ADVANCED
+#            CONTROLS look; HALO_TEST_CLASSIC_OPTIONS=1, a PC having no panel): on the Xbox files three walks through every
+#            screen and the pages they open (BUTTON LAYOUT, GYRO SETTINGS, TOUCH, DETAIL, YOUR GAMES, PS VITA AND PC,
+#            BOTS, CHAT, INFECTION, GAME FILES), a value changed on each and the environment the game reads having it at
+#            once, each row's label and value the panel's own (classic_options_check.py reads vita_settings.c's table;
+#            that a change is kept in settings.txt is run_vita_settings_test.sh's test_settings_rows), Circle back up,
+#            the eight rows scrolled, a row dimmed with its reason until the row it waits for allows it (DYNAMIC
+#            MINIMUM, AD HOC ROOM, PASSWORD, PC MAP VEHICLES; SETTINGS PANEL on a PC), RESET CONTROLS, CHECK FOR
+#            UPDATES, JOIN WITH A CODE (the code screen) and EXTRACT PC FILES asked first, LOBBY NAME typed, THANK YOU's
+#            note; then every page visited on MCC's files alone and in Spanish (both files); without sounds.map, PC MAPS
+#            dimmed and MENU STYLE saying it needs the Custom Edition files. Never a Halo 3 screen, no text that does not
+#            fit. With HALO_TEST_SHOTS, each screen's picture
+#   cpsettingstouch  the same screen by touch (HALO_TEST_TAPS): a tap on a row changes it, on its value or arrow steps
+#            it, on a row that opens a page opens it on its first row, on the Circle key goes back
 #   steampanel  (1.1.3-insider.4) the settings panel's Download from Steam and Steam Workshop rows
 #            (HALO_SYSTEM_LINK_TEST=steam, workshop) in every Menu style (original, classic, halo3,
 #            online) on every install: the Xbox files alone (HALO_TEST_DATA, HALO_CONTENT_ROOT=none:
@@ -578,6 +593,8 @@ test_out_begin "$out"
 all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox cefiles h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit cpworkshop cpworkshoptouch"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
+# (1.1.3: Classic+'s option screens)
+all_cases="$all_cases cpsettings cpsettingstouch"
 cases=${*:-$all_cases}
 ce_maps=${HALO_TEST_CE_MAPS:-$data_root/custom-maps-dl}
 status=0
@@ -4611,6 +4628,144 @@ PY
 			mkdir -p "$HALO_TEST_SHOTS/cpworkshop-noce"
 			cp "$out/cpworkshop-noce-shots"/*.bmp "$HALO_TEST_SHOTS/cpworkshop-noce/" 2>/dev/null
 		fi
+		;;
+	cpsettings|cpsettingstouch)
+		# (1.1.3, the owner's Classic+ plan part B: Classic+'s option screens, classic/options.xml - the settings
+		# panel's rows, which a PC has not: HALO_TEST_CLASSIC_OPTIONS=1 shows them on the harness, settings_rows.c)
+		if ! grep -aq "port ce options page" "$binary"; then
+			echo "--- $case"; echo "SKIP ($case): a build without Classic+'s option screens"
+			continue
+		fi
+		cs_mcc=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
+		d="down:150:450" u="up:150:450" r="right:150:600" l="left:150:600" a="a:150:900" b="b:150:900"
+		# (the main menu's SETTINGS: CONTROLS focused)
+		cs_reach="wait:150:6000 $d $d $d a:150:3500 @settings"
+		cs_end="b:150:1500 wait:150:1500"
+		# (walk a, b, c: every page and its pages, a value changed on each; RESOLUTION DYNAMIC lets DYNAMIC MINIMUM be
+		# changed, VISIBILITY PRIVATE dims PASSWORD; the actions asked and done, LOBBY NAME typed)
+		cs_walk_a="$cs_reach $a @controls $r @controls_set $d $d $d $d $d $a @buttons $r $d $r @buttons_set $b
+			$d $a @gyro $r @gyro_set $b $d $a @touch $r $d $r @touch_set $b $d @reset_row $a @reset_ask $a @reset_done $b
+			$d $a @graphics $d $d @dynmin_off $u $l @dynamic $d $r @dynmin_set $d $d $d $d $d $d $d $d @graphics_end $a
+			@detail $r @detail_set $d $d $d $d $d $d $d $d $d @detail_end $b $b $cs_end"
+		cs_walk_b="$cs_reach $d $d $a @sound $r @sound_set $b $d $a @interface $d $d $d $d $r @interface_set $b
+			$d $a @online $d @adhoc_off $d $a @join_ask $b $d $r @online_set $d $d $a @games $a @games_typed $d $r $d $r
+			$d @password_off $b $d $a @crossplay $r @crossplay_set $b $d $a @bots $r @bots_set $b $d $a @chat $r
+			@chat_set $b $d $a @infection $r @infection_set $b $u $u $u $u $u $u $u $a @join_ask_again a:150:3000 @code
+			b:150:2500 @back_from_code $b $cs_end"
+		cs_walk_c="$cs_reach $d $d $d $d $d $a @advanced $a @update_ask $a wait:150:1500 @update_done $d $r @advanced_set
+			$d $d $d $a @files $d $d $r @files_set $d $d @vehicles $r $d @extract_row $a @extract_ask $a @extract_done $b
+			$d @thankyou_row $a wait:150:2500 @thankyou $d @panel_row $a @panel $b $cs_end"
+		# (a visit: every page and its pages, the first row changed - on MCC's files and in Spanish)
+		cs_visit="$cs_reach $a @v_controls $r $d $d $d $d $d $a @v_buttons $r $b $d $a @v_gyro $r $b $d $a @v_touch $r $b $b
+			$d $a @v_graphics $r $d $d $d $d $d $d $d $d $d $d $a @v_detail $r $b $b $d $a @v_sound $r $b
+			$d $a @v_interface $d $d $r $b $d $a @v_online $d $d $d $r $d $d $a @v_games $d $r $b $d $a @v_crossplay $r $b
+			$d $a @v_bots $r $b $d $a @v_chat $r $b $d $a @v_infection $r $b $b $d $a @v_advanced $d $d $r $d $d $a
+			@v_files $d $d $r $b $d @v_advanced_end $b $cs_end"
+		cs_env="HALO_TEST_CLASSIC_OPTIONS=1 HALO_SCENE_PACKS=0 HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1 HALO_BUTTON_ICONS=playstation HALO_SCREENSHOT_EVERY=100000000 HALO_TEST_DIALOGS=1"
+		cs_spanish="HALO_LANGUAGE=es HALO_TEST_LANG_DIR=$root/port/vita/app0/lang"
+		if [ -r "$cs_mcc/maps/ui.map" ] && [ -r "$cs_mcc/maps/custom_edition/bitmaps.map" ]; then
+			rm -rf "$out/cs-content" "$out/cs-none"
+			mkdir -p "$out/cs-content/halo1/maps" "$out/cs-none/maps"
+			for file in "$cs_mcc"/maps/*.map "$cs_mcc"/maps/custom_edition; do ln -sfn "$file" "$out/cs-content/halo1/maps/"; done
+			for file in "$cs_mcc"/*; do [ "$(basename "$file")" = maps ] || ln -sfn "$file" "$out/cs-content/halo1/"; done
+			cs_mcc_ok=1
+		else
+			cs_mcc_ok=0
+			[ "$case" = cpsettings ] && { echo "--- $case"; echo "SKIP ($case, MCC's files alone): no MCC halo1 folder at $cs_mcc (HALO_TEST_MCC_ROOT)"; }
+		fi
+		# (NAME DATA SECONDS PAD PAGES|all LANG [VAR=value...]: one run, checked)
+		cs_run() {
+			local name=$1 data=$2 seconds=$3 pad=$4 pages=$5 lang=$6 shots=$out/$1-shots
+			shift 6
+			rm -rf "$shots"; mkdir -p "$shots"
+			profile_from=$campaign_profile run "$name" "$data" "$seconds" "$(echo $pad)" $cs_env HALO_SCREENSHOT_DIR="$shots" \
+				"HALO_TEST_TEXT_INPUT=Classic room" "$@"
+			log=$out/$name/run.log
+			echo "--- $name"
+			grep -a "ui: screen" "$log" | sed 's/.*ui: screen //' | uniq | tr '\n' ' ' | cut -c1-300; echo
+			[ "$(cat "$out/$name/exit")" = 0 ] || fail "$name" "exit $(cat "$out/$name/exit")"
+			grep -av "render assertion skipped" "$log" | grep -aqiE "assert|exception|halt_and_catch_fire|segmentation" &&
+				fail "$name" "an assertion, exception or halt"
+			cs_bad=$(grep -aE "ui: screen pc\.(h3|online)\.|menus: Halo 3 screen|stands for nothing|failed to spawn|classic text does not fit" "$log" | head -3)
+			[ -n "$cs_bad" ] && fail "$name" "$cs_bad"
+			grep -aq "ui: screen pc.ce.opt.screen" "$log" || fail "$name" "the option screen did not open"
+			if [ "$pages" = all ]; then
+				python3 -I "$here/classic_options_check.py" "$log" --lang "$lang" --all || fail "$name" "the rows are not the settings panel's"
+			else
+				python3 -I "$here/classic_options_check.py" "$log" --lang "$lang" --pages "$pages" || fail "$name" "the rows are not the settings panel's"
+			fi
+			case $name in *noce|*touch) ;; *) [ "$(grep -ac "menus: ce options: set " "$log")" -ge 3 ] ||
+				fail "$name" "fewer than three values set" ;; esac
+			grep -aq "menus: ce options: closed" "$log" || fail "$name" "Circle did not close the screen"
+			if [ -n "${HALO_TEST_SHOTS:-}" ]; then
+				mkdir -p "$HALO_TEST_SHOTS/$name"
+				cp "$shots"/*.bmp "$HALO_TEST_SHOTS/$name/" 2>/dev/null
+			fi
+		}
+		if [ "$case" = cpsettingstouch ]; then
+			# (taps in the menus' units on CONTROLS: INVERT LOOK's row - focused and changed at once -, its value (forward),
+			# its left arrow; BUTTON LAYOUT's row opens the page on its first row; the Circle key goes back)
+			cs_run cpsettingstouch "$menus_data" 70 "$cs_reach a:150:2500 @t_controls wait:150:20000 @t_end b:150:1500 $cs_end" \
+				CONTROLS en HALO_CONTENT_ROOT=none "HALO_TEST_TAPS=17000:200,117 19000:466,117 21000:343,117 23000:200,237 25000:380,427"
+			log=$out/cpsettingstouch/run.log
+			grep -aA1 "test tap: 200,117" "$log" | grep -aq "set XV_INVERT_Y=1" || fail cpsettingstouch "a tap on INVERT LOOK did not change it"
+			grep -aA1 "test tap: 466,117" "$log" | grep -aq "set XV_INVERT_Y=0" || fail cpsettingstouch "a tap on the value did not step it"
+			grep -aA1 "test tap: 343,117" "$log" | grep -aq "set XV_INVERT_Y=1" || fail cpsettingstouch "a tap on the left arrow did not step it"
+			grep -aA2 "test tap: 200,237" "$log" | grep -aq "opened BUTTON LAYOUT" &&
+				grep -aA20 "test tap: 200,237" "$log" | grep -aq "BUTTON ICONS focused" || fail cpsettingstouch "a tap on BUTTON LAYOUT did not open it on its first row"
+			grep -aA1 "test tap: 380,427" "$log" | grep -aq "back to CONTROLS" || fail cpsettingstouch "a tap on the Circle key did not go back"
+			continue
+		fi
+		# (the Xbox files, English: the three walks)
+		cs_run cpsettings-a "$menus_data" 200 "$cs_walk_a" CONTROLS,GRAPHICS,BUTTON\ LAYOUT,GYRO\ SETTINGS,TOUCH,DETAIL en HALO_CONTENT_ROOT=none
+		log=$out/cpsettings-a/run.log
+		for cs_page in "BUTTON LAYOUT" "GYRO SETTINGS" "TOUCH" "DETAIL"; do
+			grep -aq "menus: ce options: opened $cs_page" "$log" || fail cpsettings-a "$cs_page did not open"
+		done
+		grep -aq "menus: ce options: back to CONTROLS" "$log" || fail cpsettings-a "Circle did not go back up to CONTROLS"
+		grep -aq "menus: ce options: Reset controls done (begun)" "$log" && grep -aq "ui: screen pc.ce.opt.ask.screen" "$log" ||
+			fail cpsettings-a "RESET CONTROLS did not ask, then reset"
+		grep -aq "ce options row: GRAPHICS|HALO_DYNAMIC_RES_MIN|DYNAMIC MINIMUM|63%|Only with RENDER RESOLUTION: DYNAMIC" "$log" ||
+			fail cpsettings-a "DYNAMIC MINIMUM not dimmed with its reason before DYNAMIC"
+		grep -aq "menus: ce options: set HALO_RENDER_SCALE=dynamic" "$log" && grep -aq "menus: ce options: set HALO_DYNAMIC_RES_MIN=" "$log" ||
+			fail cpsettings-a "DYNAMIC MINIMUM not changed once RENDER RESOLUTION was DYNAMIC"
+		grep -aq "RAGDOLLS focused" "$log" || fail cpsettings-a "DETAIL did not scroll to its last row"
+		cs_run cpsettings-b "$menus_data" 220 "$cs_walk_b" SOUND,INTERFACE,ONLINE,YOUR\ GAMES,PS\ VITA\ AND\ PC,BOTS,CHAT,INFECTION en HALO_CONTENT_ROOT=none
+		log=$out/cpsettings-b/run.log
+		grep -aq "menus: ce options: set HALO_NET_LOBBY_NAME (typed); now Classic room" "$log" || fail cpsettings-b "LOBBY NAME not typed"
+		grep -aq "PASSWORD focused (NONE): Only with VISIBILITY: PUBLIC" "$log" ||
+			fail cpsettings-b "PASSWORD not dimmed with its reason once PRIVATE"
+		grep -aq "ce options row: ONLINE|HALO_ADHOC_ROOM|AD HOC ROOM|1|Only with CONNECTION: AD HOC" "$log" ||
+			fail cpsettings-b "AD HOC ROOM not dimmed with its reason"
+		grep -aq "JOIN WITH A CODE: the code screen opened" "$log" && grep -aq "ui: screen pc.code.screen" "$log" ||
+			fail cpsettings-b "JOIN WITH A CODE did not open the code screen after its question"
+		cs_run cpsettings-c "$menus_data" 160 "$cs_walk_c" ADVANCED,GAME\ FILES en HALO_CONTENT_ROOT=none
+		log=$out/cpsettings-c/run.log
+		grep -aq "menus: ce options: Check for updates done (begun)" "$log" || fail cpsettings-c "CHECK FOR UPDATES did not ask, then look"
+		grep -aq "menus: ce options: Extract PC files done" "$log" || fail cpsettings-c "EXTRACT PC FILES did not ask, then try"
+		grep -aq "thank you: the note shown (Classic+'s THANK YOU)" "$log" || fail cpsettings-c "THANK YOU did not show the note"
+		grep -aq "ce options row: ADVANCED|SETTINGS PANEL|SETTINGS PANEL||Only on the PS Vita" "$log" ||
+			fail cpsettings-c "SETTINGS PANEL not dimmed on a PC with its reason"
+		grep -aq "ce options row: GAME FILES|HALO_PC_MAP_VEHICLES|PC MAP VEHICLES|XBOX|Only with PC MAPS: ON" "$log" &&
+			grep -aq "menus: ce options: set HALO_PC_MAP_VEHICLES=" "$log" || fail cpsettings-c "PC MAP VEHICLES not dimmed until PC MAPS is ON"
+		# (a visit of every page: MCC's files in English; the Xbox files and MCC's in Spanish)
+		[ $cs_mcc_ok = 1 ] && cs_run cpsettings-mcc "$out/cs-none" 220 "$cs_visit" all en HALO_CONTENT_ROOT="$out/cs-content"
+		cs_run cpsettings-es "$menus_data" 220 "$cs_visit" all es HALO_CONTENT_ROOT=none $cs_spanish
+		grep -aq "ce options row: CONTROLS|XV_LOOK_SENS|SENSIBILIDAD DE VISTA|" "$out/cpsettings-es/run.log" ||
+			fail cpsettings-es "not in Spanish"
+		[ $cs_mcc_ok = 1 ] && cs_run cpsettings-mcc-es "$out/cs-none" 220 "$cs_visit" all es HALO_CONTENT_ROOT="$out/cs-content" $cs_spanish
+		# (the Custom Edition files required, the owner 1.1.3: without sounds.map, PC MAPS dimmed and MENU STYLE says why -
+		# Classic, which needs none, its only other choice)
+		rm -rf "$out/cs-noce"; mkdir -p "$out/cs-noce/maps"
+		for file in "$menus_data"/maps/*.map; do
+			[ "$(basename "$file")" = sounds.map ] || ln -sfn "$(readlink -f "$file")" "$out/cs-noce/maps/"
+		done
+		cs_run cpsettings-noce "$out/cs-noce" 90 "$cs_reach $d $d $d $a @noce_interface $b $d $d $a $d $d $d $d $a @noce_files $b $b $cs_end" \
+			INTERFACE,GAME\ FILES en HALO_CONTENT_ROOT=none
+		log=$out/cpsettings-noce/run.log
+		grep -aq "MENU STYLE focused (CLASSIC+): Needs the Custom Edition files" "$log" || fail cpsettings-noce "MENU STYLE did not say it needs the Custom Edition files"
+		grep -aq "ce options row: GAME FILES|HALO_CUSTOM_EDITION|PC MAPS|OFF|Needs the Custom Edition files" "$log" ||
+			fail cpsettings-noce "PC MAPS not dimmed without the Custom Edition files"
 		;;
 	*)
 		echo "usage: $0 [$(echo $all_cases $pc_cases | tr ' ' '|')]..." >&2; exit 2 ;;

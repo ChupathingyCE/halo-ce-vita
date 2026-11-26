@@ -3802,6 +3802,33 @@
 "Your Firefight ends here: its score is not kept." = "Tu Firefight termina aquí: la puntuación no se guarda."
 "Survive the Covenant's waves. Lives are shared: a\nround cleared gives some back. Each round's last\nwave is the heavy wave; after a set, a bonus round -\nbig points a kill, no lives lost." = "Resiste las oleadas del Covenant. Las vidas son\ncompartidas: una ronda superada devuelve algunas.\nLa última oleada de cada ronda es la pesada; tras\nuna serie, una ronda de bonificación: muchos puntos\npor baja, sin perder vidas."
 
+# ---------- 1.1.3: Menu style Classic+'s option screens (classic/options.xml, classic_options.h, menu_functions.c
+# ce_opt_*): the settings panel's rows in the Xbox's look - their words are the panel's own, above -; the pages'
+# names and the rows that open them, SETTINGS PANEL, why a row is dimmed, an action's question
+"GYRO SETTINGS" = "GIROSCOPIO"
+"TOUCH" = "TÁCTIL"
+"DETAIL" = "DETALLE"
+"YOUR GAMES" = "TUS PARTIDAS"
+"PS VITA AND PC" = "PS VITA Y PC"
+"CHAT" = "CHAT"
+"GAME FILES" = "ARCHIVOS DEL JUEGO"
+"SETTINGS PANEL" = "PANEL DE AJUSTES"
+"Which PS Vita button each Xbox button is on, in play; the button icons." = "En qué botón de la PS Vita está cada botón de Xbox al jugar; los iconos de botones."
+"The gyro's button, sensitivity and direction." = "El botón, la sensibilidad y la dirección del giroscopio."
+"The rear touch guard; the touch zones as Xbox buttons; touch in Forge." = "La protección del panel trasero; las zonas táctiles como botones de Xbox; el táctil en Forge."
+"Models, shadows, lights, effects, particles, ragdolls." = "Modelos, sombras, luces, efectos, partículas, cuerpos inertes."
+"The games you host: name, players, public or private, password, co-op." = "Las partidas que creas: nombre, jugadores, pública o privada, contraseña, cooperativo."
+"Which games the browser lists; who joins yours; online bots." = "Qué partidas muestra la lista; quién se une a las tuyas; bots en línea."
+"Computer players: how many, how good, their teams, vehicles, routes and playlist." = "Jugadores de la computadora: cuántos, su nivel, sus equipos, vehículos, rutas y lista de partidas."
+"In-game chat: on or off, the slur filter." = "El chat en la partida: activado o no, el filtro de insultos."
+"The games you host: Infection's zombies and round." = "Las partidas que creas: los zombis y la ronda de Infección."
+"Where the game's files are; PC maps, MCC mods, the Custom Edition installer." = "Dónde están los archivos del juego; mapas de PC, mods de MCC, el instalador de Custom Edition."
+"Every setting, the developer's too: the settings panel (SELECT and Down open it anywhere)." = "Todos los ajustes, también los de desarrollo: el panel de ajustes (SELECT y Abajo lo abren en cualquier parte)."
+"Only with %s: %s" = "Solo con %s: %s"
+"Only on the PS Vita" = "Solo en la PS Vita"
+"Taking them from the installer" = "Sacándolos del instalador"
+"%a-button =OK   %b-button =CANCEL" = "%a-button =ACEPTAR   %b-button =CANCELAR"
+
 # ---------- 1.1.3: Menu style Classic+'s main menu as Halo PC's (classic/main.xml, modes.xml): the Multiplayer
 # screen's GAME MODES (Forge, Command, Firefight, GAMETYPES PLUS) and QUIT's question
 "GAME MODES" = "MODOS DE JUEGO"
