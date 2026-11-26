@@ -3892,7 +3892,7 @@
 "Your MCC files' %s isn't the one this build's table was made for: Xbox and MCC files can't play it together with this host." = "El %s de tus archivos de MCC no es aquel para el que se hizo la tabla de esta versión: los archivos de Xbox y de MCC no pueden jugarlo juntos con este anfitrión."
 "This game's host plays %s from the Xbox's files on a version that can't play it with MCC's files: the host needs to update its game, or join with your Xbox files." = "El anfitrión de esta partida juega %s con los archivos de Xbox en una versión que no puede jugarlo con los de MCC: el anfitrión debe actualizar su juego, o únete con tus archivos de Xbox."
 "This build has no table of %s: Xbox and MCC files can't play it together with this host." = "Esta versión no tiene la tabla de %s: los archivos de Xbox y de MCC no pueden jugarlo juntos con este anfitrión."
-"MCC files, any host" = "Archivos MCC, cualquier anfitrión"
+"MCC files, any host" = "MCC: todo anfitrión"
 "MCC files: join hosts without mixed play (built-in tables)" = "Archivos MCC: unirse a anfitriones sin juego mixto (tablas incluidas)"
 # 1.1.3: the Custom Edition files check (menu_tags.c ce_files_check, vita_settings.c)
 "Custom Edition files needed" = "Faltan los archivos de Custom Edition"
