@@ -373,7 +373,9 @@
 #            on MCC's Workshop, refused at its download) the mods folder's Workshop item 2904654154 made at test
 #            time from a Custom Edition multiplayer map (HALO_TEST_CE_MAP, default ../custom-maps-dl/snowcast.map;
 #            SKIP without): the scan takes it as ws2904654154_snowtrap, the level list and the map picker offer it,
-#            the mod manager says it works in Multiplayer. With HALO_TEST_PROFILE: OFFLINE, MAP it, START GAME: it
+#            the mod manager says it works in Multiplayer; item 2904654155, the same map made a campaign one (its
+#            scenario type solo), is said "Not supported on PS Vita: a Custom Edition campaign map: copy it into the
+#            maps folder". With HALO_TEST_PROFILE: OFFLINE, MAP it, START GAME: it
 #            loads (its tags from the maps folder's bitmaps.map, sounds.map and loc.map) and the game starts on it
 #   wsunplayable  (1.1.3 device test, Nov 25: Sketpic BETA, a Workshop multiplayer map whose scripts take
 #            parameters, was offered to play, its load failed, the Xbox's ENLISTED PLAYERS then an empty message came
@@ -3122,6 +3124,13 @@ for case in $cases; do
 		cp --reflink=auto "$(readlink -f "$ws_ce_map")" "$wsc/mods/2904654154/maps/snowtrap.map"
 		echo "781788483063501535" > "$wsc/workshop/installed/2904654154.gid"
 		printf 'title Halo CE - Snowtrap\n' > "$wsc/workshop/installed/2904654154.about"
+		# (and an item whose map is a Custom Edition campaign map - the same file, its scenario type solo -: never
+		# played from the mods folder, so said as not supported, why, never left out silently)
+		mkdir -p "$wsc/mods/2904654155/maps"
+		cp --reflink=auto "$(readlink -f "$ws_ce_map")" "$wsc/mods/2904654155/maps/snowcamp.map"
+		printf '\000\000' | dd of="$wsc/mods/2904654155/maps/snowcamp.map" bs=1 seek=96 conv=notrunc status=none
+		echo "781788483063501536" > "$wsc/workshop/installed/2904654155.gid"
+		printf 'title Snow Campaign\n' > "$wsc/workshop/installed/2904654155.about"
 		# (the mod manager: MODS, the main menu; MULTIPLAYER, MAP: the picker, B)
 		wsc_pad="$h3modspad wait:150:3000 b wait:150:3000 b wait:150:3000 down:150:500 a wait:150:3000 down:150:500 a"
 		wsc_pad="$wsc_pad wait:150:3000 @wsc-picker:0:300 b wait:150:3000"
@@ -3138,6 +3147,9 @@ for case in $cases; do
 			fail wscemap "the map picker did not offer the Custom Edition Workshop map"
 		grep -aq "menus: h3 mods: 2904654154: Workshop item, on, [0-9]* KB, passed, works in Multiplayer, from Steam Workshop, title Halo CE - Snowtrap$" "$log" ||
 			fail wscemap "the mod manager did not say the item as a playable Workshop multiplayer item"
+		grep -aq "mods: 2904654155.maps.snowcamp.map is left out: not supported on PS Vita: a Custom Edition campaign map: copy it into the maps folder" "$debug" &&
+			grep -aq "menus: h3 mods: 2904654155: Workshop item, on, [0-9]* KB, failed: Not supported on PS Vita: a Custom Edition campaign map: copy it into the maps folder, works in None, from Steam Workshop, title Snow Campaign$" "$log" ||
+			fail wscemap "the item with a Custom Edition campaign map was not said as not supported, and why"
 		if [ -r "${HALO_TEST_PROFILE:-}" ]; then
 			# (OFFLINE (h3offline's), MAP: down thirteen past the Xbox's thirteen to the Workshop map, A; START GAME:
 			# split screen's SELECT PROFILE, A joins, A the profile, A the game: the map loads and the game runs)

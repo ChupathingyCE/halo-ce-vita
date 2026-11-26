@@ -734,6 +734,7 @@
 "there is not enough memory for it" = "no hay memoria suficiente para él"
 "its file could not be read" = "no se pudo leer su archivo"
 "it needs Halo Custom Edition's bitmaps.map, sounds.map and loc.map in the maps folder" = "necesita bitmaps.map, sounds.map y loc.map de Halo Custom Edition en la carpeta de mapas"
+"a Custom Edition campaign map: copy it into the maps folder" = "un mapa de campaña de Custom Edition: cópialo a la carpeta maps"
 "it is a protected map whose tags this port cannot read" = "es un mapa protegido cuyos tags este port no puede leer"
 "it has no scenario this port can find (a protected or damaged map)" = "no tiene un escenario que este port pueda encontrar (un mapa protegido o dañado)"
 "there is not enough memory for its models" = "no hay memoria suficiente para sus modelos"
