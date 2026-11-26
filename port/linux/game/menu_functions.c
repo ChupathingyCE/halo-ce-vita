@@ -900,10 +900,15 @@ static struct
 	/* a local game over, the Halo 3 lobby back up: the game let go at the
 	next frame (pc_menu_functions_local_lobby_after_game) */
 	boolean dispose_pending;
+	/* (1.1.3 device test, Nov 25) the local game's map could not be loaded
+	(pc_menu_functions_map_load_failed): the Halo 3 lobby opened again once
+	the main menu is up, never split screen's own */
+	boolean lobby_after_failure;
 } h3_local;
 static boolean row_column(struct widget_instance *row, char const *name, char const *text);
 static boolean h3_mp_local_start(void);
 static void h3_mp_local_update(boolean main_menu_loaded);
+static boolean h3_mp_lobby_open_offline(void);
 /* (the live lobby, Menu style Halo 3: h3_live) */
 static void h3_live_lobby_show(struct widget_instance *screen);
 static boolean h3_live_follow(void);
@@ -20007,6 +20012,33 @@ static void h3_mp_local_update(boolean main_menu_loaded)
 			platform_log("menus: h3 mp: the local game over: let go");
 		}
 	}
+	/* (the local game's map could not be loaded: back in the Halo 3 lobby,
+	OFFLINE, as after a game, once the main menu's own screen is up - the
+	message saying why then over the lobby) */
+	if (h3_local.lobby_after_failure && main_menu_loaded)
+	{
+		struct widget_instance *active = ui_widget_port_active_screen(0);
+		long main_tag = menu_tags_ingame_screen("h3/main/screen");
+
+		long message_tag = menu_tags_ingame_screen("h3/dlg/message/screen");
+
+		if (!halo_menu_style_halo3() || main_tag == NONE)
+		{
+			h3_local.lobby_after_failure = FALSE;
+		}
+		/* (the main menu's own screen up, the message - over it first - read and closed) */
+		else if (active && active->definition_tag_index == main_tag)
+		{
+			h3_local.lobby_after_failure = FALSE;
+			if (h3_mp_lobby_open_offline())
+				platform_log("menus: h3 mp: the local game's map could not be loaded: back to the Halo 3 lobby (OFFLINE)");
+		}
+		/* (the player gone elsewhere meanwhile: left there) */
+		else if (active && active->definition_tag_index != message_tag)
+		{
+			h3_local.lobby_after_failure = FALSE;
+		}
+	}
 	/* (asked to start, but the game not begun in 5 s - one player and no
 	bots, where a local game needs two: the desktop builds' - split screen's
 	own lobby, which says what it waits for) */
@@ -22271,26 +22303,19 @@ next START GAME makes a new one with the lobby's GAME and MAP,
 h3_mp_local_start); not split screen's map list, the Xbox's postgame screen
 (testers, insider.21): TRUE; FALSE (Menu style Halo CE, or no Halo 3 set):
 the Xbox's */
-boolean pc_menu_functions_local_lobby_after_game(void)
+/* the Halo 3 multiplayer lobby opened on OFFLINE, its START GAME focused,
+B going back to the main menu: FALSE if it did not open */
+static boolean h3_mp_lobby_open_offline(void)
 {
 	long lobby_tag = menu_tags_ingame_screen("h3/mp/screen");
 	long main_tag = menu_tags_ingame_screen("h3/main/screen");
 	struct widget_instance *screen;
 
-	if (!halo_menu_style_halo3() || lobby_tag == NONE || main_tag == NONE)
+	if (lobby_tag == NONE || main_tag == NONE)
 		return FALSE;
-	/* (let go at the next frame, h3_mp_local_update: this is the client's
-	own switch to its pregame, which goes on using it) */
-	h3_local.dispose_pending = TRUE;
-	h3_local.asked = FALSE;
-	h3_local.since = 0;
-	h3_local.started = FALSE;
 	h3_mp.network = _h3_network_offline;
 	if ((screen = ui_widget_load_by_name_or_tag(NULL, lobby_tag, NULL, 0, main_tag, NONE, NONE)) == NULL)
-	{
-		platform_log("menus: h3 mp: the local game over: the Halo 3 lobby did not open, split screen's map list");
 		return FALSE;
-	}
 	{
 		struct widget_instance *list = named(screen, "list");
 		struct widget_instance *start = named(screen, "start_offline");
@@ -22298,8 +22323,48 @@ boolean pc_menu_functions_local_lobby_after_game(void)
 		if (list && start)
 			ui_widget_port_give_focus(list, start);
 	}
+	return TRUE;
+}
+
+boolean pc_menu_functions_local_lobby_after_game(void)
+{
+	if (!halo_menu_style_halo3() || menu_tags_ingame_screen("h3/mp/screen") == NONE ||
+		menu_tags_ingame_screen("h3/main/screen") == NONE)
+		return FALSE;
+	/* (let go at the next frame, h3_mp_local_update: this is the client's
+	own switch to its pregame, which goes on using it) */
+	h3_local.dispose_pending = TRUE;
+	h3_local.asked = FALSE;
+	h3_local.since = 0;
+	h3_local.started = FALSE;
+	if (!h3_mp_lobby_open_offline())
+	{
+		platform_log("menus: h3 mp: the local game over: the Halo 3 lobby did not open, split screen's map list");
+		return FALSE;
+	}
 	platform_log("menus: h3 mp: the local game over, back to the Halo 3 lobby (OFFLINE)");
 	return TRUE;
+}
+
+/* (main.c: a map that could not be loaded - the player told why, the main
+menu loading again) the local game OFFLINE's START GAME set up let go, and
+never split screen's own lobby for it: back in the Halo 3 lobby once the
+main menu is up (h3_mp_local_update), the message over it (1.1.3 device
+test, Nov 25: a Workshop map's load failed; the Xbox's ENLISTED PLAYERS
+came up under the message, and B there an empty message) */
+void pc_menu_functions_map_load_failed(void)
+{
+	boolean local = h3_local.started || h3_local.since || h3_local.asked;
+
+	h3_local.started = FALSE;
+	h3_local.since = 0;
+	h3_local.asked = FALSE;
+	if (local)
+	{
+		h3_local.dispose_pending = TRUE;
+		h3_local.lobby_after_failure = TRUE;
+	}
+	platform_log("menus: a map could not be loaded%s", local ? ": the local game let go, the Halo 3 lobby next" : "");
 }
 
 /* (display_error, the host's game closed: _error_network_server_shut_down)

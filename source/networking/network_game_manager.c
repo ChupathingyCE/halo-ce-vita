@@ -943,8 +943,16 @@ boolean network_game_create_game_objects(
 	(port/linux/game/custom_edition_cache.c) */
 	else if (custom_edition_cache_load_failure_show(options.map_name))
 	{
+		extern void pc_menu_functions_map_load_failed(void);
+		void platform_log(char const *format, ...);
+
 		errors_clear();
 		error(_error_silent, "game_load() failed.");
+		/* (the menus' local game let go: back in the lobby it was started
+		from, never split screen's - 1.1.3 device test, Nov 25: a Workshop
+		map's load failed, the Xbox's ENLISTED PLAYERS came up) */
+		platform_log("new map: %s could not be loaded in the network game; back to the main menu", options.map_name);
+		pc_menu_functions_map_load_failed();
 		/* (the menu's map at once: the rest of this frame reads the tags of
 		a map - the input's, in main_loop - before the next one leaves the
 		game, network_game_client_start_frame) */

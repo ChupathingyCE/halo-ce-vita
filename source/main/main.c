@@ -1707,9 +1707,14 @@ static void main_new_map(
 	rather than the game stopped (port/linux/game/custom_edition_cache.c) */
 	else if (custom_edition_cache_load_failure_show(options->map_name))
 	{
+		extern void pc_menu_functions_map_load_failed(void);
+
 		errors_clear();
 		error(_error_silent, "game_load() failed.");
 		platform_log("new map: %s could not be loaded; back to the main menu", options->map_name);
+		/* (the menus' local game let go: back in the lobby it was started
+		from, not split screen's - 1.1.3 device test, Nov 25) */
+		pc_menu_functions_map_load_failed();
 		main_globals.want_to_be_at_main_menu = TRUE;
 		main_menu_load();
 
