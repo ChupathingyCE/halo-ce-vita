@@ -1982,6 +1982,20 @@ short custom_edition_cache_mod_map_check(
 		}
 		return _scenario_type_multiplayer;
 	}
+	/* (1.1.3 8v: a Custom Edition campaign map is played from the maps folder alone - the campaign's level list's
+	custom_maps\<name> -, never from a mod's: said as not supported here, and where it plays, not "not a Halo: CE
+	Anniversary map") */
+	if (status == _cache_file_status_ok && identity.format == _cache_file_format_custom_edition_cache &&
+		identity.scenario_type == _scenario_type_solo)
+	{
+		custom_edition_file_close(&file);
+		error(_error_silent, "mods: '%s' is left out: a Custom Edition campaign map (played from the maps folder)", path);
+		if (why && why_size > 0)
+		{
+			snprintf(why, (size_t)why_size, "%s", T("a Custom Edition campaign map: copy it into the maps folder"));
+		}
+		return NONE;
+	}
 	if (status != _cache_file_status_ok || identity.format != _cache_file_format_mcc_cea_cache)
 	{
 		custom_edition_file_close(&file);
