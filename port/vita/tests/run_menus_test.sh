@@ -575,9 +575,9 @@
 #                         level open)
 # On a gxm-null harness (configure.py --linux-d3d gxm-null) the taps, the saved frames and the
 # PC text box's typing are SKIPs: it draws nothing to tap, save or type into.
-# (a Steam session's good end: revoked, or - 1.1.3-insider.8 - the sign-in kept on the device (sealed, 14 days) and
-# only logged off)
-steam_ended_ok='steam job: sign-in 1 ended: done \(revoked (1, logged off 1, kept on this device 0|0, logged off 1, kept on this device 1)\)'
+# (a Steam session's good end: revoked and logged off, or - 1.1.3-insider.8 - the sign-in kept on the device (sealed, 14
+# days): since the device test of Nov 25 neither revoked nor logged off - a ClientLogOff ended the kept token at Steam)
+steam_ended_ok='steam job: sign-in 1 ended: done \(revoked (1, logged off 1, kept on this device 0|0, logged off 0, kept on this device 1)\)'
 set -u
 # (Bots online, bots.online: full by default, which fills a game hosted
 # online with bots; off here unless a run asks: run_netns_online_test.sh hostbots)
