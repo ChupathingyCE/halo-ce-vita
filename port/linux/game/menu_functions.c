@@ -25635,11 +25635,20 @@ static boolean ce_opt_open(struct widget_instance *widget)
 	return FALSE;
 }
 
-/* the classic_options_rows row focused (-1: none) */
-static int ce_opt_focused(void)
+/* the classic_options_rows row an event is for: the row widget's own (row_<n>, the n-th bar shown - a tap moves the
+focus and presses at once, before the list's update has followed it), else the focused one; -1: none */
+static int ce_opt_focused(struct widget_instance *widget)
 {
 	int rows[64], count = ce_opt_rows_of(ce_opt.page, rows, (int)NUMBEROF(rows)), at = ce_opt.focus[ce_opt.page];
 
+	for (; widget && widget->name && strncmp(widget->name, "row_", 4); widget = widget->parent)
+		;
+	if (widget && widget->name && !strncmp(widget->name, "row_", 4) && ce_opt.list && widget->parent == ce_opt.list &&
+		ce_opt.view.offset + atoi(widget->name + 4) < count)
+	{
+		at = ce_opt.view.offset + atoi(widget->name + 4);
+		ce_opt.focus[ce_opt.page] = at;
+	}
 	return at >= 0 && at < count ? rows[at] : -1;
 }
 
@@ -25684,7 +25693,9 @@ static void ce_opt_update(struct widget_instance *list)
 			if (typing_done(_typing_ce_option, typed, sizeof(typed)))
 			{
 				setting_set(name, typed);
-				platform_log("menus: ce options: set %s (typed)", name);
+				platform_log("menus: ce options: set %s (typed); now %s", name,
+					strcmp(name, "HALO_NET_LOBBY_PASSWORD") ? (getenv(name) ? getenv(name) : "(unset)") :
+					getenv(name) && !strcmp(getenv(name), typed) ? "the password typed" : "not the password typed");
 			}
 			else
 				platform_log("menus: ce options: %s: typing cancelled", name);
@@ -25819,16 +25830,17 @@ static void ce_opt_update(struct widget_instance *list)
 	{
 		ce_opt.said_row = rows[target];
 		ce_opt_row_words(rows[target], label, sizeof(label), value, sizeof(value));
-		platform_log("menus: ce options: %s focused (%s)", label, value);
+		ce_opt_help(rows[target], text, sizeof(text));
+		platform_log("menus: ce options: %s focused (%s): %s", label, value, text);
 	}
 }
 
 /* (port ce options left / right / a) the focused row: its value a step (the next choice the panel offers, round),
 set as the panel sets it; a row that opens a page, the page; a typed row, the keyboard; THANK YOU and SETTINGS PANEL
 done. An action that asks first is port ce options ask's; a row that cannot be changed, nothing (its help says why) */
-static boolean ce_opt_step(int direction, boolean press)
+static boolean ce_opt_step(struct widget_instance *widget, int direction, boolean press)
 {
-	int index = ce_opt_focused(), row, choice, count, step;
+	int index = ce_opt_focused(widget), row, choice, count, step;
 	char const *name;
 	char reason[200], label[96], value[96];
 
@@ -25914,7 +25926,8 @@ static boolean ce_opt_step(int direction, boolean press)
 CONTROLS, CHECK FOR UPDATES, JOIN WITH A CODE, EXTRACT PC FILES */
 static boolean ce_opt_ask(void)
 {
-	int index = ce_opt_focused(), row;
+	/* (the row the same press's port ce options a found: that press may have opened a page) */
+	int index = ce_opt_focused(NULL), row;
 	char reason[200];
 
 	if (index < 0 || classic_options_rows[index].opens != CLASSIC_OPTIONS_NONE ||
@@ -27313,11 +27326,11 @@ boolean pc_menu_event_function_invoke(
 	case _function_ce_options_page:
 		return ce_opt_open(widget);
 	case _function_ce_options_left:
-		return ce_opt_step(-1, FALSE);
+		return ce_opt_step(widget, -1, FALSE);
 	case _function_ce_options_right:
-		return ce_opt_step(1, FALSE);
+		return ce_opt_step(widget, 1, FALSE);
 	case _function_ce_options_a:
-		return ce_opt_step(1, TRUE);
+		return ce_opt_step(widget, 1, TRUE);
 	case _function_ce_options_ask:
 		return ce_opt_ask();
 	case _function_ce_options_do:
