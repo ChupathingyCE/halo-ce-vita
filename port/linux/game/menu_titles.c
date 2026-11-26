@@ -477,11 +477,27 @@ unsigned char *menu_titles_frame(
 	pixels = made ? malloc(HEADING_BYTES) : NULL;
 	if (!pixels)
 	{
+		/* (no room for the heading beside the letters: title_tool_set's
+		NULL, or no pixels for it) */
+		boolean no_room = made || title_tool_can_set(menu_titles.tool, words, HEADING_WIDTH, headings[index].left);
+
 		if (made)
 			title_tool_picture_free(made);
-		else if (!title_tool_can_set(menu_titles.tool, words, HEADING_WIDTH, headings[index].left))
+		else if (!no_room)
 			cache_write(path, checksum, NULL);
 		platform_log("menu titles: %s cannot be set in the game's letters: the port's picture", words);
+		/* (and the letters let go now, not made again until the menus'
+		pictures are read - menu_titles_release -: the port's pictures for
+		the headings left, and this one's PNG, read with that memory back.
+		1.1.3 8u and 8v, after a game: PLAYERS refused beside 6.4 MB of
+		letters, the C heap at 37.8 MB of 48 before them) */
+		if (no_room)
+		{
+			title_tool_free(menu_titles.tool);
+			menu_titles.tool = NULL;
+			blocks_free();
+			platform_log("menu titles: the game's heading letters let go for want of memory: the port's pictures");
+		}
 		return NULL;
 	}
 	/* (RGBA to BGRA, as menu_tags.c's PNGs; in this allocator's memory,
