@@ -360,6 +360,19 @@
 #   h3workshopqr  (1.1.3 device test, Nov 25) the same browser's SIGN IN with the QR left unscanned: the fake
 #            closes the connection under its second poll (qr_drop) - the screen says so plainly ("The sign-in QR expired
 #            ...", never the poll's raw words) and Cross is New QR: a new sign-in, approved, the grid
+#   wsunplayable  (1.1.3 device test, Nov 25: Sketpic BETA, a Workshop multiplayer map whose scripts take
+#            parameters, was offered to play, its load failed, the Xbox's ENLISTED PLAYERS then an empty message came
+#            up; the mod manager called the item an MCC mod copied in by hand that works in Campaign) the mods folder's
+#            Workshop items made at test time from this PC's MCC multiplayer map (HALO_TEST_WORKSHOP_MP_MAP; SKIP
+#            without; mcc_map_patch.py): 2900000002 a good map, 3803578418 one whose script node names a parameter,
+#            2900000004 one whose structure BSP is spoiled (passes the scan, fails at its load), each with what Steam
+#            said of it (workshop/installed/<id>.about: its title, the items it needs). The mod manager (GAME
+#            MANAGER's MODS, Menu style Halo 3): each a Workshop item, from Steam Workshop, by its title, 3803578418
+#            "Not supported on PS Vita: the scenario's scripts take parameters...", 2900000002 works in Multiplayer
+#            and needs only the item it needs that is not there ("Also needs: ... - download those too"), never MCC
+#            mods; its details page; the map picker offers 2900000002's and 2900000004's maps, never 3803578418's.
+#            With HALO_TEST_PROFILE: OFFLINE, MAP the spoiled one, START GAME: its load fails, the message once,
+#            then the Halo 3 multiplayer lobby again - never split screen's lobby, never an empty message
 #   h3workshoptouch  the same browser by touch (HALO_TEST_TAPS): a tap on a card opens its details page, a tap
 #            on Back closes it, a swipe turns the page, a tap on SUBSCRIBED changes the tab
 #   cpworkshop  (1.1.3, the owner's Classic+ plan part A, Nov 24) Menu style Classic+'s own STEAM WORKSHOP and DOWNLOAD
@@ -376,19 +389,6 @@
 #            "Needs the Custom Edition files" and starts nothing. With HALO_TEST_SHOTS, each screen's picture
 #   cpworkshoptouch  the same screen by touch (HALO_TEST_TAPS, the Xbox files): a tap on a row opens its details
 #            page, a tap on the Circle key closes it, a swipe across the rows turns the page
-#   wsunplayable  (1.1.3 device test, Nov 25: Sketpic BETA, a Workshop multiplayer map whose scripts take
-#            parameters, was offered to play, its load failed, the Xbox's ENLISTED PLAYERS then an empty message came
-#            up; the mod manager called the item an MCC mod copied in by hand that works in Campaign) the mods folder's
-#            Workshop items made at test time from this PC's MCC multiplayer map (HALO_TEST_WORKSHOP_MP_MAP; SKIP
-#            without; mcc_map_patch.py): 2900000002 a good map, 3803578418 one whose script node names a parameter,
-#            2900000004 one whose structure BSP is spoiled (passes the scan, fails at its load), each with what Steam
-#            said of it (workshop/installed/<id>.about: its title, the items it needs). The mod manager (GAME
-#            MANAGER's MODS, Menu style Halo 3): each a Workshop item, from Steam Workshop, by its title, 3803578418
-#            "Not supported on PS Vita: the scenario's scripts take parameters...", 2900000002 works in Multiplayer
-#            and needs only the item it needs that is not there ("Also needs: ... - download those too"), never MCC
-#            mods; its details page; the map picker offers 2900000002's and 2900000004's maps, never 3803578418's.
-#            With HALO_TEST_PROFILE: OFFLINE, MAP the spoiled one, START GAME: its load fails, the message once,
-#            then the Halo 3 multiplayer lobby again - never split screen's lobby, never an empty message
 #   steampanel  (1.1.3-insider.4) the settings panel's Download from Steam and Steam Workshop rows
 #            (HALO_SYSTEM_LINK_TEST=steam, workshop) in every Menu style (original, classic, halo3,
 #            online) on every install: the Xbox files alone (HALO_TEST_DATA, HALO_CONTENT_ROOT=none:
