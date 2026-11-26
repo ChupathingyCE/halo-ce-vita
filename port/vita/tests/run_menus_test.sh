@@ -25,6 +25,15 @@
 #            maps/custom_edition - told to move them; a bitmaps.map that is not
 #            Custom Edition's - told so; all three there - no screen
 #   h3broken a Halo 3 PNG missing: the set left out, the Xbox's main menu
+#            (and both failed reads give back the memory window they took)
+#   menureturn  1.1.3 8v: Menu style Online (ElDewrito) with the Vita's C heap
+#            and memory window (HALO_HEAP_LIMIT_KB, HALO_WINDOW_FLOOR_KB), a
+#            big Custom Edition map (extinction, 98 MB) and Blood Gulch, each
+#            then the main menu (HALO_TEST_COMMANDS' @menu, as END GAME),
+#            HALO_TEST_MENU_CYCLES times (5): every return reads the
+#            pictures (the set never left out); online/title.png read with
+#            the heading letters let go; no memory window or C heap lost a
+#            round from the second on
 #   h3style  Halo CE at first, Halo 3 chosen while Multiplayer is open: back on
 #            the main menu, the Halo 3 screen
 #   h3online the main menu's live servers: five made-up games
@@ -609,8 +618,8 @@ test_out_begin "$out"
 all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox cefiles h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit cpworkshop cpworkshoptouch wsunplayable h3workshopqr"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
-# (1.1.3: Classic+'s option screens)
-all_cases="$all_cases cpsettings cpsettingstouch"
+# (1.1.3: Classic+'s option screens; 8v: the menus after a game, the Vita's memory)
+all_cases="$all_cases cpsettings cpsettingstouch menureturn"
 cases=${*:-$all_cases}
 ce_maps=${HALO_TEST_CE_MAPS:-$data_root/custom-maps-dl}
 status=0
@@ -967,7 +976,69 @@ for case in $cases; do
 		sed -i "s/column\.png/no_such_picture.png/" "$out/h3menus/halo3/main.xml"
 		HALO_MENUS_FOLDER="$out/h3menus/" run h3broken "$menus_data" 20 "$h3pad" HALO_MENU_STYLE=halo3
 		check_h3 h3broken classic
-		grep -aq "menus: Halo 3 set left out" "$out/h3broken/run.log" || fail h3broken "no line said the Halo 3 set was left out" ;;
+		grep -aq "menus: Halo 3 set left out" "$out/h3broken/run.log" || fail h3broken "no line said the Halo 3 set was left out"
+		# (1.1.3 8v: a read that failed let its textures go - the memory window as before it, both reads; they
+		# were kept, made anew by the read again, and left 5464 KB of the window after a game on Amplitude)
+		[ "$(grep -ac "menus: the Halo PC pictures and text could not be read in .* memory window +0 KB" "$out/h3broken/run.log")" = 2 ] ||
+			{ grep -a "pictures and text could not be read in" "$out/h3broken/run.log" | sed 's/^/  /'
+			fail h3broken "a failed read of the pictures kept memory window (two reads, each +0 KB)"; } ;;
+	menureturn)
+		if [ ! -r "$ce_maps/extinction.map" ] || [ ! -r "$menus_data/maps/bitmaps.map" ]; then
+			echo "--- menureturn"; echo "SKIP: no extinction.map (HALO_TEST_CE_MAPS) or Halo PC files"; continue
+		fi
+		# (1.1.3 8u, the owner's Vita: END GAME after Amplitude, a 102.9 MB Workshop map, and the main
+		# menu's pictures could not be read - online/title.png's 2 MB found no room in the C heap beside the
+		# heading letters made in the same read (menu_titles.c, 6.4 MB while they are held; made again after
+		# every game, the game's map's headings not the main menu's) - and the read again took the memory
+		# window a second time (5464 KB left): the Halo 3 set left out, the Xbox's main menu. 8k the same
+		# after Blood Gulch. The Vita's limits, the heap census on so that the PC's GL driver's own
+		# allocations are not counted as the Vita's C heap)
+		rm -rf "$out/return_data"
+		mkdir -p "$out/return_data/maps"
+		for file in "$(cd "$menus_data" && pwd)"/maps/*.map; do ln -sfn "$file" "$out/return_data/maps/"; done
+		ln -sfn "$(cd "$ce_maps" && pwd)/extinction.map" "$out/return_data/maps/extinction.map"
+		return_cycles=${HALO_TEST_MENU_CYCLES:-5}
+		return_commands=
+		for index in $(seq "$return_cycles"); do
+			return_commands="${return_commands}M150:map_name levels\\test\\extinction\\extinction;M300:@menu;"
+			return_commands="${return_commands}M150:map_name levels\\test\\bloodgulch\\bloodgulch;M300:@menu;"
+		done
+		return_commands="${return_commands}M150:@exit"
+		profile_from=${HALO_TEST_PROFILE:-} run menureturn "$out/return_data" $((60 + return_cycles * 70)) "wait:150:1000" \
+			HALO_MENU_STYLE=online HALO_CUSTOM_EDITION=1 HALO_HEAP_LIMIT_KB=48988 HALO_WINDOW_FLOOR_KB=66752 \
+			HALO_HEAP_CENSUS=1 "HALO_TEST_COMMANDS=$return_commands"
+		log=$out/menureturn/run.log
+		echo "--- menureturn"
+		grep -aE "memory: (un)?loaded (levels.ui.ui|ui)|heading letters|pictures and text (could not be )?read in|title.png|left out" \
+			"$log" | sed 's/; texture pool.*//' | cut -c1-170 | tail -12
+		[ "$(cat "$out/menureturn/exit")" = 0 ] || fail menureturn "exit $(cat "$out/menureturn/exit")"
+		grep -aiE "assert|exception|halt_and_catch_fire|segmentation" "$log" |
+			grep -avq "render assertion skipped (torn read?)" && fail menureturn "an assertion, exception or crash"
+		returns=$((return_cycles * 2 + 1))
+		[ "$(grep -ac 'memory: loaded levels.ui.ui' "$log")" = $returns ] ||
+			fail menureturn "$(grep -ac 'memory: loaded levels.ui.ui' "$log") main menus of $returns (the cycle did not finish)"
+		[ "$(grep -ac 'menus: the Halo PC pictures and text read in .*(24 bitmaps, 4 string lists' "$log")" = $returns ] ||
+			fail menureturn "the main menu's pictures were not read at every return"
+		grep -aq "menus: Halo 3 set left out\|pictures and text could not be read" "$log" &&
+			fail menureturn "the pictures could not be read: the Halo 3 set left out"
+		# (online/title.png read with the letters let go: the C heap as it is read below what the letters
+		# held, in each main menu's read that made them - and at least one return made them)
+		awk '/memory: loaded levels.ui.ui/ { letters = 0; menu = 1 } /memory: unloaded ui/ { menu = 0 }
+			menu && /heading letters made in .* KB in use\)/ { line = $0; sub(/ KB in use\).*/, "", line); sub(/.*, /, "", line); letters = line; made++ }
+			menu && /online\/title.png .* read with the C heap at/ { line = $0; sub(/.*C heap at /, "", line); sub(/ KB.*/, "", line); seen++
+				if (letters && line + 0 >= letters + 0) { printf "FAIL (menureturn): online/title.png read with the C heap at %d KB, the heading letters held (%d KB)\n", line, letters; bad = 1 } }
+			END { if (made < 2) { print "FAIL (menureturn): the heading letters were made in " made + 0 " main menu reads (2 or more: the case is not what it tests)"; bad = 1 }
+				if (seen < 2) { print "FAIL (menureturn): online/title.png read " seen + 0 " times"; bad = 1 }
+				exit bad }' "$log" || status=1
+		# (no memory lost a round: from the second return on - the first fills the caches that last the
+		# session - the memory window as free at each unload of the menus, the C heap at each load of
+		# them within 512 KB)
+		grep -a "memory: unloaded ui:" "$log" | sed 's/.*KB in use, //; s/ KB free.*//' | tail -n +3 | sort -u |
+			awk 'NR == 1 { low = $1 } { high = $1 } END { if (high - low > 0) { print "FAIL (menureturn): the memory window at the menus\x27 unload went from " high " to " low " KB free"; exit 1 } }' ||
+			status=1
+		grep -a "memory: loaded levels.ui.ui:" "$log" | sed 's/.*C heap //; s/ KB.*//' | tail -n +3 | sort -n |
+			awk 'NR == 1 { low = $1 } { high = $1 } END { if (high - low > 512) { print "FAIL (menureturn): the C heap at the main menu grew from " low " to " high " KB"; exit 1 } }' ||
+			status=1 ;;
 	h3style)
 		run h3style "$menus_data" 30 "wait:150:2000 down:150:800 a wait:150:5000 b wait:150:4000" \
 			HALO_MENU_STYLE=classic "HALO_TEST_COMMANDS=150:@set HALO_MENU_STYLE halo3"
