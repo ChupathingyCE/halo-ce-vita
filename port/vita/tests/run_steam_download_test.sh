@@ -612,6 +612,15 @@ flow job-cancel-manifest stall_manifest 1 cancel
 cancel_check job-cancel-manifest
 grep -q "cdn: stalled before the manifest" "$out/flow-job-cancel-manifest/transcript.txt" ||
 	{ echo "FAIL job-cancel-manifest: no stall"; status=1; }
+# (8v audit: the player's cancel in the pause before a lost session's next sign-in - the CM cut after 6 chunks -: as
+# quick as any other cancel, the job ended, no sign-in again)
+client_env="env STEAM_TEST_CANCEL=reconnecting" server_extra="--lose-after-chunks 6"
+flow job-cancel-reconnect normal 1 cancel
+server_extra=
+cancel_check job-cancel-reconnect
+grep -q "steam job: cancelled before connecting again" "$out/flow-job-cancel-reconnect/log.txt" &&
+	[ "$(grep -c "cm: logon ok" "$out/flow-job-cancel-reconnect/transcript.txt")" = 1 ] ||
+	{ echo "FAIL job-cancel-reconnect: not cancelled in the pause, or signed in again"; status=1; }
 client_env= signin_flow=
 sub=
 
