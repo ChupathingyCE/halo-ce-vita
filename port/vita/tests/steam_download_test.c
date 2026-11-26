@@ -1318,10 +1318,28 @@ static int show_qr(void *context, const char *url)
 
 static int progress(void *context, uint64_t done, uint64_t total, const char *file)
 {
+	/* (1.1.3 8v: STEAM_TEST_CHECK_MS=<ms>: each step of a file's check - every 256 KB it reads - takes that much
+	longer, as the Vita's SHA-1 does (~90 ms a step: Zuka's 242 MB map in 90 s, the dev Vita, Nov 26); each file's
+	check logged once, "test: checked <file>") */
+	static char last_checked[160];
+	const char *check_ms = getenv("STEAM_TEST_CHECK_MS");
+
 	(void)context;
 	(void)done;
 	(void)total;
-	(void)file;
+	if (file && check_ms && !strncmp(file, "checking ", 9))
+	{
+		long ms = atol(check_ms);
+		struct timespec wait = { ms / 1000, (ms % 1000) * 1000000L };
+
+		if (strcmp(last_checked, file))
+		{
+			snprintf(last_checked, sizeof(last_checked), "%s", file);
+			fprintf(log_file, "test: checked %s\n", file + 9);
+			fflush(log_file);
+		}
+		nanosleep(&wait, NULL);
+	}
 	return cancel_after >= 0 && ++progress_calls > cancel_after;
 }
 

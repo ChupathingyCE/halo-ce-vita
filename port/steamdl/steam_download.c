@@ -290,19 +290,44 @@ static int make_parents(const char *path)
 }
 
 /* (a file's checks - one already there, a resume's chunks, the finished file -: the progress shown as "checking", the
-player's cancel looked at every 256 KB) */
+player's cancel looked at every 256 KB, and the CM session kept meanwhile) */
 struct checking
 {
 	const struct steam_download_callbacks *callbacks;
 	uint64_t done, total;
 	char label[120];
+	struct steam_session *session;
+	long long pumped_ms;
 };
+
+static long long monotonic_ms(void)
+{
+	struct timespec now;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return (long long)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
 
 static int checking_progress(void *context, uint64_t read, uint64_t total)
 {
 	struct checking *checking = context;
 
 	(void)total;
+	/* (1.1.3 8v: a big map's SHA-1 takes minutes on the Vita - Zuka's 242 MB in 90 s -, and Steam closes a session that
+	sends no heartbeat for about a minute: the dev Vita, Nov 26, lost it after every big file, and again after the next
+	sign-in's checks of the files already in. The session pumped here, at most every half second - its heartbeat when
+	due, a log-off read. A session lost meanwhile does not stop the check: the file is checked and recorded, the next
+	chunk's pump sees the loss and the next sign-in resumes) */
+	if (checking->session && checking->session->connected)
+	{
+		long long now = monotonic_ms();
+
+		if (now - checking->pumped_ms >= 500)
+		{
+			checking->pumped_ms = now;
+			steam_session_pump(checking->session, 0);
+		}
+	}
 	return checking->callbacks->progress && checking->callbacks->progress(checking->callbacks->context,
 		checking->done + read, checking->total, checking->label);
 }
@@ -337,7 +362,7 @@ static struct
 {
 	char path[STEAM_PATH_MAXIMUM];
 	struct record_entry *entries;
-	int count, dirty, loaded;
+	int count, capacity, dirty, loaded;
 	time_t saved;
 } record;
 
@@ -352,8 +377,10 @@ static void record_free(void)
 	memset(&record, 0, sizeof(record));
 }
 
-/* the record of app_root read (once per depot run): its entries, or none if anything in it does not read */
-static void record_load(const struct steam_download_options *options, const struct steam_download_callbacks *callbacks)
+/* the record at path read (once per depot run: <app root>/steam-verified.txt; per Workshop item:
+<ce_root>/workshop/<id>.verified, room for an item's files alone - the Vita's C heap is short while the game's menus
+are up): its entries, or none if anything in it does not read */
+static void record_load(const char *path, int capacity, const struct steam_download_callbacks *callbacks)
 {
 	FILE *file;
 	char *text = NULL, *line, *next;
@@ -362,9 +389,9 @@ static void record_load(const struct steam_download_options *options, const stru
 
 	record_free();
 	record.loaded = 1;
-	record.entries = calloc(RECORD_ENTRIES_MAXIMUM, sizeof(*record.entries));
-	if (!record.entries || snprintf(record.path, sizeof(record.path), "%s/steam-verified.txt", options->app_root) >=
-		(int)sizeof(record.path))
+	record.capacity = capacity;
+	record.entries = calloc((size_t)capacity, sizeof(*record.entries));
+	if (!record.entries || snprintf(record.path, sizeof(record.path), "%s", path) >= (int)sizeof(record.path))
 	{
 		record_free();
 		return;
@@ -396,7 +423,7 @@ static void record_load(const struct steam_download_options *options, const stru
 			break;
 		}
 		*next++ = 0;
-		if (record.count >= RECORD_ENTRIES_MAXIMUM || strlen(line) < 46 || line[40] != ' ')
+		if (record.count >= record.capacity || strlen(line) < 46 || line[40] != ' ')
 		{
 			bad = 1;
 			break;
@@ -510,7 +537,7 @@ static void record_verified(const struct planned *planned, const char *path,
 	entry = record_find(key);
 	if (!entry)
 	{
-		if (record.count >= RECORD_ENTRIES_MAXIMUM)
+		if (record.count >= record.capacity)
 			return;
 		entry = &record.entries[record.count++];
 		snprintf(entry->key, sizeof(entry->key), "%s", key);
@@ -558,8 +585,8 @@ static int download_file(struct steam_session *session, struct planned *planned,
 		fail(result, "path too long: %s", planned->destination);
 		return 0;
 	}
-	/* (the Workshop's staging is moved into mods: no record for it) */
-	if (!options->workshop && record_trusted(planned, path))
+	/* (the Workshop's too: its item's own record, <ce_root>/workshop/<id>.verified - steam_download_workshop_item) */
+	if (record_trusted(planned, path))
 	{
 		say(callbacks, "%s: already there (verified before, unchanged)", planned->destination);
 		result->files_already++;
@@ -573,6 +600,8 @@ static int download_file(struct steam_session *session, struct planned *planned,
 		checking.callbacks = callbacks;
 		checking.done = *done;
 		checking.total = total;
+		checking.session = session;
+		checking.pumped_ms = 0;
 		snprintf(checking.label, sizeof(checking.label), "checking %.100s", planned->destination);
 		opened = steam_file_open_checked(&job, path, depot, gid, planned->file, planned->kind, planned->destination,
 			checking_progress, &checking, error, sizeof(error));
@@ -596,8 +625,7 @@ static int download_file(struct steam_session *session, struct planned *planned,
 		say(callbacks, "%s: already there", planned->destination);
 		result->files_already++;
 		*done += planned->file->size;
-		if (!options->workshop)
-			record_verified(planned, path, callbacks);
+		record_verified(planned, path, callbacks);
 		return 1;
 	}
 	*done += job.resumed_bytes;
@@ -696,6 +724,8 @@ static int download_file(struct steam_session *session, struct planned *planned,
 		checking.callbacks = callbacks;
 		checking.done = *done - planned->file->size;
 		checking.total = total;
+		checking.session = session;
+		checking.pumped_ms = 0;
 		snprintf(checking.label, sizeof(checking.label), "checking %.100s", planned->destination);
 		job.checking = checking_progress;
 		job.checking_context = &checking;
@@ -712,8 +742,7 @@ static int download_file(struct steam_session *session, struct planned *planned,
 	}
 	say(callbacks, "%s: done (%llu bytes)", planned->destination, (unsigned long long)planned->file->size);
 	result->files_done++;
-	if (!options->workshop)
-		record_verified(planned, path, callbacks);
+	record_verified(planned, path, callbacks);
 	ok = 1;
 	goto stopped;
 stop:
@@ -858,7 +887,13 @@ int steam_download_depot(struct steam_session *session, const struct steam_kv *a
 		}
 	}
 	say(callbacks, "depot %u: %u files, %.1f MB", (unsigned int)depot, (unsigned int)collected.count, total / 1e6);
-	record_load(options, callbacks);
+	{
+		char record_path[STEAM_PATH_MAXIMUM];
+
+		if (snprintf(record_path, sizeof(record_path), "%s/steam-verified.txt", options->app_root) <
+			(int)sizeof(record_path))
+			record_load(record_path, RECORD_ENTRIES_MAXIMUM, callbacks);
+	}
 	for (index = 0; index < collected.count; index++)
 	{
 		struct planned *planned = &collected.files[index];
@@ -1017,7 +1052,8 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 	uint8_t *zipped = NULL, *manifest = NULL;
 	size_t zipped_size = 0, manifest_size = 0, index;
 	uint64_t code = 0, done = 0, total, staged_gid;
-	char path[128], error[256], id_text[24], staging[512], gid_path[512], done_path[512], text[96], folder[512];
+	char path[128], error[256], id_text[24], staging[512], gid_path[512], done_path[512], text[96], folder[512],
+		verified_path[512];
 	int ok = 0;
 
 	memset(&collected, 0, sizeof(collected));
@@ -1028,7 +1064,8 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 	cdn.callbacks = callbacks;
 	cdn.result = result;
 	if (!steam_workshop_id_text(item->id, id_text, sizeof(id_text)) ||
-		!steam_workshop_paths(options->ce_root, item->id, staging, gid_path, done_path, NULL, sizeof(staging)))
+		!steam_workshop_paths(options->ce_root, item->id, staging, gid_path, done_path, NULL, sizeof(staging)) ||
+		!steam_workshop_verified_path(options->ce_root, item->id, verified_path, sizeof(verified_path)))
 	{
 		fail(result, "the item's number is too long");
 		return 0;
@@ -1038,6 +1075,7 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 	{
 		say(callbacks, "workshop %s: a new version: the old download dropped", id_text);
 		steam_workshop_remove_tree(staging);
+		remove(verified_path);
 	}
 	remove(done_path);
 	snprintf(folder, sizeof(folder), "%s/workshop", options->ce_root);
@@ -1134,6 +1172,10 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 		}
 	}
 	say(callbacks, "workshop %s: %u files, %.1f MB", id_text, (unsigned int)collected.base.count, total / 1e6);
+	/* (1.1.3 8v: the item's verified files' record, as the game's depots have theirs: a sign-in after a lost session
+	takes the files already checked from it, unread - the dev Vita, Nov 26, read Cursed Halo's 5 finished maps again,
+	~60 s each, at every sign-in. Kept until the item is installed or dropped) */
+	record_load(verified_path, (int)STEAM_WORKSHOP_FILES_MAXIMUM, callbacks);
 	for (index = 0; index < collected.base.count; index++)
 	{
 		if (!download_file(session, &collected.base.files[index], STEAM_WORKSHOP_DEPOT, item->hcontent, key, &cdn,
@@ -1150,6 +1192,8 @@ int steam_download_workshop_item(struct steam_session *session, const struct ste
 	}
 	ok = 1;
 done:
+	record_save(callbacks);
+	record_free();
 	steam_http_close(&cdn.http);
 	for (index = 0; index < collected.base.count; index++)
 		free_planned(&collected.base.files[index]);
@@ -1546,8 +1590,12 @@ static int workshop_flow(struct steam_session *session, const struct steam_downl
 			{
 				if (result->item_dropped)
 				{
+					char verified_path[512];
+
 					steam_workshop_remove_tree(staging);
 					remove(gid_path);
+					if (steam_workshop_verified_path(options->ce_root, item->id, verified_path, sizeof(verified_path)))
+						remove(verified_path);
 				}
 				else
 				{

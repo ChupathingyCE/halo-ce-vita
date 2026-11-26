@@ -207,6 +207,10 @@ typedef int (*steam_workshop_map_check)(void *context, const char *path, char *w
 (every file in and checked); the mods folder's place <root>/mods/<id> */
 int steam_workshop_paths(const char *root, uint64_t id, char *staging, char *gid_path, char *done_path, char *mods,
 	size_t size);
+/* (1.1.3 8v) the staging's verified files' record, <root>/workshop/<id>.verified (each file checked whole: its size,
+time and the manifest's SHA-1 - steam_download.c's record): 1, or 0 if the path is too long. Removed with the
+install, a drop or a new version */
+int steam_workshop_verified_path(const char *root, uint64_t id, char *path, size_t size);
 /* the downloaded items waiting for their install (their .done marks): how many ids were written */
 int steam_workshop_staged(const char *root, uint64_t *ids, int maximum);
 /* the item checked again (every file's name; every map by check) and moved to <root>/mods/<id> (one there before
