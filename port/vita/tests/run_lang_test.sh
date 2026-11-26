@@ -20,4 +20,7 @@ $cc -m32 -g -O1 -Wall -Wextra -fshort-wchar -I"$root/port/linux/src" "$here/lang
 status=0
 (cd "$out" && ./lang_test) || status=$?
 python3 "$root/tools/lang_check.py" --root "$root" || status=1
+# (1.1.3 8v audit: the mod manager's reasons fit its 96-byte buffers, "Not supported on PS Vita: " and all, in every
+# language)
+python3 -I "$here/mods_reasons_fit.py" --root "$root" || status=1
 exit $status

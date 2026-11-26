@@ -39,6 +39,10 @@ steam_job.h: the download's worker thread and its snapshot.
 without counting as one of those, at most this often in one job: an hour's Workshop pack on a Vita's Wi-Fi may lose it
 more than twice and must carry on */
 #define JOB_PROGRESS_RESTARTS_MAXIMUM 20
+/* (8v audit) the pause before a lost session's next sign-in, in steps that look at the player's cancel: Steam's CM
+not asked again at once, twenty times over */
+#define JOB_RESTART_PAUSE_MS 3000
+#define JOB_RESTART_PAUSE_STEP_MS 100
 /* (sleeps of the device in one job that each start the flow again) */
 #define JOB_SLEEPS_MAXIMUM 50
 #define CM_DIRECTORY_URL "https://api.steampowered.com/ISteamDirectory/GetCMListForConnect/v1/?cellid=0&cmtype=websockets"
@@ -1342,6 +1346,30 @@ static void *worker(void *unused)
 		}
 		say(result.kept ? "steam job: the session was lost: connecting again with the kept sign-in (the download resumes)" :
 			"steam job: the session was lost: a new QR (the download resumes)");
+		/* (a moment before it: the screens say "connecting again" meanwhile - the next sign-in's number -, and the
+		player's cancel ends it at once) */
+		if (attempt < JOB_RESTARTS)
+		{
+			int waited;
+
+			pthread_mutex_lock(&job.lock);
+			job.status.phase = STEAM_JOB_CONNECTING;
+			job.status.attempts = attempt + 2 + progress_restarts;
+			pthread_mutex_unlock(&job.lock);
+			for (waited = 0; waited < JOB_RESTART_PAUSE_MS && !job.cancel; waited += JOB_RESTART_PAUSE_STEP_MS)
+			{
+				struct timespec step = { 0, JOB_RESTART_PAUSE_STEP_MS * 1000 * 1000 };
+
+				nanosleep(&step, NULL);
+			}
+			if (job.cancel)
+			{
+				say("steam job: cancelled before connecting again");
+				result.cancelled = 1;
+				snprintf(result.error, sizeof(result.error), "cancelled");
+				break;
+			}
+		}
 	}
 	steam_wipe(secret, sizeof(secret));
 	secret_size = 0;

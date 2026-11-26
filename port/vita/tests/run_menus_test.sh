@@ -3131,6 +3131,22 @@ for case in $cases; do
 		printf '\000\000' | dd of="$wsc/mods/2904654155/maps/snowcamp.map" bs=1 seek=96 conv=notrunc status=none
 		echo "781788483063501536" > "$wsc/workshop/installed/2904654155.gid"
 		printf 'title Snow Campaign\n' > "$wsc/workshop/installed/2904654155.about"
+		# (8v audit: one whose OpenSauce header names a mod set that leaves the folder, "..\..\evil": its resource maps
+		# never looked for there - hidden, said why)
+		mkdir -p "$wsc/mods/2904654156/maps"
+		cp --reflink=auto "$(readlink -f "$ws_ce_map")" "$wsc/mods/2904654156/maps/snowyelo.map"
+		python3 -I - "$wsc/mods/2904654156/maps/snowyelo.map" <<'EOF_YELO'
+import struct, sys
+with open(sys.argv[1], 'r+b') as f:
+    header = bytearray(0xC8)
+    header[0:4] = b'oley'
+    struct.pack_into('<hHBB', header, 4, 1, 2, 2, 2)
+    header[0x40:0x40 + 10] = b'..\\..\\evil'
+    f.seek(0x70)
+    f.write(header)
+EOF_YELO
+		echo "781788483063501537" > "$wsc/workshop/installed/2904654156.gid"
+		printf 'title Snow OpenSauce\n' > "$wsc/workshop/installed/2904654156.about"
 		# (the mod manager: MODS, the main menu; MULTIPLAYER, MAP: the picker, B)
 		wsc_pad="$h3modspad wait:150:3000 b wait:150:3000 b wait:150:3000 down:150:500 a wait:150:3000 down:150:500 a"
 		wsc_pad="$wsc_pad wait:150:3000 @wsc-picker:0:300 b wait:150:3000"
@@ -3150,6 +3166,10 @@ for case in $cases; do
 		grep -aq "mods: 2904654155.maps.snowcamp.map is left out: not supported on PS Vita: a Custom Edition campaign map: copy it into the maps folder" "$debug" &&
 			grep -aq "menus: h3 mods: 2904654155: Workshop item, on, [0-9]* KB, failed: Not supported on PS Vita: a Custom Edition campaign map: copy it into the maps folder, works in None, from Steam Workshop, title Snow Campaign$" "$log" ||
 			fail wscemap "the item with a Custom Edition campaign map was not said as not supported, and why"
+		grep -aq "mods: 2904654156.maps.snowyelo.map is left out: not supported on PS Vita: its OpenSauce mod set's name is not a plain file name" "$debug" &&
+			grep -aq "menus: h3 mods: 2904654156: Workshop item, on, [0-9]* KB, failed: Not supported on PS Vita: its OpenSauce mod set's name is not a plain file name, works in None, from Steam Workshop, title Snow OpenSauce$" "$log" ||
+			fail wscemap "the item whose OpenSauce mod set name leaves the folder was not hidden, said why"
+		grep -aq "evil" "$debug" && fail wscemap "the hostile mod set name reached a path"
 		if [ -r "${HALO_TEST_PROFILE:-}" ]; then
 			# (OFFLINE (h3offline's), MAP: down thirteen past the Xbox's thirteen to the Workshop map, A; START GAME:
 			# split screen's SELECT PROFILE, A joins, A the profile, A the game: the map loads and the game runs)

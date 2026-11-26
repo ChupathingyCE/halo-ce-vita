@@ -1709,7 +1709,8 @@ static int job(int argc, char **argv)
 	char log_path[600];
 	unsigned int qr_serial = 0;
 	int qr_size = 0, phases = 0, last_phase = -1, polls = 0, cancel_at = argc > 6 ? atoi(argv[6]) : -1;
-	/* (STEAM_TEST_CANCEL=qr|preparing|downloading: the player's cancel at that phase's first sight - downloading
+	/* (STEAM_TEST_CANCEL=qr|preparing|downloading|reconnecting: the player's cancel at that phase's first sight -
+	reconnecting: CONNECTING after a lost session, its pause before the next sign-in (8v audit) -, downloading
 	after STEAM_TEST_CANCEL_MS in it, default 0 -: how long the cancel call took (the game's thread), whether the
 	device's hold was let go at once, and how long until the job ended; the longest snapshot call meanwhile) */
 	const char *cancel_phase = getenv("STEAM_TEST_CANCEL");
@@ -1771,9 +1772,10 @@ static int job(int argc, char **argv)
 		if (cancel_phase && cancelled_at < 0)
 		{
 			int wanted = !strcmp(cancel_phase, "qr") ? STEAM_JOB_QR : !strcmp(cancel_phase, "preparing") ?
-				STEAM_JOB_PREPARING : !strcmp(cancel_phase, "downloading") ? STEAM_JOB_DOWNLOADING : -1;
+				STEAM_JOB_PREPARING : !strcmp(cancel_phase, "downloading") ? STEAM_JOB_DOWNLOADING :
+				!strcmp(cancel_phase, "reconnecting") ? STEAM_JOB_CONNECTING : -1;
 
-			if (status.phase == wanted && phase_seen_at < 0)
+			if (status.phase == wanted && phase_seen_at < 0 && (strcmp(cancel_phase, "reconnecting") || status.attempts >= 2))
 				phase_seen_at = test_ms();
 			if (phase_seen_at >= 0 && test_ms() - phase_seen_at >= cancel_wait_ms)
 			{

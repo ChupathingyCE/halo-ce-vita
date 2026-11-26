@@ -300,8 +300,14 @@ static unsigned int touch_read(unsigned long long now, int *started)
 	}
 	/* (the system's keyboard open, or just closed: its fingers are not the game's - neither the menus' pointer nor the
 	zones; 8u device test, Nov 26: taps on the Workshop search's keyboard opened cards behind it) */
-	if (vita_ime_blocking())
-		count = 0;
+	{
+		int front_fingers = 0;
+
+		for (index = 0; index < count; index++)
+			front_fingers += contacts[index].panel == VITA_TOUCH_FRONT;
+		if (vita_ime_blocking(front_fingers))
+			count = 0;
+	}
 	/* (the front fingers kept for the menus' pointer) */
 	front_touch_count = 0;
 	for (index = 0; index < count && front_touch_count < SCE_TOUCH_MAX_REPORT; index++)

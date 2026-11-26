@@ -227,9 +227,9 @@ int vita_ime_open(const char *title, const char *text, int maximum_length, int p
 printable ASCII characters; others are left out), or -1 if it was
 cancelled or failed. The game should see no buttons while it is open */
 int vita_ime_poll(char *text, int size);
-/* 1 while the keyboard is open and for half a second after it closes: the game's touches are none meanwhile
-(vita_input.c touch_read) */
-int vita_ime_blocking(void);
+/* 1 while the keyboard is open, and after it closes for half a second and until a read sees no finger on the front
+panel (front_fingers: this read's): the game's touches are none meanwhile (vita_input.c touch_read) */
+int vita_ime_blocking(int front_fingers);
 /* (debug) HALO_ADHOC_PROBE=1: logs what the Vita's ad hoc libraries do
 (vita_net.c) */
 void vita_net_adhoc_probe(void);
