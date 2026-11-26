@@ -1649,6 +1649,7 @@
 "No custom maps or mods yet. Copy maps to %s/maps,\nmods to %s/mods." = "Aún no hay mapas ni mods. Copia los mapas a %s/maps,\nlos mods a %s/mods."
 "1 item, %s used, %s free" = "1 elemento, %s usados, %s libres"
 "%d items, %s used, %s free" = "%d elementos, %s usados, %s libres"
+"%s used, %s free" = "%s usados, %s libres"
 "This one can't be turned off here" = "Este no se puede apagar aquí"
 "Maps: %d, %d of them play\n" = "Mapas: %d, se juegan %d\n"
 "On: in the map lists" = "Encendido: en las listas de mapas"

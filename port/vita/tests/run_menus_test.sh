@@ -2768,7 +2768,21 @@ for case in $cases; do
 			ws_taps="HALO_TEST_TAPS=52000:410,161 58000:600,431 63000:560,200>220,200 70000:517,65"
 		fi
 		mods_data "$out/$case-data"
-		run $case "$out/$case-data" $ws_seconds "$ws_pad" \
+		ws_mods= ws_workshop=
+		if [ "$case" = h3workshoptouch ]; then
+			# (1.1.3-insider.8v: card 2's item, 2900000003, installed already with a map this build cannot run - its
+			# scripts take parameters: the details page's "Not supported on PS Vita: ..." in lines that fit the box -
+			# 8u device test, Nov 26: "the scenario's script" and the rest past the box's edge)
+			mkdir -p "$out/$case-data/mods/2900000003/maps" "$out/$case-data/mods/2900000003/halo1/maps" \
+				"$out/$case-data/workshop/installed"
+			cp --reflink=auto "$ws_map" "$out/$case-data/mods/2900000003/maps/skeptic.map"
+			ln -s "$(dirname "$ws_map")/bitmaps.map" "$out/$case-data/mods/2900000003/halo1/maps/bitmaps.map"
+			python3 -I "$here/mcc_map_patch.py" script-parameter "$out/$case-data/mods/2900000003/maps/skeptic.map"
+			echo "$(date +%s)" > "$out/$case-data/workshop/installed/2900000003.gid"
+			printf 'title Fake Unplayable\n' > "$out/$case-data/workshop/installed/2900000003.about"
+			ws_mods=$out/$case-data/mods ws_workshop=$out/$case-data/workshop
+		fi
+		mods_from=$ws_mods workshop_from=$ws_workshop run $case "$out/$case-data" $ws_seconds "$ws_pad" \
 			HALO_MENU_STYLE=halo3 HALO_STEAM_TEST_CM="ws://127.0.0.1:$fake_cm/cmsocket/" \
 			HALO_STEAM_TEST_CDN="http://127.0.0.1:$fake_cdn" HALO_STEAM_TEST_IMAGES="http://127.0.0.1:$fake_cdn" \
 			HALO_TEST_TEXT_INPUT=rebalanced HALO_GL_VITA_DISPLAY=1 HALO_RENDER_SCALE=1 HALO_SCREENSHOT_DIR="$ws_shots" \
@@ -2810,6 +2824,10 @@ for case in $cases; do
 		if [ "$case" = h3workshoptouch ]; then
 			grep -aq "menus: workshop: card 2 tapped" "$log" && grep -aq "menus: workshop: details of 2900000003" "$log" ||
 				fail $case "a tap on card 2 did not open its details page"
+			grep -aE "menus: workshop: 2900000003 installed|the item's problem in" "$log" | head -3
+			grep -aq "menus: workshop: 2900000003 installed: Not supported on PS Vita: the scenario's scripts take parameters" "$log" &&
+				grep -aqE "menus: workshop: the item's problem in [2-9] lines$" "$log" ||
+				fail $case "the installed item's problem was not said in lines that fit its box"
 			grep -aq "menus: workshop: details closed" "$log" || fail $case "a tap on Back did not close the details page"
 			grep -aq "menus: workshop: a swipe to page 2" "$log" && grep -aq "steam job: workshop page 2 (list 0)" "$log" ||
 				fail $case "a swipe did not turn the page"
@@ -2956,6 +2974,11 @@ for case in $cases; do
 		grep -aq "mods: 3803578418.maps.skeptic.map is left out: not supported on PS Vita: the scenario's scripts take parameters, which this build does not run" \
 			"$debug" || fail wsunplayable "the map whose scripts take parameters was not found unplayable by the scan"
 		grep -aq "is the Steam Workshop multiplayer map ws3803578418_" "$debug" && fail wsunplayable "the unplayable map was listed"
+		# (1.1.3-insider.8v: the mod manager's totals fit their box, shorter if need be - 8u device test, Nov 26: "2 items,
+		# 207.8 MB used, 221.8" lost its "GB free" at the right edge)
+		grep -aE "menus: h3 mods: the totals: " "$log" | tail -1
+		grep -aE "menus: h3 mods: the totals: .* free$" "$log" | grep -avq "do not fit" &&
+			! grep -aq "menus: h3 mods: the totals: .*(do not fit)" "$log" || fail wsunplayable "the mod manager's totals do not fit"
 		grep -aq "workshop: 2 Steam Workshop multiplayer maps for the level list" "$debug" ||
 			fail wsunplayable "the level list's Workshop maps were not the two playable ones"
 		grep -aq "menus: h3 mp: the map picker: 15 maps (2 custom)" "$log" ||

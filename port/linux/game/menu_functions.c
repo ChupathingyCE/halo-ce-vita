@@ -12767,6 +12767,8 @@ static void h3_gm_update(struct widget_instance *list)
 	}
 }
 
+static boolean h3_dialog_too_wide(struct widget_instance *widget, char const *text, short width);
+
 /* (port h3 mods) the rows, the chosen one's facts, the totals */
 static void h3_mods_update(struct widget_instance *list)
 {
@@ -12899,10 +12901,29 @@ static void h3_mods_update(struct widget_instance *list)
 		mod_manager_totals(&used, &free_space);
 		h3_mods_size_text(used_text, sizeof(used_text), used);
 		h3_mods_size_text(free_text, sizeof(free_text), free_space);
+		struct widget_instance *status = named(screen, "mods_status");
+		short width = status ? ui_widget_port_text_box_width(status) : 0;
+
 		if (mod_manager_count() == 1)
 			snprintf(text, sizeof(text), T("1 item, %s used, %s free"), used_text, free_text);
 		else
 			snprintf(text, sizeof(text), T("%d items, %s used, %s free"), mod_manager_count(), used_text, free_text);
+		/* (shorter while it does not fit its box - "2 items, 207.8 MB used, 221.8" lost its "GB free" at the right
+		edge, 8u device test, Nov 26: the free space the line that stays) */
+		if (width > 0 && h3_dialog_too_wide(status, text, width))
+			snprintf(text, sizeof(text), T("%s used, %s free"), used_text, free_text);
+		if (width > 0 && h3_dialog_too_wide(status, text, width))
+			snprintf(text, sizeof(text), T("%s free"), free_text);
+		{
+			static char said[160];
+
+			if (strcmp(said, text))
+			{
+				snprintf(said, sizeof(said), "%s", text);
+				platform_log("menus: h3 mods: the totals: %s%s", text,
+					width > 0 && h3_dialog_too_wide(status, text, width) ? " (do not fit)" : "");
+			}
+		}
 	}
 	text_show(named(screen, "mods_status"), text);
 }
@@ -13358,6 +13379,8 @@ static struct
 	/* (1.1.3) the installed item's problem as the mod manager says it ("Not supported on PS Vita: ...": a map the
 	load would refuse, never listed to play; "" none) */
 	char details_unsupported[HALO_MODS_TEXT_BYTES];
+	/* (its lines, said in the log once) */
+	int details_said;
 	/* a finger on the screen: where it came down, a swipe taken */
 	boolean touching, swiped;
 	short touch_x, touch_y;
@@ -14110,6 +14133,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 				steam_workshop_installed(h3_workshop_root(), id, &gid);
 			h3_workshop.details_installed_gid = gid;
 			h3_workshop.details_unsupported[0] = 0;
+			h3_workshop.details_said = 0;
 			if (page.needs)
 			{
 				char said[sizeof(page.needs_titles) + 2 * STEAM_WORKSHOP_NEEDS_MAXIMUM];
@@ -14257,8 +14281,37 @@ static void h3_workshop_update(struct widget_instance *widget)
 				}
 				if (page.state == 2 && state && h3_workshop.details_unsupported[0])
 				{
-					snprintf(line, sizeof(line), "\n%s", h3_workshop.details_unsupported);
+					/* (in lines that fit the box, broken at spaces - one line lost its end at the box's edge: "Not
+					supported on PS Vita: the scenario's script", 8u device test, Nov 26) */
+					short width = ui_widget_port_text_box_width(found);
+					char const *word = h3_workshop.details_unsupported;
+					char row[300] = "", candidate[300];
+					int rows = 0;
+
+					while (*word)
+					{
+						int length = (int)strcspn(word, " ");
+
+						snprintf(candidate, sizeof(candidate), "%s%s%.*s", row, row[0] ? " " : "", length, word);
+						if (row[0] && width > 0 && h3_dialog_too_wide(found, candidate, width))
+						{
+							snprintf(line, sizeof(line), "\n%s", row);
+							strncat(text, line, sizeof(text) - strlen(text) - 1);
+							rows++;
+							snprintf(row, sizeof(row), "%.*s", length, word);
+						}
+						else
+							snprintf(row, sizeof(row), "%s", candidate);
+						word += length;
+						while (*word == ' ')
+							word++;
+					}
+					snprintf(line, sizeof(line), "\n%s", row);
 					strncat(text, line, sizeof(text) - strlen(text) - 1);
+					if (h3_workshop.details_said != rows + 1)
+						platform_log("menus: workshop: the item's problem in %d lines%s", rows + 1,
+							width > 0 && h3_dialog_too_wide(found, row, width) ? " (a word does not fit)" : "");
+					h3_workshop.details_said = rows + 1;
 				}
 				h3_dialog_text(found, text);
 			}
