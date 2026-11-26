@@ -5120,7 +5120,7 @@ PY
 		# multiplayer\<map>.json, a map the item titles, one it titles longer than any row -, Amplitude's, and an item of
 		# one map of a file name past 23 characters, untitled but by its item (as the dev Vita's Snowtrap))
 		for item in 2905272848:cursed-h1.5_levee-mcc 2905272848:cursed-sidewinder-mcc 2905272848:cursed-hangemhigh-mcc \
-			2931965261:amplitude 2900000009:snowgulch_pb2_do_not_leak_x; do
+			2931965261:amplitude 2900000009:snowgulch_pb2_do_not_leak_x 2900000010:pipegulch 2900000010:pipegulch_two; do
 			id=${item%%:*} stem=${item#*:}
 			mkdir -p "$wsn/mods/$id/maps" "$wsn/mods/$id/halo1/maps" "$wsn/mods/$id/multiplayer"
 			cp --reflink=auto "$ws_mp_map" "$wsn/mods/$id/maps/$stem.map"
@@ -5132,6 +5132,10 @@ PY
 		ws_json 2905272848 cursed-sidewinder-mcc "Cursed Sidewinder"
 		ws_json 2905272848 cursed-hangemhigh-mcc "Hang 'em Higher: The Extremely Long Cursed Remix of Doom"
 		ws_json 2931965261 amplitude "  Amplitude "
+		# (8v audit: '|' is the game's text formatting mark - its parser reads the character after it, past the end of
+		# "Snowtrap |", and "|n" breaks the line -: a mod's title never keeps one, '/' in its place)
+		ws_json 2900000010 pipegulch "Snowtrap |"
+		ws_json 2900000010 pipegulch_two "Pipe|nGulch"
 		printf 'title Cursed Halo Map Pack\n' > "$wsn/workshop/installed/2905272848.about"
 		printf 'title Amplitude Item\n' > "$wsn/workshop/installed/2931965261.about"
 		printf 'title Halo CE - Snow Gulch\n' > "$wsn/workshop/installed/2900000009.about"
@@ -5145,7 +5149,7 @@ PY
 		off_d="down:150:500"
 		off_lobby="$h3mppad wait:150:1000 a:150:2000 $off_d $off_d a:150:2500"
 		wsn_pad="$off_lobby $off_d a:150:2500"
-		for row in $(seq 17); do wsn_pad="$wsn_pad down:150:400"; done
+		for row in $(seq 19); do wsn_pad="$wsn_pad down:150:400"; done
 		wsn_pad="$wsn_pad @wsn-picker:0:300 up:150:400 up:150:400 up:150:400 @wsn-picker2:0:300 b:150:2500 @wsn-lobby:0:300"
 		mods_from=$wsn/mods workshop_from=$wsn/workshop profile_from=$HALO_TEST_PROFILE run wsnames "$wsn" 60 "$wsn_pad" \
 			HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch "${ws_shots[@]}"
@@ -5155,35 +5159,40 @@ PY
 		check_h3 wsnames halo3
 		check_h3 wsnames_es halo3
 		log=$out/wsnames/run.log debug=$out/wsnames/data/debug.txt
-		grep -aE "Steam Workshop multiplayer map|shown as its item|cascade: mp maps: column 1, -, row 1[4-8]|map picker" "$log" "$debug" | cut -c1-240
+		grep -aE "Steam Workshop multiplayer map|shown as its item|cascade: mp maps: column 1, -, row (1[4-9]|20)|map picker" "$log" "$debug" | cut -c1-240
 		grep -aq "mods: d:.mods.2905272848.maps.cursed-h1.5_levee-mcc.map is the Steam Workshop multiplayer map ws2905272848_cursed--f7a2, shown as \"Cursed H1.5 Levee\"" \
 			"$debug" || fail wsnames "the dotted file name was not taken as ws2905272848_cursed--f7a2, Cursed H1.5 Levee"
 		grep -aq "mods: d:.mods.2900000009.maps.snowgulch_pb2_do_not_leak_x.map is the Steam Workshop multiplayer map ws2900000009_snowgul-" \
 			"$debug" || fail wsnames "the file name of 27 characters was not taken"
+		grep -aq "pipegulch.map is the Steam Workshop multiplayer map ws2900000010_pipegulch, shown as \"Snowtrap /\"" "$debug" &&
+			grep -aq "pipegulch_two.map is the Steam Workshop multiplayer map ws2900000010_pipegul-[0-9a-f]*, shown as \"Pipe/nGulch\"" \
+			"$debug" || fail wsnames "a title's '|' was not made '/'"
+		grep -aE "cascade: mp maps: |h3 mp lobby: " "$log" "$out/wsnames_es/run.log" | grep -aF "|" && fail wsnames "a '|' shown (above)"
 		grep -aq "is shown as its item's title \"Halo CE - Snow Gulch\"" "$debug" || fail wsnames "the item of one map was not shown by its title"
 		grep -a "is shown as its item's title" "$debug" | grep -aqv 2900000009 &&
 			fail wsnames "an item of many maps, or one its map's file titles, shown by the item's title"
-		grep -aq "workshop: 5 Steam Workshop multiplayer maps for the level list" "$debug" ||
-			fail wsnames "not all five Workshop maps were in the level list"
-		grep -aq "menus: h3 mp: the map picker: 18 maps (5 custom)" "$log" || fail wsnames "the map picker did not offer the five"
+		grep -aq "workshop: 7 Steam Workshop multiplayer maps for the level list" "$debug" ||
+			fail wsnames "not all seven Workshop maps were in the level list"
+		grep -aq "menus: h3 mp: the map picker: 20 maps (7 custom)" "$log" || fail wsnames "the map picker did not offer the seven"
 		# (the rows as shown, cut to fit with "..." and their tag kept; in Spanish " (PERS.)", whose " (PERSONALIZADO)" cut
 		# every Workshop map's name)
-		for row in "CURSED H1\.5 LEVEE" "HANG 'EM HIGHER: [A-Z' ]*\.\.\." "CURSED SIDEWINDER" "AMPLITUDE" "HALO CE - SNOW GULCH"; do
-			grep -aqE "menus: cascade: mp maps: column 1, -, row 1[4-8] of 18: $row \(CUSTOM\)$" "$log" ||
+		for row in "CURSED H1\.5 LEVEE" "HANG 'EM HIGHER: [A-Z' ]*\.\.\." "CURSED SIDEWINDER" "AMPLITUDE" "HALO CE - SNOW GULCH" \
+			"SNOWTRAP /" "PIPE/NGULCH"; do
+			grep -aqE "menus: cascade: mp maps: column 1, -, row (1[4-9]|20) of 20: $row \(CUSTOM\)$" "$log" ||
 				fail wsnames "SELECT MAP's row $row (CUSTOM) not shown so"
-			grep -aqE "menus: cascade: mp maps: column 1, -, row 1[4-8] of 18: $row \(PERS\.\)$" "$out/wsnames_es/run.log" ||
+			grep -aqE "menus: cascade: mp maps: column 1, -, row (1[4-9]|20) of 20: $row \(PERS\.\)$" "$out/wsnames_es/run.log" ||
 				fail wsnames_es "SELECT MAP's row $row (PERS.) not shown so"
 		done
 		# (nothing of the picker's or the lobby's drawn past its box: the harness's own check, ui_widget_port_text_check)
 		grep -aE "menus: text cut: pc.h3.(cascade.(row|c1|c2)_|mp.(map|caption))" "$log" "$out/wsnames_es/run.log" &&
 			fail wsnames "a text cut by its box (above)"
-		grep -aE "menus: cascade: mp maps: column 1, -, row 1[4-8] of 18: .*(MCC|ws[0-9])" "$log" "$out/wsnames_es/run.log" &&
+		grep -aE "menus: cascade: mp maps: column 1, -, row (1[4-9]|20) of 20: .*(MCC|ws[0-9])" "$log" "$out/wsnames_es/run.log" &&
 			fail wsnames "a file's or the network's name in SELECT MAP (above)"
 		# (each map played: OFFLINE, MAP it, START GAME: SELECT PROFILE, the game; the waiting lobby, the game, Start: the
 		# pause - Levee loads, every screen says its title)
-		wsn_rows=$(grep -a "menus: cascade: mp maps: column 1, -, row 1[4-8] of 18: " "$log" | sed 's/.*row \([0-9]*\) of 18: \(.*\)/\1|\2/' | sort -u)
+		wsn_rows=$(grep -aE "menus: cascade: mp maps: column 1, -, row (1[4-9]|20) of 20: " "$log" | sed 's/.*row \([0-9]*\) of 20: \(.*\)/\1|\2/' | sort -u)
 		for want in "CURSED H1.5 LEVEE|Cursed H1.5 Levee|levee" "HANG 'EM HIGHER|$(echo "$wsn_titles" | cut -d'|' -f3)|long" \
-			"AMPLITUDE|Amplitude|amplitude"; do
+			"AMPLITUDE|Amplitude|amplitude" "SNOWTRAP /|Snowtrap /|pipe"; do
 			prefix=${want%%|*} rest=${want#*|} title=${rest%|*} tag=${want##*|}
 			row=$(echo "$wsn_rows" | grep -a "|$prefix" | head -1 | cut -d'|' -f1)
 			[ -n "$row" ] || { fail wsnames "no picker row for $title"; continue; }
@@ -5209,7 +5218,7 @@ PY
 			grep -aqE "the host's map is levels.test.ws[0-9]+_[a-z0-9_-]+.ws[0-9]+_" "$log2" ||
 				fail wsnames_$tag "the game's map was not the Workshop map's network name"
 			grep -aq "could not be loaded" "$log2" && fail wsnames_$tag "its load failed"
-			grep -aE "h3 pregame: |h3 mp pause: " "$log2" | grep -aE "ws[0-9]{4}" && fail wsnames_$tag "the network's name shown (above)"
+			grep -aE "h3 pregame: |h3 mp pause: " "$log2" | grep -aE "ws[0-9]{4}|[|]" && fail wsnames_$tag "the network's name or a '|' shown (above)"
 			grep -aE "menus: text cut: pc.(h3|online).(mppause.(title|game)|pregame.caption|mp.(map|caption))" "$log2" &&
 				fail wsnames_$tag "the map's name cut by its box (above)"
 		done

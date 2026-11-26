@@ -183,6 +183,13 @@ static enum mod_campaign_file_status json_string_read(
 			/* (the further bytes of one, or DEL) */
 			continue;
 		}
+		/* (1.1.3 8v audit: '|' is the game's text formatting mark - draw_string.c's parser
+		reads the character after it, past the end of a text that ends in one, and "|n" is a
+		line break -: a mod's text never has one, '/' in its place) */
+		if (kept == '|')
+		{
+			kept = '/';
+		}
 		if (length + 1 < out_bytes)
 		{
 			out[length++] = kept;

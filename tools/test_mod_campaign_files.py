@@ -126,6 +126,22 @@ def test_text_beyond_printable_ascii_is_kept_as_question_marks(report_tool, tmp_
     assert fields["title"] == "Caf? \\ \"Q\" ? end tab"
 
 
+def test_the_games_text_formatting_mark_is_never_kept(report_tool, tmp_path):
+    # (1.1.3 8v audit: '|' starts a formatting code in the game's text - draw_string.c reads the character after
+    # it, past the end of a title ending in one, and "|n" breaks the line -: a mod's text has '/' in its place,
+    # written as it is or escaped)
+    for title, kept in (("Snowtrap |", "Snowtrap /"), ("Pipe|nGulch", "Pipe/nGulch"), ("||", "//"),
+                        ("A \\u007c B", "A / B")):
+        text = json.dumps(dict(LEVEL, Title={"Neutral": "@"})).replace('"@"', '"' + title + '"')
+        returncode, fields = report(report_tool, "level", written(tmp_path, text))
+        assert returncode == 0
+        assert fields["title"] == kept
+    info = json.dumps(dict(CAMPAIGN_INFO, Title={"Neutral": "Mod|"}))
+    returncode, fields = report(report_tool, "info", written(tmp_path, info))
+    assert returncode == 0
+    assert fields["title"] == "Mod/"
+
+
 def test_long_texts_and_many_levels_are_cut_to_the_room_kept(report_tool, tmp_path):
     info = dict(CAMPAIGN_INFO, Title={"Neutral": "T" * 500},
                 CampaignMaps=[f"campaign/level{index}.json" for index in range(40)])

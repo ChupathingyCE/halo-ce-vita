@@ -349,7 +349,8 @@ static boolean workshop_item_title_read(
 				{
 					continue;
 				}
-				title[length++] = *line >= ' ' && *line <= '~' ? *line : '?';
+				/* (and '|', the game's text formatting mark, as '/': mod_campaign_files.c's) */
+				title[length++] = *line == '|' ? '/' : *line >= ' ' && *line <= '~' ? *line : '?';
 			}
 			break;
 		}
