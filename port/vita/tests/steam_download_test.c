@@ -1693,6 +1693,12 @@ static int job(int argc, char **argv)
 	double sleep_ms = getenv("STEAM_TEST_SLEEP") ? atof(getenv("STEAM_TEST_SLEEP")) : -1, downloading_at = -1,
 		slept_at = -1;
 	int asleep_seen = 0, woke = 0;
+	/* (the screens' rate, as steam_job_view gives it: the highest seen - a progress that went back, the finished
+	file's own check counting from its start again, once made a rate of 2^64 bytes over a second: "4194304.0 MB/s",
+	the owner's 8s Workshop test, Nov 25 -; and how often the bytes done went back) */
+	double rate_max_mb = 0;
+	unsigned int done_back = 0;
+	uint64_t done_last = 0;
 	double cancel_wait_ms = getenv("STEAM_TEST_CANCEL_MS") ? atof(getenv("STEAM_TEST_CANCEL_MS")) : 0;
 	double cancelled_at = -1, cancel_call_ms = -1, end_ms = -1, view_max_ms = 0, phase_seen_at = -1;
 	int busy_after_cancel = -1;
@@ -1771,6 +1777,17 @@ static int job(int argc, char **argv)
 			steam_net_abort(0);
 			steam_job_sleep(0);
 		}
+		{
+			struct steam_job_view view;
+
+			steam_job_view(&view);
+			if (view.rate_kb / 1024.0 > rate_max_mb)
+				rate_max_mb = view.rate_kb / 1024.0;
+			if (status.phase == STEAM_JOB_DOWNLOADING && status.done < done_last)
+				done_back++;
+			if (status.phase == STEAM_JOB_DOWNLOADING)
+				done_last = status.done;
+		}
 		if (status.asleep == 1)
 			asleep_seen |= 1;
 		if (status.asleep == 2)
@@ -1803,11 +1820,11 @@ static int job(int argc, char **argv)
 	}
 	printf("result ok=%d cancelled=%d files=%u already=%u qr=%d serials=%u attempts=%d revoked=%d logged_off=%d "
 		"session_lost=%d waits=%u phases=%d busy_end=%d busy_twice=%d view_max_ms=%.1f cancel_call_ms=%.1f "
-		"busy_after_cancel=%d end_ms=%.0f asleep_seen=%d error=%s\n", status.phase == STEAM_JOB_DONE,
+		"busy_after_cancel=%d end_ms=%.0f asleep_seen=%d rate_max_mb=%.1f done_back=%u error=%s\n", status.phase == STEAM_JOB_DONE,
 		status.phase == STEAM_JOB_CANCELLED, status.files_done, status.files_already, qr_size, qr_serial, status.attempts,
 		status.revoked, status.logged_off, status.session_lost, status.network_waits, phases,
 		test_busy_count + steam_job_busy_held(), test_busy_twice, view_max_ms, cancel_call_ms, busy_after_cancel, end_ms,
-		asleep_seen, status.error[0] ? status.error : "-");
+		asleep_seen, rate_max_mb, done_back, status.error[0] ? status.error : "-");
 	CHECK(steam_job_forget());
 	fclose(log_file);
 	return 0;
@@ -2372,6 +2389,35 @@ static int live_workshop(int argc, char **argv)
 	return status.phase == STEAM_JOB_DONE ? 0 : 1;
 }
 
+/* the screens' rate (steam_job_rate_sample): a real one, the bytes done going back - the finished file's own check
+counting from its start again, the owner's 8s Workshop test's "4194304.0 MB/s, about 0 min left" - and on */
+static void test_rate(void)
+{
+	struct steam_job_rate rate;
+	uint64_t mb = 1024 * 1024;
+
+	memset(&rate, 0, sizeof(rate));
+	rate.seconds_left = -1;
+	steam_job_rate_sample(&rate, 10.0, 10 * mb, 100 * mb);
+	CHECK(rate.rate == 0 && rate.seconds_left == -1);
+	/* (under a second: no sample) */
+	steam_job_rate_sample(&rate, 10.5, 11 * mb, 100 * mb);
+	CHECK(rate.rate == 0);
+	steam_job_rate_sample(&rate, 12.0, 14 * mb, 100 * mb);
+	CHECK(rate.rate > 1.99 * mb && rate.rate < 2.01 * mb);
+	CHECK(rate.seconds_left == 43);
+	/* (back to the file's start for its check) */
+	steam_job_rate_sample(&rate, 14.0, 4 * mb, 100 * mb);
+	CHECK(rate.rate > 1.99 * mb && rate.rate < 2.01 * mb);
+	steam_job_rate_sample(&rate, 15.0, 8 * mb, 100 * mb);
+	CHECK(rate.rate > 2.0 * mb && rate.rate < 3.0 * mb);
+	CHECK(rate.seconds_left > 0 && rate.seconds_left < 100);
+	/* (done past the total - a file larger than its plan: no time left said, never a huge one) */
+	steam_job_rate_sample(&rate, 17.0, 120 * mb, 100 * mb);
+	CHECK(rate.seconds_left == -1);
+	printf("rate: a real rate kept when the bytes done go back\n");
+}
+
 static void test_qr(void)
 {
 	uint8_t modules[57 * 57];
@@ -2429,6 +2475,7 @@ int main(int argc, char **argv)
 		test_manifest(argv[2]);
 		test_file(argv[2]);
 		test_net();
+		test_rate();
 		test_qr();
 		test_workshop(argv[2]);
 		test_browser(argv[2]);

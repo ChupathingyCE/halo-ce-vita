@@ -458,6 +458,16 @@ grep -q "asleep_seen=3" "$out/flow-job-sleep/line" &&
 	diff -r "$out/flow-ce/card/haloce-vita/mcc" "$out/flow-job-sleep/card/haloce-vita/mcc" > /dev/null ||
 	{ echo "FAIL job-sleep: not carried on after the wake"; status=1; }
 grep -q "waits=[1-9]" "$out/flow-job-outage/line" || { echo "FAIL job-outage: no wait for the network"; status=1; }
+# (1.1.3, the owner's 8s Workshop test, Nov 25: "4194304.0 MB/s, about 0 min left" - the finished file's own check
+# counts from the file's start again, the bytes done went back, and the rate was taken over that step: an unsigned
+# difference, 2^64 bytes. The screens' rate (steam_job_view) stays a real one through every flow that went back)
+for f in job-ce job-lost job-outage job-sleep; do
+	r=$(sed -n 's/.*rate_max_mb=\([0-9.]*\).*/\1/p' "$out/flow-$f/line")
+	awk -v r="$r" 'BEGIN { exit !(r != "" && r < 100000) }' ||
+		{ echo "FAIL $f: the screen's rate went to $r MB/s (the bytes done went back)"; status=1; }
+done
+grep -q "done_back=[1-9]" "$out/flow-job-sleep/line" "$out/flow-job-ce/line" "$out/flow-job-lost/line" ||
+	{ echo "FAIL job flows: no progress went back (the rate check above saw nothing)"; status=1; }
 # (1.1.3-insider.8, the owner's daily: a cancel while the job checked gigabytes already on the card took minutes and
 # kept the PS button locked. The player's cancel at each phase, and with a CDN that stalls: the cancel call (the
 # game's thread) under 100 ms, the device's hold let go at once and at the end exactly once, every snapshot call

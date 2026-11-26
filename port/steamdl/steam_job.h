@@ -183,6 +183,20 @@ struct steam_job_view
 };
 void steam_job_view(struct steam_job_view *view);
 
+/* the screens' rate (bytes a second) and time left from the progress: a sample at least a second after the last.
+The bytes done may go back - the finished file's own check counts from the file's start again -: that step starts
+the sample over, the rate kept (once taken over it, an unsigned difference: 2^64 bytes, "4194304.0 MB/s, about 0 min
+left" - the owner's 8s Workshop test, Nov 25 2026) */
+struct steam_job_rate
+{
+	double sample_time;
+	uint64_t sample_done;
+	int sample_valid;
+	double rate;
+	long seconds_left;
+};
+void steam_job_rate_sample(struct steam_job_rate *rate, double now, uint64_t done, uint64_t total);
+
 /* a finished job's state cleared (back to IDLE); 0 while one runs */
 int steam_job_forget(void);
 /* a marker left by a sign-in never signed out (the app killed mid-download): 1, with its date as text */
