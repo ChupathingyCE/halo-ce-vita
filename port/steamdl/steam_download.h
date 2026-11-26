@@ -93,6 +93,10 @@ struct steam_download_result
 	int signin_found, kept, signed_out;
 	/* the CM session ended under the download (the Wi-Fi lost too long, the server's log-off): a new QR resumes it */
 	int session_lost;
+	/* (1.1.3) the QR was up and not scanned until Steam ended it (its poll failed: the connection closed under it):
+	the screens say so plainly and offer a new QR - device test, Nov 25: "Authentication.PollAuthSessionStatus#1:
+	cannot send" */
+	int qr_expired;
 	/* rounds of waits for the network (the Wi-Fi lost for a while) */
 	unsigned int network_waits;
 	/* the decoders' time and output, by container (0 VZa LZMA, 1 VSZa zstd, 2 zip), the largest chunk buffer */
@@ -134,6 +138,10 @@ int steam_download_workshop_page(struct steam_session *session, uint64_t id, str
 /* (the browser) these accounts' public names ("" where none came): the names found, -1 if the call failed */
 int steam_download_workshop_names(struct steam_session *session, const uint64_t *steamids, int count,
 	char (*names)[STEAM_WORKSHOP_AUTHOR_SIZE]);
+/* (1.1.3) the titles of these items (the items an item needs: one GetDetails call), each "" Steam gave none of: the
+titles found (0 none), -1 if the call failed (every title "") */
+int steam_download_workshop_titles(struct steam_session *session, const uint64_t *ids, int count,
+	char (*titles)[STEAM_WORKSHOP_TITLE_SIZE]);
 
 /* (the browser's details page) the item's manifest read (the depot key, its request code, a CDN - cdn_override's,
 else Steam's list - one try each, no waits) and its files put through the name rule: 1, or 0 with a reason. Nothing

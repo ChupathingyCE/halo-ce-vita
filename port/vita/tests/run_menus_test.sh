@@ -357,6 +357,22 @@
 #            logged off each time, no token written, no picture fetched from a host not Steam's image CDN, the
 #            memory said. With HALO_TEST_SHOTS, each screen's picture at 960x544 (HALO_TEST_STEAM_SPANISH=1: in
 #            Spanish, the Vita's buttons)
+#   h3workshopqr  (1.1.3 device test, Nov 25) the same browser's SIGN IN with the QR left unscanned: the fake
+#            closes the connection under its second poll (qr_drop) - the screen says so plainly ("The sign-in QR expired
+#            ...", never the poll's raw words) and Cross is New QR: a new sign-in, approved, the grid
+#   wsunplayable  (1.1.3 device test, Nov 25: Sketpic BETA, a Workshop multiplayer map whose scripts take
+#            parameters, was offered to play, its load failed, the Xbox's ENLISTED PLAYERS then an empty message came
+#            up; the mod manager called the item an MCC mod copied in by hand that works in Campaign) the mods folder's
+#            Workshop items made at test time from this PC's MCC multiplayer map (HALO_TEST_WORKSHOP_MP_MAP; SKIP
+#            without; mcc_map_patch.py): 2900000002 a good map, 3803578418 one whose script node names a parameter,
+#            2900000004 one whose structure BSP is spoiled (passes the scan, fails at its load), each with what Steam
+#            said of it (workshop/installed/<id>.about: its title, the items it needs). The mod manager (GAME
+#            MANAGER's MODS, Menu style Halo 3): each a Workshop item, from Steam Workshop, by its title, 3803578418
+#            "Not supported on PS Vita: the scenario's scripts take parameters...", 2900000002 works in Multiplayer
+#            and needs only the item it needs that is not there ("Also needs: ... - download those too"), never MCC
+#            mods; its details page; the map picker offers 2900000002's and 2900000004's maps, never 3803578418's.
+#            With HALO_TEST_PROFILE: OFFLINE, MAP the spoiled one, START GAME: its load fails, the message once,
+#            then the Halo 3 multiplayer lobby again - never split screen's lobby, never an empty message
 #   h3workshoptouch  the same browser by touch (HALO_TEST_TAPS): a tap on a card opens its details page, a tap
 #            on Back closes it, a swipe turns the page, a tap on SUBSCRIBED changes the tab
 #   cpworkshop  (1.1.3, the owner's Classic+ plan part A, Nov 24) Menu style Classic+'s own STEAM WORKSHOP and DOWNLOAD
@@ -574,9 +590,9 @@
 #                         level open)
 # On a gxm-null harness (configure.py --linux-d3d gxm-null) the taps, the saved frames and the
 # PC text box's typing are SKIPs: it draws nothing to tap, save or type into.
-# (a Steam session's good end: revoked, or - 1.1.3-insider.8 - the sign-in kept on the device (sealed, 14 days) and
-# only logged off)
-steam_ended_ok='steam job: sign-in 1 ended: done \(revoked (1, logged off 1, kept on this device 0|0, logged off 1, kept on this device 1)\)'
+# (a Steam session's good end: revoked and logged off, or - 1.1.3-insider.8 - the sign-in kept on the device (sealed, 14
+# days): since the device test of Nov 25 neither revoked nor logged off - a ClientLogOff ended the kept token at Steam)
+steam_ended_ok='steam job: sign-in 1 ended: done \(revoked (1, logged off 1, kept on this device 0|0, logged off 0, kept on this device 1)\)'
 set -u
 # (Bots online, bots.online: full by default, which fills a game hosted
 # online with bots; off here unless a run asks: run_netns_online_test.sh hostbots)
@@ -590,7 +606,7 @@ menus_data=${HALO_TEST_DATA_MENUS:-$data_root/triage/menus/data}
 out=${HALO_TEST_OUT:-${TMPDIR:-/tmp}/halo_menus_test.$$}
 . "$here/test_out.sh"
 test_out_begin "$out"
-all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox cefiles h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit cpworkshop cpworkshoptouch"
+all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classic h3xbox cefiles h3broken h3style h3online h3touch h3campaign h3resume h3pause h3mp h3browser h3create h3mptouch h3coop h3coopguide h3scenes h3profiles h3proftouch h3customize h3customrows onlinegridnav h3models h3modelswitch h3nameplate h3damaged h3mods h3steam h3steamcancel h3workshop h3workshoptouch h3workshoppicker steampanel steampanelget mccmp h3modspicker h3modstouch h3games h3mpcustom h3lan h3adhoc h3adhoccoop h3oddrows h3lobbyscenes h3modelsmany h3friends h3friendsbackup h3friendspanel h3partyplates h3party h3partyonline browserprofile h3players browserrows profilepaths h3mppause h3friendsfit h3hostonline h3hostbots h3livelobby h3groups browserreopen h3nonet h3livebrowse profileio h3vitapc h3createwho h3carnage h3gametypes h3offline h3offlineend msgboxes thankyou ceplusmain experimental ceplusmp ceplusprofile cepluspregame cepluspause ceplusforge h3scoreboard cpaudit cpworkshop cpworkshoptouch wsunplayable h3workshopqr"
 # (the PC build's own, asked for by name: not in the default list)
 pc_cases="pctext pcclassic pcnoadhoc"
 # (1.1.3: Classic+'s option screens)
@@ -646,6 +662,8 @@ run() { # NAME DATA SECONDS PAD [VAR=value...]
 	ln -sfn "$(cd "$folder" && pwd)/maps" "$out/$name/data/maps"
 	# (a mods folder of the case's: mods_data's, copied with its links as links)
 	[ -n "${mods_from:-}" ] && cp -a "$mods_from" "$out/$name/data/mods"
+	# (and the Workshop's own records - workshop/installed/<id>.about: what Steam said of each item)
+	[ -n "${workshop_from:-}" ] && cp -a "$workshop_from" "$out/$name/data/workshop"
 	[ -n "${init_line:-}" ] && printf '%s\n' "$init_line" > "$out/$name/data/init.txt"
 	# (1.1.3's thank-you note seen already: a thank_you.txt of the case's)
 	[ -n "${thank_you_from:-}" ] && cp "$thank_you_from" "$out/$name/data/thank_you.txt"
@@ -2698,7 +2716,7 @@ for case in $cases; do
 				cp "$sp_shots"/*.bmp "$HALO_TEST_SHOTS/$sp_name/" 2>/dev/null
 			fi
 		done ;;
-	h3workshop|h3workshoptouch)
+	h3workshop|h3workshoptouch|h3workshopqr)
 		ws_map=${HALO_TEST_WORKSHOP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/chillout.map}
 		if ! grep -aq "port h3 workshop mark" "$binary" || ! grep -aq "HALO_STEAM_TEST_IMAGES" "$binary"; then
 			echo "--- $case"; echo "SKIP ($case): not a Steam Workshop browser test build (configure.py --steam-workshop --steam-test-ca)"
@@ -2710,9 +2728,10 @@ for case in $cases; do
 		fi
 		mkdir -p "$out/$case-fake"
 		rm -f "$out/$case-fake/stdin" "$out/$case-fake/transcript.txt"; mkfifo "$out/$case-fake/stdin"
-		# (mode slow: each CDN answer a quarter second late - the download's progress shows a while)
+		# (mode slow: each CDN answer a quarter second late - the download's progress shows a while; h3workshopqr's
+		# qr_drop: the connection closed under the QR's second poll, once - a QR left unscanned)
 		python3 -I "$here/steam_fake_server.py" --work "$out/$case-fake" --chunk-kb 1024 --workshop-map "$ws_map" \
-			--mode slow < "$out/$case-fake/stdin" > "$out/$case-fake/server.json" &
+			--mode $([ "$case" = h3workshopqr ] && echo qr_drop || echo slow) < "$out/$case-fake/stdin" > "$out/$case-fake/server.json" &
 		fake_pid=$!
 		exec 7> "$out/$case-fake/stdin"
 		for i in $(seq 300); do [ -s "$out/$case-fake/server.json" ] && break; sleep 0.1; done
@@ -2733,6 +2752,13 @@ for case in $cases; do
 			# B, B: signed out; B)
 			ws_pad="$ws_reach x:150:700 right:150:700 x:150:700 wait:150:500 @ws_marked wait:150:300 left:150:700 a wait:150:4500 @ws_details wait:150:300 right:150:3000 @ws_details_picture wait:150:300 down:150:900 @ws_details_scrolled wait:150:300 b wait:150:1500 rt wait:150:4000 @ws_newest wait:150:300 rt wait:150:4000 @ws_top wait:150:300 rt wait:150:4000 @ws_subscribed wait:150:300 rt wait:150:4000 right:150:600 right:150:600 right:150:600 right:150:5000 @ws_page2 wait:150:300 down:150:600 right:150:600 right:150:600 right:150:600 a wait:150:4000 @ws_details_long wait:150:300 b wait:150:1500 right:150:5000 @ws_page3 wait:150:300 y wait:150:4000 @ws_search wait:150:300 start wait:150:1200 @ws_progress wait:150:20000 @ws_done wait:150:300 b wait:150:3000 a wait:150:3000 @ws_reopened wait:150:300 a wait:150:15500 @ws_again wait:150:300 a wait:150:4500 @ws_installed wait:150:300 y wait:150:800 @ws_remove_ask wait:150:300 y wait:150:1500 @ws_removed wait:150:300 b wait:150:1500 b wait:150:5000 @ws_end wait:150:300 b wait:150:3000"
 			ws_seconds=420
+			ws_taps=
+		elif [ "$case" = h3workshopqr ]; then
+			# (1.1.3 device test, Nov 25: the QR left unscanned ended in "Authentication.PollAuthSessionStatus#1: cannot
+			# send". SIGN IN: the QR; the fake closes its connection at the second poll: the plain words and New QR;
+			# Cross: a new QR, approved: the grid; B signs out, B, B)
+			ws_pad="$h3gmpad down:150:500 a wait:150:3000 down:150:500 down:150:500 a wait:150:2500 a wait:150:500 @ws_qr wait:150:6000 @ws_qr_expired wait:150:300 a wait:150:500 @ws_qr_new wait:150:12000 @ws_qr_grid wait:150:300 b wait:150:5000 b wait:150:3000 b wait:150:3000"
+			ws_seconds=80
 			ws_taps=
 		else
 			# (taps in the menus' units: card 2's middle, then the Back key, a finger from right to left across
@@ -2767,6 +2793,20 @@ for case in $cases; do
 			mkdir -p "$HALO_TEST_SHOTS/$case"
 			cp "$ws_shots"/*.bmp "$HALO_TEST_SHOTS/$case/" 2>/dev/null
 		fi
+		if [ "$case" = h3workshopqr ]; then
+			grep -aE "QR|sign-in|workshop page 1|cm: the QR" "$log" "$transcript" | cut -c1-200 | head -12
+			grep -aq "cm: the QR's connection closed" "$transcript" || fail $case "the fake did not close the QR's connection"
+			grep -aq "steam: the QR sign-in ended unscanned: " "$log" || fail $case "the QR's end was not found"
+			grep -aq "steam job: sign-in 1 ended: The sign-in QR expired before it was approved" "$log" ||
+				fail $case "the job did not end with the plain words"
+			grep -aq "menus: workshop: the QR timed out: a new QR" "$log" || fail $case "Cross did not ask for a new QR"
+			[ "$(grep -ac "menus: workshop: sign-in begun" "$log")" = 2 ] || fail $case "the sign-in was not begun again"
+			grep -aq "steam job: workshop page 1 (list 0): 8 items of 19" "$log" || fail $case "the new QR's sign-in did not list"
+			for shot in ws_qr_expired ws_qr_new; do
+				ls "$ws_shots"/*$shot* > /dev/null 2>&1 || fail $case "no picture of $shot"
+			done
+			continue
+		fi
 		if [ "$case" = h3workshoptouch ]; then
 			grep -aq "menus: workshop: card 2 tapped" "$log" && grep -aq "menus: workshop: details of 2900000003" "$log" ||
 				fail $case "a tap on card 2 did not open its details page"
@@ -2781,6 +2821,8 @@ for case in $cases; do
 		fi
 		grep -aq "menus: workshop: 2900000001 marked (1)" "$log" && grep -aq "menus: workshop: 2900000002 marked (2)" "$log" ||
 			fail $case "the two cards were not marked"
+		grep -aq "menus: workshop: 2900000001 needs 3 other items: Fake Gulch Remix, Fake GIF Picture, item 2999999999" "$log" ||
+			fail $case "the details page did not say the items it needs"
 		grep -aq "menus: workshop: details of 2900000001" "$log" &&
 			grep -aq "steam job: workshop details 2900000001: here (4 pictures)" "$log" &&
 			grep -aq "steam job: workshop contents 2900000001: read" "$log" &&
@@ -2873,6 +2915,98 @@ for case in $cases; do
 			"$out/h3workshoppicker/data/debug.txt" || fail h3workshoppicker "the maps folder's file of the reserved name was listed"
 		grep -aq "menus: h3 mp: the map picker: 15 maps (2 custom)" "$log" ||
 			fail h3workshoppicker "the map picker did not offer the Workshop map beside mygulch" ;;
+	wsunplayable)
+		ws_mp_map=${HALO_TEST_WORKSHOP_MP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/bloodgulch.map}
+		if [ ! -f "$ws_mp_map" ]; then
+			echo "--- wsunplayable"; echo "SKIP (wsunplayable): no MCC multiplayer map (HALO_TEST_WORKSHOP_MP_MAP)"
+			continue
+		fi
+		wsu=$out/wsu-data
+		mods_data "$wsu"
+		rm -rf "$wsu/workshop"
+		mkdir -p "$wsu/workshop/installed"
+		for item in 2900000002:coldsnapextended 3803578418:skeptic 2900000004:brokenbsp; do
+			id=${item%%:*} stem=${item#*:}
+			mkdir -p "$wsu/mods/$id/maps" "$wsu/mods/$id/halo1/maps"
+			cp --reflink=auto "$ws_mp_map" "$wsu/mods/$id/maps/$stem.map"
+			ln -s "$(dirname "$ws_mp_map")/bitmaps.map" "$wsu/mods/$id/halo1/maps/bitmaps.map"
+			echo "$(date +%s)" > "$wsu/workshop/installed/$id.gid"
+		done
+		python3 -I "$here/mcc_map_patch.py" script-parameter "$wsu/mods/3803578418/maps/skeptic.map"
+		python3 -I "$here/mcc_map_patch.py" bsp-signature "$wsu/mods/2900000004/maps/brokenbsp.map"
+		printf 'title Good Gulch Remix\nneeds 2900000077 Needed Textures Pack\nneeds 3803578418 Sketpic BETA\n' \
+			> "$wsu/workshop/installed/2900000002.about"
+		printf 'title Sketpic BETA\n' > "$wsu/workshop/installed/3803578418.about"
+		printf 'title Broken BSP Arena\n' > "$wsu/workshop/installed/2900000004.about"
+		# (the mod manager: MODS; down three to the first Workshop item (past broken.map, cefake.map, mygulch.map),
+		# Triangle: its details, B; down two to 3803578418's, its details, B; the main menu; MULTIPLAYER, MAP: the
+		# picker, B)
+		wsu_pad="$h3modspad wait:150:2000 @wsu-mods:0:300 down:150:500 down:150:500 down:150:500"
+		wsu_pad="$wsu_pad wait:150:1500 @wsu-mods-good:0:300 y wait:150:2500 @wsu-details-good:0:300 b wait:150:2000"
+		wsu_pad="$wsu_pad down:150:500 down:150:500 wait:150:1500 @wsu-mods-bad:0:300 y wait:150:2500 @wsu-details-bad:0:300"
+		wsu_pad="$wsu_pad b wait:150:2000 b wait:150:3000"
+		wsu_pad="$wsu_pad b wait:150:3000 down:150:500 a wait:150:3000 down:150:500 a wait:150:3000 @wsu-picker:0:300 b wait:150:3000"
+		mods_from=$wsu/mods workshop_from=$wsu/workshop run wsunplayable "$wsu" 80 "$wsu_pad" HALO_MENU_STYLE=halo3 \
+			HALO_MAPS_DISABLED=mygulch
+		check_h3 wsunplayable halo3
+		log=$out/wsunplayable/run.log debug=$out/wsunplayable/data/debug.txt
+		grep -aE "menus: h3 mods: (2900000002|2900000004|3803578418)|not supported on PS Vita|Steam Workshop multiplayer maps|map picker" \
+			"$log" "$debug" | cut -c1-260
+		# (hidden and said why: never in the level list, its words the loader's)
+		grep -aq "mods: 3803578418.maps.skeptic.map is left out: not supported on PS Vita: the scenario's scripts take parameters, which this build does not run" \
+			"$debug" || fail wsunplayable "the map whose scripts take parameters was not found unplayable by the scan"
+		grep -aq "is the Steam Workshop multiplayer map ws3803578418_" "$debug" && fail wsunplayable "the unplayable map was listed"
+		grep -aq "workshop: 2 Steam Workshop multiplayer maps for the level list" "$debug" ||
+			fail wsunplayable "the level list's Workshop maps were not the two playable ones"
+		grep -aq "menus: h3 mp: the map picker: 15 maps (2 custom)" "$log" ||
+			fail wsunplayable "the map picker did not offer the two playable Workshop maps alone"
+		# (the mod manager says each as a Workshop item: its title, where it came from, the modes, what it truly needs)
+		grep -aq "menus: h3 mods: 3803578418: Workshop item, on, [0-9]* KB, failed: Not supported on PS Vita: the scenario's scripts take parameters, which this build does not run, works in None, from Steam Workshop, title Sketpic BETA$" "$log" ||
+			fail wsunplayable "the mod manager did not say the unplayable item as not supported"
+		grep -aq "menus: h3 mods: 2900000002: Workshop item, on, [0-9]* KB, passed, works in Multiplayer, needs Also needs: Needed Textures Pack - download those too, from Steam Workshop, title Good Gulch Remix$" "$log" ||
+			fail wsunplayable "the mod manager did not say the good item's title, kind, source and true needs"
+		grep -aq "menus: h3 mods: 2900000004: Workshop item, on, [0-9]* KB, passed, works in Multiplayer, from Steam Workshop, title Broken BSP Arena$" "$log" ||
+			fail wsunplayable "the mod manager did not say the spoiled item as a Workshop multiplayer item needing nothing"
+		grep -a "menus: h3 mods: [0-9]*: " "$log" | grep -aE "Campaign|MCC mods|Copied in by hand|MCC mod," &&
+			fail wsunplayable "a Workshop item said as an MCC campaign mod (above)"
+		grep -aq "ui: screen pc.h3.mods.details" "$log" || fail wsunplayable "Triangle did not open an item's details"
+		if [ -r "${HALO_TEST_PROFILE:-}" ]; then
+			# (OFFLINE (h3offline's), MAP: down fourteen past the Xbox's thirteen and 2900000002's to 2900000004's
+			# spoiled map, A; down to START GAME: split screen's SELECT PROFILE, A joins, A the profile, A the game; its load fails:
+			# the message, A; the lobby)
+			off_d="down:150:500"
+			wsu_fail="$h3mppad wait:150:1000 a:150:2000 $off_d $off_d a:150:2500 $off_d a:150:2500"
+			for row in $(seq 14); do wsu_fail="$wsu_fail down:150:300"; done
+			wsu_fail="$wsu_fail a:150:2500 $off_d $off_d a:150:3000 a:150:1500 a:150:1500 a:150:1000 wait:150:20000 @wsu-failed:0:300"
+			wsu_fail="$wsu_fail a:150:4000 @wsu-back:0:300 wait:150:4000 @wsu-after:0:300"
+			profile_from=$HALO_TEST_PROFILE mods_from=$wsu/mods workshop_from=$wsu/workshop run wsunplayable_load "$wsu" 75 \
+				"$wsu_fail" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch HALO_BOTS=1 HALO_TEST_DIALOGS=1
+			check_h3 wsunplayable_load halo3
+			log=$out/wsunplayable_load/run.log
+			grep -aE "new map: |a map could not be loaded|could not be loaded|h3 mp: the local game|split screen|h3 dialog|ui: screen pc.h3.mp" \
+				"$log" | cut -c1-220
+			grep -aq "menus: h3 mp: the local game: Slayer on Broken BSP Arena\|menus: h3 mp: the local game: .* on Brokenbsp" "$log" ||
+				grep -aq "menus: h3 mp: the local game: " "$log" || fail wsunplayable_load "START GAME did not set up the local game"
+			grep -aq "new map: levels.test.ws2900000004_brokenbsp.ws2900000004_brokenbsp could not be loaded in the network game; back to the main menu" "$log" ||
+				fail wsunplayable_load "the spoiled map's load did not fail back to the main menu"
+			grep -aq "menus: a map could not be loaded: the local game let go, the Halo 3 lobby next" "$log" ||
+				fail wsunplayable_load "the local game was not let go at the failure"
+			grep -aq "menus: h3 mp: the local game's map could not be loaded: back to the Halo 3 lobby (OFFLINE)" "$log" ||
+				fail wsunplayable_load "the Halo 3 lobby did not open again after the failure"
+			grep -aq "split screen's lobby" "$log" && fail wsunplayable_load "split screen's lobby (the Xbox's ENLISTED PLAYERS) opened"
+			grep -aq "ui: screen ui.shell.main_menu.multiplayer_type_select.split_screen.pregame" "$log" &&
+				fail wsunplayable_load "the Xbox's split screen lobby screen opened"
+			[ "$(grep -ac 'menus: h3 dialog: .* "CUSTOM MAP"' "$log")" = 1 ] || fail wsunplayable_load "the message was not shown once"
+			grep -aq 'menus: h3 dialog: .* ""' "$log" && fail wsunplayable_load "an empty message came up"
+			grep -aq "menus: h3 dialog: message dismissed" "$log" || fail wsunplayable_load "the message was not dismissed"
+			# (the message over the main menu, then - closed - the lobby; the message's screen never up again)
+			awk '/h3 dialog: message dismissed/ { seen = 1 } seen && /ui: screen pc.h3.mp.screen/ { found = 1 } END { exit !found }' "$log" ||
+				fail wsunplayable_load "the lobby was not what the message went back to"
+			awk '/h3 dialog: message dismissed/ { seen = 1 } seen && /ui: screen pc.h3.dlg/ { again = 1 } END { exit !again }' "$log" &&
+				fail wsunplayable_load "a message came up again after the first was closed"
+		else
+			echo "(wsunplayable: no HALO_TEST_PROFILE: the load failure's way back not run)"
+		fi ;;
 	h3modspicker)
 		mods_data "$out/h3mods-data"
 		run h3modspicker "$out/h3mods-data" 50 "$h3pickerpad" HALO_MENU_STYLE=halo3

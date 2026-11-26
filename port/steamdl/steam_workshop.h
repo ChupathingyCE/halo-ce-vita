@@ -58,6 +58,9 @@ the tests use it alone.
 #define STEAM_WORKSHOP_PREVIEWS 5
 #define STEAM_WORKSHOP_MAP_NAMES 12
 #define STEAM_WORKSHOP_MAP_NAME_SIZE 48
+/* (1.1.3) the items an item needs (Steam's "required items", its children): the first ones kept, never downloaded with
+it (the release is frozen: the item's page and the mod manager say to download them too) */
+#define STEAM_WORKSHOP_NEEDS_MAXIMUM 8
 /* a text field read (a longer one is cut there first) */
 #define STEAM_WORKSHOP_FIELD_MAXIMUM 16384u
 
@@ -96,6 +99,10 @@ struct steam_workshop_item
 	uint32_t time_created, votes_up, votes_down;
 	int score;
 	char preview_url[STEAM_IMAGE_URL_MAXIMUM + 1];
+	/* (1.1.3) the items it needs (GetDetails' includechildren: its children), the first STEAM_WORKSHOP_NEEDS_MAXIMUM,
+	none twice, never itself */
+	int needs_count;
+	uint64_t needs[STEAM_WORKSHOP_NEEDS_MAXIMUM];
 };
 
 /* an item's details page: its item, its description (steam_workshop_text, lines kept), its extra pictures' URLs (the
@@ -125,10 +132,10 @@ struct steam_workshop_contents
 tags; a search (text not empty) ranks by its text */
 size_t steam_workshop_query_request(uint8_t *buffer, size_t capacity, int page, enum steam_workshop_sort sort,
 	const char *search);
-/* PublishedFile.GetDetails#1 of these ids, with their tags */
+/* PublishedFile.GetDetails#1 of these ids, with their tags and the items they need */
 size_t steam_workshop_details_request(uint8_t *buffer, size_t capacity, const uint64_t *ids, int count);
 /* (a details page) PublishedFile.GetDetails#1 of one id: tags, votes, the extra pictures, the description without its
-BBCode */
+BBCode, the items it needs */
 size_t steam_workshop_page_request(uint8_t *buffer, size_t capacity, uint64_t id);
 /* (SUBSCRIBED) PublishedFile.GetUserFiles#1: the signed-in account's own (steamid: the session's, never typed) Halo
 CE subscriptions, page (1 the first) of STEAM_WORKSHOP_PAGE_ITEMS, newest subscription first, with tags and votes */
@@ -214,7 +221,17 @@ uint64_t steam_workshop_tree_bytes(const char *path);
 /* (the browser) the item is in the mods folder (mods/<id>, a folder): 1 with the version the Workshop installed
 (<root>/workshop/installed/<id>.gid: the manifest's gid; 0 if the folder came another way) */
 int steam_workshop_installed(const char *root, uint64_t id, uint64_t *gid);
-/* (the browser's REMOVE) the item's mods folder and its record removed: 1 (nothing there: 1 too) */
+/* (the browser's REMOVE) the item's mods folder and its records removed: 1 (nothing there: 1 too) */
 int steam_workshop_uninstall(const char *root, uint64_t id);
+
+/* (1.1.3, the mod manager's words) what Steam said of a downloaded item, kept beside its staging folder as
+<root>/workshop/<id>.about, moved with the install to <root>/workshop/installed/<id>.about (removed with REMOVE):
+lines of text, our font's characters (steam_workshop_text's, no control bytes),
+  title <the item's title>
+  needs <id> <that item's title, or nothing if Steam gave none>
+one needs line an item it needs (Steam's required items, STEAM_WORKSHOP_NEEDS_MAXIMUM at most) - never downloaded with
+it: the release is frozen; the item's page and the mod manager say to download them too. 1 if written */
+int steam_workshop_about_write(const char *root, uint64_t id, const char *title, const uint64_t *needs,
+	const char (*need_titles)[STEAM_WORKSHOP_TITLE_SIZE], int needs_count);
 
 #endif

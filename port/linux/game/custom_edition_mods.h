@@ -114,6 +114,19 @@ char const *custom_edition_mods_mod_problem(
 short custom_edition_mods_mod_maps(
 	short mod_index,
 	short *valid);
+/* (port, 1.1.3) the survey's mod at `mod_index`: its Steam Workshop item's
+number (0: a folder of another name), the words on the first of its maps
+the load would refuse ("Not supported on PS Vita: ...", "" none: such a map
+is never listed to play), and how many of its maps play in multiplayer
+(a Workshop item's, ws<id>_<map>) and in the campaign */
+unsigned long long custom_edition_mods_mod_workshop_id(
+	short mod_index);
+char const *custom_edition_mods_mod_unsupported(
+	short mod_index);
+void custom_edition_mods_mod_kinds(
+	short mod_index,
+	short *multiplayer,
+	short *campaign);
 char const *custom_edition_mods_mod_map_name(
 	short mod_index,
 	short which);

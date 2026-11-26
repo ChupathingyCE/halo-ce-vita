@@ -101,6 +101,10 @@ struct custom_edition_mod
 	(the Workshop installs mods/<id>): its multiplayer maps are played as
 	ws<id>_<map> (workshop_maps.h); 0 for any other folder */
 	uint64_t workshop_id;
+	/* (port) its maps the load would refuse (custom_edition_cache_mod_map_check),
+	and (the survey's) the first one's words: "Not supported on PS Vita: ..." */
+	short unsupported_maps;
+	char unsupported[MOD_PROBLEM_BYTES];
 };
 
 /* (port) a Steam Workshop item's multiplayer map: a
@@ -227,6 +231,46 @@ static void mod_problem(
 	{
 		csstrncpy(mod->problem, problem, sizeof(mod->problem) - 1);
 		mod->problem[sizeof(mod->problem) - 1] = 0;
+	}
+
+	return;
+}
+
+/* (port) a map of `mod`'s, the file `file`, that the cache file loader's
+Halo: CE Anniversary fix would refuse (custom_edition_cache_mod_map_check):
+never listed to play; the survey says why, first of the mod's problems
+(1.1.3 device test, Nov 25: a Workshop map whose scripts take parameters
+was offered, and its load failed) */
+static void mod_unsupported(
+	struct custom_edition_mod *mod,
+	char const *file,
+	char const *why)
+{
+	char problem[MOD_PROBLEM_BYTES];
+
+	error(_error_silent, "mods: %s\\maps\\%s is left out: not supported on PS Vita: %s", mod->folder, file, why);
+	mod->unsupported_maps++;
+	if (custom_edition_mods_globals.survey && !mod->unsupported[0])
+	{
+		long length;
+
+		snprintf(problem, sizeof(problem), T("Not supported on PS Vita: %s"), why);
+		/* (cut short within a character's bytes: the character left out - the words are UTF-8, Spanish's too) */
+		length = (long)strlen(problem);
+		if (length == (long)sizeof(problem) - 1)
+		{
+			while (length > 0 && ((unsigned char)problem[length - 1] & 0xC0) == 0x80)
+			{
+				length--;
+			}
+			if (length > 0 && ((unsigned char)problem[length - 1] & 0xC0) == 0xC0)
+			{
+				length--;
+			}
+			problem[length] = 0;
+		}
+		csstrncpy(mod->unsupported, problem, sizeof(mod->unsupported) - 1);
+		mod->unsupported[sizeof(mod->unsupported) - 1] = 0;
 	}
 
 	return;
@@ -675,6 +719,7 @@ static void mod_add(
 		long stem_length = (long)strlen(data.cFileName) - 4;
 		struct file_reference reference;
 		short kind;
+		char unsupported[MOD_PROBLEM_BYTES];
 
 		if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
 			stem_length <= 0 || stem_length >= MAP_STEM_BYTES ||
@@ -696,11 +741,17 @@ static void mod_add(
 		mod->map_files++;
 		snprintf(map_path, sizeof(map_path), "%s%s\\maps\\%s", CUSTOM_EDITION_MODS_DIRECTORY, folder, data.cFileName);
 		kind = NONE - 1;
+		unsupported[0] = 0;
 		/* (port: a Steam Workshop item's multiplayer map,
 		ws<id>_<map>: the multiplayer level list's, workshop_maps.h) */
 		if (mod->workshop_id && map_stem_valid(stem))
 		{
-			kind = custom_edition_cache_mod_map_kind(map_path);
+			kind = custom_edition_cache_mod_map_check(map_path, unsupported, sizeof(unsupported));
+			if (unsupported[0])
+			{
+				mod_unsupported(mod, data.cFileName, unsupported);
+				continue;
+			}
 			if (kind == _scenario_type_multiplayer)
 			{
 				if (workshop_multiplayer_map_add(mod_index, stem, map_path))
@@ -749,7 +800,20 @@ static void mod_add(
 			mod_problem(mod, T("A map has the name of a file in the maps folder"));
 			continue;
 		}
-		if (kind == NONE - 1 ? !custom_edition_cache_mod_map_identify(map_path) : kind != _scenario_type_solo)
+		if (kind == NONE - 1)
+		{
+			kind = custom_edition_cache_mod_map_check(map_path, unsupported, sizeof(unsupported));
+			if (unsupported[0])
+			{
+				mod_unsupported(mod, data.cFileName, unsupported);
+				continue;
+			}
+			if (kind == _scenario_type_multiplayer)
+			{
+				error(_error_silent, "mods: '%s' is left out: not a campaign map (a multiplayer map)", map_path);
+			}
+		}
+		if (kind != _scenario_type_solo)
 		{
 			/* (the survey: why, by the same check) */
 			if (globals->survey && !mod->problem[0])
@@ -1084,6 +1148,49 @@ short custom_edition_mods_mod_maps(
 	*valid = globals->mods[mod_index].maps_valid;
 
 	return globals->mods[mod_index].map_files;
+}
+
+unsigned long long custom_edition_mods_mod_workshop_id(
+	short mod_index)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+
+	return mod_index >= 0 && mod_index < globals->mod_count ? (unsigned long long)globals->mods[mod_index].workshop_id : 0;
+}
+
+char const *custom_edition_mods_mod_unsupported(
+	short mod_index)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+
+	return mod_index >= 0 && mod_index < globals->mod_count ? globals->mods[mod_index].unsupported : "";
+}
+
+void custom_edition_mods_mod_kinds(
+	short mod_index,
+	short *multiplayer,
+	short *campaign)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+	short index;
+
+	*multiplayer = *campaign = 0;
+	for (index = 0; index < globals->multiplayer_count; index++)
+	{
+		if (globals->multiplayer_maps[index].mod_index == mod_index)
+		{
+			(*multiplayer)++;
+		}
+	}
+	for (index = 0; index < globals->map_count; index++)
+	{
+		if (globals->maps[index].mod_index == mod_index)
+		{
+			(*campaign)++;
+		}
+	}
+
+	return;
 }
 
 char const *custom_edition_mods_mod_map_name(

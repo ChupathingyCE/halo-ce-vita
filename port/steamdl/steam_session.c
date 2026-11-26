@@ -644,7 +644,8 @@ int steam_session_logon(struct steam_session *session, char *error, int error_si
 	steam_pb_put_varint(&writer, 1, STEAM_PROTOCOL_VERSION);
 	steam_pb_put_varint(&writer, 3, session->cell_id);
 	steam_pb_put_string(&writer, 6, "english");
-	steam_pb_put_varint(&writer, 8, 0);
+	/* (should_remember_password: a kept sign-in's session is one Steam keeps; without it, the log-off ends the token) */
+	steam_pb_put_varint(&writer, 8, session->remember ? 1 : 0);
 	steam_pb_put_string(&writer, 50, secrets->account_name);
 	steam_pb_put_string(&writer, 96, STEAM_DEVICE_NAME);
 	steam_pb_put_string(&writer, 108, secrets->refresh_token);
@@ -1174,6 +1175,14 @@ void steam_session_end(struct steam_session *session)
 			session->revoked = 1;
 		say(session, session->revoked ? "steam: the sign-in was revoked" :
 			"steam: the revoke was not confirmed: remove '" STEAM_DEVICE_NAME "' in the Steam app if it is listed");
+	}
+	/* (a sign-in kept on the device: the connection closed without a ClientLogOff, as when the Vita sleeps - its token
+	stays Steam's for the next start; device test, Nov 25: a session that logged off had its kept token refused,
+	AccessDenied, at the next start) */
+	if (session->connected && session->logged_on && session->keep_token)
+	{
+		say(session, "steam: the session closed without a log-off (the sign-in stays kept)");
+		session->logged_on = 0;
 	}
 	if (session->connected && session->logged_on)
 	{

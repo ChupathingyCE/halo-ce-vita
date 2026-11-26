@@ -71,6 +71,8 @@ struct steam_job_status
 	/* the kept sign-in (steam_signin.h): its state when the job began, kept at the end (1), SIGN OUT's job (1) and
 	its revoke confirmed by Steam (1) */
 	int signin_found, kept, sign_out, signed_out;
+	/* (1.1.3) failed because the QR was not scanned before Steam ended it (steam_download_result's qr_expired) */
+	int qr_expired;
 	/* the device asleep (1: paused while it sleeps) or just woken (2: carrying on, until the bytes move again) */
 	int asleep;
 	/* the measurements the dev Vita run reads (also logged at the end) */
@@ -180,6 +182,8 @@ struct steam_job_view
 	int kept, sign_out, signed_out, signin_found;
 	/* 1 paused while the device sleeps, 2 woken: carrying on (until the bytes move again), 0 neither */
 	int asleep;
+	/* (1.1.3) the job failed because the QR was not scanned before Steam ended it (steam_download_result's) */
+	int qr_expired;
 };
 void steam_job_view(struct steam_job_view *view);
 
@@ -290,6 +294,10 @@ struct steam_job_workshop_details
 	char map_names[12][48];
 	char contents_why[160];
 	char error[160];
+	/* (1.1.3) the items it needs (Steam's required items: never downloaded with it - the page says to download them
+	too): how many, and their titles ("item <id>" for one Steam gave no title of), a line each */
+	int needs;
+	char needs_titles[300];
 };
 void steam_job_workshop_details(struct steam_job_workshop_details *details);
 

@@ -132,7 +132,7 @@ flow() {
 		order=$(grep -E "cm: (revoke|logoff)" "$work/transcript.txt" | tr '\n' ' ')
 		[ "$order" = "cm: revoke ok cm: logoff " ] || { echo "FAIL $name: end was '$order'"; status=1; }
 	elif grep -q "cm: call Authentication.PollAuthSessionStatus" "$work/transcript.txt" && \
-		[ "$mode" != qr_refuse ]; then
+		[ "$mode" != qr_refuse ] && [ "$mode" != qr_drop ]; then
 		grep -q "cm: revoke ok" "$work/transcript.txt" || { echo "FAIL $name: not revoked"; status=1; }
 	fi
 	# no token anywhere we wrote
@@ -264,6 +264,13 @@ echo "  gonedmg-resume: $name: $had chunks journalled, ${took:-0} taken from the
 	{ echo "FAIL gonedmg-resume: files differ or partial left"; status=1; }
 flow logon-refused logon_refuse 1 fail
 flow qr-refused qr_refuse 1 fail
+# (1.1.3 device test, Nov 25: a QR left unscanned until Steam closed the connection ended in "Authentication.
+# PollAuthSessionStatus#1: cannot send" - now said plainly, the result marked for the screens' new QR)
+flow qr-dropped qr_drop 1 fail
+grep -q "qr_expired=1" "$out/flow-qr-dropped/line" &&
+	grep -q "steam: the QR sign-in ended unscanned: " "$out/flow-qr-dropped/log.txt" ||
+	{ echo "FAIL qr-dropped: the QR's end not marked"; status=1; }
+grep -q "qr_expired=1" "$out/flow-qr-refused/line" || { echo "FAIL qr-refused: the QR's end not marked"; status=1; }
 flow not-owned not_owned 1 fail
 flow kicked kick 1 fail
 flow badmulti badmulti 1 ok
@@ -294,14 +301,31 @@ signin_check() {
 }
 server_extra="--token-file $out/signin-token.txt"
 rm -f "$out/signin-token.txt"
+# (1.1.3 device test, Nov 25: the kept sign-in was refused - AccessDenied - at the start after a session that ended
+# with a ClientLogOff, the fake now ends a token as Steam did: a session logged on without should_remember_password
+# that logs off. A kept sign-in's session is logged on remembered and ends with no log-off: no revoke, no ClientLogOff,
+# the token good for every next start)
 flow keep-first normal 1 ok
 grep -q "kept=1" "$out/flow-keep-first/line" || { echo "FAIL keep-first: not kept"; status=1; }
-signin_check keep-first "cm: logoff " 1 1
+signin_check keep-first "" 1 1
+grep -q "cm: logon ok (remembered)" "$out/flow-keep-first/transcript.txt" ||
+	{ echo "FAIL keep-first: the logon did not ask Steam to keep the session"; status=1; }
+grep -q "the session closed without a log-off (the sign-in stays kept)" "$out/flow-keep-first/log.txt" ||
+	{ echo "FAIL keep-first: the end was not the kept sign-in's"; status=1; }
 flow keep-again normal 1 ok "" keep-first
 grep -q "found=1 kept=1" "$out/flow-keep-again/line" && grep -q "already=20" "$out/flow-keep-again/line" ||
 	{ echo "FAIL keep-again: the kept sign-in not used"; status=1; }
-signin_check keep-again "cm: logoff " 1 0
+signin_check keep-again "" 1 0
 grep -q "sign-in kept on this device is used (saved 0 days ago" "$out/flow-keep-again/log.txt" || { echo "FAIL keep-again: log"; status=1; }
+grep -q "cm: logon ok (remembered)" "$out/flow-keep-again/transcript.txt" ||
+	{ echo "FAIL keep-again: the kept sign-in's logon not remembered"; status=1; }
+# (a third start after two normal ends: still the same kept sign-in, no QR, never refused)
+flow keep-third normal 1 ok "" keep-again
+grep -q "found=1 kept=1" "$out/flow-keep-third/line" || { echo "FAIL keep-third: the kept sign-in not used"; status=1; }
+signin_check keep-third "" 1 0
+grep -q "the kept sign-in was refused" "$out/flow-keep-third/log.txt" && { echo "FAIL keep-third: refused"; status=1; }
+grep -q "cm: the session's token ended" "$out"/flow-keep-first/transcript.txt "$out"/flow-keep-again/transcript.txt \
+	"$out"/flow-keep-third/transcript.txt && { echo "FAIL keep-*: a kept sign-in's token was ended at Steam"; status=1; }
 client_env="env STEAM_TEST_SIGNIN=1 STEAM_TEST_SIGN_OUT=1"
 flow keep-signout normal 1 ok "" keep-again
 grep -q "signed_out=1" "$out/flow-keep-signout/line" || { echo "FAIL keep-signout: not confirmed"; status=1; }
@@ -311,7 +335,7 @@ client_env="env STEAM_TEST_SIGNIN=1"
 flow keep-revoked normal 1 ok "" keep-first
 grep -q "the kept sign-in was refused (result 26, Revoked): removed from this device; a new QR" "$out/flow-keep-revoked/log.txt" ||
 	{ echo "FAIL keep-revoked: log"; status=1; }
-signin_check keep-revoked "cm: logoff " 1 1
+signin_check keep-revoked "" 1 1
 # (older than 14 days: revoked before the QR, not signed in; then a new QR, kept again)
 rm -f "$out/signin-token.txt"
 flow keep-base normal 1 ok
@@ -320,7 +344,7 @@ mkdir -p "$out/flow-keep-old-base" && cp -r "$out/flow-keep-base/card" "$out/flo
 "$out/steam_download_test" signin-write "$out/flow-keep-old-base/card/haloce-vita/steam-signin.bin" "$token_now" fakeplayer \
 	$(($(date +%s) - 15 * 86400)) || { echo "FAIL signin-write"; status=1; }
 flow keep-old normal 1 ok "" keep-old-base
-signin_check keep-old "cm: revoke ok cm: logoff " 1 1
+signin_check keep-old "cm: revoke ok " 1 1
 # (the expired one revoked before the QR, not signed in: no logon between the connection and the revoke)
 awk '/cm: revoke ok/ {print "revoke"; exit} /cm: logon ok/ {print "logon"; exit}' "$out/flow-keep-old/transcript.txt" | grep -q revoke ||
 	{ echo "FAIL keep-old: not revoked before the logon"; status=1; }
@@ -330,7 +354,7 @@ rm -f "$out/signin-token.txt"
 mkdir -p "$out/flow-keep-bad-base/card/haloce-vita"
 head -c 300 /dev/urandom > "$out/flow-keep-bad-base/card/haloce-vita/steam-signin.bin"
 flow keep-bad normal 1 ok "" keep-bad-base
-signin_check keep-bad "cm: logoff " 1 1
+signin_check keep-bad "" 1 1
 grep -q "found=3 kept=1" "$out/flow-keep-bad/line" || { echo "FAIL keep-bad: state"; status=1; }
 # (Steam busy at the logon - ServiceUnavailable -: kept for the next try, neither wiped nor revoked)
 flow keep-busy logon_busy 1 fail "" keep-bad
@@ -370,8 +394,21 @@ find "$w/card" -name 'setup.exe' -o -name 'link.map' -o -name '*.part*' -o -name
 # (staging empty; workshop/installed/ holds the versions installed - the browser's UPDATE - and nothing else)
 [ -z "$(ls -A "$w/card/haloce-vita/workshop" 2>/dev/null | grep -v -x -e installed)" ] || \
 	{ echo "FAIL ws-items: workshop staging not empty: $(ls "$w/card/haloce-vita/workshop")"; status=1; }
-[ "$(ls "$w/card/haloce-vita/workshop/installed" 2>/dev/null | tr '\n' ' ')" = "2900000001.gid 2900000002.gid " ] || \
+[ "$(ls "$w/card/haloce-vita/workshop/installed" 2>/dev/null | tr '\n' ' ')" = \
+	"2900000001.about 2900000001.gid 2900000002.about 2900000002.gid " ] || \
 	{ echo "FAIL ws-items: installed versions: $(ls "$w/card/haloce-vita/workshop/installed")"; status=1; }
+# (1.1.3: what Steam said of each - its title, the items it needs - kept for the mod manager; the needs' titles in one
+# more GetDetails call, never downloaded with it; Steam's own id among its children and an unknown one as Steam gave)
+about=$w/card/haloce-vita/workshop/installed/2900000001.about
+grep -q "^title Fake Rebalanced Campaign " "$about" && grep -qx "needs 2900000002 Fake Gulch Remix" "$about" &&
+	grep -qx "needs 2900000014 Fake GIF Picture" "$about" && grep -qx "needs 2999999999 " "$about" &&
+	! grep -q "needs 2900000001" "$about" || { echo "FAIL ws-items: 2900000001's about: $(cat "$about")"; status=1; }
+[ "$(cat "$w/card/haloce-vita/workshop/installed/2900000002.about")" = "title Fake Gulch Remix" ] ||
+	{ echo "FAIL ws-items: 2900000002's about"; status=1; }
+grep -q "cm: workshop details 2900000002 2900000014 2999999999 (children)" "$w/transcript.txt" &&
+	grep -q "workshop 2900000001: needs 3 other items (not downloaded with it)" "$w/log.txt" ||
+	{ echo "FAIL ws-items: the needed items' titles not asked, or not said"; status=1; }
+[ ! -e "$w/card/haloce-vita/mods/2900000014" ] || { echo "FAIL ws-items: a needed item was downloaded"; status=1; }
 for id in 2900000003 2900000004 2900000005 2900000006 2900000007 2900000008; do
 	[ ! -e "$w/card/haloce-vita/mods/$id" ] || { echo "FAIL ws-items: $id installed"; status=1; }
 done
@@ -531,7 +568,9 @@ dup=$(grep "img: " "$w/transcript.txt" | sort | uniq -d | head -1)
 grep -q "cm: workshop subscribed page 1" "$w/transcript.txt" || { echo "FAIL ws-browse: SUBSCRIBED not asked"; status=1; }
 grep -q "cm: subscriptions of another account" "$w/transcript.txt" && { echo "FAIL ws-browse: another account's"; status=1; }
 grep -q "cm: names of" "$w/transcript.txt" || { echo "FAIL ws-browse: no authors asked"; status=1; }
-grep -q "cm: workshop details 2900000001 (a page)" "$w/transcript.txt" || { echo "FAIL ws-browse: no details page"; status=1; }
+grep -q "cm: workshop details 2900000001 (a page) (children)" "$w/transcript.txt" || { echo "FAIL ws-browse: no details page"; status=1; }
+grep -q "steam job: workshop details 2900000001: it needs 3 other items" "$w/log.txt" ||
+	{ echo "FAIL ws-browse: the details page's needed items"; status=1; }
 grep -q 'by "Ñandú Mapper"' "$w/log.txt" || { echo "FAIL ws-browse: the Latin-1 author"; status=1; }
 grep -q "browse description: Fake Rebalanced Campaign" "$w/log.txt" || { echo "FAIL ws-browse: the description"; status=1; }
 grep "browse row 2900000016" "$w/log.txt" | head -1 | grep -q 'by "Evil/nName' || { echo "FAIL ws-browse: the hostile author"; status=1; }

@@ -5,12 +5,13 @@ steam_workshop.h: the Workshop's requests, its responses read, its names' rule a
 Field numbers (SteamDatabase/Protobufs, steammessages_publishedfile.steamclient.proto):
   CPublishedFile_QueryFiles_Request: 1 query_type, 2 page, 3 numperpage, 5 appid, 6 requiredtags, 11 search_text,
     14 days, 18 return_tags, 37 return_details; its response 1 total, 2 publishedfiledetails
-  CPublishedFile_GetDetails_Request: 1 publishedfileids (fixed64), 2 includetags, 14 appid; its response
-    1 publishedfiledetails
+  CPublishedFile_GetDetails_Request: 1 publishedfileids (fixed64), 2 includetags, 4 includechildren, 14 appid; its
+    response 1 publishedfiledetails
   PublishedFileDetails: 1 result, 2 publishedfileid, 3 creator (fixed64), 5 consumer_appid, 8 file_size,
     11 preview_url, 14 hcontent_file (fixed64), 16 title, 17 file_description, 19 time_created, 20 time_updated,
     21 visibility, 28 banned, 51 previews (Preview: 3 url, 7 preview_type, 0 an image), 52 tags (Tag: 1 tag),
-    55 vote_data (VoteData: 1 score (float), 2 votes_up, 3 votes_down)
+    53 children (Child: 1 publishedfileid - the item's required items), 55 vote_data (VoteData: 1 score (float),
+    2 votes_up, 3 votes_down)
   (the browser, docs/steam_download_security.md section 9) QueryFiles' 17 return_vote_data; GetDetails' 3
     includeadditionalpreviews, 6 includevotes, 15 strip_description_bbcode; CPublishedFile_GetUserFiles_Request:
     1 steamid (fixed64), 2 appid, 4 page, 5 numperpage, 6 type ("mysubscriptions"), 7 sortmethod, 10 requiredtags,
@@ -82,6 +83,7 @@ size_t steam_workshop_details_request(uint8_t *buffer, size_t capacity, const ui
 	for (index = 0; index < count; index++)
 		steam_pb_put_fixed64(&writer, 1, ids[index]);
 	steam_pb_put_varint(&writer, 2, 1);
+	steam_pb_put_varint(&writer, 4, 1);
 	steam_pb_put_varint(&writer, 14, STEAM_WORKSHOP_APP);
 	return writer.error ? 0 : writer.size;
 }
@@ -96,6 +98,7 @@ size_t steam_workshop_page_request(uint8_t *buffer, size_t capacity, uint64_t id
 	steam_pb_put_fixed64(&writer, 1, id);
 	steam_pb_put_varint(&writer, 2, 1);
 	steam_pb_put_varint(&writer, 3, 1);
+	steam_pb_put_varint(&writer, 4, 1);
 	steam_pb_put_varint(&writer, 6, 1);
 	steam_pb_put_varint(&writer, 14, STEAM_WORKSHOP_APP);
 	steam_pb_put_varint(&writer, 15, 1);
@@ -420,6 +423,29 @@ static int read_preview(const struct steam_pb_field *field, struct steam_worksho
 	return 1;
 }
 
+/* a Child (an item the item needs): its id kept, if there is room and it is not there yet; 1, or -1 if malformed */
+static int read_child(const struct steam_pb_field *field, struct steam_workshop_item *item)
+{
+	struct steam_pb_reader reader;
+	struct steam_pb_field inner;
+	uint64_t id = 0;
+	int result, index;
+
+	steam_pb_reader_init(&reader, field->data, field->size);
+	while ((result = steam_pb_next(&reader, &inner)) > 0)
+		if (inner.number == 1 && inner.wire == STEAM_PB_VARINT)
+			id = inner.value;
+	if (result < 0)
+		return -1;
+	if (!id || item->needs_count >= STEAM_WORKSHOP_NEEDS_MAXIMUM)
+		return 1;
+	for (index = 0; index < item->needs_count; index++)
+		if (item->needs[index] == id)
+			return 1;
+	item->needs[item->needs_count++] = id;
+	return 1;
+}
+
 /* one PublishedFileDetails: 1, or -1 if malformed; with details (a details page's), the description and the extra
 pictures too */
 static int read_item_with(const struct steam_pb_field *field, struct steam_workshop_item *item,
@@ -427,7 +453,7 @@ static int read_item_with(const struct steam_pb_field *field, struct steam_works
 {
 	struct steam_pb_reader reader;
 	struct steam_pb_field inner;
-	int result, tag_count = 0, preview_count = 0;
+	int result, tag_count = 0, preview_count = 0, child_count = 0;
 
 	memset(item, 0, sizeof(*item));
 	item->score = -1;
@@ -470,6 +496,13 @@ static int read_item_with(const struct steam_pb_field *field, struct steam_works
 				if (++preview_count > TAGS_MAXIMUM)
 					return -1;
 				if (details && read_preview(&inner, details) < 0)
+					return -1;
+			}
+			break;
+		case 53:
+			if (inner.wire == STEAM_PB_BYTES)
+			{
+				if (++child_count > TAGS_MAXIMUM || read_child(&inner, item) < 0)
 					return -1;
 			}
 			break;
@@ -518,7 +551,18 @@ static int read_item_with(const struct steam_pb_field *field, struct steam_works
 			break;
 		}
 	}
-	return result < 0 ? -1 : 1;
+	if (result < 0)
+		return -1;
+	/* (never itself: Steam's children are other items) */
+	{
+		int index, kept = 0;
+
+		for (index = 0; index < item->needs_count; index++)
+			if (item->needs[index] != item->id)
+				item->needs[kept++] = item->needs[index];
+		item->needs_count = kept;
+	}
+	return 1;
 }
 
 static int read_item(const struct steam_pb_field *field, struct steam_workshop_item *item)
@@ -1115,6 +1159,54 @@ static int install_walk(struct install_walk *walk, const char *base, const char 
 	return ok;
 }
 
+/* <root>/workshop/<id>.about (installed: <root>/workshop/installed/<id>.about) */
+static int about_path(const char *root, uint64_t id, int installed, char *path, size_t size)
+{
+	char text[24];
+
+	return steam_workshop_id_text(id, text, sizeof(text)) &&
+		(size_t)snprintf(path, size, "%s/workshop/%s%s.about", root, installed ? "installed/" : "", text) < size;
+}
+
+/* a line's text written without what would end it early (a control byte: none of steam_workshop_text's, but the
+file is ours to keep plain) */
+static void about_text_put(FILE *file, const char *text)
+{
+	for (; *text; text++)
+		fputc((unsigned char)*text < ' ' ? ' ' : *text, file);
+}
+
+int steam_workshop_about_write(const char *root, uint64_t id, const char *title, const uint64_t *needs,
+	const char (*need_titles)[STEAM_WORKSHOP_TITLE_SIZE], int needs_count)
+{
+	char path[512], folder[512];
+	FILE *file;
+	int index, ok;
+
+	if (!about_path(root, id, 0, path, sizeof(path)))
+		return 0;
+	snprintf(folder, sizeof(folder), "%s/workshop", root);
+	mkdir(folder, 0777);
+	file = fopen(path, "wb");
+	if (!file)
+		return 0;
+	fputs("title ", file);
+	about_text_put(file, title ? title : "");
+	fputc('\n', file);
+	for (index = 0; index < needs_count && index < STEAM_WORKSHOP_NEEDS_MAXIMUM; index++)
+	{
+		fprintf(file, "needs %llu ", (unsigned long long)needs[index]);
+		about_text_put(file, need_titles ? need_titles[index] : "");
+		fputc('\n', file);
+	}
+	ok = !ferror(file);
+	if (fclose(file) != 0)
+		ok = 0;
+	if (!ok)
+		remove(path);
+	return ok;
+}
+
 int steam_workshop_install(const char *root, uint64_t id, steam_workshop_map_check check, void *context, char *why,
 	size_t why_size)
 {
@@ -1184,6 +1276,18 @@ int steam_workshop_install(const char *root, uint64_t id, steam_workshop_map_che
 			}
 		}
 	}
+	/* (what Steam said of it, for the mod manager: kept with the install, dropped with a refusal) */
+	{
+		char about[512], installed_about[512];
+
+		if (about_path(root, id, 0, about, sizeof(about)) && about_path(root, id, 1, installed_about, sizeof(installed_about)))
+		{
+			remove(installed_about);
+			if (ok)
+				rename(about, installed_about);
+			remove(about);
+		}
+	}
 	if (!ok)
 		steam_workshop_remove_tree(staging);
 	remove(done_path);
@@ -1231,6 +1335,8 @@ int steam_workshop_uninstall(const char *root, uint64_t id)
 		return 0;
 	ok = steam_workshop_remove_tree(mods);
 	if (record_path(root, id, record, sizeof(record)))
+		remove(record);
+	if (about_path(root, id, 1, record, sizeof(record)))
 		remove(record);
 	return ok;
 }

@@ -918,10 +918,15 @@ static struct
 	/* a local game over, the Halo 3 lobby back up: the game let go at the
 	next frame (pc_menu_functions_local_lobby_after_game) */
 	boolean dispose_pending;
+	/* (1.1.3 device test, Nov 25) the local game's map could not be loaded
+	(pc_menu_functions_map_load_failed): the Halo 3 lobby opened again once
+	the main menu is up, never split screen's own */
+	boolean lobby_after_failure;
 } h3_local;
 static boolean row_column(struct widget_instance *row, char const *name, char const *text);
 static boolean h3_mp_local_start(void);
 static void h3_mp_local_update(boolean main_menu_loaded);
+static boolean h3_mp_lobby_open_offline(void);
 /* (the live lobby, Menu style Halo 3: h3_live) */
 static void h3_live_lobby_show(struct widget_instance *screen);
 static boolean h3_live_follow(void);
@@ -12445,10 +12450,10 @@ static void h3_mods_said(void)
 		char modes[64];
 
 		mod_manager_modes_text(entry->modes, modes, sizeof(modes));
-		platform_log("menus: h3 mods: %s: %s, %s, %d KB, %s%s%s, works in %s%s%s", entry->file,
-			mod_manager_kind_name(entry->kind), entry->enabled ? "on" : "off", entry->kilobytes,
+		platform_log("menus: h3 mods: %s: %s, %s, %d KB, %s%s%s, works in %s%s%s, from %s, title %s", entry->file,
+			mod_manager_entry_kind_name(entry), entry->enabled ? "on" : "off", entry->kilobytes,
 			entry->valid ? "passed" : "failed", entry->why[0] ? ": " : "", entry->why, modes,
-			entry->needs[0] ? ", needs " : "", entry->needs);
+			entry->needs[0] ? ", needs " : "", entry->needs, mod_manager_source_name(entry->source), entry->title);
 	}
 }
 
@@ -12816,7 +12821,7 @@ static void h3_mods_update(struct widget_instance *list)
 		widget_instance_set_visibility_recursive(child, TRUE);
 		child->disabled = FALSE;
 		row_column(child, "row_name", entry->kind == HALO_MOD_KIND_MCC_MOD ? entry->title : entry->file);
-		row_column(child, "row_kind", mod_manager_kind_name(entry->kind));
+		row_column(child, "row_kind", mod_manager_entry_kind_name(entry));
 		h3_mods_size_text(text, sizeof(text), entry->kilobytes);
 		row_column(child, "row_size", text);
 		row_column(child, "row_state", h3_mods_state_name(entry));
@@ -13114,6 +13119,13 @@ static void h3_steam_update(struct widget_instance *list)
 		break;
 	case STEAM_JOB_FAILED:
 	case STEAM_JOB_CANCELLED:
+		/* (1.1.3: the QR left unscanned until Steam closed it, said plainly - device test, Nov 25: "Authentication.
+		PollAuthSessionStatus#1: cannot send") */
+		if (view.phase == STEAM_JOB_FAILED && view.qr_expired)
+		{
+			snprintf(text, sizeof(text), "%s", T("The sign-in QR expired before it was approved in the Steam app. Start the download again for a new QR."));
+			break;
+		}
 		snprintf(text, sizeof(text), "%s\n%s\n\n%s", view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The download stopped:"),
 			view.phase == STEAM_JOB_CANCELLED ? "" : view.error, view.revoked ? T("Signed out of Steam. What is in stays: download again to resume.") :
 			view.kept ? T("You stay signed in on this Vita. What is in stays: download again to resume.") :
@@ -13343,6 +13355,9 @@ static struct
 	int details_installed;
 	unsigned long long details_installed_gid;
 	char details_checked_id[24];
+	/* (1.1.3) the installed item's problem as the mod manager says it ("Not supported on PS Vita: ...": a map the
+	load would refuse, never listed to play; "" none) */
+	char details_unsupported[HALO_MODS_TEXT_BYTES];
 	/* a finger on the screen: where it came down, a swipe taken */
 	boolean touching, swiped;
 	short touch_x, touch_y;
@@ -13452,6 +13467,20 @@ static int h3_workshop_map_check(void *context, const char *path, char *why, siz
 		snprintf(why, why_size, "%s", T("not a Halo: CE Anniversary map"));
 		return 0;
 	}
+	/* (1.1.3: a map the load would refuse - its scripts take parameters, ... - installed with the item, never listed
+	to play, and said now: the install's end and the mod manager tell why; device test, Nov 25) */
+	if (context)
+	{
+		char unsupported[160];
+
+		custom_edition_cache_mod_map_check(game_path, unsupported, sizeof(unsupported));
+		if (unsupported[0] && !((char *)context)[0])
+		{
+			char const *name = strrchr(path, '/');
+
+			snprintf((char *)context, 200, "%.40s: %.150s", name ? name + 1 : path, unsupported);
+		}
+	}
 	return 1;
 }
 
@@ -13464,10 +13493,20 @@ static void h3_workshop_install_staged(void)
 
 	for (index = 0; index < count; index++)
 	{
-		if (steam_workshop_install(h3_workshop_root(), ids[index], h3_workshop_map_check, NULL, why, sizeof(why)))
+		char unsupported[200];
+
+		unsupported[0] = 0;
+		if (steam_workshop_install(h3_workshop_root(), ids[index], h3_workshop_map_check, unsupported, why, sizeof(why)))
 		{
 			h3_workshop.installed++;
 			platform_log("menus: workshop: %llu installed in mods", (unsigned long long)ids[index]);
+			if (unsupported[0])
+			{
+				platform_log("menus: workshop: %llu: not supported on PS Vita: %s", (unsigned long long)ids[index], unsupported);
+				snprintf(line, sizeof(line), T("Not supported on PS Vita (%llu, %.150s): not in the map lists\n"),
+					(unsigned long long)ids[index], unsupported);
+				strncat(h3_workshop.message, line, sizeof(h3_workshop.message) - strlen(h3_workshop.message) - 1);
+			}
 		}
 		else
 		{
@@ -13870,7 +13909,13 @@ static void h3_workshop_update(struct widget_instance *widget)
 		snprintf(status_text, sizeof(status_text), "%s", view.phase == STEAM_JOB_DONE ? (view.kept ? T("Done. You stay signed in on this Vita.") : T("Done. Signed out of Steam.")) :
 			view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The Workshop stopped."));
 		details[0] = 0;
-		if (view.phase == STEAM_JOB_FAILED)
+		if (view.phase == STEAM_JOB_FAILED && view.qr_expired)
+		{
+			/* (1.1.3 device test, Nov 25: the QR left unscanned ended in "Authentication.PollAuthSessionStatus#1:
+			cannot send" - said plainly, Cross a new QR) */
+			snprintf(details, sizeof(details), "%s\n\n", T("The sign-in QR expired before it was approved in the Steam app. Cross: a new QR."));
+		}
+		else if (view.phase == STEAM_JOB_FAILED)
 		{
 			snprintf(details, sizeof(details), "%.200s\n\n", view.error);
 		}
@@ -13883,7 +13928,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 			strncat(details, line, sizeof(details) - strlen(details) - 1);
 		}
 		strncat(details, h3_workshop.message, sizeof(details) - strlen(details) - 1);
-		if (!view.revoked && !view.kept && view.phase != STEAM_JOB_DONE)
+		if (!view.revoked && !view.kept && view.phase != STEAM_JOB_DONE && !view.qr_expired)
 			strncat(details, T("If \"Halo CE Vita (PS Vita)\" is in the Steam app's Authorized devices, remove it."),
 				sizeof(details) - strlen(details) - 1);
 		break;
@@ -14064,6 +14109,35 @@ static void h3_workshop_update(struct widget_instance *widget)
 			h3_workshop.details_installed = steam_workshop_id_parse(page.id, &id) &&
 				steam_workshop_installed(h3_workshop_root(), id, &gid);
 			h3_workshop.details_installed_gid = gid;
+			h3_workshop.details_unsupported[0] = 0;
+			if (page.needs)
+			{
+				char said[sizeof(page.needs_titles) + 2 * STEAM_WORKSHOP_NEEDS_MAXIMUM];
+				size_t at, length = 0;
+
+				for (at = 0; page.needs_titles[at] && length < sizeof(said) - 3; at++)
+				{
+					if (page.needs_titles[at] == '\n')
+						said[length++] = ',';
+					said[length++] = page.needs_titles[at] == '\n' ? ' ' : page.needs_titles[at];
+				}
+				said[length] = 0;
+				platform_log("menus: workshop: %s needs %d other items: %s", page.id, page.needs, said);
+			}
+			if (h3_workshop.details_installed)
+			{
+				short entry_index;
+				struct halo_mod_entry const *entry;
+
+				mod_manager_scan();
+				entry_index = mod_manager_find(page.id, HALO_MOD_KIND_MCC_MOD);
+				entry = entry_index != NONE ? mod_manager_entry(entry_index) : NULL;
+				if (entry && entry->workshop && entry->why[0])
+				{
+					snprintf(h3_workshop.details_unsupported, sizeof(h3_workshop.details_unsupported), "%s", entry->why);
+					platform_log("menus: workshop: %s installed: %s", page.id, entry->why);
+				}
+			}
 		}
 		if (details_mode && page.state == 2)
 			state = h3_workshop_state(h3_workshop.details_installed, h3_workshop.details_installed_gid, page.version);
@@ -14158,6 +14232,34 @@ static void h3_workshop_update(struct widget_instance *widget)
 							strncat(text, T("\nNo maps: it would not install."), sizeof(text) - strlen(text) - 1);
 					}
 				}
+				/* (1.1.3: the items it needs, never downloaded with it - the release is frozen -, and an installed
+				item's map this build cannot run, said here rather than at its load: device test, Nov 25) */
+				if (page.state == 2 && page.needs)
+				{
+					char const *title = page.needs_titles;
+					int shown;
+
+					strncat(text, T("\nAlso needs - download those too:"), sizeof(text) - strlen(text) - 1);
+					/* (a line each, as the maps: three at most, then how many more) */
+					for (shown = 0; shown < 3 && *title; shown++)
+					{
+						int length = (int)strcspn(title, "\n");
+
+						snprintf(line, sizeof(line), "\n  %.*s", length < 40 ? length : 40, title);
+						strncat(text, line, sizeof(text) - strlen(text) - 1);
+						title += length + (title[length] == '\n');
+					}
+					if (page.needs > shown)
+					{
+						snprintf(line, sizeof(line), T("\n  and %d more"), page.needs - shown);
+						strncat(text, line, sizeof(text) - strlen(text) - 1);
+					}
+				}
+				if (page.state == 2 && state && h3_workshop.details_unsupported[0])
+				{
+					snprintf(line, sizeof(line), "\n%s", h3_workshop.details_unsupported);
+					strncat(text, line, sizeof(text) - strlen(text) - 1);
+				}
 				h3_dialog_text(found, text);
 			}
 			if ((found = named(screen, "d_desc")) != NULL)
@@ -14183,8 +14285,10 @@ static void h3_workshop_update(struct widget_instance *widget)
 			int button;
 
 			snprintf(download_label, sizeof(download_label), T("Download (%d)"), h3_workshop.marked_count);
-			shown[0] = (idle && !needs) || (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
-			labels[0] = idle ? h3_workshop_footer_word("{footer}Select", "Select") : grid ? T("Details") : state == 2 ? T("Update") : state == 1 ?
+			shown[0] = (idle && !needs) || (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable) ||
+				(view.phase == STEAM_JOB_FAILED && view.qr_expired);
+			labels[0] = view.phase == STEAM_JOB_FAILED && view.qr_expired ? T("New QR") :
+				idle ? h3_workshop_footer_word("{footer}Select", "Select") : grid ? T("Details") : state == 2 ? T("Update") : state == 1 ?
 				T("Download again") : T("Download");
 			shown[1] = (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
 			{
@@ -14353,6 +14457,13 @@ static boolean h3_workshop_row(struct widget_instance *widget)
 	struct steam_job_view view;
 
 	steam_job_view(&view);
+	/* (1.1.3: the QR left unscanned until Steam closed it - Cross: a new one, the sign-in begun again) */
+	if (view.phase == STEAM_JOB_FAILED && view.qr_expired)
+	{
+		platform_log("menus: workshop: the QR timed out: a new QR");
+		steam_job_forget();
+		view.phase = STEAM_JOB_IDLE;
+	}
 	if (view.phase == STEAM_JOB_IDLE)
 	{
 		int started;
@@ -15131,7 +15242,7 @@ static void h3_mods_details_update(struct widget_instance *widget)
 	text_show(named(screen, "details_title"), entry->kind == HALO_MOD_KIND_MCC_MOD ? entry->title : entry->file);
 	mod_manager_modes_text(entry->modes, modes, sizeof(modes));
 	h3_mods_size_text(size_text, sizeof(size_text), entry->kilobytes);
-	length += snprintf(text + length, sizeof(text) - (size_t)length, "%s: %s\n", T("Type"), mod_manager_kind_name(entry->kind));
+	length += snprintf(text + length, sizeof(text) - (size_t)length, "%s: %s\n", T("Type"), mod_manager_entry_kind_name(entry));
 	length += snprintf(text + length, sizeof(text) - (size_t)length, "%s: %s%s\n", T("File"),
 		entry->kind == HALO_MOD_KIND_MCC_MOD ? "mods/" : "maps/", entry->file);
 	length += snprintf(text + length, sizeof(text) - (size_t)length, "%s: %s\n", T("Size"), size_text);
@@ -20025,6 +20136,33 @@ static void h3_mp_local_update(boolean main_menu_loaded)
 			platform_log("menus: h3 mp: the local game over: let go");
 		}
 	}
+	/* (the local game's map could not be loaded: back in the Halo 3 lobby,
+	OFFLINE, as after a game, once the main menu's own screen is up - the
+	message saying why then over the lobby) */
+	if (h3_local.lobby_after_failure && main_menu_loaded)
+	{
+		struct widget_instance *active = ui_widget_port_active_screen(0);
+		long main_tag = menu_tags_ingame_screen("h3/main/screen");
+
+		long message_tag = menu_tags_ingame_screen("h3/dlg/message/screen");
+
+		if (!halo_menu_style_halo3() || main_tag == NONE)
+		{
+			h3_local.lobby_after_failure = FALSE;
+		}
+		/* (the main menu's own screen up, the message - over it first - read and closed) */
+		else if (active && active->definition_tag_index == main_tag)
+		{
+			h3_local.lobby_after_failure = FALSE;
+			if (h3_mp_lobby_open_offline())
+				platform_log("menus: h3 mp: the local game's map could not be loaded: back to the Halo 3 lobby (OFFLINE)");
+		}
+		/* (the player gone elsewhere meanwhile: left there) */
+		else if (active && active->definition_tag_index != message_tag)
+		{
+			h3_local.lobby_after_failure = FALSE;
+		}
+	}
 	/* (asked to start, but the game not begun in 5 s - one player and no
 	bots, where a local game needs two: the desktop builds' - split screen's
 	own lobby, which says what it waits for) */
@@ -22289,26 +22427,19 @@ next START GAME makes a new one with the lobby's GAME and MAP,
 h3_mp_local_start); not split screen's map list, the Xbox's postgame screen
 (testers, insider.21): TRUE; FALSE (Menu style Halo CE, or no Halo 3 set):
 the Xbox's */
-boolean pc_menu_functions_local_lobby_after_game(void)
+/* the Halo 3 multiplayer lobby opened on OFFLINE, its START GAME focused,
+B going back to the main menu: FALSE if it did not open */
+static boolean h3_mp_lobby_open_offline(void)
 {
 	long lobby_tag = menu_tags_ingame_screen("h3/mp/screen");
 	long main_tag = menu_tags_ingame_screen("h3/main/screen");
 	struct widget_instance *screen;
 
-	if (!halo_menu_style_halo3() || lobby_tag == NONE || main_tag == NONE)
+	if (lobby_tag == NONE || main_tag == NONE)
 		return FALSE;
-	/* (let go at the next frame, h3_mp_local_update: this is the client's
-	own switch to its pregame, which goes on using it) */
-	h3_local.dispose_pending = TRUE;
-	h3_local.asked = FALSE;
-	h3_local.since = 0;
-	h3_local.started = FALSE;
 	h3_mp.network = _h3_network_offline;
 	if ((screen = ui_widget_load_by_name_or_tag(NULL, lobby_tag, NULL, 0, main_tag, NONE, NONE)) == NULL)
-	{
-		platform_log("menus: h3 mp: the local game over: the Halo 3 lobby did not open, split screen's map list");
 		return FALSE;
-	}
 	{
 		struct widget_instance *list = named(screen, "list");
 		struct widget_instance *start = named(screen, "start_offline");
@@ -22316,8 +22447,48 @@ boolean pc_menu_functions_local_lobby_after_game(void)
 		if (list && start)
 			ui_widget_port_give_focus(list, start);
 	}
+	return TRUE;
+}
+
+boolean pc_menu_functions_local_lobby_after_game(void)
+{
+	if (!halo_menu_style_halo3() || menu_tags_ingame_screen("h3/mp/screen") == NONE ||
+		menu_tags_ingame_screen("h3/main/screen") == NONE)
+		return FALSE;
+	/* (let go at the next frame, h3_mp_local_update: this is the client's
+	own switch to its pregame, which goes on using it) */
+	h3_local.dispose_pending = TRUE;
+	h3_local.asked = FALSE;
+	h3_local.since = 0;
+	h3_local.started = FALSE;
+	if (!h3_mp_lobby_open_offline())
+	{
+		platform_log("menus: h3 mp: the local game over: the Halo 3 lobby did not open, split screen's map list");
+		return FALSE;
+	}
 	platform_log("menus: h3 mp: the local game over, back to the Halo 3 lobby (OFFLINE)");
 	return TRUE;
+}
+
+/* (main.c: a map that could not be loaded - the player told why, the main
+menu loading again) the local game OFFLINE's START GAME set up let go, and
+never split screen's own lobby for it: back in the Halo 3 lobby once the
+main menu is up (h3_mp_local_update), the message over it (1.1.3 device
+test, Nov 25: a Workshop map's load failed; the Xbox's ENLISTED PLAYERS
+came up under the message, and B there an empty message) */
+void pc_menu_functions_map_load_failed(void)
+{
+	boolean local = h3_local.started || h3_local.since || h3_local.asked;
+
+	h3_local.started = FALSE;
+	h3_local.since = 0;
+	h3_local.asked = FALSE;
+	if (local)
+	{
+		h3_local.dispose_pending = TRUE;
+		h3_local.lobby_after_failure = TRUE;
+	}
+	platform_log("menus: a map could not be loaded%s", local ? ": the local game let go, the Halo 3 lobby next" : "");
 }
 
 /* (display_error, the host's game closed: _error_network_server_shut_down)

@@ -23,7 +23,8 @@ Every event goes to <work>/transcript.txt (the tests read the order of revoke
 and log-off). --mode picks a failure to act out:
   normal, corrupt_once (one chunk damaged the first time it is sent), chunk_gone (after 4 chunks every
   chunk request is answered 404: a server error mid-download),
-  drop_once (the connection cut mid-body once), logon_refuse, qr_refuse,
+  drop_once (the connection cut mid-body once), logon_refuse, qr_refuse, qr_drop (the connection closed at the
+  QR's second poll, once: a QR left unscanned),
   logon_busy (ServiceUnavailable, 20, at the logon), stall_chunk (the third chunk's body stops a third in,
   the connection held), stall_manifest (a manifest request never answered), not_owned (no key for 976734), kick (the server logs the client off during
   PICS), badmulti (a malformed Multi first), slow (each CDN answer 0.25 s late:
@@ -318,6 +319,11 @@ def workshop_png(rng):
     return b"\x89PNG\r\n\x1a\n" + rng.randbytes(300)
 
 
+# (1.1.3) the items an item needs (Steam's required items: its children); one Steam would not name (not a Workshop item
+# of the fake's) and the item itself, which the game leaves out
+NEEDS = {2900000001: [2900000002, 2900000014, 2999999999, 2900000001]}
+
+
 def workshop_items(seed):
     """the made-up Workshop items: (id, title, tags, consumer app, banned, files, symlinks); the ids are made up"""
     rng = random.Random(seed * 31 + 7)
@@ -391,7 +397,7 @@ class WorkshopItem:
         up, down = self.browser()[1:3]
         return up / (up + down) if up + down else 0.0
 
-    def details(self, extra=False):
+    def details(self, extra=False, children=False):
         creator, up, down, created, kind, extras, host = self.browser()
         tags = b"".join(pb_bytes(52, pb_bytes(1, t)) for t in self.tags)
         votes = pb_float(1, self.score()) + pb_varint(2, up) + pb_varint(3, down)
@@ -402,6 +408,11 @@ class WorkshopItem:
                pb_fixed64(14, self.depot.gid) + pb_bytes(16, self.title.encode()) + pb_varint(19, created) +
                pb_varint(20, created + 86400 * 30) + pb_varint(21, 0) + pb_varint(28, int(self.banned)) + tags +
                pb_bytes(17, description) + pb_bytes(55, votes))
+        # (1.1.3: the items it needs - Steam's required items, GetDetails' children when includechildren is asked)
+        if children and self.id in NEEDS:
+            out += pb_varint(49, len(NEEDS[self.id])) + b"".join(
+                pb_bytes(53, pb_varint(1, child) + pb_varint(2, index) + pb_varint(3, 0))
+                for index, child in enumerate(NEEDS[self.id]))
         if extra:
             for index, other in enumerate(extras):
                 if other == "video":
@@ -517,8 +528,9 @@ class State:
     def new_token(self, fresh=True):
         if fresh:
             self.refresh_token = "eyJ0ZXN0.FAKE-REFRESH-" + os.urandom(12).hex()
-        with open(self.token_file, "a") as kept:
-            kept.write(self.refresh_token + "\n")
+        if self.token_file:
+            with open(self.token_file, "a") as kept:
+                kept.write(self.refresh_token + "\n")
 
     def __init__(self, args):
         self.args = args
@@ -532,17 +544,23 @@ class State:
         # revoked: a revoked one is refused at the logon with Revoked, 26, as Steam does)
         # (each line "<token> [revoked]"; the last unrevoked one is the account's live token, a new QR approval after a
         # revoke gets a new one - as Steam's do)
+        # (1.1.3: "<token> ended" - a session logged on without should_remember_password that logged off ends its
+        # refresh token, which Steam then refuses with AccessDenied, 15: the device test of Nov 25, the kept sign-in
+        # refused at the start after a session that logged off)
         self.token_file = args.token_file
         self.revoked_tokens = set()
+        self.ended_tokens = set()
         if self.token_file and os.path.exists(self.token_file):
             with open(self.token_file) as kept:
                 for line in kept.read().splitlines():
                     parts = line.split()
                     if len(parts) >= 2 and parts[1] == "revoked":
                         self.revoked_tokens.add(parts[0])
+                    elif len(parts) >= 2 and parts[1] == "ended":
+                        self.ended_tokens.add(parts[0])
                     elif parts:
                         self.refresh_token = parts[0]
-            if self.refresh_token in self.revoked_tokens:
+            if self.refresh_token in self.revoked_tokens or self.refresh_token in self.ended_tokens:
                 self.new_token()
         elif self.token_file:
             self.new_token(fresh=False)
@@ -660,6 +678,8 @@ def cm_client(state, conn):
     state.log("cm: connected")
     polls = 0
     logged_on = False
+    # (the session's logon: its token, and whether it asked Steam to keep the session - should_remember_password)
+    logon_token, remember = None, False
     steamid = 76561198000000000
     if state.mode == "badmulti":
         ws_send(conn, cm_message(1, pb_varint(1, 50) + pb_bytes(2, b"\x1f\x8bnot gzip at all")))
@@ -698,6 +718,13 @@ def cm_client(state, conn):
                 polls += 1
                 if state.mode == "qr_refuse" and polls >= 2:
                     result = 9
+                elif state.mode == "qr_drop" and polls >= 2 and not state.lost:
+                    # (1.1.3 device test, Nov 25: the QR left unscanned, Steam closed the connection under it - once;
+                    # the next QR is approved)
+                    state.lost = True
+                    state.log("cm: the QR's connection closed")
+                    conn.shutdown(socket.SHUT_RDWR)
+                    return
                 elif polls == 2:
                     reply = pb_bytes(2, "https://s.team/q/1/FAKEQR2")
                 elif polls >= 3:
@@ -731,8 +758,10 @@ def cm_client(state, conn):
                 assert logged_on and emsg == 151
                 ids = [v for n, v in body if n == 1]
                 extra = first(body, 3, 0) == 1
-                state.log("cm: workshop details %s%s" % (" ".join(str(i) for i in ids), " (a page)" if extra else ""))
-                reply = b"".join(pb_bytes(1, i.details(extra)) for i in state.workshop if i.id in ids)
+                children = first(body, 4, 0) == 1
+                state.log("cm: workshop details %s%s%s" % (" ".join(str(i) for i in ids), " (a page)" if extra else "",
+                                                           " (children)" if children else ""))
+                reply = b"".join(pb_bytes(1, i.details(extra, children)) for i in state.workshop if i.id in ids)
             elif name == "PublishedFile.GetUserFiles#1":
                 assert logged_on and emsg == 151
                 page, per_page = first(body, 4, 1), first(body, 5, 1)
@@ -772,7 +801,7 @@ def cm_client(state, conn):
                                      steamid=steamid if logged_on else 0, session=42 if logged_on else 0))
         elif emsg == 5514:
             ok = (first(body, 108, b"").decode() == state.refresh_token and first(body, 50) == b"fakeplayer" and
-                  first(body, 8, 0) == 0 and first(body, 1) == 65580)
+                  first(body, 8, 0) in (0, 1) and first(body, 1) == 65580)
             eresult = 1 if ok else 5
             if state.mode == "logon_refuse":
                 ok, eresult = False, 5
@@ -781,7 +810,10 @@ def cm_client(state, conn):
                 ok, eresult = False, 20
             elif first(body, 108, b"").decode() in state.revoked_tokens:
                 ok, eresult = False, 26
-            state.log("cm: logon %s" % ("ok" if ok else "refused %d" % eresult))
+            elif first(body, 108, b"").decode() in state.ended_tokens:
+                ok, eresult = False, 15
+            logon_token, remember = (first(body, 108, b"").decode(), first(body, 8, 0) == 1) if ok else (None, False)
+            state.log("cm: logon %s%s" % ("ok" if ok else "refused %d" % eresult, " (remembered)" if ok and remember else ""))
             response = cm_message(751, pb_varint(1, eresult) + pb_varint(3, 5) + pb_varint(7, 7),
                                   steamid=steamid if ok else 0, session=42 if ok else 0)
             logged_on = ok
@@ -833,6 +865,15 @@ def cm_client(state, conn):
         elif emsg == 706:
             state.log("cm: logoff")
             ws_send(conn, cm_message(757, pb_varint(1, 1)))
+            # (a session Steam was not asked to keep: its log-off ends its refresh token)
+            if logged_on and logon_token and not remember and logon_token not in state.revoked_tokens:
+                state.ended_tokens.add(logon_token)
+                state.log("cm: the session's token ended (logged off, not remembered)")
+                if state.token_file:
+                    with open(state.token_file, "a") as kept:
+                        kept.write(logon_token + " ended\n")
+                if logon_token == state.refresh_token:
+                    state.new_token()
             logged_on = False
         else:
             state.log("cm: emsg %d ignored" % emsg)

@@ -3793,6 +3793,18 @@ static const char *mod_kind_name(int kind)
 		kind == HALO_MOD_KIND_MCC_MOD ? T("MCC mod") : T("Unknown file");
 }
 
+/* (1.1.3) an entry's kind and where it came from in words: a Steam Workshop item as one */
+static const char *mod_entry_kind_name(const struct halo_mod_entry *entry)
+{
+	return entry->workshop ? T("Workshop item") : mod_kind_name(entry->kind);
+}
+
+static const char *mod_source_name(const struct halo_mod_entry *entry)
+{
+	return entry->source == HALO_MOD_SOURCE_MAP_SHARE ? T("Received through map sharing") :
+		entry->source == HALO_MOD_SOURCE_WORKSHOP ? T("Steam Workshop") : T("Copied in by hand");
+}
+
 static void mod_modes_text(char *text, int size, int modes)
 {
 	int length = 0;
@@ -5589,10 +5601,13 @@ static const char *setting_help(const struct setting *setting)
 	static char camera_help[128];
 	int row = playstation_row(setting);
 
-	/* (1.1.3: the rows that need Halo Custom Edition's files, without them) */
+	/* (1.1.3: the rows that need Halo Custom Edition's files, without them. The classic panel's help is one
+	line of 70 characters - the longer one ran off its right edge, device test, Nov 25 -; the ElDewrito panel wraps
+	the longer one) */
 	if (halo_ce_files_state < 0 && ((setting->variable && !strcmp(setting->variable, "HALO_MENU_STYLE")) ||
 		(setting->kind == KIND_ACTION && setting->action == ACTION_WORKSHOP)))
-		return T("Needs the Custom Edition files (bitmaps.map, loc.map, sounds.map in the maps folder)");
+		return classic_panel() ? T("Needs Custom Edition files in maps: bitmaps.map, loc.map, sounds.map") :
+			T("Needs the Custom Edition files (bitmaps.map, loc.map, sounds.map in the maps folder)");
 
 	if (setting->variable && !strcmp(setting->variable, "HALO_MAP_SHARE_FROM") && setting->choice >= 0 &&
 		setting->choice < 3)
@@ -5711,7 +5726,7 @@ static void help_line(char *text, int size, const struct line *line)
 		else if (entry->needs[0])
 			snprintf(text, (size_t)size, T("Needs: %.60s"), entry->needs);
 		else
-			snprintf(text, (size_t)size, T("%s: on or off, or delete it"), mod_kind_name(entry->kind));
+			snprintf(text, (size_t)size, T("%s: on or off, or delete it"), mod_entry_kind_name(entry));
 	}
 	else if (line && line->type == LINE_PARTY_MEMBER)
 	{
@@ -6249,7 +6264,7 @@ static int list_text(char *text, int size, const struct line *lines, int count, 
 			size_text(size_name, sizeof(size_name), (unsigned long long)entry->kilobytes << 10);
 			snprintf(name, sizeof(name), "%.20s", entry->kind == HALO_MOD_KIND_MCC_MOD ? entry->title : entry->file);
 			length += snprintf(text + length, (size_t)(size - length), "\n%s\x02  %s%*s %8s  %s", name, state,
-				pad > 0 ? pad : 0, "", size_name, mod_kind_short(entry->kind));
+				pad > 0 ? pad : 0, "", size_name, entry->workshop ? "WS" : mod_kind_short(entry->kind));
 		}
 		else
 		{
@@ -6294,9 +6309,11 @@ static int list_text(char *text, int size, const struct line *lines, int count, 
 				if (online_panel_style() && last > 0)
 					length += snprintf(text + length, (size_t)(size - length), "\x0b%d/%d", setting->choice, last);
 				/* (the choices this build does not offer, greyed out after a
-				'\x07', after the arrow's place: vita_gxm.c menu_row) */
+				'\x07', after the arrow's place: vita_gxm.c menu_row and
+				online_panel; not the chosen one, shown already - a saved
+				ElDewrito without the Custom Edition files) */
 				for (choice = 0; choice <= last && length < size; choice++)
-					if (choice_disabled(setting, choice))
+					if (choice != setting->choice && choice_disabled(setting, choice))
 						length += snprintf(text + length, (size_t)(size - length), "\x07%s", T(setting->names[choice]));
 			}
 		}
@@ -6852,12 +6869,11 @@ static void show_mod_details(void)
 	}
 	size_text(size_name, sizeof(size_name), (unsigned long long)entry->kilobytes << 10);
 	mod_modes_text(modes, sizeof(modes), entry->modes);
-	length += snprintf(body + length, sizeof(body) - length, "%s: %s\n", T("Type"), mod_kind_name(entry->kind));
+	length += snprintf(body + length, sizeof(body) - length, "%s: %s\n", T("Type"), mod_entry_kind_name(entry));
 	length += snprintf(body + length, sizeof(body) - length, "%s: %s%.47s\n", T("File"),
 		entry->kind == HALO_MOD_KIND_MCC_MOD ? "mods/" : "maps/", entry->file);
 	length += snprintf(body + length, sizeof(body) - length, "%s: %s\n", T("Size"), size_name);
-	length += snprintf(body + length, sizeof(body) - length, "%s: %s\n", T("From"),
-		entry->source == HALO_MOD_SOURCE_MAP_SHARE ? T("Received through map sharing") : T("Copied in by hand"));
+	length += snprintf(body + length, sizeof(body) - length, "%s: %s\n", T("From"), mod_source_name(entry));
 	length += snprintf(body + length, sizeof(body) - length, "%s: %s\n", T("Works in"), modes);
 	if (entry->kind == HALO_MOD_KIND_MCC_MOD)
 		length += snprintf(body + length, sizeof(body) - length, T("Maps: %d, %d of them play\n"), entry->maps,

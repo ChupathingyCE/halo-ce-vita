@@ -573,6 +573,50 @@ def test_more_than_512_named_object_names_are_refused(report_tool, tmp_path):
     assert report["mcc_cea_fix"] == "the scenario names more objects than this build has room for"
 
 
+def scan_cases(tmp_path):
+    """(name, path) of caches the fix takes and refuses: the mods folder's scan
+    must say what the fix says (mcc_cea_cache_runnable)"""
+    count = 20000
+    valid = [index for index in range(count) if index >= 2000 or index % 2]
+    cases = [
+        ("minimal", Cache().write(tmp_path / "minimal")),
+        ("packed", Cache(script_nodes=(count, valid, {valid[0]: datum(valid[1]), valid[1]: NONE})).write(tmp_path / "packed")),
+        ("too many nodes", Cache(script_nodes=(GAME_NODES + 1, None, {})).write(tmp_path / "nodes")),
+        ("names moved", Cache(name_count=531, name_references=[("script", 520), ("command", 530), ("conversation", 515),
+                                                               ("script", 3), ("command", 511)]).write(tmp_path / "moved")),
+        ("too many names", Cache(name_count=600, name_references=[("command", index) for index in range(513)]
+                                 ).write(tmp_path / "names")),
+        ("too many named by scripts", Cache(name_count=600, name_references=[("script", index) for index in range(513)]
+                                            ).write(tmp_path / "scriptnames")),
+    ]
+    cache = Cache(script_nodes=(8, None, {}))
+    path = cache.write(tmp_path / "parameters")
+    script = cache.where["tag_data"] + cache.addresses["script"] - BASE
+    cases.append(("script parameters", patched(path, script + 0x50, "<I", 1)))
+    cache = Cache(script_nodes=(8, None, {}))
+    path = cache.write(tmp_path / "parameter_node")
+    nodes = cache.where["tag_data"] + cache.addresses["array"] + 0x38 - BASE
+    cases.append(("a node naming a parameter", patched(path, nodes + 3 * 20 + 6, "<H", 0x15)))
+    return cases
+
+
+def test_the_mods_folders_scan_says_what_the_fix_says(report_tool, tmp_path):
+    # (1.1.3 device test, Nov 25: a Workshop map whose scripts take parameters was offered to play and failed at the
+    # load - the scan now reads the same checks from the file, without loading the tags)
+    verdicts = {}
+    for name, path in scan_cases(tmp_path):
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        returncode, report = run_report(report_tool, path)
+        assert report["mcc_cea_runnable"] == report["mcc_cea_fix"], name
+        verdicts[name] = report["mcc_cea_runnable"]
+    assert verdicts["minimal"] == verdicts["packed"] == verdicts["names moved"] == "ok"
+    assert verdicts["script parameters"] == verdicts["a node naming a parameter"] == \
+        "the scenario's scripts take parameters, which this build does not run"
+    assert verdicts["too many nodes"].startswith("the scenario's scripts use more syntax nodes")
+    assert verdicts["too many names"] == verdicts["too many named by scripts"] == \
+        "the scenario names more objects than this build has room for"
+
+
 def test_a_dxt_bitmap_not_marked_compressed_is_marked_and_mcc_flags_cleared(report_tool, tmp_path):
     # DXT1 64x64, six mipmaps claimed, pixels for the first three (2048 + 512 + 128)
     cache = Cache(bitmap=(64, 64, 14, 0x201, 6, 2688))

@@ -1532,10 +1532,10 @@ static int flow(int argc, char **argv)
 	callbacks.free_space = free_space;
 	steam_download_run(&options, &callbacks, &result);
 	printf("result ok=%d cancelled=%d files=%u already=%u recorded=%u downloaded=%llu written=%llu retried=%u revoked=%d "
-		"logged_off=%d found=%d kept=%d signed_out=%d error=%s\n", result.ok, result.cancelled, result.files_done,
+		"logged_off=%d found=%d kept=%d signed_out=%d qr_expired=%d error=%s\n", result.ok, result.cancelled, result.files_done,
 		result.files_already, result.files_recorded, (unsigned long long)result.bytes_downloaded, (unsigned long long)result.bytes_written,
 		result.chunks_retried, result.revoked, result.logged_off, result.signin_found, result.kept, result.signed_out,
-		result.error[0] ? result.error : "-");
+		result.qr_expired, result.error[0] ? result.error : "-");
 	fclose(log_file);
 	return 0;
 }

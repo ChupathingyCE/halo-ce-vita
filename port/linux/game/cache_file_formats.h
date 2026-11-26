@@ -724,6 +724,19 @@ enum cache_file_status mcc_cea_cache_fix(
 	uint32_t loaded_bytes,
 	struct mcc_cea_fix_report *report);
 
+/* (port) Whether mcc_cea_cache_fix would take the Halo: CE Anniversary cache
+`map` (described by `identity`, cache_file_identify's), read from the file
+a piece at a time without loading its tags (the mods folder's scan, before a
+map is offered to play): its scripts' parameters, its script syntax nodes
+in use and the object names past 512 something names, checked as the fix
+checks them. Returns _cache_file_status_ok (also for any other format), or
+the problem the fix would return; a block that does not lie within the tag
+data is taken as empty here, as the fix takes it (the load refuses such a
+map on its own). */
+enum cache_file_status mcc_cea_cache_runnable(
+	struct cache_file_source *map,
+	struct cache_file_identity const *identity);
+
 /* Says that the pointers of the tag cache custom_edition_cache_load filled
 now point to `address`, where the tag cache is, rather than to
 CUSTOM_EDITION_TAG_CACHE_ADDRESS: a process that cannot have the tag cache
