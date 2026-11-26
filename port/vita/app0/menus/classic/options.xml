@@ -40,12 +40,12 @@
 	<widget name="ce/opt/h_advanced" left="29" top="11" width="512" height="64" bitmap="ce/opt/header_advanced_art"/>
 	<!-- (a page's name, under its parent's heading, as GAME MANAGER's "L R:" line) -->
 	<widget name="ce/opt/page_line" type="text" left="67" top="76" width="480" height="22" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
-	<widget name="ce/opt/opt_label" type="text" left="0" top="0" width="330" height="22" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" text_flags="no_focus_test"/>
-	<widget name="ce/opt/opt_value" type="text" left="0" top="0" width="160" height="22" font="ui\large_ui" color="#FF2896FF" align="center" text_y="4" text_flags="no_focus_test"/>
+	<widget name="ce/opt/opt_label" type="text" left="0" top="0" width="286" height="22" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" text_flags="no_focus_test"/>
+	<widget name="ce/opt/opt_value" type="text" left="0" top="0" width="200" height="22" font="ui\large_ui" color="#FF2896FF" align="center" text_y="4" text_flags="no_focus_test"/>
 	<!-- (the label's and the value's smaller twins, small_ui: a translation too wide for the large letters shown whole,
 	menu_functions.c classic_text_fit) -->
-	<widget name="ce/opt/opt_label_small" type="text" left="0" top="0" width="330" height="22" font="ui\small_ui" color="#FF2896FF" text_x="13" text_y="7" text_flags="no_focus_test"/>
-	<widget name="ce/opt/opt_value_small" type="text" left="0" top="0" width="160" height="22" font="ui\small_ui" color="#FF2896FF" align="center" text_y="7" text_flags="no_focus_test"/>
+	<widget name="ce/opt/opt_label_small" type="text" left="0" top="0" width="286" height="22" font="ui\small_ui" color="#FF2896FF" text_x="13" text_y="7" text_flags="no_focus_test"/>
+	<widget name="ce/opt/opt_value_small" type="text" left="0" top="0" width="200" height="22" font="ui\small_ui" color="#FF2896FF" align="center" text_y="7" text_flags="no_focus_test"/>
 	<widget name="ce/opt/opt_left" left="0" top="0" width="6" height="12" bitmap="ui\shell\bitmaps\arrow_sm_left"/>
 	<widget name="ce/opt/opt_right" left="0" top="0" width="6" height="12" bitmap="ui\shell\bitmaps\arrow_sm_right"/>
 	<!-- (a typed row's text - LOBBY NAME, PASSWORD -: at the right, no arrows) -->
@@ -57,9 +57,9 @@
 		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
 		<child widget="ce/opt/opt_label"/>
 		<child widget="ce/opt/opt_label_small"/>
-		<child widget="ce/opt/opt_left" x="326" y="8"/>
-		<child widget="ce/opt/opt_value" x="332" y="1"/>
-		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_left" x="286" y="8"/>
+		<child widget="ce/opt/opt_value" x="292" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="292" y="1"/>
 		<child widget="ce/opt/opt_right" x="492" y="8"/>
 		<child widget="ce/opt/opt_text" x="252" y="1"/>
 	</widget>
@@ -70,9 +70,9 @@
 		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
 		<child widget="ce/opt/opt_label"/>
 		<child widget="ce/opt/opt_label_small"/>
-		<child widget="ce/opt/opt_left" x="326" y="8"/>
-		<child widget="ce/opt/opt_value" x="332" y="1"/>
-		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_left" x="286" y="8"/>
+		<child widget="ce/opt/opt_value" x="292" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="292" y="1"/>
 		<child widget="ce/opt/opt_right" x="492" y="8"/>
 		<child widget="ce/opt/opt_text" x="252" y="1"/>
 	</widget>
@@ -83,9 +83,9 @@
 		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
 		<child widget="ce/opt/opt_label"/>
 		<child widget="ce/opt/opt_label_small"/>
-		<child widget="ce/opt/opt_left" x="326" y="8"/>
-		<child widget="ce/opt/opt_value" x="332" y="1"/>
-		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_left" x="286" y="8"/>
+		<child widget="ce/opt/opt_value" x="292" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="292" y="1"/>
 		<child widget="ce/opt/opt_right" x="492" y="8"/>
 		<child widget="ce/opt/opt_text" x="252" y="1"/>
 	</widget>
@@ -96,9 +96,9 @@
 		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
 		<child widget="ce/opt/opt_label"/>
 		<child widget="ce/opt/opt_label_small"/>
-		<child widget="ce/opt/opt_left" x="326" y="8"/>
-		<child widget="ce/opt/opt_value" x="332" y="1"/>
-		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_left" x="286" y="8"/>
+		<child widget="ce/opt/opt_value" x="292" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="292" y="1"/>
 		<child widget="ce/opt/opt_right" x="492" y="8"/>
 		<child widget="ce/opt/opt_text" x="252" y="1"/>
 	</widget>
@@ -109,9 +109,9 @@
 		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
 		<child widget="ce/opt/opt_label"/>
 		<child widget="ce/opt/opt_label_small"/>
-		<child widget="ce/opt/opt_left" x="326" y="8"/>
-		<child widget="ce/opt/opt_value" x="332" y="1"/>
-		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_left" x="286" y="8"/>
+		<child widget="ce/opt/opt_value" x="292" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="292" y="1"/>
 		<child widget="ce/opt/opt_right" x="492" y="8"/>
 		<child widget="ce/opt/opt_text" x="252" y="1"/>
 	</widget>
@@ -122,9 +122,9 @@
 		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
 		<child widget="ce/opt/opt_label"/>
 		<child widget="ce/opt/opt_label_small"/>
-		<child widget="ce/opt/opt_left" x="326" y="8"/>
-		<child widget="ce/opt/opt_value" x="332" y="1"/>
-		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_left" x="286" y="8"/>
+		<child widget="ce/opt/opt_value" x="292" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="292" y="1"/>
 		<child widget="ce/opt/opt_right" x="492" y="8"/>
 		<child widget="ce/opt/opt_text" x="252" y="1"/>
 	</widget>
@@ -135,9 +135,9 @@
 		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
 		<child widget="ce/opt/opt_label"/>
 		<child widget="ce/opt/opt_label_small"/>
-		<child widget="ce/opt/opt_left" x="326" y="8"/>
-		<child widget="ce/opt/opt_value" x="332" y="1"/>
-		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_left" x="286" y="8"/>
+		<child widget="ce/opt/opt_value" x="292" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="292" y="1"/>
 		<child widget="ce/opt/opt_right" x="492" y="8"/>
 		<child widget="ce/opt/opt_text" x="252" y="1"/>
 	</widget>
@@ -148,9 +148,9 @@
 		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
 		<child widget="ce/opt/opt_label"/>
 		<child widget="ce/opt/opt_label_small"/>
-		<child widget="ce/opt/opt_left" x="326" y="8"/>
-		<child widget="ce/opt/opt_value" x="332" y="1"/>
-		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_left" x="286" y="8"/>
+		<child widget="ce/opt/opt_value" x="292" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="292" y="1"/>
 		<child widget="ce/opt/opt_right" x="492" y="8"/>
 		<child widget="ce/opt/opt_text" x="252" y="1"/>
 	</widget>
