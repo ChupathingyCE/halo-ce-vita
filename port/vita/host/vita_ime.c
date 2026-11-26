@@ -29,8 +29,10 @@ static SceWChar16 ime_title[SCE_IME_DIALOG_MAX_TITLE_LENGTH];
 static SceWChar16 ime_initial[IME_TEXT_SIZE];
 static SceWChar16 ime_input[IME_TEXT_SIZE + 1];
 static int ime_open;
-/* (when it closed: vita_ime_blocking's moment after) */
+/* (when it closed: vita_ime_blocking's moment after; 0 once the touches are the game's again) and whether a read has
+seen the front panel with no finger since */
 static unsigned long long ime_closed_us;
+static int ime_lifted;
 /* (how long after it closes the touches stay the dialog's: the finger that pressed its OK or Cancel lifting) */
 #define IME_AFTER_US 500000ULL
 
@@ -134,6 +136,7 @@ int vita_ime_poll(char *text, int size)
 	ime_log("sceImeDialogTerm", sceImeDialogTerm());
 	ime_open = 0;
 	ime_closed_us = sceKernelGetProcessTimeWide();
+	ime_lifted = 0;
 	if (status < 0 || code < 0 || result.button != SCE_IME_DIALOG_BUTTON_ENTER)
 	{
 		memset(ime_input, 0, sizeof(ime_input));
@@ -151,8 +154,21 @@ int vita_ime_poll(char *text, int size)
 /* 1.1.3-insider.8v: the touches are the dialog's while it is open and for a moment after it closes - the system's
 keyboard does not keep them from the game: 8u device test, Nov 26, taps on the Workshop search's keyboard reached
 the Workshop's cards behind it (card tapped -> details -> download, twice). The pad's buttons were already the
-dialog's (vita_settings.c game_text_input, held_after_close) */
-int vita_ime_blocking(void)
+dialog's (vita_settings.c game_text_input, held_after_close). After it closes they stay the dialog's for half a
+second and until a read sees no finger on the front panel (8v audit: the finger that pressed OK, still down at
+0.5 s, came to the game as a new press) */
+int vita_ime_blocking(int front_fingers)
 {
-	return ime_open || (ime_closed_us && sceKernelGetProcessTimeWide() - ime_closed_us < IME_AFTER_US);
+	if (ime_open)
+		return 1;
+	if (!ime_closed_us)
+		return 0;
+	if (!front_fingers)
+		ime_lifted = 1;
+	if (ime_lifted && sceKernelGetProcessTimeWide() - ime_closed_us >= IME_AFTER_US)
+	{
+		ime_closed_us = 0;
+		return 0;
+	}
+	return 1;
 }
