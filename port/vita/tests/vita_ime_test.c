@@ -3,9 +3,11 @@ VITA_IME_TEST.C
 
 A desktop test of the system keyboard's hold on the touches (port/vita/host/
 vita_ime.c, included whole; the system's dialog calls stood in for here):
-vita_ime_blocking is 1 from the dialog's opening, while it is open, and after
-it closes for half a second and until a read sees no finger on the front panel
-(8v audit: a finger held on OK past half a second), then 0 - vita_input.c's touch_read gives the
+every finger is the dialog's from its opening, while it is open, and for half
+a second after it closes; then the front fingers down as it closed stay its
+own until each lifts (8v audit: a finger held on OK past half a second), three
+seconds at most (a thumb resting on the glass), and any other finger is the
+game's - vita_input.c's touch_read gives the
 game no fingers meanwhile. 1.1.3-insider.8v, 8u device test, Nov 26: taps
 on the Workshop search's keyboard reached the Workshop's cards behind it.
 
@@ -73,37 +75,86 @@ static void check(int condition, const char *what)
 		failures++;
 }
 
+/* a read of the front panel with these fingers (report ids; -1 ends) and a rear one if rear: which are the game's */
+static int front_ids[8], front_count;
+
+static void read_front(int a, int b)
+{
+	front_count = 0;
+	if (a >= 0)
+		front_ids[front_count++] = a;
+	if (b >= 0)
+		front_ids[front_count++] = b;
+	vita_ime_touch_frame(front_ids, front_count);
+}
+
+static int game_has(int id)
+{
+	return !vita_ime_touch_blocked(1, id);
+}
+
+static void close_with_ok(int finger)
+{
+	char text[64];
+
+	dialog_status = SCE_COMMON_DIALOG_STATUS_RUNNING;
+	check(vita_ime_open("Search", "", 32, 0) == 0, "the keyboard opened");
+	read_front(finger, -1);
+	clock_us += 16000;
+	dialog_status = SCE_COMMON_DIALOG_STATUS_FINISHED;
+	check(vita_ime_poll(text, sizeof(text)) == 1, "closed with OK");
+}
+
 int main(void)
 {
 	char text[64];
 
-	check(!vita_ime_blocking(0), "no keyboard yet: the touches are the game's");
-	check(vita_ime_open("Search", "", 32, 0) == 0 && vita_ime_blocking(1), "the keyboard opened: the touches are not the game's");
+	read_front(-1, -1);
+	check(game_has(1) && !vita_ime_touch_blocked(0, 1), "no keyboard yet: the touches are the game's");
+	check(vita_ime_open("Search", "", 32, 0) == 0, "the keyboard opened");
+	read_front(1, -1);
+	check(!game_has(1) && !game_has(7) && vita_ime_touch_blocked(0, 2),
+		"open: no finger is the game's, front or rear (8u device test: the Workshop's cards tapped)");
 	clock_us += 30000000;
-	check(vita_ime_poll(text, sizeof(text)) == 0 && vita_ime_blocking(1),
-		"30 s of typing, the keyboard still open: still not the game's (8u device test: the Workshop's cards tapped)");
+	check(vita_ime_poll(text, sizeof(text)) == 0 && !game_has(1), "30 s of typing, still open: still not the game's");
+
+	/* (the finger on OK still down as it closes) */
+	read_front(5, -1);
 	dialog_status = SCE_COMMON_DIALOG_STATUS_FINISHED;
-	check(vita_ime_poll(text, sizeof(text)) == 1 && vita_ime_blocking(1),
-		"closed with OK: not the game's at once (the finger that pressed OK still down)");
-	clock_us += 100000;
-	check(vita_ime_blocking(0), "0.1 s after, the finger lifted: still not the game's (half a second at least)");
-	clock_us += 300000;
-	check(vita_ime_blocking(1), "0.4 s after, a finger down again: still not the game's");
+	check(vita_ime_poll(text, sizeof(text)) == 1, "closed with OK, finger 5 on OK");
+	read_front(5, -1);
+	check(!game_has(5) && vita_ime_touch_blocked(0, 1), "at once: finger 5 and the rear not the game's");
+	clock_us += 400000;
+	read_front(5, 6);
+	check(!game_has(5) && !game_has(6) && vita_ime_touch_blocked(0, 1), "0.4 s after: every finger the keyboard's, rear too");
 	clock_us += 200000;
-	check(!vita_ime_blocking(1), "0.6 s after, lifted once since: the game's again (a finger put down after the close)");
-	check(!vita_ime_blocking(0), "and stays the game's");
-	/* (8v audit: the finger that pressed OK still down past half a second came to the game as a new press,
-	vita_controls.c) */
-	dialog_status = SCE_COMMON_DIALOG_STATUS_RUNNING;
-	check(vita_ime_open("Search", "", 32, 0) == 0 && vita_ime_blocking(1), "opened again: not the game's");
-	dialog_status = SCE_COMMON_DIALOG_STATUS_FINISHED;
-	check(vita_ime_poll(text, sizeof(text)) == 1 && vita_ime_blocking(1), "closed with OK, the finger on OK");
-	clock_us += 600000;
-	check(vita_ime_blocking(1), "0.6 s after, that finger still down: still not the game's (never a new press)");
+	read_front(5, 6);
+	check(!game_has(5), "0.6 s after, finger 5 (down as it closed) still down: still the keyboard's (8v audit: never a new press)");
+	check(game_has(6) && !vita_ime_touch_blocked(0, 1), "0.6 s after: finger 6, put down after the close, and the rear are the game's");
 	clock_us += 1400000;
-	check(vita_ime_blocking(1), "2 s after, still held: still not the game's");
-	check(!vita_ime_blocking(0), "lifted: the game's again");
-	check(!vita_ime_blocking(1), "the next finger down is the game's: a new touch");
+	read_front(5, -1);
+	check(!game_has(5), "2 s after, finger 5 still held: still the keyboard's");
+	read_front(-1, -1);
+	read_front(5, -1);
+	check(game_has(5), "finger 5 lifted, then id 5 down again: a new finger, the game's");
+
+	/* (8v audit: a thumb resting on the glass, or a ghost touch, down as it closes and never lifting) */
+	close_with_ok(9);
+	read_front(9, -1);
+	clock_us += 1000000;
+	read_front(9, 10);
+	check(!game_has(9) && game_has(10), "1 s after, the resting thumb 9 held: a new tap, 10, is the game's");
+	check(!vita_ime_touch_blocked(0, 3), "1 s after: the rear pad is the game's");
+	read_front(9, -1);
+	clock_us += 1900000;
+	read_front(9, -1);
+	check(!game_has(9), "2.9 s after: thumb 9 still the keyboard's");
+	clock_us += 200000;
+	read_front(9, -1);
+	check(game_has(9), "3.1 s after: nothing is the keyboard's any more, thumb 9 the game's");
+	clock_us += 7000000;
+	read_front(9, 11);
+	check(game_has(9) && game_has(11), "10 s after: the thumb and a new tap the game's");
 	printf("-- %d of %d checks failed\n", failures, checks);
 	return failures ? 1 : 0;
 }

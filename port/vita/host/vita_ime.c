@@ -29,12 +29,20 @@ static SceWChar16 ime_title[SCE_IME_DIALOG_MAX_TITLE_LENGTH];
 static SceWChar16 ime_initial[IME_TEXT_SIZE];
 static SceWChar16 ime_input[IME_TEXT_SIZE + 1];
 static int ime_open;
-/* (when it closed: vita_ime_blocking's moment after; 0 once the touches are the game's again) and whether a read has
-seen the front panel with no finger since */
+/* (when it closed: the moment after it, 0 once the touches are all the game's again) and the front panel's fingers
+down as it closed (their report ids), the dialog's until each lifts; the front fingers of the last read while it was
+open */
 static unsigned long long ime_closed_us;
-static int ime_lifted;
-/* (how long after it closes the touches stay the dialog's: the finger that pressed its OK or Cancel lifting) */
+#define IME_HELD_MAXIMUM 16
+static int ime_held[IME_HELD_MAXIMUM], ime_held_count;
+static int ime_seen[IME_HELD_MAXIMUM], ime_seen_count;
+/* (whether a read has come since it closed) */
+static int ime_read_since_close;
+/* (how long after it closes every touch stays the dialog's - the finger that pressed its OK or Cancel lifting -; and
+how long at most a finger down as it closed stays the dialog's: a thumb resting on the glass, a ghost touch) */
 #define IME_AFTER_US 500000ULL
+#define IME_HELD_MAXIMUM_US 3000000ULL
+#define IME_FIRST_READ_US 100000ULL
 
 static void ime_log(const char *step, int result)
 {
@@ -115,6 +123,7 @@ int vita_ime_open(const char *title, const char *text, int maximum_length, int p
 	if (result < 0)
 		return -1;
 	ime_open = 1;
+	ime_seen_count = 0;
 	vgxm_common_dialog(1);
 	return 0;
 }
@@ -136,7 +145,11 @@ int vita_ime_poll(char *text, int size)
 	ime_log("sceImeDialogTerm", sceImeDialogTerm());
 	ime_open = 0;
 	ime_closed_us = sceKernelGetProcessTimeWide();
-	ime_lifted = 0;
+	/* (the fingers down as it closed: the last read's while it was open) */
+	memcpy(ime_held, ime_seen, sizeof(ime_held));
+	ime_held_count = ime_seen_count;
+	ime_seen_count = 0;
+	ime_read_since_close = 0;
 	if (status < 0 || code < 0 || result.button != SCE_IME_DIALOG_BUTTON_ENTER)
 	{
 		memset(ime_input, 0, sizeof(ime_input));
@@ -154,21 +167,72 @@ int vita_ime_poll(char *text, int size)
 /* 1.1.3-insider.8v: the touches are the dialog's while it is open and for a moment after it closes - the system's
 keyboard does not keep them from the game: 8u device test, Nov 26, taps on the Workshop search's keyboard reached
 the Workshop's cards behind it (card tapped -> details -> download, twice). The pad's buttons were already the
-dialog's (vita_settings.c game_text_input, held_after_close). After it closes they stay the dialog's for half a
-second and until a read sees no finger on the front panel (8v audit: the finger that pressed OK, still down at
-0.5 s, came to the game as a new press) */
-int vita_ime_blocking(int front_fingers)
+dialog's (vita_settings.c game_text_input, held_after_close). After it closes every touch stays the dialog's for
+half a second; then the front panel's fingers that were down as it closed stay the dialog's until each lifts (8v
+audit: the finger that pressed OK, still down at 0.5 s, came to the game as a new press), three seconds at most (a
+thumb resting on the glass, or a ghost touch, must not keep the touches from the game); any other finger is the
+game's */
+void vita_ime_touch_frame(const int *front_ids, int count)
 {
+	int index, other, kept = 0;
+
+	if (count > IME_HELD_MAXIMUM)
+		count = IME_HELD_MAXIMUM;
+	if (ime_open)
+	{
+		memcpy(ime_seen, front_ids, (size_t)count * sizeof(*front_ids));
+		ime_seen_count = count;
+		return;
+	}
+	if (!ime_closed_us)
+		return;
+	if (sceKernelGetProcessTimeWide() - ime_closed_us >= IME_HELD_MAXIMUM_US)
+	{
+		ime_closed_us = 0;
+		ime_held_count = 0;
+		return;
+	}
+	/* (a finger down as it closed that has lifted is gone: its id may come again as a new finger's) */
+	for (index = 0; index < ime_held_count; index++)
+	{
+		for (other = 0; other < count && front_ids[other] != ime_held[index]; other++)
+			;
+		if (other < count)
+			ime_held[kept++] = ime_held[index];
+	}
+	ime_held_count = kept;
+	/* (a finger down at the first read after it closed counts as down as it closed: the read before was a frame ago -
+	a read soon after alone, never one that came late) */
+	if (!ime_read_since_close)
+	{
+		ime_read_since_close = 1;
+		for (index = 0; index < count && ime_held_count < IME_HELD_MAXIMUM &&
+			sceKernelGetProcessTimeWide() - ime_closed_us < IME_FIRST_READ_US; index++)
+		{
+			for (other = 0; other < ime_held_count && ime_held[other] != front_ids[index]; other++)
+				;
+			if (other == ime_held_count)
+				ime_held[ime_held_count++] = front_ids[index];
+		}
+	}
+	if (!ime_held_count && sceKernelGetProcessTimeWide() - ime_closed_us >= IME_AFTER_US)
+		ime_closed_us = 0;
+}
+
+int vita_ime_touch_blocked(int front, int id)
+{
+	int index;
+
 	if (ime_open)
 		return 1;
 	if (!ime_closed_us)
 		return 0;
-	if (!front_fingers)
-		ime_lifted = 1;
-	if (ime_lifted && sceKernelGetProcessTimeWide() - ime_closed_us >= IME_AFTER_US)
-	{
-		ime_closed_us = 0;
+	if (sceKernelGetProcessTimeWide() - ime_closed_us < IME_AFTER_US)
+		return 1;
+	if (!front)
 		return 0;
-	}
-	return 1;
+	for (index = 0; index < ime_held_count; index++)
+		if (ime_held[index] == id)
+			return 1;
+	return 0;
 }
