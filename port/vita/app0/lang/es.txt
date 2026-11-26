@@ -737,6 +737,7 @@
 "the scenario's scripts are larger than this build has room for" = "los scripts del escenario no caben en esta versión"
 "it needs Custom Edition's bitmaps.map, sounds.map and loc.map" = "necesita bitmaps.map, sounds.map y loc.map de Custom Edition"
 "this build cannot run it" = "esta versión no puede ejecutarlo"
+"its OpenSauce mod set's name is not a plain file name" = "el nombre de su conjunto de mods de OpenSauce no es un nombre válido"
 "a Custom Edition campaign map: copy it into the maps folder" = "un mapa de campaña de Custom Edition: cópialo a la carpeta maps"
 "it is a protected map whose tags this port cannot read" = "es un mapa protegido cuyos tags este port no puede leer"
 "it has no scenario this port can find (a protected or damaged map)" = "no tiene un escenario que este port pueda encontrar (un mapa protegido o dañado)"

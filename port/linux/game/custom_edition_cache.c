@@ -1075,9 +1075,43 @@ static boolean custom_edition_map_path(
 	return FALSE;
 }
 
+/* (port, 8v audit) whether an OpenSauce cache names a mod set (its resource maps data_files\<mod>-bitmaps.map...)
+that is not a plain file name: letters, digits, ' ', '_', '-' and '.', never "..", no path or drive - the name is the
+map's own header's, untrusted. Such a map has no resource maps here: it cannot be loaded, said why */
+static boolean custom_edition_cache_mod_set_name_unsafe(
+	struct cache_file_identity const *identity)
+{
+	char const *name = identity->opensauce.mod_name;
+	long index;
+
+	if (!identity->has_opensauce_header ||
+		!TEST_FLAG(identity->opensauce.flags, _opensauce_cache_uses_mod_data_files_bit))
+	{
+		return FALSE;
+	}
+	if (!name[0] || strstr(name, ".."))
+	{
+		return TRUE;
+	}
+	for (index = 0; name[index]; index++)
+	{
+		char c = name[index];
+
+		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '_' ||
+			c == '-' || c == '.'))
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
 /* A cache's resource map of `type`: <maps>\bitmaps.map and so on, or for an
 OpenSauce cache built with a mod set, <maps>\data_files\<mod>-bitmaps.map
-(the mod set file name is an assumption: docs/custom_edition_caches.md). */
+(the mod set file name is an assumption: docs/custom_edition_caches.md); none
+for a mod set name that is not a plain file name
+(custom_edition_cache_mod_set_name_unsafe). */
 static boolean custom_edition_resource_map_path(
 	struct cache_file_identity const *identity,
 	enum resource_map_type type,
@@ -1089,6 +1123,11 @@ static boolean custom_edition_resource_map_path(
 	if (identity->has_opensauce_header &&
 		TEST_FLAG(identity->opensauce.flags, _opensauce_cache_uses_mod_data_files_bit))
 	{
+		if (custom_edition_cache_mod_set_name_unsafe(identity))
+		{
+			error(_error_silent, "custom edition: an OpenSauce mod set name that is not a plain file name: no resource maps");
+			return FALSE;
+		}
 		if (strlen(directory) + strlen(identity->opensauce.mod_name) + strlen(type_name) + 32 >= MAP_PATH_SIZE)
 		{
 			return FALSE;
@@ -1949,6 +1988,7 @@ static char const *const mod_map_reasons[] =
 	N_("it needs Custom Edition's bitmaps.map, sounds.map and loc.map"),
 	N_("a Custom Edition campaign map: copy it into the maps folder"),
 	N_("this build cannot run it"),
+	N_("its OpenSauce mod set's name is not a plain file name"),
 };
 /* :mods reasons */
 enum
@@ -1960,6 +2000,7 @@ enum
 	_mod_map_reason_resource_maps,
 	_mod_map_reason_custom_edition_campaign,
 	_mod_map_reason_other,
+	_mod_map_reason_mod_set_name,
 };
 
 /* the mods scan's reason for what mcc_cea_cache_runnable refused, in the player's language */
@@ -2009,13 +2050,22 @@ short custom_edition_cache_mod_map_check(
 		short type;
 
 		custom_edition_file_close(&file);
+		if (custom_edition_cache_mod_set_name_unsafe(&identity))
+		{
+			error(_error_silent, "mods: '%s' (a Custom Edition map) names an OpenSauce mod set that is not a plain file name", path);
+			if (why && why_size > 0)
+			{
+				snprintf(why, (size_t)why_size, "%s", T(mod_map_reasons[_mod_map_reason_mod_set_name]));
+			}
+			return NONE;
+		}
 		for (type = _resource_map_bitmaps; type < NUMBER_OF_RESOURCE_MAP_TYPES; type++)
 		{
 			char resource_path[MAP_PATH_SIZE];
 
 			if (TEST_FLAG(used, type) &&
-				custom_edition_resource_map_path(&identity, (enum resource_map_type)type, resource_path) &&
-				!file_path_exists(resource_path))
+				(!custom_edition_resource_map_path(&identity, (enum resource_map_type)type, resource_path) ||
+					!file_path_exists(resource_path)))
 			{
 				error(_error_silent, "mods: '%s' (a Custom Edition map) needs %s", path, resource_path);
 				if (why && why_size > 0)
@@ -2167,9 +2217,16 @@ boolean custom_edition_cache_missing_resource_maps(
 		char path[MAP_PATH_SIZE];
 		char const *directory = cache_files_map_directory();
 
-		if (!TEST_FLAG(used, type) ||
-			!custom_edition_resource_map_path(&identity, (enum resource_map_type)type, path) ||
-			file_path_exists(path))
+		if (!TEST_FLAG(used, type))
+		{
+			continue;
+		}
+		/* (8v audit: a mod set name that is not a plain file name: its resource maps are missing, said so) */
+		if (!custom_edition_resource_map_path(&identity, (enum resource_map_type)type, path))
+		{
+			snprintf(path, sizeof(path), "%sdata_files\\(an OpenSauce mod set name not taken)", directory);
+		}
+		else if (file_path_exists(path))
 		{
 			continue;
 		}
@@ -2561,6 +2618,14 @@ static struct cache_file_tag_header *custom_edition_cache_tags_load_private(
 	{
 		error(_error_silent, "custom edition: '%s' is not a loadable cache (%s)", path, cache_file_status_describe(status));
 		custom_edition_cache_load_failure_reason(T(cache_file_status_describe(status)));
+		custom_edition_cache_files_close();
+		return NULL;
+	}
+	/* (8v audit: the OpenSauce mod set its header names, untrusted, made a path of only when a plain file name) */
+	if (custom_edition_cache_mod_set_name_unsafe(&identity))
+	{
+		error(_error_silent, "custom edition: '%s' is not loaded: its OpenSauce mod set name is not a plain file name", path);
+		custom_edition_cache_load_failure_reason(T(mod_map_reasons[_mod_map_reason_mod_set_name]));
 		custom_edition_cache_files_close();
 		return NULL;
 	}
