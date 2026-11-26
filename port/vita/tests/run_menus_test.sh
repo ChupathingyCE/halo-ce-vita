@@ -396,7 +396,7 @@
 #            BOTS, CHAT, INFECTION, GAME FILES), a value changed on each and the environment the game reads having it at
 #            once, each row's label and value the panel's own (classic_options_check.py reads vita_settings.c's table;
 #            that a change is kept in settings.txt is run_vita_settings_test.sh's test_settings_rows), Circle back up,
-#            the eight rows scrolled, a row dimmed with its reason until the row it waits for allows it (DYNAMIC
+#            the eight rows scrolled, MASTER VOLUME's Left quieter and Right louder (1.1.3-insider.8v), a row dimmed with its reason until the row it waits for allows it (DYNAMIC
 #            MINIMUM, AD HOC ROOM, PASSWORD, PC MAP VEHICLES; SETTINGS PANEL on a PC), RESET CONTROLS, CHECK FOR
 #            UPDATES, JOIN WITH A CODE (the code screen) and EXTRACT PC FILES asked first, LOBBY NAME typed, THANK YOU's
 #            note; then every page visited on MCC's files alone and in Spanish (both files); without sounds.map, PC MAPS
@@ -4783,7 +4783,7 @@ PY
 			$d $a @gyro $r @gyro_set $b $d $a @touch $r $d $r @touch_set $b $d @reset_row $a @reset_ask $a @reset_done $b
 			$d $a @graphics $d $d @dynmin_off $u $l @dynamic $d $r @dynmin_set $d $d $d $d $d $d $d $d @graphics_end $a
 			@detail $r @detail_set $d $d $d $d $d $d $d $d $d @detail_end $b $b $cs_end"
-		cs_walk_b="$cs_reach $d $d $a @sound $r @sound_set $b $d $a @interface $d $d $d $d $r @interface_set $b
+		cs_walk_b="$cs_reach $d $d $a @sound $l $r @sound_set $b $d $a @interface $d $d $d $d $r @interface_set $b
 			$d $a @online $d @adhoc_off $d $a @join_ask $b $d $r @online_set $d $d $a @games $a @games_typed $d $r $d $r
 			$d @password_off $b $d $a @crossplay $r @crossplay_set $b $d $a @bots $r @bots_set $b $d $a @chat $r
 			@chat_set $b $d $a @infection $r @infection_set $b $u $u $u $u $u $u $u $a @join_ask_again a:150:3000 @code
@@ -4869,6 +4869,9 @@ PY
 		cs_run cpsettings-b "$menus_data" 220 "$cs_walk_b" SOUND,INTERFACE,ONLINE,YOUR\ GAMES,PS\ VITA\ AND\ PC,BOTS,CHAT,INFECTION en HALO_CONTENT_ROOT=none
 		log=$out/cpsettings-b/run.log
 		grep -aq "menus: ce options: set HALO_NET_LOBBY_NAME (typed); now Classic room" "$log" || fail cpsettings-b "LOBBY NAME not typed"
+		# (1.1.3-insider.8v: MASTER VOLUME's Left quieter, Right louder - 8u device test, Nov 26: Right took it from 100% to 90%)
+		[ "$(grep -a "menus: ce options: set HALO_VOLUME=" "$log" | head -2 | sed 's/.*set HALO_VOLUME=\([0-9.]*\).*/\1/' | tr '\n' ' ')" = "0.9 1.0 " ] ||
+			fail cpsettings-b "MASTER VOLUME: Left from 100% not 90%, then Right not 100% again"
 		grep -aq "PASSWORD focused (NONE): Only with VISIBILITY: PUBLIC" "$log" ||
 			fail cpsettings-b "PASSWORD not dimmed with its reason once PRIVATE"
 		grep -aq "ce options row: ONLINE|HALO_ADHOC_ROOM|AD HOC ROOM|1|Only with CONNECTION: AD HOC" "$log" ||
