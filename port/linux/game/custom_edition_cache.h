@@ -278,6 +278,15 @@ _scenario_type_multiplayer: a Steam Workshop item's multiplayer map,
 workshop_maps.h), else NONE (logged). */
 short custom_edition_cache_mod_map_kind(
 	char const *path);
+/* (port) custom_edition_cache_mod_map_kind's check, and what the load's
+mcc_cea_cache_fix would refuse (cache_file_formats.h:
+mcc_cea_cache_runnable, read from the file, the verdict remembered by path,
+size and checksum): NONE with the player's words in `why` (empty when it is
+not a map of a kind this build takes at all) */
+short custom_edition_cache_mod_map_check(
+	char const *path,
+	char *why,
+	long why_size);
 /* (port) The loader the Halo content folder's map file at `path` asks for
 by its header (mcc_content.h's table: enum content_library_loader), and its
 game's index into `game_index` (may be NULL): none for a file that cannot

@@ -6719,6 +6719,362 @@ enum cache_file_status mcc_cea_cache_fix(
 	return _cache_file_status_ok;
 }
 
+/* (port) mcc_cea_cache_runnable: the file's own bytes, read a piece at a
+time (a map's tags are 10 MB and more, which the Vita's C heap at the main
+menu has not in one piece: scene_pack_ce.c) */
+
+/* the nodes read at a time */
+#define RUNNABLE_NODES_A_READ 512
+
+struct runnable_block
+{
+	uint32_t file_offset;
+	int32_t count;
+};
+
+/* the tag block `block` (12 bytes of the file) as mcc_cea_block_elements
+takes it of the loaded tags: its elements' place in the file and their
+count, 0 when it has none or they do not lie within the tag data */
+static void runnable_block_get(
+	struct cache_file_identity const *identity,
+	uint8_t const *block,
+	uint32_t element_bytes,
+	struct runnable_block *out)
+{
+	int32_t count;
+	uint32_t offset;
+
+	out->count = 0;
+	out->file_offset = 0;
+	if (loaded_block_get(block, MCC_CEA_TAG_CACHE_ADDRESS, identity->tag_data_size, element_bytes, &count, &offset) &&
+		count > 0)
+	{
+		out->count = count;
+		out->file_offset = identity->tag_data_offset + offset;
+	}
+
+	return;
+}
+
+static int runnable_read(
+	struct cache_file_source *map,
+	uint32_t file_offset,
+	uint32_t size,
+	void *buffer)
+{
+	return range_fits(file_offset, size, map->size) && map->read(map->context, file_offset, size, buffer);
+}
+
+struct runnable_names
+{
+	int32_t name_count;
+	uint8_t *referenced;
+};
+
+static void runnable_name_mark(
+	struct runnable_names *names,
+	uint8_t const *field)
+{
+	int16_t name_index = read_s16(field);
+
+	if (name_index >= 0 && name_index < names->name_count)
+	{
+		names->referenced[name_index] = 1;
+	}
+
+	return;
+}
+
+/* the object names the AI command lists' commands and the conversations'
+participants name, marked (mcc_cea_object_name_references_visit's, but
+the scripts' nodes, which the caller marks) */
+static enum cache_file_status runnable_ai_names_mark(
+	struct cache_file_source *map,
+	struct cache_file_identity const *identity,
+	uint8_t const *scenario,
+	struct runnable_names *names)
+{
+	struct runnable_block lists;
+	struct runnable_block conversations;
+	int32_t index;
+
+	runnable_block_get(identity, scenario + SCENARIO_AI_COMMAND_LISTS_OFFSET, AI_COMMAND_LIST_BYTES, &lists);
+	for (index = 0; index < lists.count; index++)
+	{
+		uint8_t list_block[TAG_BLOCK_BYTES];
+		uint8_t command[AI_COMMAND_BYTES];
+		struct runnable_block commands;
+		int32_t command_index;
+
+		if (!runnable_read(map, lists.file_offset + (uint32_t)index * AI_COMMAND_LIST_BYTES + AI_COMMAND_LIST_COMMANDS_OFFSET,
+			TAG_BLOCK_BYTES, list_block))
+		{
+			return _cache_file_status_read_failed;
+		}
+		runnable_block_get(identity, list_block, AI_COMMAND_BYTES, &commands);
+		for (command_index = 0; command_index < commands.count; command_index++)
+		{
+			if (!runnable_read(map, commands.file_offset + (uint32_t)command_index * AI_COMMAND_BYTES, AI_COMMAND_BYTES, command))
+			{
+				return _cache_file_status_read_failed;
+			}
+			runnable_name_mark(names, command + AI_COMMAND_OBJECT_NAME_OFFSET);
+		}
+	}
+	runnable_block_get(identity, scenario + SCENARIO_AI_CONVERSATIONS_OFFSET, AI_CONVERSATION_BYTES, &conversations);
+	for (index = 0; index < conversations.count; index++)
+	{
+		uint8_t conversation_block[TAG_BLOCK_BYTES];
+		uint8_t participant[AI_CONVERSATION_PARTICIPANT_BYTES];
+		struct runnable_block participants;
+		int32_t participant_index;
+
+		if (!runnable_read(map,
+			conversations.file_offset + (uint32_t)index * AI_CONVERSATION_BYTES + AI_CONVERSATION_PARTICIPANTS_OFFSET,
+			TAG_BLOCK_BYTES, conversation_block))
+		{
+			return _cache_file_status_read_failed;
+		}
+		runnable_block_get(identity, conversation_block, AI_CONVERSATION_PARTICIPANT_BYTES, &participants);
+		for (participant_index = 0; participant_index < participants.count; participant_index++)
+		{
+			if (!runnable_read(map, participants.file_offset + (uint32_t)participant_index * AI_CONVERSATION_PARTICIPANT_BYTES,
+				AI_CONVERSATION_PARTICIPANT_BYTES, participant))
+			{
+				return _cache_file_status_read_failed;
+			}
+			runnable_name_mark(names, participant + AI_CONVERSATION_PARTICIPANT_OBJECT_NAME_OFFSET);
+			runnable_name_mark(names, participant + AI_CONVERSATION_PARTICIPANT_NEW_OBJECT_NAME_OFFSET);
+		}
+	}
+
+	return _cache_file_status_ok;
+}
+
+/* each node of the script syntax node array of `node_count` whose first
+node is at `nodes_offset` in the file: whether one in use names a script's
+parameter (`parameters`), how many are in use (`*in_use`), and, with
+`names`, the object names the constants among them name marked */
+static enum cache_file_status runnable_nodes_walk(
+	struct cache_file_source *map,
+	uint32_t nodes_offset,
+	int32_t node_count,
+	int parameters,
+	int32_t *in_use,
+	struct runnable_names *names)
+{
+	uint8_t *buffer = malloc(RUNNABLE_NODES_A_READ * HS_SYNTAX_NODE_BYTES);
+	int32_t first;
+
+	*in_use = 0;
+	if (!buffer)
+	{
+		return _cache_file_status_out_of_memory;
+	}
+	for (first = 0; first < node_count; first += RUNNABLE_NODES_A_READ)
+	{
+		int32_t count = node_count - first < RUNNABLE_NODES_A_READ ? node_count - first : RUNNABLE_NODES_A_READ;
+		int32_t index;
+
+		if (!runnable_read(map, nodes_offset + (uint32_t)first * HS_SYNTAX_NODE_BYTES, (uint32_t)count * HS_SYNTAX_NODE_BYTES,
+			buffer))
+		{
+			free(buffer);
+			return _cache_file_status_read_failed;
+		}
+		for (index = 0; index < count; index++)
+		{
+			uint8_t const *node = buffer + (uint32_t)index * HS_SYNTAX_NODE_BYTES;
+			uint16_t flags = read_u16(node + HS_SYNTAX_NODE_FLAGS_OFFSET);
+			int16_t constant_type = read_s16(node + HS_SYNTAX_NODE_CONSTANT_TYPE_OFFSET);
+
+			if (!read_u16(node + HS_SYNTAX_NODE_IDENTIFIER_OFFSET))
+			{
+				continue;
+			}
+			(*in_use)++;
+			if (parameters && (flags & HS_SYNTAX_NODE_PARAMETER_FLAGS_MASK) == HS_SYNTAX_NODE_PARAMETER_FLAGS)
+			{
+				free(buffer);
+				return _cache_file_status_script_parameters;
+			}
+			if (names &&
+				flag_is_set(flags, HS_SYNTAX_NODE_PRIMITIVE_BIT) &&
+				!flag_is_set(flags, HS_SYNTAX_NODE_SCRIPT_BIT) &&
+				!flag_is_set(flags, HS_SYNTAX_NODE_GLOBAL_BIT) &&
+				constant_type >= HS_TYPE_FIRST_OBJECT_NAME &&
+				constant_type <= HS_TYPE_LAST_OBJECT_NAME)
+			{
+				runnable_name_mark(names, node + HS_SYNTAX_NODE_DATA_OFFSET);
+			}
+		}
+	}
+	free(buffer);
+
+	return _cache_file_status_ok;
+}
+
+enum cache_file_status mcc_cea_cache_runnable(
+	struct cache_file_source *map,
+	struct cache_file_identity const *identity)
+{
+	uint8_t tag_index[TAG_INDEX_BYTES];
+	uint8_t instance[TAG_INSTANCE_BYTES];
+	uint8_t scenario[SCENARIO_BYTES];
+	uint8_t array_header[DATA_ARRAY_HEADER_BYTES];
+	uint8_t const *syntax_data = scenario + SCENARIO_HS_SYNTAX_DATA_OFFSET;
+	uint32_t base = MCC_CEA_TAG_CACHE_ADDRESS;
+	uint32_t mcc_bytes = DATA_ARRAY_HEADER_BYTES + MCC_CEA_MAXIMUM_HS_SYNTAX_NODES * HS_SYNTAX_NODE_BYTES;
+	uint32_t game_bytes = DATA_ARRAY_HEADER_BYTES + MAXIMUM_HS_SYNTAX_NODES_PER_SCENARIO * HS_SYNTAX_NODE_BYTES;
+	uint32_t scenario_handle;
+	uint32_t scenario_address;
+	uint32_t array_address;
+	int32_t syntax_size;
+	int32_t tag_count;
+	int32_t node_count = 0;
+	uint32_t nodes_offset = 0;
+	int32_t in_use;
+	struct runnable_block scripts;
+	struct runnable_names names;
+	enum cache_file_status status;
+	int32_t index;
+
+	if (identity->format != _cache_file_format_mcc_cea_cache)
+	{
+		return _cache_file_status_ok;
+	}
+	/* the tag index and the scenario (as mcc_cea_tag_cache_bytes found them) */
+	if (!runnable_read(map, identity->tag_data_offset, TAG_INDEX_BYTES, tag_index))
+	{
+		return _cache_file_status_read_failed;
+	}
+	tag_count = read_s32(tag_index + TAG_INDEX_COUNT_OFFSET);
+	scenario_handle = read_u32(tag_index + TAG_INDEX_SCENARIO_OFFSET);
+	if (tag_count <= 0 ||
+		(uint32_t)tag_count > ABSOLUTE_INDEX_MASK + 1 ||
+		(scenario_handle & ABSOLUTE_INDEX_MASK) >= (uint32_t)tag_count ||
+		!runnable_read(map,
+			identity->tag_data_offset + TAG_INDEX_BYTES + (scenario_handle & ABSOLUTE_INDEX_MASK) * TAG_INSTANCE_BYTES,
+			TAG_INSTANCE_BYTES,
+			instance) ||
+		(scenario_address = read_u32(instance + TAG_INSTANCE_ADDRESS_OFFSET)) < base ||
+		!range_fits(scenario_address - base, SCENARIO_BYTES, identity->tag_data_size) ||
+		!runnable_read(map, identity->tag_data_offset + (scenario_address - base), SCENARIO_BYTES, scenario))
+	{
+		return _cache_file_status_bad_scenario_tag;
+	}
+
+	/* the scripts' parameters (mcc_cea_script_parameters_refuse) */
+	runnable_block_get(identity, scenario + SCENARIO_HS_SCRIPTS_OFFSET, HS_SCRIPT_BYTES, &scripts);
+	for (index = 0; index < scripts.count; index++)
+	{
+		uint8_t count[4];
+
+		if (!runnable_read(map,
+			scripts.file_offset + (uint32_t)index * HS_SCRIPT_BYTES + HS_SCRIPT_PARAMETERS_OFFSET + TAG_BLOCK_COUNT_OFFSET,
+			sizeof(count), count))
+		{
+			return _cache_file_status_read_failed;
+		}
+		if (read_u32(count))
+		{
+			return _cache_file_status_script_parameters;
+		}
+	}
+
+	/* the syntax nodes: MCC's array (mcc_cea_script_nodes_pack), or one of
+	this build's size, which the game runs as it is */
+	syntax_size = read_s32(syntax_data + TAG_DATA_SIZE_OFFSET);
+	array_address = read_u32(syntax_data + TAG_DATA_ADDRESS_OFFSET);
+	if (syntax_size == (int32_t)mcc_bytes || syntax_size == (int32_t)game_bytes)
+	{
+		int mcc_array = syntax_size == (int32_t)mcc_bytes;
+
+		if (array_address < base ||
+			!range_fits(array_address - base, (uint32_t)syntax_size, identity->tag_data_size) ||
+			(mcc_array && ((array_address - base) & 3)))
+		{
+			if (mcc_array)
+			{
+				return _cache_file_status_bad_script_nodes;
+			}
+		}
+		else if (!runnable_read(map, identity->tag_data_offset + (array_address - base), DATA_ARRAY_HEADER_BYTES, array_header))
+		{
+			return _cache_file_status_read_failed;
+		}
+		else
+		{
+			node_count = read_s16(array_header + DATA_ARRAY_COUNT_OFFSET);
+			nodes_offset = identity->tag_data_offset + (array_address - base) + DATA_ARRAY_HEADER_BYTES;
+			if (mcc_array)
+			{
+				if (read_s16(array_header + DATA_ARRAY_MAXIMUM_COUNT_OFFSET) != MCC_CEA_MAXIMUM_HS_SYNTAX_NODES ||
+					read_s16(array_header + DATA_ARRAY_ELEMENT_BYTES_OFFSET) != HS_SYNTAX_NODE_BYTES ||
+					node_count < 0)
+				{
+					return _cache_file_status_bad_script_nodes;
+				}
+				status = runnable_nodes_walk(map, nodes_offset, node_count, 1, &in_use, NULL);
+				if (status != _cache_file_status_ok)
+				{
+					return status;
+				}
+				if (in_use > MAXIMUM_HS_SYNTAX_NODES_PER_SCENARIO)
+				{
+					return _cache_file_status_bad_script_nodes;
+				}
+			}
+			else if (node_count < 0 || node_count > MAXIMUM_HS_SYNTAX_NODES_PER_SCENARIO)
+			{
+				node_count = 0;
+			}
+		}
+	}
+
+	/* the object names past 512 that something names (mcc_cea_object_names_fit) */
+	{
+		struct runnable_block object_names;
+
+		runnable_block_get(identity, scenario + SCENARIO_OBJECT_NAMES_OFFSET, SCENARIO_OBJECT_NAME_BYTES, &object_names);
+		names.name_count = object_names.count;
+	}
+	if (names.name_count <= MAXIMUM_OBJECT_NAMES_PER_SCENARIO)
+	{
+		return _cache_file_status_ok;
+	}
+	if (names.name_count > INT16_MAX)
+	{
+		return _cache_file_status_bad_object_names;
+	}
+	names.referenced = calloc((size_t)names.name_count, 1);
+	if (!names.referenced)
+	{
+		return _cache_file_status_out_of_memory;
+	}
+	status = runnable_nodes_walk(map, nodes_offset, node_count, 0, &in_use, &names);
+	if (status == _cache_file_status_ok)
+	{
+		status = runnable_ai_names_mark(map, identity, scenario, &names);
+	}
+	if (status == _cache_file_status_ok)
+	{
+		int32_t referenced_count = 0;
+
+		for (index = 0; index < names.name_count; index++)
+		{
+			referenced_count += names.referenced[index];
+		}
+		if (referenced_count > MAXIMUM_OBJECT_NAMES_PER_SCENARIO)
+		{
+			status = _cache_file_status_bad_object_names;
+		}
+	}
+	free(names.referenced);
+
+	return status;
+}
+
 void custom_edition_cache_combine_resource_offsets(
 	uint8_t *tag_cache,
 	uint32_t loaded_bytes,

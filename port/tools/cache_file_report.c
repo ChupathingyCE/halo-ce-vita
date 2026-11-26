@@ -318,6 +318,12 @@ static int report_custom_edition_cache(
 
 	memset(resource_sources, 0, sizeof(resource_sources));
 	memset(resource_maps, 0, sizeof(resource_maps));
+	/* (port) the mods folder's scan's verdict, from the file alone, before
+	any load: what mcc_cea_fix says below, or a load's refusal */
+	if (identity->format == _cache_file_format_mcc_cea_cache)
+	{
+		printf("mcc_cea_runnable: %s\n", cache_file_status_describe(mcc_cea_cache_runnable(source, identity)));
+	}
 	if (use_stock_data_files && identity->has_opensauce_header &&
 		((identity->opensauce.flags >> _opensauce_cache_uses_mod_data_files_bit) & 1))
 	{

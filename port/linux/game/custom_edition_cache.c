@@ -1868,33 +1868,124 @@ short custom_edition_cache_content_loader(
 	return (short)loader;
 }
 
-short custom_edition_cache_mod_map_kind(
-	char const *path)
+/* (port) the mods folder's maps' runnable verdicts (mcc_cea_cache_runnable:
+their scripts and object names read from the file), by path, size and
+header checksum: a scan after the first reads none of them again */
+enum
+{
+	RUNNABLE_VERDICTS = 32,
+};
+static struct
+{
+	char path[MAP_PATH_SIZE];
+	uint32_t size;
+	uint32_t checksum;
+	short status;
+} runnable_verdicts[RUNNABLE_VERDICTS];
+static short next_runnable_verdict;
+static volatile int runnable_verdicts_lock;
+
+static enum cache_file_status custom_edition_cache_runnable_verdict(
+	char const *path,
+	struct custom_edition_file *file,
+	struct cache_file_identity const *identity)
+{
+	enum cache_file_status status;
+	short index;
+
+	while (__atomic_exchange_n(&runnable_verdicts_lock, 1, __ATOMIC_ACQUIRE))
+	{
+	}
+	for (index = 0; index < RUNNABLE_VERDICTS; index++)
+	{
+		if (runnable_verdicts[index].path[0] && runnable_verdicts[index].size == file->source.size &&
+			runnable_verdicts[index].checksum == identity->checksum && !csstrcasecmp(runnable_verdicts[index].path, path))
+		{
+			status = (enum cache_file_status)runnable_verdicts[index].status;
+			__atomic_store_n(&runnable_verdicts_lock, 0, __ATOMIC_RELEASE);
+			return status;
+		}
+	}
+	__atomic_store_n(&runnable_verdicts_lock, 0, __ATOMIC_RELEASE);
+	status = mcc_cea_cache_runnable(&file->source, identity);
+	/* (out of memory, or a read that failed, is no verdict on the map: asked again next time) */
+	if (status == _cache_file_status_out_of_memory || status == _cache_file_status_read_failed ||
+		strlen(path) >= sizeof(runnable_verdicts[0].path))
+	{
+		return status;
+	}
+	while (__atomic_exchange_n(&runnable_verdicts_lock, 1, __ATOMIC_ACQUIRE))
+	{
+	}
+	index = next_runnable_verdict;
+	next_runnable_verdict = (short)((next_runnable_verdict + 1) % RUNNABLE_VERDICTS);
+	csstrcpy(runnable_verdicts[index].path, path);
+	runnable_verdicts[index].size = file->source.size;
+	runnable_verdicts[index].checksum = identity->checksum;
+	runnable_verdicts[index].status = (short)status;
+	__atomic_store_n(&runnable_verdicts_lock, 0, __ATOMIC_RELEASE);
+
+	return status;
+}
+
+short custom_edition_cache_mod_map_check(
+	char const *path,
+	char *why,
+	long why_size)
 {
 	struct custom_edition_file file;
 	struct cache_file_identity identity;
 	enum cache_file_status status;
 
+	if (why && why_size > 0)
+	{
+		why[0] = 0;
+	}
 	if (!custom_edition_file_open(&file, path))
 	{
 		return NONE;
 	}
 	status = cache_file_identify(&file.source, &identity);
-	custom_edition_file_close(&file);
 	if (status != _cache_file_status_ok || identity.format != _cache_file_format_mcc_cea_cache)
 	{
+		custom_edition_file_close(&file);
 		error(_error_silent, "mods: '%s' is left out: %s", path,
 			status != _cache_file_status_ok ? cache_file_status_describe(status) : "not a Halo: CE Anniversary map");
 		return NONE;
 	}
 	if (identity.scenario_type != _scenario_type_solo && identity.scenario_type != _scenario_type_multiplayer)
 	{
+		custom_edition_file_close(&file);
 		error(_error_silent, "mods: '%s' is left out: neither a campaign nor a multiplayer map (scenario type %d)", path,
 			identity.scenario_type);
 		return NONE;
 	}
+	/* (1.1.3 device test, Nov 25: a Workshop multiplayer map whose scripts take
+	parameters was offered to play, and its load failed; what the load's
+	mcc_cea_cache_fix refuses is now found here, before it is listed) */
+	if (why)
+	{
+		status = custom_edition_cache_runnable_verdict(path, &file, &identity);
+		if (status != _cache_file_status_ok && status != _cache_file_status_out_of_memory &&
+			status != _cache_file_status_read_failed)
+		{
+			custom_edition_file_close(&file);
+			if (why_size > 0)
+			{
+				snprintf(why, (size_t)why_size, "%s", T(cache_file_status_describe(status)));
+			}
+			return NONE;
+		}
+	}
+	custom_edition_file_close(&file);
 
 	return identity.scenario_type;
+}
+
+short custom_edition_cache_mod_map_kind(
+	char const *path)
+{
+	return custom_edition_cache_mod_map_check(path, NULL, 0);
 }
 
 boolean custom_edition_cache_mod_map_identify(
