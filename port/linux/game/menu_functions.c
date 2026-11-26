@@ -13101,6 +13101,13 @@ static void h3_steam_update(struct widget_instance *list)
 		break;
 	case STEAM_JOB_FAILED:
 	case STEAM_JOB_CANCELLED:
+		/* (1.1.3: the QR left unscanned until Steam closed it, said plainly - device test, Nov 25: "Authentication.
+		PollAuthSessionStatus#1: cannot send") */
+		if (view.phase == STEAM_JOB_FAILED && view.qr_expired)
+		{
+			snprintf(text, sizeof(text), "%s", T("The sign-in QR expired before it was approved in the Steam app. Start the download again for a new QR."));
+			break;
+		}
 		snprintf(text, sizeof(text), "%s\n%s\n\n%s", view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The download stopped:"),
 			view.phase == STEAM_JOB_CANCELLED ? "" : view.error, view.revoked ? T("Signed out of Steam. What is in stays: download again to resume.") :
 			view.kept ? T("You stay signed in on this Vita. What is in stays: download again to resume.") :
@@ -13857,7 +13864,13 @@ static void h3_workshop_update(struct widget_instance *widget)
 		snprintf(status_text, sizeof(status_text), "%s", view.phase == STEAM_JOB_DONE ? (view.kept ? T("Done. You stay signed in on this Vita.") : T("Done. Signed out of Steam.")) :
 			view.phase == STEAM_JOB_CANCELLED ? T("Stopped.") : T("The Workshop stopped."));
 		details[0] = 0;
-		if (view.phase == STEAM_JOB_FAILED)
+		if (view.phase == STEAM_JOB_FAILED && view.qr_expired)
+		{
+			/* (1.1.3 device test, Nov 25: the QR left unscanned ended in "Authentication.PollAuthSessionStatus#1:
+			cannot send" - said plainly, Cross a new QR) */
+			snprintf(details, sizeof(details), "%s\n\n", T("The sign-in QR expired before it was approved in the Steam app. Cross: a new QR."));
+		}
+		else if (view.phase == STEAM_JOB_FAILED)
 		{
 			snprintf(details, sizeof(details), "%.200s\n\n", view.error);
 		}
@@ -13870,7 +13883,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 			strncat(details, line, sizeof(details) - strlen(details) - 1);
 		}
 		strncat(details, h3_workshop.message, sizeof(details) - strlen(details) - 1);
-		if (!view.revoked && !view.kept && view.phase != STEAM_JOB_DONE)
+		if (!view.revoked && !view.kept && view.phase != STEAM_JOB_DONE && !view.qr_expired)
 			strncat(details, T("If \"Halo CE Vita (PS Vita)\" is in the Steam app's Authorized devices, remove it."),
 				sizeof(details) - strlen(details) - 1);
 		break;
@@ -14170,8 +14183,10 @@ static void h3_workshop_update(struct widget_instance *widget)
 			int button;
 
 			snprintf(download_label, sizeof(download_label), T("Download (%d)"), h3_workshop.marked_count);
-			shown[0] = (idle && !needs) || (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
-			labels[0] = idle ? h3_workshop_footer_word("{footer}Select", "Select") : grid ? T("Details") : state == 2 ? T("Update") : state == 1 ?
+			shown[0] = (idle && !needs) || (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable) ||
+				(view.phase == STEAM_JOB_FAILED && view.qr_expired);
+			labels[0] = view.phase == STEAM_JOB_FAILED && view.qr_expired ? T("New QR") :
+				idle ? h3_workshop_footer_word("{footer}Select", "Select") : grid ? T("Details") : state == 2 ? T("Update") : state == 1 ?
 				T("Download again") : T("Download");
 			shown[1] = (grid && ws.count) || (details_mode && page.state == 2 && page.downloadable);
 			{
@@ -14340,6 +14355,13 @@ static boolean h3_workshop_row(struct widget_instance *widget)
 	struct steam_job_view view;
 
 	steam_job_view(&view);
+	/* (1.1.3: the QR left unscanned until Steam closed it - Cross: a new one, the sign-in begun again) */
+	if (view.phase == STEAM_JOB_FAILED && view.qr_expired)
+	{
+		platform_log("menus: workshop: the QR timed out: a new QR");
+		steam_job_forget();
+		view.phase = STEAM_JOB_IDLE;
+	}
 	if (view.phase == STEAM_JOB_IDLE)
 	{
 		int started;

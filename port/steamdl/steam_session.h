@@ -8,6 +8,7 @@ One Steam session on a CM's WebSocket, for the download alone:
                in the Steam app (the refresh and access tokens come back);
                never a password (docs/steam_download_security.md 3.1)
   logon        ClientLogon with the refresh token, should_remember_password
+               true when the device keeps the sign-in (remember), else
                false; heartbeats while signed in
   app info     PICS: ClientPICSAccessTokenRequest, then
                ClientPICSProductInfoRequest (the appinfo KeyValues: the
@@ -20,7 +21,9 @@ One Steam session on a CM's WebSocket, for the download alone:
                ClientLogOff, the socket closed, every secret wiped
                (steam_session_end: on every path, twice is harmless) - or,
                when the device keeps the sign-in (keep_token, steam_signin.h:
-               sealed to the console, 14 days), ClientLogOff alone
+               sealed to the console, 14 days), the socket closed alone: no
+               revoke, no ClientLogOff (1.1.3 device test, Nov 25: after a
+               ClientLogOff the kept token was refused at the next start)
 
 Every secret (the tokens, the QR session's ids, the account name, the PICS
 access token, the depot keys, the request codes the caller holds) lives in
@@ -87,8 +90,13 @@ struct steam_session
 	uint64_t logon_steamid;
 	/* the last logon's EResult (0: no answer came) and the server's log-off's (0: none came) */
 	int logon_eresult, logged_off_eresult;
-	/* the token is kept on the device (steam_signin.h): the end logs off without revoking it */
+	/* the token is kept on the device (steam_signin.h): the end neither revokes it nor logs off (closes the connection
+	alone) */
 	int keep_token;
+	/* (1.1.3) the logon asks Steam to keep the session (CMsgClientLogon's should_remember_password): set when the device
+	may keep the token (steam_signin.h). A session logged on without it ends its refresh token when it logs off - device
+	test, Nov 25: the kept sign-in refused (AccessDenied) at the start after the first session that logged off */
+	int remember;
 	/* the RevokeToken is sent (the server's log-off that follows is its answer, not a kick) */
 	int revoking;
 	/* old-style (not protobuf) messages skipped, alone or in Multis; the first said in the log */

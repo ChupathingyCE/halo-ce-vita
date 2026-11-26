@@ -1550,6 +1550,7 @@ void steam_download_run(const struct steam_download_options *options, const stru
 				/* (kept from here on: a connection that fails ends without revoking it) */
 				use_kept = 1;
 				session.keep_token = 1;
+				session.remember = 1;
 				result->kept = 1;
 				say(callbacks, "steam: the sign-in kept on this device is used (saved %d days ago; kept 14)",
 					(int)(((int64_t)time(NULL) - kept->saved_at) / 86400));
@@ -1653,7 +1654,11 @@ void steam_download_run(const struct steam_download_options *options, const stru
 		state = steam_session_qr_poll(&session, url, sizeof(url), error, sizeof(error));
 		if (state == STEAM_QR_FAILED)
 		{
-			fail(result, "%s", error);
+			/* (the QR left unscanned until Steam closed its connection, or refused the poll: said plainly - the screens
+			offer a new QR; the poll's own words in the log) */
+			say(callbacks, "steam: the QR sign-in ended unscanned: %s", error);
+			result->qr_expired = 1;
+			fail(result, "The sign-in QR expired before it was approved");
 			goto end;
 		}
 		if (state == STEAM_QR_APPROVED)
@@ -1662,6 +1667,9 @@ void steam_download_run(const struct steam_download_options *options, const stru
 			goto cancelled;
 	}
 	steam_wipe(url, sizeof(url));
+	/* (a sign-in this device may keep: the logon asks Steam to keep its session - should_remember_password -, so that
+	the token outlives this session; one it cannot keep is revoked at the end, whatever was asked) */
+	session.remember = options->signin_path && options->device_secret && options->device_secret_size;
 	if (!steam_session_logon(&session, error, sizeof(error)))
 	{
 		fail(result, "%s", error);

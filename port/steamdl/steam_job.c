@@ -1343,6 +1343,7 @@ static void *worker(void *unused)
 	job.status.logged_off = result.logged_off;
 	job.status.signin_found = result.signin_found;
 	job.status.kept = result.kept;
+	job.status.qr_expired = !result.ok && !result.cancelled && result.qr_expired;
 	job.status.sign_out = options.sign_out;
 	job.status.signed_out = result.signed_out;
 	job.status.session_lost = result.session_lost;
@@ -1511,6 +1512,7 @@ void steam_job_view(struct steam_job_view *view)
 	view->files_already = status.files_already;
 	view->revoked = status.revoked;
 	view->kept = status.kept;
+	view->qr_expired = status.qr_expired;
 	view->sign_out = status.sign_out;
 	view->signed_out = status.signed_out;
 	view->signin_found = status.signin_found;
