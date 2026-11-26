@@ -165,6 +165,13 @@ static struct
 	{ "header_download_from_steam", "DOWNLOAD FROM STEAM", HEADING_LEFT },
 	{ "header_select_profile_to_edit", "SELECT PROFILE TO EDIT", HEADING_LEFT - 6 },
 	{ "header_advanced_controls", "ADVANCED CONTROLS", HEADING_LEFT - 6 },
+	/* (classic/options.xml: Classic+'s option screens, at ADVANCED CONTROLS' place) */
+	{ "header_controls", "CONTROLS", HEADING_LEFT - 6 },
+	{ "header_graphics", "GRAPHICS", HEADING_LEFT - 6 },
+	{ "header_sound", "SOUND", HEADING_LEFT - 6 },
+	{ "header_interface", "INTERFACE", HEADING_LEFT - 6 },
+	{ "header_online", "ONLINE", HEADING_LEFT - 6 },
+	{ "header_advanced", "ADVANCED", HEADING_LEFT - 6 },
 	/* (classic/xbox_netscreens.xml: the System Link list's, header_found_games on the Xbox's) */
 	{ "header_system_link_games", "SYSTEM LINK GAMES", HEADING_LEFT - 6 },
 };

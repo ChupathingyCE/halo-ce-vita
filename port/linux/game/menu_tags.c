@@ -497,6 +497,9 @@ static char const *const port_function_names[] =
 	"port forge firefight prepare",
 	/* (1.1.3: Classic+'s SETTINGS > WORKSHOP, classic/modes.xml) */
 	"port ce workshop row",
+	/* (1.1.3: Classic+'s option screens, classic/options.xml) */
+	"port ce options page", "port ce options left", "port ce options right", "port ce options a",
+	"port ce options ask", "port ce options do", "port ce options back",
 };
 
 /* the port's game data functions (menu_functions.c), from
@@ -546,6 +549,8 @@ static char const *const port_game_data_input_names[] =
 	"port ce settings",
 	/* (1.1.3: Classic+'s GAME MODES) */
 	"port ce modes",
+	/* (1.1.3: Classic+'s option screens, classic/options.xml) */
+	"port ce options", "port ce options question",
 };
 
 static struct

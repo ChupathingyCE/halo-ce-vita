@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Menu style Classic+'s option screens (1.1.3, the owner's Classic+ plan part B): SETTINGS' CONTROLS, GRAPHICS,
+     SOUND, INTERFACE, ONLINE and ADVANCED, each the settings panel's player-facing rows of that kind in the look of the
+     Xbox's own ADVANCED CONTROLS (classic/xbox_screens.xml: ui.map's gradient, the heading at 29,11 - made of the
+     game's letters, menu_titles.c, else the port's drawn one: tools/classic_menu_art.py -, rows of option_bkds
+     512 x 28 at 54,73 and 30 apart, the label in large_ui at the left, the value between arrow_sm_left and
+     arrow_sm_right at the right, the focused row's help in white large_ui under them, the button key at the foot).
+     Eight rows a screen, the rest scrolled to as GAME MANAGER's are; a row without a value opens its page on the same
+     screen - the parent's heading kept, the page's name on the line under it, the rows a line lower - and Circle goes
+     back up. A change applies at once, as the panel's (no CANCEL/ACCEPT). Which rows: port/linux/game/
+     classic_options.h; their words, values and help: the panel's own (settings_rows.h); menu_functions.c ce_opt_*.
+     An action asks first in the Xbox's question (semi_transparent_grey, alert_bkd: as QUIT does). -->
+<menus>
+	<strings name="ce/opt_text">
+		<string text="%a-button =OK   %b-button =CANCEL"/>
+	</strings>
+	<bitmap name="ce/opt/header_controls_art">
+		<frame png="classic/{lang}/header_controls.png" width="512" height="64"/>
+	</bitmap>
+	<widget name="ce/opt/h_controls" left="29" top="11" width="512" height="64" bitmap="ce/opt/header_controls_art"/>
+	<bitmap name="ce/opt/header_graphics_art">
+		<frame png="classic/{lang}/header_graphics.png" width="512" height="64"/>
+	</bitmap>
+	<widget name="ce/opt/h_graphics" left="29" top="11" width="512" height="64" bitmap="ce/opt/header_graphics_art"/>
+	<bitmap name="ce/opt/header_sound_art">
+		<frame png="classic/{lang}/header_sound.png" width="512" height="64"/>
+	</bitmap>
+	<widget name="ce/opt/h_sound" left="29" top="11" width="512" height="64" bitmap="ce/opt/header_sound_art"/>
+	<bitmap name="ce/opt/header_interface_art">
+		<frame png="classic/{lang}/header_interface.png" width="512" height="64"/>
+	</bitmap>
+	<widget name="ce/opt/h_interface" left="29" top="11" width="512" height="64" bitmap="ce/opt/header_interface_art"/>
+	<bitmap name="ce/opt/header_online_art">
+		<frame png="classic/{lang}/header_online.png" width="512" height="64"/>
+	</bitmap>
+	<widget name="ce/opt/h_online" left="29" top="11" width="512" height="64" bitmap="ce/opt/header_online_art"/>
+	<bitmap name="ce/opt/header_advanced_art">
+		<frame png="classic/{lang}/header_advanced.png" width="512" height="64"/>
+	</bitmap>
+	<widget name="ce/opt/h_advanced" left="29" top="11" width="512" height="64" bitmap="ce/opt/header_advanced_art"/>
+	<!-- (a page's name, under its parent's heading, as GAME MANAGER's "L R:" line) -->
+	<widget name="ce/opt/page_line" type="text" left="67" top="76" width="480" height="22" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="ce/opt/opt_label" type="text" left="0" top="0" width="330" height="22" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4" text_flags="no_focus_test"/>
+	<widget name="ce/opt/opt_value" type="text" left="0" top="0" width="160" height="22" font="ui\large_ui" color="#FF2896FF" align="center" text_y="4" text_flags="no_focus_test"/>
+	<!-- (the label's and the value's smaller twins, small_ui: a translation too wide for the large letters shown whole,
+	menu_functions.c classic_text_fit) -->
+	<widget name="ce/opt/opt_label_small" type="text" left="0" top="0" width="330" height="22" font="ui\small_ui" color="#FF2896FF" text_x="13" text_y="7" text_flags="no_focus_test"/>
+	<widget name="ce/opt/opt_value_small" type="text" left="0" top="0" width="160" height="22" font="ui\small_ui" color="#FF2896FF" align="center" text_y="7" text_flags="no_focus_test"/>
+	<widget name="ce/opt/opt_left" left="0" top="0" width="6" height="12" bitmap="ui\shell\bitmaps\arrow_sm_left"/>
+	<widget name="ce/opt/opt_right" left="0" top="0" width="6" height="12" bitmap="ui\shell\bitmaps\arrow_sm_right"/>
+	<!-- (a typed row's text - LOBBY NAME, PASSWORD -: at the right, no arrows) -->
+	<widget name="ce/opt/opt_text" type="text" left="0" top="0" width="246" height="22" font="ui\large_ui" color="#FF2896FF" align="right" text_y="4" text_flags="no_focus_test"/>
+	<widget name="ce/opt/row_0" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<on event="left stick_left" run="port ce options left"/>
+		<on event="right stick_right" run="port ce options right"/>
+		<on event="a start" run="port ce options a"/>
+		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
+		<child widget="ce/opt/opt_label"/>
+		<child widget="ce/opt/opt_label_small"/>
+		<child widget="ce/opt/opt_left" x="326" y="8"/>
+		<child widget="ce/opt/opt_value" x="332" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_right" x="492" y="8"/>
+		<child widget="ce/opt/opt_text" x="252" y="1"/>
+	</widget>
+	<widget name="ce/opt/row_1" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<on event="left stick_left" run="port ce options left"/>
+		<on event="right stick_right" run="port ce options right"/>
+		<on event="a start" run="port ce options a"/>
+		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
+		<child widget="ce/opt/opt_label"/>
+		<child widget="ce/opt/opt_label_small"/>
+		<child widget="ce/opt/opt_left" x="326" y="8"/>
+		<child widget="ce/opt/opt_value" x="332" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_right" x="492" y="8"/>
+		<child widget="ce/opt/opt_text" x="252" y="1"/>
+	</widget>
+	<widget name="ce/opt/row_2" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<on event="left stick_left" run="port ce options left"/>
+		<on event="right stick_right" run="port ce options right"/>
+		<on event="a start" run="port ce options a"/>
+		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
+		<child widget="ce/opt/opt_label"/>
+		<child widget="ce/opt/opt_label_small"/>
+		<child widget="ce/opt/opt_left" x="326" y="8"/>
+		<child widget="ce/opt/opt_value" x="332" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_right" x="492" y="8"/>
+		<child widget="ce/opt/opt_text" x="252" y="1"/>
+	</widget>
+	<widget name="ce/opt/row_3" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<on event="left stick_left" run="port ce options left"/>
+		<on event="right stick_right" run="port ce options right"/>
+		<on event="a start" run="port ce options a"/>
+		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
+		<child widget="ce/opt/opt_label"/>
+		<child widget="ce/opt/opt_label_small"/>
+		<child widget="ce/opt/opt_left" x="326" y="8"/>
+		<child widget="ce/opt/opt_value" x="332" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_right" x="492" y="8"/>
+		<child widget="ce/opt/opt_text" x="252" y="1"/>
+	</widget>
+	<widget name="ce/opt/row_4" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<on event="left stick_left" run="port ce options left"/>
+		<on event="right stick_right" run="port ce options right"/>
+		<on event="a start" run="port ce options a"/>
+		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
+		<child widget="ce/opt/opt_label"/>
+		<child widget="ce/opt/opt_label_small"/>
+		<child widget="ce/opt/opt_left" x="326" y="8"/>
+		<child widget="ce/opt/opt_value" x="332" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_right" x="492" y="8"/>
+		<child widget="ce/opt/opt_text" x="252" y="1"/>
+	</widget>
+	<widget name="ce/opt/row_5" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<on event="left stick_left" run="port ce options left"/>
+		<on event="right stick_right" run="port ce options right"/>
+		<on event="a start" run="port ce options a"/>
+		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
+		<child widget="ce/opt/opt_label"/>
+		<child widget="ce/opt/opt_label_small"/>
+		<child widget="ce/opt/opt_left" x="326" y="8"/>
+		<child widget="ce/opt/opt_value" x="332" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_right" x="492" y="8"/>
+		<child widget="ce/opt/opt_text" x="252" y="1"/>
+	</widget>
+	<widget name="ce/opt/row_6" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<on event="left stick_left" run="port ce options left"/>
+		<on event="right stick_right" run="port ce options right"/>
+		<on event="a start" run="port ce options a"/>
+		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
+		<child widget="ce/opt/opt_label"/>
+		<child widget="ce/opt/opt_label_small"/>
+		<child widget="ce/opt/opt_left" x="326" y="8"/>
+		<child widget="ce/opt/opt_value" x="332" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_right" x="492" y="8"/>
+		<child widget="ce/opt/opt_text" x="252" y="1"/>
+	</widget>
+	<widget name="ce/opt/row_7" type="container" left="0" top="0" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\option_bkds">
+		<on event="left stick_left" run="port ce options left"/>
+		<on event="right stick_right" run="port ce options right"/>
+		<on event="a start" run="port ce options a"/>
+		<on event="a start" run="port ce options ask" open="ce/opt/ask/screen"/>
+		<child widget="ce/opt/opt_label"/>
+		<child widget="ce/opt/opt_label_small"/>
+		<child widget="ce/opt/opt_left" x="326" y="8"/>
+		<child widget="ce/opt/opt_value" x="332" y="1"/>
+		<child widget="ce/opt/opt_value_small" x="332" y="1"/>
+		<child widget="ce/opt/opt_right" x="492" y="8"/>
+		<child widget="ce/opt/opt_text" x="252" y="1"/>
+	</widget>
+	<widget name="ce/opt/list" type="column_list" flags="pass_unhandled_to_focused_child up_down_tabs_items">
+		<data input="port ce options"/>
+		<child widget="ce/opt/row_0" x="54" y="73"/>
+		<child widget="ce/opt/row_1" x="54" y="103"/>
+		<child widget="ce/opt/row_2" x="54" y="133"/>
+		<child widget="ce/opt/row_3" x="54" y="163"/>
+		<child widget="ce/opt/row_4" x="54" y="193"/>
+		<child widget="ce/opt/row_5" x="54" y="223"/>
+		<child widget="ce/opt/row_6" x="54" y="253"/>
+		<child widget="ce/opt/row_7" x="54" y="283"/>
+	</widget>
+	<widget name="ce/opt/opt_help" type="text" left="68" top="321" width="482" height="79" font="ui\large_ui" color="#FFFFFFFF" text_flags="no_focus_test"/>
+	<widget name="ce/opt/screen" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\gradient">
+		<on event="b back" run="port ce options back" back="true"/>
+		<child widget="ce/opt/h_controls"/>
+		<child widget="ce/opt/h_graphics"/>
+		<child widget="ce/opt/h_sound"/>
+		<child widget="ce/opt/h_interface"/>
+		<child widget="ce/opt/h_online"/>
+		<child widget="ce/opt/h_advanced"/>
+		<child widget="ce/opt/page_line"/>
+		<child widget="ce/opt/opt_help"/>
+		<child widget="cp/key/b_butn"/>
+		<child widget="cp/key/back"/>
+		<child widget="cp/key/a_butn"/>
+		<child widget="cp/key/select"/>
+		<child widget="ce/opt/list"/>
+	</widget>
+
+	<!-- an action's question (RESET CONTROLS, CHECK FOR UPDATES, JOIN WITH A CODE, EXTRACT PC FILES): the row's label
+	     and the panel's help line, written by port ce options question; Cross does it (port ce options do), Circle
+	     does nothing -->
+	<widget name="ce/opt/ask/title" type="text" left="56" top="158" width="528" height="24" font="ui\large_ui" color="#FF2896FF" text_flags="no_focus_test">
+		<data input="port ce options question"/>
+	</widget>
+	<widget name="ce/opt/ask/text" type="text" left="56" top="190" width="528" height="90" font="ui\small_ui" color="#FF2896FF" text_flags="no_focus_test"/>
+	<widget name="ce/opt/ask/keys" type="text" left="56" top="283" width="528" height="24" font="ui\large_ui" color="#FF2896FF" string_list="ce/opt_text" string_index="0" text_flags="no_focus_test"/>
+	<widget name="ce/opt/ask/box" left="40" top="150" width="560" height="170" bitmap="ui\shell\bitmaps\alert_bkd">
+		<child widget="ce/opt/ask/title"/>
+		<child widget="ce/opt/ask/text"/>
+		<child widget="ce/opt/ask/keys"/>
+	</widget>
+	<widget name="ce/opt/ask/screen" flags="pass_unhandled_to_focused_child" bitmap="ui\shell\bitmaps\semi_transparent_grey">
+		<on event="a" run="port ce options do" back="true"/>
+		<on event="b back" back="true"/>
+		<child widget="ce/opt/ask/box"/>
+	</widget>
+</menus>

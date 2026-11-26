@@ -103,6 +103,11 @@ for a gamepad); a test build's HALO_TEST_TEXT_INPUT answers in its place,
 #include "network_anticheat.h"
 #include "game_chat.h"
 #include "browser_list.h"
+/* (1.1.3: Classic+'s option screens - the settings panel's rows by name, which rows each screen shows) */
+#include "../src/settings_rows.h"
+#include "../src/thank_you.h"
+#include "../src/update_check.h"
+#include "classic_options.h"
 #include "../src/system_link_shortcut.h"
 #include "forge.h"
 #include "command.h"
@@ -545,6 +550,14 @@ enum
 	_function_forge_firefight_prepare,
 	/* (1.1.3: Classic+'s SETTINGS > WORKSHOP, classic/modes.xml) */
 	_function_ce_workshop_row,
+	/* (1.1.3: Classic+'s option screens, classic/options.xml) */
+	_function_ce_options_page,
+	_function_ce_options_left,
+	_function_ce_options_right,
+	_function_ce_options_a,
+	_function_ce_options_ask,
+	_function_ce_options_do,
+	_function_ce_options_back,
 };
 
 /* in port_game_data_input_names' order */
@@ -643,6 +656,9 @@ enum
 	_input_ce_settings,
 	/* (1.1.3: Classic+'s GAME MODES, its experimental rows) */
 	_input_ce_modes,
+	/* (1.1.3: Classic+'s option screens, classic/options.xml) */
+	_input_ce_options,
+	_input_ce_options_question,
 };
 
 /* what a line of typing is for */
@@ -650,6 +666,8 @@ enum
 {
 	_typing_none,
 	_typing_workshop_search,
+	/* (1.1.3: Classic+'s option screens' LOBBY NAME and PASSWORD) */
+	_typing_ce_option,
 	_typing_password,
 	_typing_lobby_name,
 	_typing_lobby_password,
@@ -24770,6 +24788,8 @@ static boolean start_hub_panel(struct widget_instance *widget)
 panel at its page (port start panel) - only where there is a panel, the PS Vita: elsewhere they are
 not shown and the rows after them take their places from the top, 32 apart as the list has them; the
 focus on a row shown; the focused row's words (the START hub's) in the panel at the right */
+static boolean ce_opt_shown_here(void);
+
 static void ce_settings_update(struct widget_instance *list)
 {
 	static char said[32];
@@ -24788,7 +24808,9 @@ static void ce_settings_update(struct widget_instance *list)
 
 		row = start_row_of(child);
 #if !defined(HALO_VITA)
-		shown = row == NONE || !start_rows[row].panel;
+		/* (the option screens: Classic+'s own since 1.1.3, a settings panel's rows - none on a PC; the tests'
+		harness shows them, ce_opt_shown_here) */
+		shown = row == NONE || !start_rows[row].panel || ce_opt_shown_here();
 #endif
 		/* (WORKSHOP: a build with the Workshop alone; without the Custom Edition files it is there, dimmed, and says
 		so - port ce workshop row opens nothing) */
@@ -25336,6 +25358,643 @@ static boolean mp_go_online(char const *row)
 	network_connection_choose(NETWORK_CONNECTION_ONLINE);
 	platform_log("menus: %s: internet play was off: the connection switched to Online", row);
 	return network_connection_wanted() == NETWORK_CONNECTION_ONLINE;
+}
+
+/* ---- Menu style Classic+'s option screens (1.1.3, the owner's Classic+ plan part B; classic/options.xml): SETTINGS'
+CONTROLS, GRAPHICS, SOUND, INTERFACE, ONLINE and ADVANCED, each a screen of the settings panel's player-facing rows in
+the Xbox's ADVANCED CONTROLS look. One screen, ce/opt/screen, its page chosen by the SETTINGS row that opened it
+(classic_options.h: which rows each page shows); a row that opens a page opens it on the same screen - the parent's
+heading kept, the page's name on the line under it, the rows a line lower - and Circle goes back up (the owner, Nov 25:
+no heading of their own). Each row is the panel's own (settings_rows.h): its label, its values' names and its help as
+the panel words them (T(): the panel's translations), its value now, and a change made as the panel makes it, at once
+(setting_set: on the PS Vita vita_settings_set - the profile worked out again, settings.txt written; the owner: live,
+no CANCEL/ACCEPT). An action asks first (the Xbox's question, ce/opt/ask); LOBBY NAME and PASSWORD open the keyboard. A
+row that cannot be changed here and now is shown dimmed, its help saying why - never left out */
+#define CE_OPT_ROWS 8
+/* (a page's rows a line lower than a top page's, under its name) */
+#define CE_OPT_PAGE_LINE 25
+#define CE_OPT_FIRST_ROW_TOP 73
+#define CE_OPT_ROW_PITCH 30
+
+static struct
+{
+	int page;
+	int stack[4];
+	int depth;
+	int focus[CLASSIC_OPTIONS_PAGES];
+	struct browser_view view;
+	struct widget_instance *list;
+	long list_creation;
+	boolean moved;
+	/* (the page whose rows were last said in the log; the row last said focused) */
+	int said_page;
+	int said_row;
+	/* the classic_options_rows row asked about (ce/opt/ask), typed for, and whose action's outcome its help says */
+	int asked;
+	int typing_row;
+	int note_row;
+	char note[160];
+	boolean update_note;
+	/* (JOIN WITH A CODE said yes to: the code screen opened over this one at its next frame) */
+	boolean join_pending;
+} ce_opt = { CLASSIC_OPTIONS_CONTROLS, { 0 }, 0, { 0 }, { 0, 0, -1 }, NULL, 0, FALSE, -1, -1, -1, -1, -1, "", FALSE, FALSE };
+
+static boolean ce_opt_shown_here(void)
+{
+#if defined(HALO_VITA)
+	return TRUE;
+#else
+	/* (a PC has no settings panel: the rows that would be its rows are not shown; the tests' harness shows them,
+	the panel's rows built alone - settings_rows.c) */
+	char const *test = getenv("HALO_TEST_CLASSIC_OPTIONS");
+
+	return test && test[0] == '1';
+#endif
+}
+
+/* (the Custom Edition files: Classic+'s Steam screens' own check, where the build has them) */
+static boolean ce_opt_needs_custom_edition(void)
+{
+#ifdef HALO_STEAM_WORKSHOP
+	return cp_steam_needs_custom_edition();
+#else
+	return FALSE;
+#endif
+}
+
+/* the panel's words in the player's language, as Classic+ shows them: capitals, no leading spaces (the panel indents
+some of its rows: "  Bot skill") */
+static void ce_opt_words(char *text, size_t size, char const *english)
+{
+	char const *translated = T(english ? english : "");
+
+	while (*translated == ' ')
+		translated++;
+	snprintf(text, size, "%s", translated);
+	h3_capitals(text);
+}
+
+static int ce_opt_rows_of(int page, int *rows, int maximum)
+{
+	int index, count = 0;
+
+	for (index = 0; index < (int)NUMBEROF(classic_options_rows) && count < maximum; index++)
+		if (classic_options_rows[index].page == page)
+			rows[count++] = index;
+	return count;
+}
+
+/* a classic_options_rows row's panel row (none: -1) */
+static int ce_opt_panel_row(int index)
+{
+	char const *name = classic_options_rows[index].name;
+
+	return name && strcmp(name, CLASSIC_OPTIONS_PANEL) ? halo_settings_row_find(name) : -1;
+}
+
+static char const *ce_opt_value_now(char const *variable)
+{
+	int row = halo_settings_row_find(variable);
+
+	return row >= 0 ? halo_settings_row_value(row, halo_settings_row_choice(row)) : "";
+}
+
+/* "Only with RENDER RESOLUTION: DYNAMIC": the row it waits for, and that row's choice, in the panel's words */
+static void ce_opt_only_with(char *reason, size_t size, char const *variable, char const *value)
+{
+	int row = halo_settings_row_find(variable), choice;
+	char label[96], name[96];
+
+	ce_opt_words(label, sizeof(label), row >= 0 ? halo_settings_row_label(row) : variable);
+	name[0] = 0;
+	for (choice = 0; row >= 0 && choice < halo_settings_row_count(row); choice++)
+		if (!strcmp(halo_settings_row_value(row, choice), value))
+			ce_opt_words(name, sizeof(name), halo_settings_row_name(row, choice));
+	snprintf(reason, size, T("Only with %s: %s"), label, name);
+}
+
+/* why a row cannot be changed here and now (TRUE, reason set): not this build's, a PS Vita's alone, a row that waits
+for another's choice (as the panel hides it until then), the Custom Edition files missing */
+static boolean ce_opt_unavailable(int index, char *reason, size_t size)
+{
+	char const *name = classic_options_rows[index].name;
+
+	reason[0] = 0;
+	if (!name)
+		return FALSE;
+	if (!strcmp(name, CLASSIC_OPTIONS_PANEL))
+	{
+#if !defined(HALO_VITA)
+		snprintf(reason, size, "%s", T("Only on the PS Vita"));
+		return TRUE;
+#else
+		return FALSE;
+#endif
+	}
+	if (ce_opt_panel_row(index) < 0)
+	{
+		snprintf(reason, size, "%s", T("Not in this version yet."));
+		return TRUE;
+	}
+#if !defined(HALO_VITA)
+	if (!strcmp(name, "HALO_GAME_FOLDER"))
+	{
+		snprintf(reason, size, "%s", T("Only on the PS Vita"));
+		return TRUE;
+	}
+#endif
+	if (!strcmp(name, "HALO_DYNAMIC_RES_MIN") && strcmp(ce_opt_value_now("HALO_RENDER_SCALE"), "dynamic"))
+		ce_opt_only_with(reason, size, "HALO_RENDER_SCALE", "dynamic");
+	else if (!strcmp(name, "HALO_ADHOC_ROOM") && strcmp(ce_opt_value_now("HALO_VITA_NETWORK"), "adhoc"))
+		ce_opt_only_with(reason, size, "HALO_VITA_NETWORK", "adhoc");
+	else if (!strcmp(name, "HALO_NET_LOBBY_PASSWORD") && strcmp(ce_opt_value_now("HALO_NET_HOST_PUBLIC"), "true"))
+		ce_opt_only_with(reason, size, "HALO_NET_HOST_PUBLIC", "true");
+	else if (!strcmp(name, "HALO_PC_MAP_VEHICLES") && strcmp(ce_opt_value_now("HALO_CUSTOM_EDITION"), "1"))
+		ce_opt_only_with(reason, size, "HALO_CUSTOM_EDITION", "1");
+	else if (!strcmp(name, "HALO_CUSTOM_EDITION") && ce_opt_needs_custom_edition())
+		snprintf(reason, size, "%s", T("Needs the Custom Edition files"));
+	return reason[0] != 0;
+}
+
+/* whether a row's choice can be chosen here: the panel's (not the Profile's Custom, not Stable on a pre-release),
+and without the Custom Edition files no Menu style but Classic (the owner, 1.1.3) */
+static boolean ce_opt_offered(int index, int row, int choice)
+{
+	char const *name = classic_options_rows[index].name;
+
+	if (!halo_settings_row_offered(row, choice))
+		return FALSE;
+	return !(name && !strcmp(name, "HALO_MENU_STYLE") && ce_opt_needs_custom_edition() &&
+		strcmp(halo_settings_row_value(row, choice), "original"));
+}
+
+/* a row's label, and its value as shown (the choice's name; a typed row's text; none) */
+static void ce_opt_row_words(int index, char *label, size_t label_size, char *value, size_t value_size)
+{
+	int row = ce_opt_panel_row(index), opens = classic_options_rows[index].opens;
+	char const *name = classic_options_rows[index].name;
+
+	value[0] = 0;
+	if (opens != CLASSIC_OPTIONS_NONE)
+		ce_opt_words(label, label_size, classic_options_pages[opens].name);
+	else if (name && !strcmp(name, CLASSIC_OPTIONS_PANEL))
+		ce_opt_words(label, label_size, CLASSIC_OPTIONS_PANEL);
+	else if (row < 0)
+		ce_opt_words(label, label_size, name);
+	else
+	{
+		ce_opt_words(label, label_size, halo_settings_row_label(row));
+		if (halo_settings_row_kind(row) == SETTINGS_ROW_CHOICE)
+			ce_opt_words(value, value_size, halo_settings_row_name(row, halo_settings_row_choice(row)));
+		else if (halo_settings_row_kind(row) == SETTINGS_ROW_TEXT)
+		{
+			char const *text = getenv(name);
+
+			/* (a password never shown: its stars) */
+			if (!strcmp(name, "HALO_NET_LOBBY_PASSWORD") && text && text[0])
+				stars(value, (int)value_size, text);
+			else if (text && text[0])
+				snprintf(value, value_size, "%s", text);
+			else
+				ce_opt_words(value, value_size, "NONE");
+		}
+	}
+}
+
+/* the focused row's help: why it cannot be changed; what its action did; the panel's help (Classic+'s own for a
+row that opens a page and SETTINGS PANEL) */
+static void ce_opt_help(int index, char *text, size_t size)
+{
+	int row = ce_opt_panel_row(index);
+	char const *name = classic_options_rows[index].name;
+	char reason[200];
+
+	if (ce_opt_unavailable(index, reason, sizeof(reason)))
+	{
+		snprintf(text, size, "%s", reason);
+		return;
+	}
+	if (index == ce_opt.note_row && ce_opt.update_note)
+	{
+		char version[UPDATE_VERSION_SIZE], answer[160];
+		int status = update_check_status(version, sizeof(version));
+
+		answer[0] = 0;
+		if (status == UPDATE_STATUS_CHECKING)
+			snprintf(answer, sizeof(answer), "%s", T("Checking..."));
+		else if (status == UPDATE_STATUS_UP_TO_DATE)
+			snprintf(answer, sizeof(answer), "%s", T("Up to date"));
+		else if (status == UPDATE_STATUS_AVAILABLE)
+			snprintf(answer, sizeof(answer), T("Update available: %s"), version);
+		else if (status == UPDATE_STATUS_NO_CONNECTION)
+			snprintf(answer, sizeof(answer), "%s", T("Couldn't check: no connection"));
+		else if (status == UPDATE_STATUS_FAILED)
+			snprintf(answer, sizeof(answer), "%s", T("Couldn't check right now"));
+		snprintf(text, size, T("Version %s"), HALO_VITA_VERSION);
+		if (answer[0])
+			snprintf(text + strlen(text), size - strlen(text), " - %s", answer);
+		return;
+	}
+	if (index == ce_opt.note_row && ce_opt.note[0])
+	{
+		snprintf(text, size, "%s", ce_opt.note);
+		return;
+	}
+	if (classic_options_rows[index].help)
+		snprintf(text, size, "%s", T(classic_options_rows[index].help));
+	else
+		snprintf(text, size, "%s", row >= 0 ? T(halo_settings_row_help(row)) : "");
+	/* (Menu style without the Custom Edition files: Classic alone, and why) */
+	if (name && !strcmp(name, "HALO_MENU_STYLE") && ce_opt_needs_custom_edition())
+		snprintf(text, size, "%s", T("Needs the Custom Edition files"));
+	/* (a change that applies after a restart says so, as the panel's help line does) */
+	else if (row >= 0 && halo_settings_row_restart(row))
+		snprintf(text + strlen(text), size - strlen(text), "\n%s", T("Restart the game for this change"));
+}
+
+/* (port ce options page: a SETTINGS row) its page, from the top; FALSE (nothing opens) for any other row */
+static boolean ce_opt_open(struct widget_instance *widget)
+{
+	int index;
+
+	for (index = 0; widget && widget->name && index < CLASSIC_OPTIONS_TOP_PAGES; index++)
+	{
+		if (!strcmp(widget->name, classic_options_pages[index].row))
+		{
+			ce_opt.page = index;
+			ce_opt.depth = 0;
+			ce_opt.focus[index] = 0;
+			ce_opt.list = NULL;
+			ce_opt.said_page = ce_opt.said_row = -1;
+			ce_opt.note_row = -1;
+			ce_opt.update_note = FALSE;
+			platform_log("menus: ce options: %s", classic_options_pages[index].name);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/* the classic_options_rows row focused (-1: none) */
+static int ce_opt_focused(void)
+{
+	int rows[64], count = ce_opt_rows_of(ce_opt.page, rows, (int)NUMBEROF(rows)), at = ce_opt.focus[ce_opt.page];
+
+	return at >= 0 && at < count ? rows[at] : -1;
+}
+
+/* the page's rows said in the log, each "PAGE|NAME|LABEL|VALUE|state" (the tests match them with the panel's) */
+static void ce_opt_say_page(void)
+{
+	int rows[64], count = ce_opt_rows_of(ce_opt.page, rows, (int)NUMBEROF(rows)), index;
+	char label[96], value[96], reason[200];
+
+	for (index = 0; index < count; index++)
+	{
+		ce_opt_row_words(rows[index], label, sizeof(label), value, sizeof(value));
+		platform_log("menus: ce options row: %s|%s|%s|%s|%s", classic_options_pages[ce_opt.page].name,
+			classic_options_rows[rows[index]].name ? classic_options_rows[rows[index]].name :
+			classic_options_pages[classic_options_rows[rows[index]].opens].name, label, value,
+			ce_opt_unavailable(rows[index], reason, sizeof(reason)) ? reason : "on");
+	}
+}
+
+/* (port ce options, the list) the page's rows on the eight bars, the focus followed (scrolled as GAME MANAGER's);
+each row's label and value, dimmed when it cannot be changed; the parent's heading, the page's name under it; the
+focused row's help. A text typed, or JOIN WITH A CODE said yes to, taken here */
+static void ce_opt_update(struct widget_instance *list)
+{
+	struct widget_instance *screen = screen_of(list), *child, *focus = NULL, *found;
+	int rows[64], count = ce_opt_rows_of(ce_opt.page, rows, (int)NUMBEROF(rows)), index, focused_row = -1, target;
+	int top_page = ce_opt.page < CLASSIC_OPTIONS_TOP_PAGES ? ce_opt.page : classic_options_pages[ce_opt.page].parent;
+	short drop = (short)(ce_opt.page < CLASSIC_OPTIONS_TOP_PAGES ? 0 : CE_OPT_PAGE_LINE);
+	char label[96], value[96], text[400];
+
+	if (ce_opt.typing_row >= 0)
+	{
+		char typed[HALO_TEXT_INPUT_SIZE];
+		int state = __atomic_load_n(&halo_text_input_state, __ATOMIC_ACQUIRE);
+
+		if (menu_functions.typing != _typing_ce_option)
+			ce_opt.typing_row = -1;
+		else if (state == HALO_TEXT_INPUT_DONE || state == HALO_TEXT_INPUT_CANCELLED)
+		{
+			char const *name = classic_options_rows[ce_opt.typing_row].name;
+
+			if (typing_done(_typing_ce_option, typed, sizeof(typed)))
+			{
+				setting_set(name, typed);
+				platform_log("menus: ce options: set %s (typed)", name);
+			}
+			else
+				platform_log("menus: ce options: %s: typing cancelled", name);
+			ce_opt.typing_row = -1;
+		}
+	}
+	if (ce_opt.join_pending)
+	{
+		long code = menu_tags_ingame_screen("code/screen");
+
+		ce_opt.join_pending = FALSE;
+		if (!mp_go_online("JOIN WITH A CODE"))
+		{
+			ce_opt.note_row = ce_opt.asked;
+			snprintf(ce_opt.note, sizeof(ce_opt.note), "%s", T("Leave the network game's lobby first"));
+		}
+		else if (code == NONE || !ui_widget_load_by_name_or_tag(NULL, code, NULL, screen->local_player_index,
+			screen->definition_tag_index, NONE, NONE))
+		{
+			platform_log("menus: ce options: JOIN WITH A CODE: the code screen did not open");
+		}
+		else
+		{
+			platform_log("menus: ce options: JOIN WITH A CODE: the code screen opened");
+			return;
+		}
+	}
+	if (list != ce_opt.list || list->creation_time != ce_opt.list_creation || ce_opt.moved)
+	{
+		ce_opt.list = list;
+		ce_opt.list_creation = list->creation_time;
+		browser_view_reset(&ce_opt.view);
+		target = browser_view_follow(&ce_opt.view, CE_OPT_ROWS, count, -1, ce_opt.focus[ce_opt.page], 0);
+		ce_opt.moved = FALSE;
+	}
+	else
+	{
+		for (index = 0, child = list->child; child; child = child->next)
+		{
+			if (!child->name || strncmp(child->name, "row_", 4))
+				continue;
+			if (child == list->focused_child)
+				focused_row = index;
+			index++;
+		}
+		target = browser_view_follow(&ce_opt.view, CE_OPT_ROWS, count, focused_row, -1, 0);
+	}
+	ce_opt.focus[ce_opt.page] = target;
+	for (index = 0, child = list->child; child; child = child->next)
+	{
+		int at;
+		boolean disabled, arrows, typed;
+		char reason[200];
+
+		if (!child->name || strncmp(child->name, "row_", 4))
+			continue;
+		child->vertical_offset = (short)(CE_OPT_FIRST_ROW_TOP + CE_OPT_ROW_PITCH * index + drop);
+		if (index >= ce_opt.view.visible || ce_opt.view.offset + index >= count)
+		{
+			widget_instance_set_visibility_recursive(child, FALSE);
+			child->disabled = TRUE;
+			index++;
+			continue;
+		}
+		at = rows[ce_opt.view.offset + index];
+		widget_instance_set_visibility_recursive(child, TRUE);
+		child->disabled = FALSE;
+		ce_opt_row_words(at, label, sizeof(label), value, sizeof(value));
+		disabled = ce_opt_unavailable(at, reason, sizeof(reason));
+		{
+			int row = ce_opt_panel_row(at);
+			int kind = row >= 0 ? halo_settings_row_kind(row) : SETTINGS_ROW_ACTION;
+
+			/* (a value of choices between the Xbox's small arrows, as ADVANCED CONTROLS' are; a typed text at the
+			right; a row that opens a page or does something: no value, as the Xbox's list rows) */
+			arrows = classic_options_rows[at].opens == CLASSIC_OPTIONS_NONE && kind == SETTINGS_ROW_CHOICE && row >= 0;
+			typed = classic_options_rows[at].opens == CLASSIC_OPTIONS_NONE && kind == SETTINGS_ROW_TEXT && row >= 0;
+		}
+		row_column(child, "opt_label", label);
+		if ((found = named(child, "opt_value")) != NULL)
+			widget_instance_set_visibility_recursive(found, arrows);
+		if ((found = named(child, "opt_value_small")) != NULL && !arrows)
+			widget_instance_set_visibility_recursive(found, FALSE);
+		if ((found = named(child, "opt_left")) != NULL)
+			widget_instance_set_visibility_recursive(found, arrows && !disabled);
+		if ((found = named(child, "opt_right")) != NULL)
+			widget_instance_set_visibility_recursive(found, arrows && !disabled);
+		if ((found = named(child, "opt_text")) != NULL)
+			widget_instance_set_visibility_recursive(found, typed);
+		if (arrows)
+			row_column(child, "opt_value", value);
+		else if (typed)
+			row_column(child, "opt_text", value);
+		child->alpha_modifier = disabled ? 0.5f : 1.f;
+		if (index == ce_opt.view.row)
+			focus = child;
+		index++;
+	}
+	if (focus && focus != list->focused_child)
+		ui_widget_port_give_focus(list, focus);
+	for (index = 0; index < CLASSIC_OPTIONS_TOP_PAGES; index++)
+	{
+		char heading[32];
+
+		snprintf(heading, sizeof(heading), "h_%s", classic_options_pages[index].row);
+		if ((found = named(screen, heading)) != NULL)
+			widget_instance_set_visibility_recursive(found, index == top_page);
+	}
+	if ((found = named(screen, "page_line")) != NULL)
+	{
+		if (drop)
+			ce_opt_words(label, sizeof(label), classic_options_pages[ce_opt.page].name);
+		else
+			label[0] = 0;
+		text_show(found, label);
+	}
+	if ((found = named(screen, "opt_help")) != NULL)
+	{
+		found->vertical_offset = drop;
+		text[0] = 0;
+		if (target >= 0 && target < count)
+			ce_opt_help(rows[target], text, sizeof(text));
+		classic_text_fit(found, text);
+	}
+	if (ce_opt.page != ce_opt.said_page)
+	{
+		ce_opt.said_page = ce_opt.page;
+		ce_opt.said_row = -1;
+		ce_opt_say_page();
+	}
+	if (target >= 0 && target < count && rows[target] != ce_opt.said_row)
+	{
+		ce_opt.said_row = rows[target];
+		ce_opt_row_words(rows[target], label, sizeof(label), value, sizeof(value));
+		platform_log("menus: ce options: %s focused (%s)", label, value);
+	}
+}
+
+/* (port ce options left / right / a) the focused row: its value a step (the next choice the panel offers, round),
+set as the panel sets it; a row that opens a page, the page; a typed row, the keyboard; THANK YOU and SETTINGS PANEL
+done. An action that asks first is port ce options ask's; a row that cannot be changed, nothing (its help says why) */
+static boolean ce_opt_step(int direction, boolean press)
+{
+	int index = ce_opt_focused(), row, choice, count, step;
+	char const *name;
+	char reason[200], label[96], value[96];
+
+	if (index < 0)
+		return FALSE;
+	name = classic_options_rows[index].name;
+	row = ce_opt_panel_row(index);
+	if (classic_options_rows[index].opens != CLASSIC_OPTIONS_NONE)
+	{
+		int opens = classic_options_rows[index].opens;
+
+		if (!press && direction < 0)
+			return FALSE;
+		if (ce_opt.depth < (int)NUMBEROF(ce_opt.stack))
+			ce_opt.stack[ce_opt.depth++] = ce_opt.page;
+		ce_opt.page = opens;
+		ce_opt.focus[opens] = 0;
+		ce_opt.moved = TRUE;
+		ce_opt.note_row = -1;
+		platform_log("menus: ce options: opened %s", classic_options_pages[opens].name);
+		return TRUE;
+	}
+	if (ce_opt_unavailable(index, reason, sizeof(reason)))
+	{
+		if (press)
+			platform_log("menus: ce options: %s: not now (%s)", name, reason);
+		return TRUE;
+	}
+	if (!strcmp(name, CLASSIC_OPTIONS_PANEL))
+	{
+		if (!press)
+			return TRUE;
+#if defined(HALO_VITA)
+		__atomic_store_n(&halo_settings_panel_request, HALO_SETTINGS_PANEL_OPEN, __ATOMIC_RELEASE);
+#endif
+		platform_log("menus: ce options: SETTINGS PANEL: the settings panel asked for");
+		return TRUE;
+	}
+	if (row < 0)
+		return TRUE;
+	if (halo_settings_row_kind(row) == SETTINGS_ROW_ACTION)
+	{
+		/* (THANK YOU: the note at once; the others ask first: port ce options ask) */
+		if (press && !strcmp(name, "Thank you"))
+			thank_you_show("Classic+'s THANK YOU");
+		return TRUE;
+	}
+	if (halo_settings_row_kind(row) == SETTINGS_ROW_TEXT)
+	{
+		char const *now = getenv(name);
+		boolean password = !strcmp(name, "HALO_NET_LOBBY_PASSWORD");
+
+		if (!press)
+			return TRUE;
+		ce_opt_words(label, sizeof(label), halo_settings_row_label(row));
+		ce_opt.typing_row = index;
+		typing_begin(_typing_ce_option, label, password ? "" : now, password ? PASSWORD_LENGTH : LOBBY_NAME_LENGTH, password);
+		return TRUE;
+	}
+	count = halo_settings_row_count(row);
+	choice = halo_settings_row_choice(row);
+	for (step = 1; step < count; step++)
+	{
+		int next = ((choice + direction * step) % count + count) % count;
+
+		if (ce_opt_offered(index, row, next))
+		{
+			choice = next;
+			break;
+		}
+	}
+	if (step >= count)
+		return TRUE;
+	setting_set(name, halo_settings_row_value(row, choice));
+	ce_opt_row_words(index, label, sizeof(label), value, sizeof(value));
+	ce_opt.note_row = -1;
+	platform_log("menus: ce options: set %s=%s (%s); now %s", name, halo_settings_row_value(row, choice), value,
+		getenv(name) ? getenv(name) : "(unset)");
+	return TRUE;
+}
+
+/* (port ce options ask, the row's second A) TRUE - the question opens - for an action that asks first: RESET
+CONTROLS, CHECK FOR UPDATES, JOIN WITH A CODE, EXTRACT PC FILES */
+static boolean ce_opt_ask(void)
+{
+	int index = ce_opt_focused(), row;
+	char reason[200];
+
+	if (index < 0 || classic_options_rows[index].opens != CLASSIC_OPTIONS_NONE ||
+		ce_opt_unavailable(index, reason, sizeof(reason)) || (row = ce_opt_panel_row(index)) < 0 ||
+		halo_settings_row_kind(row) != SETTINGS_ROW_ACTION || !strcmp(classic_options_rows[index].name, "Thank you"))
+	{
+		return FALSE;
+	}
+	ce_opt.asked = index;
+	platform_log("menus: ce options: %s asked", classic_options_rows[index].name);
+	return TRUE;
+}
+
+/* (port ce options question, the question's title) the row's label and the panel's help line under it */
+static void ce_opt_question_update(struct widget_instance *widget)
+{
+	int row = ce_opt.asked >= 0 ? ce_opt_panel_row(ce_opt.asked) : -1;
+	char title[100];
+
+	if (row < 0)
+		return;
+	ce_opt_words(title, sizeof(title) - 1, halo_settings_row_label(row));
+	strcat(title, "?");
+	text_show(widget, title);
+	text_show(named(screen_of(widget), "text"), T(halo_settings_row_help(row)));
+}
+
+/* (port ce options do: the question's Cross) the action, as the panel's press does it; its outcome on the row's help */
+static boolean ce_opt_do(void)
+{
+	int index = ce_opt.asked, row = index >= 0 ? ce_opt_panel_row(index) : -1;
+	char const *name;
+	int done;
+
+	if (row < 0)
+		return TRUE;
+	name = classic_options_rows[index].name;
+	ce_opt.note_row = index;
+	ce_opt.note[0] = 0;
+	ce_opt.update_note = FALSE;
+	if (!strcmp(name, "Join with a code"))
+	{
+		/* (the code screen of Classic+'s MULTIPLAYER's JOIN BY CODE, opened over the options once the question is
+		closed; internet play first, as that row switches to it: mp_go_online) */
+		ce_opt.join_pending = TRUE;
+		platform_log("menus: ce options: JOIN WITH A CODE: yes");
+		return TRUE;
+	}
+	done = halo_settings_row_act(row);
+	if (!strcmp(name, "Check for updates"))
+		ce_opt.update_note = TRUE;
+	else if (!strcmp(name, "Reset controls"))
+		snprintf(ce_opt.note, sizeof(ce_opt.note), "%s", T("Controls as shipped"));
+	else if (!strcmp(name, "Extract PC files"))
+		snprintf(ce_opt.note, sizeof(ce_opt.note), "%s", done == 0 ? T("Taking them from the installer") :
+			T("No installer, or the files are there"));
+	platform_log("menus: ce options: %s done (%s)", name, done == 0 ? "begun" : "not possible here");
+	return TRUE;
+}
+
+/* (port ce options back: Circle) a page's page closed, back to the one that opened it on its row: FALSE (the screen
+stays); at the top, TRUE (the screen closes) */
+static boolean ce_opt_back(void)
+{
+	if (ce_opt.depth > 0)
+	{
+		int from = ce_opt.page, rows[64], count, index;
+
+		ce_opt.page = ce_opt.stack[--ce_opt.depth];
+		count = ce_opt_rows_of(ce_opt.page, rows, (int)NUMBEROF(rows));
+		for (index = 0; index < count; index++)
+			if (classic_options_rows[rows[index]].opens == from)
+				ce_opt.focus[ce_opt.page] = index;
+		ce_opt.moved = TRUE;
+		ce_opt.note_row = -1;
+		platform_log("menus: ce options: back to %s", classic_options_pages[ce_opt.page].name);
+		return FALSE;
+	}
+	platform_log("menus: ce options: closed");
+	return TRUE;
 }
 
 boolean pc_menu_event_function_invoke(
@@ -26651,6 +27310,20 @@ boolean pc_menu_event_function_invoke(
 		return TRUE;
 	case _function_ce_workshop_row:
 		return cp_workshop_row();
+	case _function_ce_options_page:
+		return ce_opt_open(widget);
+	case _function_ce_options_left:
+		return ce_opt_step(-1, FALSE);
+	case _function_ce_options_right:
+		return ce_opt_step(1, FALSE);
+	case _function_ce_options_a:
+		return ce_opt_step(1, TRUE);
+	case _function_ce_options_ask:
+		return ce_opt_ask();
+	case _function_ce_options_do:
+		return ce_opt_do();
+	case _function_ce_options_back:
+		return ce_opt_back();
 	case _function_h3_steam_row:
 		return h3_steam_row(widget);
 	case _function_h3_steam_back:
@@ -26782,6 +27455,13 @@ void pc_menu_game_data_function_invoke(
 	case _input_ce_modes:
 		if (widget->type == _ui_widget_type_column_list)
 			ce_modes_update(widget);
+		break;
+	case _input_ce_options:
+		if (widget->type == _ui_widget_type_column_list)
+			ce_opt_update(widget);
+		break;
+	case _input_ce_options_question:
+		ce_opt_question_update(widget);
 		break;
 	case _input_forge_leave_text:
 		h3_forge_leave_text_update(widget);
@@ -27531,6 +28211,15 @@ int menu_functions_mouse_kind(struct widget_instance *widget)
 		return 1;
 	}
 #endif
+	/* (Classic+'s option screens, classic/options.xml: the focused row's small arrows and its value step it - a tap on
+	the value forward, as Cross does; the rows themselves are the list's, a tap focuses one and a second presses it) */
+	if (name && (!strcmp(name, "opt_left") || !strcmp(name, "opt_right") || !strcmp(name, "opt_value") ||
+		!strcmp(name, "opt_value_small")) && mouse_on_screen(widget, "pc\\ce\\opt\\screen"))
+	{
+		if (!widget->visible || !widget->parent || !widget->parent->parent || widget->parent->parent->focused_child != widget->parent)
+			return 0;
+		return !strcmp(name, "opt_left") ? 2 : 3;
+	}
 	if (!name || !halo_menu_style_online())
 		return 0;
 	if (!strcmp(name, "arrow_left") || !strcmp(name, "arrow_right"))
