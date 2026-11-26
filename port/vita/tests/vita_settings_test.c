@@ -4271,7 +4271,8 @@ and the rows added since (Sun rays, Button icons, Map downloads, Max
 players, Visibility, Fourth core helpers, Latency meter, Particles,
 First-person legs, MCC mods, PC map vehicles, Sharp interface, Player model,
 PC mouse aim assist, PC versions list, Carnage report, Field of view, Chat,
-Chat filter, Online bots, Scoreboard; the Play page's two texts) */
+Chat filter, Online bots, Scoreboard, MCC files any host; the Play page's
+two texts) */
 static void test_variables_kept(void)
 {
 	static const char *const variables[] = {
@@ -4309,6 +4310,8 @@ static void test_variables_kept(void)
 		"HALO_EXPERIMENTAL_MODES",
 		/* (1.1.3, issue #53: the Game folder, ux0, uma0 or imc0; kept in its own file) */
 		"HALO_GAME_FOLDER",
+		/* (1.1.3: MCC files, any host - network.mixed_client_only, mixed play by the built-in tables) */
+		"HALO_MIXED_CLIENT_ONLY",
 	};
 	int index, all = 1, choices = 0;
 
