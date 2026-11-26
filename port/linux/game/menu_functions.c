@@ -25991,8 +25991,8 @@ static void ce_opt_update(struct widget_instance *list)
 	}
 }
 
-/* (port ce options left / right / a) the focused row: its value a step (the next choice the panel offers, round),
-set as the panel sets it; a row that opens a page, the page; a typed row, the keyboard; THANK YOU and SETTINGS PANEL
+/* (port ce options left / right / a) the focused row: its value a step (the next choice the panel offers, round - a
+volume's left and right stop at its ends), set as the panel sets it; a row that opens a page, the page; a typed row, the keyboard; THANK YOU and SETTINGS PANEL
 done. An action that asks first is port ce options ask's; a row that cannot be changed, nothing (its help says why) */
 static boolean ce_opt_step(struct widget_instance *widget, int direction, boolean press)
 {
@@ -26062,6 +26062,11 @@ static boolean ce_opt_step(struct widget_instance *widget, int direction, boolea
 	{
 		int next = ((choice + direction * step) % count + count) % count;
 
+		/* (a volume - its choices from Off up -: left and right stop at Off and 100%, as the panel's; right at 100%
+		went round to Off, 1.1.3-insider.8v) */
+		if (!press && (strstr(name, "VOLUME") || !strcmp(name, "HALO_MENU_MUSIC")) &&
+			(choice + direction * step < 0 || choice + direction * step >= count))
+			return TRUE;
 		if (ce_opt_offered(index, row, next))
 		{
 			choice = next;
