@@ -1437,14 +1437,17 @@ static int characters(const char *text, int bytes)
 /* every line fits: a row's label 22 characters at most and its value 24
 (the value column starts 23 characters in, vita_gxm.c menu_build), the
 help and the panel's buttons 70 (drawn smaller), any other line 46; in
-characters, a translation's UTF-8 counted as the overlay draws it */
+characters, a translation's UTF-8 counted as the overlay draws it. A row's
+greyed-out choices, after a '\x07' each past the arrow's place, are not its
+value (vita_panel_draw_test.c checks they are drawn inside the panel) */
 static int menu_fits(void)
 {
 	const char *at = menu;
 
 	while (*at)
 	{
-		int bytes = (int)strcspn(at, "\n");
+		int line_bytes = (int)strcspn(at, "\n");
+		int bytes = at[0] == '\x05' || at[0] == '\x06' ? line_bytes : (int)strcspn(at, "\x07\n");
 		int length = characters(at, bytes);
 		int label = characters(at, (int)strcspn(at, "\x02\n"));
 		int fits;
@@ -1462,7 +1465,7 @@ static int menu_fits(void)
 			printf("too long: %.*s\n", bytes, at);
 			return 0;
 		}
-		at += bytes + (at[bytes] == '\n');
+		at += line_bytes + (at[line_bytes] == '\n');
 	}
 	return 1;
 }
@@ -4846,7 +4849,9 @@ static int every_page_fits(int *shown)
 					setting->choice = choice;
 					show();
 					(*shown)++;
-					if (!menu_fits())
+					/* (Menu style ElDewrito chosen: the ElDewrito panel, which
+					wraps its help - the Custom Edition files' longer one) */
+					if (classic_panel() && !menu_fits())
 					{
 						printf("(%s, choice %d)\n", setting->label, choice);
 						fits = 0;
@@ -5563,21 +5568,24 @@ static void test_ce_files_panel(void)
 /* VITA_SETTINGS_PANEL_TEXT=FOLDER (run_vita_settings_test.sh, a build with the shipped Menu style row,
 VITA_SETTINGS_TEST_SHIPPED_STYLE): the Custom Edition files missing, Game > Menus with Menu style chosen as the
 panel hands it to the renderer (vgxm_menu_set) - in the ElDewrito look (a saved ElDewrito) and the Classic one, in
-English and in Spanish -, each in FOLDER/<eldewrito|classic>-<en|es>.txt (the chosen line's index, then the text),
+English and in Spanish -, each in FOLDER/<eldewrito|classic>-<en|es>.txt; and Classic+ with the files there,
+FOLDER/classicplus-<en|es>.txt (the chosen line's index, then the text),
 for vita_panel_draw_test.c to draw */
 static int panel_text_dump(const char *folder)
 {
 	static const char *const languages[] = { "en", "es" };
-	static const char *const styles[] = { "online", "original" }, *const looks[] = { "eldewrito", "classic" };
+	/* (and Classic+ with the files there, 8u device test, Nov 26: its Menu style help off the right edge) */
+	static const char *const styles[] = { "online", "original", "classic" };
+	static const char *const looks[] = { "eldewrito", "classic", "classicplus" };
 	int language, style, written = 0;
 
-	halo_ce_files_state = -1;
-	for (style = 0; style < 2; style++)
+	for (style = 0; style < 3; style++)
 		for (language = 0; language < 2; language++)
 		{
 			char path[1024];
 			FILE *file;
 
+			halo_ce_files_state = style == 2 ? 1 : -1;
 			if (!ce_files_menus_page(languages[language], styles[style]))
 			{
 				printf("FAIL %s, %s: Game > Menus, Menu style not reached\n%s\n", looks[style], languages[language], menu);
@@ -5592,7 +5600,47 @@ static int panel_text_dump(const char *folder)
 			written++;
 		}
 	printf("%d panels' text written in %s\n", written, folder);
-	return written == 4 ? 0 : 1;
+	return written == 6 ? 0 : 1;
+}
+
+/* (1.1.3-insider.8v, VITA_SETTINGS_PANEL_TEXT's build: the shipped Menu style row) the classic panel - Menu style
+Classic and Classic+ - in English and in Spanish, the Custom Edition files there and not: every page, each line
+chosen, each row's every value fits (menu_fits: the help one line of 70 characters). 8u device test, Nov 26: Game >
+Menus' Menu style help, "ElDewrito: Halo Online style. Classic: as shipped. Classic+: with the new rows." (79), ran
+off the panel's right edge with the files there - the checks above run with the hidden Halo 3 row, whose help is
+another, and every_page_fits in Spanish alone; nonzero when one does not fit */
+static int classic_pages_fit(void)
+{
+	static const char *const languages[] = { "en", "es" };
+	static const char *const styles[] = { "original", "classic" };
+	int language, style, files, failed = failures, shown = 0, saved = halo_ce_files_state;
+
+	vita_settings_set("HALO_DEV_SETTINGS", "1");
+	for (files = 0; files < 2; files++)
+		for (language = 0; language < 2; language++)
+			for (style = 0; style < 2; style++)
+			{
+				char what[192];
+
+				vita_settings_set("HALO_LANGUAGE", languages[language]);
+				halo_ce_files_state = 1;
+				vita_settings_set("HALO_MENU_STYLE", styles[style]);
+				halo_ce_files_state = files ? -1 : 1;
+				if (panel_open)
+					close_panel();
+				open_panel();
+				snprintf(what, sizeof(what), "the classic panel, Menu style %s, %s, the Custom Edition files %s: every "
+					"page, each line chosen, each row's every value fits (its help 70 characters)", styles[style],
+					languages[language], files ? "missing" : "there");
+				check(classic_panel() && every_page_fits(&shown), what);
+			}
+	printf("(%d pages shown)\n", shown);
+	if (panel_open)
+		close_panel();
+	halo_ce_files_state = saved;
+	vita_settings_set("HALO_DEV_SETTINGS", "0");
+	vita_settings_set("HALO_LANGUAGE", "auto");
+	return failures > failed;
 }
 
 static void test_menu_style_original(void)
@@ -6258,8 +6306,11 @@ int main(void)
 	setenv("HALO_MAPS_ROOT", "ux0:data/haloce-vita/maps", 1);
 	if (getenv("VITA_SETTINGS_PANEL_TEXT"))
 	{
+		int dumped;
+
 		vita_settings_load();
-		return panel_text_dump(getenv("VITA_SETTINGS_PANEL_TEXT"));
+		dumped = panel_text_dump(getenv("VITA_SETTINGS_PANEL_TEXT"));
+		return classic_pages_fit() | dumped;
 	}
 
 	test_variables_kept();

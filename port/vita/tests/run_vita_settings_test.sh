@@ -48,8 +48,9 @@ ln -s "$root/port/vita/app0/lang" "$out/workshop/app0:lang"
 echo "--- as a Steam Workshop build"
 (cd "$out/workshop" && ./vita_settings_test) || status=$?
 # (how the panel is drawn, vita_panel_draw_test.c: the shipped Menu style row's panel text - the Custom Edition
-# files missing, Game > Menus, the ElDewrito and Classic looks, English and Spanish - drawn by vita_gxm.c's
-# menu_build into pictures and checked; HALO_TEST_SHOTS=FOLDER: the pictures copied there)
+# files missing, Game > Menus, the ElDewrito and Classic looks, English and Spanish; Classic+ with the files there -
+# drawn by vita_gxm.c's menu_build into pictures and checked; HALO_TEST_SHOTS=FOLDER: the pictures copied there. That
+# build first checks the shipped row's classic panel: every page, line and value fits, its help 70 characters)
 mkdir -p "$out/panel/text" "$out/panel/gen"
 build "$out/panel/vita_settings_test" -DVITA_SETTINGS_TEST_SHIPPED_STYLE -DHALO_STEAM_DOWNLOAD=1 -DHALO_STEAM_WORKSHOP=1
 ln -s "$root/port/vita/app0/lang" "$out/panel/app0:lang"

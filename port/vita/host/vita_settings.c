@@ -667,9 +667,11 @@ static struct setting settings[] = {
 	/* (Classic, "original": the Xbox menus as they shipped, the port's
 	features here alone; Classic+, "classic" - the Halo CE style before
 	insider.25, so a saved one keeps its rows -: the Xbox menus with the
-	port's rows and screens in their look. The owner, insider.25) */
+	port's rows and screens in their look. The owner, insider.25. Its help
+	fits the classic panel's one line of 70 characters: "... Classic+: with
+	the new rows." ran off its right edge, 8u device test, Nov 26) */
 	{ "Menu style", "HALO_MENU_STYLE", 0, 3, { "original", "classic", "online" }, { "Classic", "Classic+", "ElDewrito" },
-		"ElDewrito: Halo Online style. Classic: as shipped. Classic+: with the new rows.", 2, PAGE_MENUS },
+		"ElDewrito: Halo Online style. Classic: as shipped. Classic+: new rows", 2, PAGE_MENUS },
 #else
 	/* (vita_settings_test.c: the panel's every page as the hidden Halo 3
 	style lays it out - its checks were written for it) */
