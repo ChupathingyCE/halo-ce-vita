@@ -16612,7 +16612,55 @@ server browser's rows (row_column); a text that fits, of lines, or a Classic+ bo
 (8v device test, Nov 26: SELECT MAP's "CURSED-CRITICAL-V2-MCC (CUSTO" ran off its row) */
 /* (the line `text` as text_show_fitted shows it, in `shown` (`size`): itself when it fits the box's room, else cut with
 "..." (its tag kept); FALSE when not even one character fits) */
+/* (text_fitted's answers, made once for each box and text - the pickers' rows ask every frame, and a cut
+is a measure for each character it tries: 8v audit) */
+#define TEXT_FITTED_CACHED 32
+#define TEXT_FITTED_TEXT_BYTES 160
+static struct
+{
+	void const *widget;
+	long creation;
+	long definition;
+	boolean fitted;
+	char text[TEXT_FITTED_TEXT_BYTES];
+	char shown[TEXT_FITTED_TEXT_BYTES];
+} text_fitted_cache[TEXT_FITTED_CACHED];
+static int text_fitted_next;
+
+static boolean text_fitted_measured(struct widget_instance *widget, char const *text, char *shown, int size);
+
 static boolean text_fitted(struct widget_instance *widget, char const *text, char *shown, int size)
+{
+	int index;
+	boolean fitted;
+
+	if (strlen(text) >= TEXT_FITTED_TEXT_BYTES)
+		return text_fitted_measured(widget, text, shown, size);
+	for (index = 0; index < TEXT_FITTED_CACHED; index++)
+	{
+		if (text_fitted_cache[index].widget == widget && text_fitted_cache[index].creation == widget->creation_time &&
+			text_fitted_cache[index].definition == widget->definition_tag_index && !strcmp(text_fitted_cache[index].text, text))
+		{
+			snprintf(shown, (size_t)size, "%s", text_fitted_cache[index].shown);
+			return text_fitted_cache[index].fitted;
+		}
+	}
+	fitted = text_fitted_measured(widget, text, shown, size);
+	if (strlen(shown) < TEXT_FITTED_TEXT_BYTES)
+	{
+		index = text_fitted_next;
+		text_fitted_next = (text_fitted_next + 1) % TEXT_FITTED_CACHED;
+		text_fitted_cache[index].widget = widget;
+		text_fitted_cache[index].creation = widget->creation_time;
+		text_fitted_cache[index].definition = widget->definition_tag_index;
+		text_fitted_cache[index].fitted = fitted;
+		snprintf(text_fitted_cache[index].text, sizeof(text_fitted_cache[index].text), "%s", text);
+		snprintf(text_fitted_cache[index].shown, sizeof(text_fitted_cache[index].shown), "%s", shown);
+	}
+	return fitted;
+}
+
+static boolean text_fitted_measured(struct widget_instance *widget, char const *text, char *shown, int size)
 {
 	char const *tag;
 	long head, kept;
