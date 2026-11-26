@@ -4468,7 +4468,9 @@ PY
 				[ "$(cat "$out/$cp_run/exit")" = 0 ] || fail cpaudit "$cp_setup $cp_name: exit $(cat "$out/$cp_run/exit")"
 				grep -av "render assertion skipped" "$log" | grep -aqiE "assert|exception|halt_and_catch_fire|segmentation" &&
 					fail cpaudit "$cp_setup $cp_name: an assertion, exception or halt"
-				cp_bad=$(grep -aE "an empty widget stands in|stands for nothing|the handler opens nothing|LAN browser in its place|menus: Halo 3 screen|ui: screen pc\.(h3|online)\." "$log" | head -3)
+				# (GAME MANAGER's rows, both data sets: DOWNLOAD FROM STEAM's "Your own MCC files" did not fit Classic+'s
+				# column and was said every frame - the 8s device test, Nov 25)
+				cp_bad=$(grep -aE "an empty widget stands in|stands for nothing|the handler opens nothing|LAN browser in its place|menus: Halo 3 screen|ui: screen pc\.(h3|online)\.|classic text does not fit: pc.ce.mods.row_" "$log" | head -3)
 				[ -n "$cp_bad" ] && fail cpaudit "$cp_setup $cp_name: $cp_bad"
 				grep -aqE "failed to spawn widget|may not run event handler function" "$out/$cp_run/data/debug.txt" 2>/dev/null &&
 					fail cpaudit "$cp_setup $cp_name: debug.txt: $(grep -aE "failed to spawn widget|may not run event handler function" "$out/$cp_run/data/debug.txt" | head -1)"

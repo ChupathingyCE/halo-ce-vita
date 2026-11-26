@@ -12630,7 +12630,9 @@ static void h3_gm_update(struct widget_instance *list)
 			widget_instance_set_visibility_recursive(child, TRUE);
 			child->disabled = FALSE;
 			row_column(child, "row_name", T("DOWNLOAD FROM STEAM"));
-			row_column(child, "row_kind", T("Your own MCC files"));
+			/* (Classic+'s column is narrower - classic/mods.xml's row_kind, 116 wide: "Your own MCC files" did not
+			fit and was said every frame, the 8s device test, Nov 25 -: the Xbox row's own words there) */
+			row_column(child, "row_kind", halo_menu_style_classic_plus() ? T("MCC files") : T("Your own MCC files"));
 			row_column(child, "row_size", "");
 			row_column(child, "row_state", "");
 			child->animation.current_frame_index = child == list->focused_child ? 1 : 0;

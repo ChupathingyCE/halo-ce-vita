@@ -53,9 +53,7 @@ static struct
 	struct steam_job_status status;
 	struct steam_job_options options;
 	/* the rate's last sample */
-	double sample_time;
-	uint64_t sample_done;
-	int sample_valid;
+	struct steam_job_rate rate;
 	/* the Workshop: the page asked (serial) and the one shown, the choice, the player's last key */
 	struct
 	{
@@ -512,9 +510,31 @@ static int depot_start(void *context, uint32_t depot, int index, int count)
 	job.status.done = job.status.total = 0;
 	job.status.rate = 0;
 	job.status.seconds_left = -1;
-	job.sample_valid = 0;
+	memset(&job.rate, 0, sizeof(job.rate));
+	job.rate.seconds_left = -1;
 	pthread_mutex_unlock(&job.lock);
 	return job.cancel;
+}
+
+void steam_job_rate_sample(struct steam_job_rate *rate, double now, uint64_t done, uint64_t total)
+{
+	if (!rate->sample_valid || done < rate->sample_done)
+	{
+		/* (the first sample, or the bytes done went back: counted from here) */
+		rate->sample_time = now;
+		rate->sample_done = done;
+		rate->sample_valid = 1;
+		return;
+	}
+	if (now - rate->sample_time >= 1.0)
+	{
+		double sampled = (double)(done - rate->sample_done) / (now - rate->sample_time);
+
+		rate->rate = rate->rate > 0 ? rate->rate * 0.7 + sampled * 0.3 : sampled;
+		rate->sample_time = now;
+		rate->sample_done = done;
+		rate->seconds_left = rate->rate > 1 && total >= done ? (long)((double)(total - done) / rate->rate) : -1;
+	}
 }
 
 static int progress(void *context, uint64_t done, uint64_t total, const char *file)
@@ -533,21 +553,9 @@ static int progress(void *context, uint64_t done, uint64_t total, const char *fi
 		job.status.done = done;
 		job.status.total = total;
 		snprintf(job.status.file, sizeof(job.status.file), "%s", file);
-		if (!job.sample_valid)
-		{
-			job.sample_time = now;
-			job.sample_done = done;
-			job.sample_valid = 1;
-		}
-		else if (now - job.sample_time >= 1.0)
-		{
-			double rate = (double)(done - job.sample_done) / (now - job.sample_time);
-
-			job.status.rate = job.status.rate > 0 ? job.status.rate * 0.7 + rate * 0.3 : rate;
-			job.sample_time = now;
-			job.sample_done = done;
-			job.status.seconds_left = job.status.rate > 1 ? (long)((double)(total - done) / job.status.rate) : -1;
-		}
+		steam_job_rate_sample(&job.rate, now, done, total);
+		job.status.rate = job.rate.rate;
+		job.status.seconds_left = job.rate.seconds_left;
 	}
 	pthread_mutex_unlock(&job.lock);
 	return job.cancel;
@@ -992,7 +1000,8 @@ static int job_item_start(void *context, const struct steam_workshop_item *item,
 	job.status.done = job.status.total = 0;
 	job.status.rate = 0;
 	job.status.seconds_left = -1;
-	job.sample_valid = 0;
+	memset(&job.rate, 0, sizeof(job.rate));
+	job.rate.seconds_left = -1;
 	pthread_mutex_unlock(&job.lock);
 	return job.cancel;
 }
