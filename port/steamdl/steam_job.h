@@ -295,7 +295,7 @@ struct steam_job_workshop_details
 	char contents_why[160];
 	char error[160];
 	/* (1.1.3) the items it needs (Steam's required items: never downloaded with it - the page says to download them
-	too): how many, and their titles ("item <id>" for one Steam gave no title of), ", " between */
+	too): how many, and their titles ("item <id>" for one Steam gave no title of), a line each */
 	int needs;
 	char needs_titles[300];
 };

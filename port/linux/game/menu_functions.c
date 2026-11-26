@@ -14093,7 +14093,19 @@ static void h3_workshop_update(struct widget_instance *widget)
 			h3_workshop.details_installed_gid = gid;
 			h3_workshop.details_unsupported[0] = 0;
 			if (page.needs)
-				platform_log("menus: workshop: %s needs %d other items: %s", page.id, page.needs, page.needs_titles);
+			{
+				char said[sizeof(page.needs_titles) + 2 * STEAM_WORKSHOP_NEEDS_MAXIMUM];
+				size_t at, length = 0;
+
+				for (at = 0; page.needs_titles[at] && length < sizeof(said) - 3; at++)
+				{
+					if (page.needs_titles[at] == '\n')
+						said[length++] = ',';
+					said[length++] = page.needs_titles[at] == '\n' ? ' ' : page.needs_titles[at];
+				}
+				said[length] = 0;
+				platform_log("menus: workshop: %s needs %d other items: %s", page.id, page.needs, said);
+			}
 			if (h3_workshop.details_installed)
 			{
 				short entry_index;
@@ -14206,8 +14218,24 @@ static void h3_workshop_update(struct widget_instance *widget)
 				item's map this build cannot run, said here rather than at its load: device test, Nov 25) */
 				if (page.state == 2 && page.needs)
 				{
-					snprintf(line, sizeof(line), T("\nAlso needs: %.200s - download those too"), page.needs_titles);
-					strncat(text, line, sizeof(text) - strlen(text) - 1);
+					char const *title = page.needs_titles;
+					int shown;
+
+					strncat(text, T("\nAlso needs - download those too:"), sizeof(text) - strlen(text) - 1);
+					/* (a line each, as the maps: three at most, then how many more) */
+					for (shown = 0; shown < 3 && *title; shown++)
+					{
+						int length = (int)strcspn(title, "\n");
+
+						snprintf(line, sizeof(line), "\n  %.*s", length < 40 ? length : 40, title);
+						strncat(text, line, sizeof(text) - strlen(text) - 1);
+						title += length + (title[length] == '\n');
+					}
+					if (page.needs > shown)
+					{
+						snprintf(line, sizeof(line), T("\n  and %d more"), page.needs - shown);
+						strncat(text, line, sizeof(text) - strlen(text) - 1);
+					}
 				}
 				if (page.state == 2 && state && h3_workshop.details_unsupported[0])
 				{

@@ -724,9 +724,9 @@ static void workshop_details(struct steam_session *session)
 			size_t length = strlen(needs_text);
 
 			if (titles && titles[index][0])
-				snprintf(needs_text + length, sizeof(needs_text) - length, "%s%s", index ? ", " : "", titles[index]);
+				snprintf(needs_text + length, sizeof(needs_text) - length, "%s%s", index ? "\n" : "", titles[index]);
 			else
-				snprintf(needs_text + length, sizeof(needs_text) - length, "%sitem %llu", index ? ", " : "",
+				snprintf(needs_text + length, sizeof(needs_text) - length, "%sitem %llu", index ? "\n" : "",
 					(unsigned long long)details->item.needs[index]);
 		}
 		free(titles);

@@ -1672,7 +1672,7 @@
 "No map in it is one this game plays" = "Ningún mapa suyo se juega aquí"
 "Also needs: %s - download those too" = "También necesita: %s - descárgalos también"
 "item %llu" = "objeto %llu"
-"\nAlso needs: %.200s - download those too" = "\nTambién necesita: %.200s - descárgalos también"
+"\nAlso needs - download those too:" = "\nTambién necesita (descárgalos también):"
 "Not supported on PS Vita (%llu, %.150s): not in the map lists\n" = "No va en PS Vita (%llu, %.150s): no está en las listas de mapas\n"
 "New QR" = "QR nuevo"
 "The sign-in QR expired before it was approved in the Steam app. Cross: a new QR." = "El QR para entrar caducó antes de aprobarlo en la app de Steam. Cruz: un QR nuevo."
