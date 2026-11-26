@@ -188,7 +188,7 @@ enum
 };
 
 /* a manifest's file name (as it is, '\' or '/'): TAKE with the relative path to write ('/'-separated, the same bytes)
-and its header check (STEAM_KIND_MCC_MAP for a map, STEAM_KIND_RESOURCE for bitmaps/sounds/loc.map,
+and its header check (STEAM_KIND_WORKSHOP_MAP for a map, STEAM_KIND_RESOURCE for bitmaps/sounds/loc.map,
 STEAM_KIND_WORKSHOP_TEXT, _PNG, _BMP); SKIP (not written) for a file of another kind or a name merely odd (deeper
 than STEAM_WORKSHOP_NAME_PARTS, a part longer than STEAM_WORKSHOP_NAME_PART_MAXIMUM, the whole longer than
 STEAM_WORKSHOP_NAME_MAXIMUM, hidden, ending in '.' or ' ', a character not of [A-Za-z0-9 _.-()+,'&!]); REFUSE (the

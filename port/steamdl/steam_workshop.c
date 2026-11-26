@@ -877,7 +877,7 @@ int steam_workshop_name(const char *name, char *relative, size_t capacity, enum 
 		return STEAM_WORKSHOP_NAME_SKIP;
 	if (ends_with(path, length, ".map"))
 		*kind = base_is(path, "bitmaps.map") || base_is(path, "sounds.map") || base_is(path, "loc.map") ?
-			STEAM_KIND_RESOURCE : STEAM_KIND_MCC_MAP;
+			STEAM_KIND_RESOURCE : STEAM_KIND_WORKSHOP_MAP;
 	else if (ends_with(path, length, ".json") || ends_with(path, length, ".txt"))
 		*kind = STEAM_KIND_WORKSHOP_TEXT;
 	else if (ends_with(path, length, ".png"))
@@ -1149,7 +1149,7 @@ static int install_walk(struct install_walk *walk, const char *base, const char 
 			ok = 0;
 			break;
 		}
-		if (kind == STEAM_KIND_MCC_MAP)
+		if (kind == STEAM_KIND_WORKSHOP_MAP)
 		{
 			char reason[160];
 

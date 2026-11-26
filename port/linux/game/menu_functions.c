@@ -13462,7 +13462,9 @@ static int h3_workshop_map_check(void *context, const char *path, char *why, siz
 		snprintf(why, why_size, "%s", T(cache_file_status_describe((enum cache_file_status)status)));
 		return 0;
 	}
-	if (format != _cache_file_format_mcc_cea_cache)
+	/* (1.1.3 8v: or a Halo PC Custom Edition cache, which MCC's Workshop carries too - the dev Vita's Snowtrap, Nov 26 -:
+	installed, and the mods scan takes its multiplayer map as the item's, custom_edition_cache_mod_map_check) */
+	if (format != _cache_file_format_mcc_cea_cache && format != _cache_file_format_custom_edition_cache)
 	{
 		snprintf(why, why_size, "%s", T("not a Halo: CE Anniversary map"));
 		return 0;

@@ -1232,7 +1232,7 @@ static int contents_file(void *context, const struct steam_manifest_file *file)
 	}
 	contents->files++;
 	contents->bytes += file->size;
-	if (kind == STEAM_KIND_MCC_MAP)
+	if (kind == STEAM_KIND_WORKSHOP_MAP)
 	{
 		if (contents->maps < STEAM_WORKSHOP_MAP_NAMES)
 		{
