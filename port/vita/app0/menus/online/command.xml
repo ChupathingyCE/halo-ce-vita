@@ -11,7 +11,7 @@ h3/). -->
 	<widget name="online/command/network_row" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="2">
 		<on event="a" open="h3/network/screen"/>
 	</widget>
-	<widget name="online/command/network_status" type="text" left="96" top="69" width="186" height="14" font="online/font_small" color="#FF9FB6CC" align="right">
+	<widget name="online/command/network_status" type="text" left="96" top="69" width="186" height="16" font="online/font_small" color="#FF9FB6CC" align="right">
 		<data input="port h3 network status"/>
 	</widget>
 	<widget name="online/command/map_row" type="text" width="344" height="18" bitmap="online/item" font="online/font_item" color="#FFC5D0DD" text_x="8" text_y="2">

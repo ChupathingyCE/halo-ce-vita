@@ -628,6 +628,8 @@ all_cases="fresh level xbox pause touchdrag h3renamed pausesave h3probe h3classi
 pc_cases="pctext pcclassic pcnoadhoc"
 # (1.1.3: Classic+'s option screens; 8v: the menus after a game, the Vita's memory)
 all_cases="$all_cases cpsettings cpsettingstouch menureturn"
+# (1.1.3 8v: the Workshop maps' names: a dotted file name listed, every screen the map's title, long ones cut to fit)
+all_cases="$all_cases wsnames"
 cases=${*:-$all_cases}
 ce_maps=${HALO_TEST_CE_MAPS:-$data_root/custom-maps-dl}
 status=0
@@ -3187,6 +3189,15 @@ EOF_YELO
 			grep -aq "could not be loaded" "$log" && fail wscemap_play "its load failed"
 			grep -aq "menus: the in-game screens: .* added to ws2904654154_snowtrap.map's" "$log" ||
 				fail wscemap_play "the game did not start on it"
+			# (1.1.3 8v: shown by its item's title, as the mod manager says it - never ws2904654154_snowtrap)
+			grep -aq "mods: ws2904654154_snowtrap is shown as its item's title \"Halo CE - Snowtrap\"" "$debug" ||
+				fail wscemap_play "the map was not shown by its item's title"
+			grep -aq "menus: cascade: mp maps: column 1, -, row 14 of 14: HALO CE - SNOWTRAP (CUSTOM)$" "$log" ||
+				fail wscemap_play "SELECT MAP did not say HALO CE - SNOWTRAP (CUSTOM)"
+			grep -aq "menus: h3 mp lobby: NETWORK: OFFLINE, GAME: SLAYER, MAP: HALO CE - SNOWTRAP$" "$log" ||
+				fail wscemap_play "the lobby's MAP was not HALO CE - SNOWTRAP"
+			grep -aq "menus: h3 pregame: Waiting for other players; Slayer on Halo CE - Snowtrap;" "$log" ||
+				fail wscemap_play "the waiting lobby did not say Halo CE - Snowtrap"
 		else
 			echo "(wscemap: no HALO_TEST_PROFILE: the game on it not run)"
 		fi ;;
@@ -5089,6 +5100,138 @@ PY
 		grep -aq "MENU STYLE focused (CLASSIC+): Needs the Custom Edition files" "$log" || fail cpsettings-noce "MENU STYLE did not say it needs the Custom Edition files"
 		grep -aq "ce options row: GAME FILES|HALO_CUSTOM_EDITION|PC MAPS|OFF|Needs the Custom Edition files" "$log" ||
 			fail cpsettings-noce "PC MAPS not dimmed without the Custom Edition files"
+		;;
+	wsnames)
+		# (1.1.3 8v device test, Nov 26, Cursed Halo's 19 maps: cursed-h1.5_levee-mcc.map not in the picker (the '.');
+		# the waiting lobby and the pause said "ws2905272848_cursed--6b2c", the picker "CURSED-SIDEWINDER-MCC (CUSTOM)",
+		# cut at its row's edge; the lobby's "On this PS Vita only" lost its descenders)
+		ws_mp_map=${HALO_TEST_WORKSHOP_MP_MAP:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1/maps/bloodgulch.map}
+		if [ ! -f "$ws_mp_map" ]; then
+			echo "--- wsnames"; echo "SKIP (wsnames): no MCC multiplayer map (HALO_TEST_WORKSHOP_MP_MAP)"
+			continue
+		fi
+		if [ ! -r "${HALO_TEST_PROFILE:-}" ]; then
+			echo "--- wsnames"; echo "SKIP (wsnames): no HALO_TEST_PROFILE"; continue
+		fi
+		wsn=$out/wsn-data
+		mods_data "$wsn"
+		rm -rf "$wsn/workshop"; mkdir -p "$wsn/workshop/installed"
+		# (three items, this PC's MCC Blood Gulch as each map: Cursed Halo's 2905272848 - a dotted file name with no
+		# multiplayer\<map>.json, a map the item titles, one it titles longer than any row -, Amplitude's, and an item of
+		# one map of a file name past 23 characters, untitled but by its item (as the dev Vita's Snowtrap))
+		for item in 2905272848:cursed-h1.5_levee-mcc 2905272848:cursed-sidewinder-mcc 2905272848:cursed-hangemhigh-mcc \
+			2931965261:amplitude 2900000009:snowgulch_pb2_do_not_leak_x; do
+			id=${item%%:*} stem=${item#*:}
+			mkdir -p "$wsn/mods/$id/maps" "$wsn/mods/$id/halo1/maps" "$wsn/mods/$id/multiplayer"
+			cp --reflink=auto "$ws_mp_map" "$wsn/mods/$id/maps/$stem.map"
+			ln -sfn "$(dirname "$ws_mp_map")/bitmaps.map" "$wsn/mods/$id/halo1/maps/bitmaps.map"
+			echo "$(date +%s)" > "$wsn/workshop/installed/$id.gid"
+		done
+		# (MCC's multiplayer map files, as the items have them: the title "Neutral")
+		ws_json() { printf '{\n\t"MapGuid": "00000000-0000-0000-0000-000000000000",\n\t"ScenarioFile": "levels/test/%s/%s",\n\t"Title": {\n\t\t"Neutral": "%s"\n\t},\n\t"Description": {\n\t\t"Neutral": "A map."\n\t},\n\t"Images": {\n\t\t"Large": "images\\\\large.png"\n\t},\n\t"Flags": [],\n\t"InsertionPoints": []\n}\n' "$2" "$2" "$3" > "$wsn/mods/$1/multiplayer/$2.json"; }
+		ws_json 2905272848 cursed-sidewinder-mcc "Cursed Sidewinder"
+		ws_json 2905272848 cursed-hangemhigh-mcc "Hang 'em Higher: The Extremely Long Cursed Remix of Doom"
+		ws_json 2931965261 amplitude "  Amplitude "
+		printf 'title Cursed Halo Map Pack\n' > "$wsn/workshop/installed/2905272848.about"
+		printf 'title Amplitude Item\n' > "$wsn/workshop/installed/2931965261.about"
+		printf 'title Halo CE - Snow Gulch\n' > "$wsn/workshop/installed/2900000009.about"
+		# (the titles every screen says: a title at most 47 characters, as the level list keeps a map's name)
+		wsn_titles="Cursed H1.5 Levee|Cursed Sidewinder|Hang 'em Higher: The Extremely Long Cursed Remi|Amplitude|Halo CE - Snow Gulch"
+		ws_shots=()
+		[ -n "${HALO_TEST_SHOTS:-}" ] || ws_shots=("HALO_SCREENSHOT_DIR=$out/wsnames_shots" HALO_SCREENSHOT_EVERY=1000000)
+		rm -rf "$out/wsnames_shots"; mkdir -p "$out/wsnames_shots"
+		# (MULTIPLAYER, NETWORK: OFFLINE (h3offline's), MAP: SELECT MAP, down through the thirteen Xbox maps and the five
+		# Workshop maps, up two, B: the lobby; in English, then in Spanish)
+		off_d="down:150:500"
+		off_lobby="$h3mppad wait:150:1000 a:150:2000 $off_d $off_d a:150:2500"
+		wsn_pad="$off_lobby $off_d a:150:2500"
+		for row in $(seq 17); do wsn_pad="$wsn_pad down:150:400"; done
+		wsn_pad="$wsn_pad @wsn-picker:0:300 up:150:400 up:150:400 up:150:400 @wsn-picker2:0:300 b:150:2500 @wsn-lobby:0:300"
+		mods_from=$wsn/mods workshop_from=$wsn/workshop profile_from=$HALO_TEST_PROFILE run wsnames "$wsn" 60 "$wsn_pad" \
+			HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch "${ws_shots[@]}"
+		mods_from=$wsn/mods workshop_from=$wsn/workshop profile_from=$HALO_TEST_PROFILE run wsnames_es "$wsn" 60 \
+			"${wsn_pad//@wsn-/@wsn-es-}" HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch "${ws_shots[@]}" HALO_LANGUAGE=es \
+			"HALO_TEST_LANG_DIR=$root/port/vita/app0/lang" HALO_BUTTON_ICONS=playstation
+		check_h3 wsnames halo3
+		check_h3 wsnames_es halo3
+		log=$out/wsnames/run.log debug=$out/wsnames/data/debug.txt
+		grep -aE "Steam Workshop multiplayer map|shown as its item|cascade: mp maps: column 1, -, row 1[4-8]|map picker" "$log" "$debug" | cut -c1-240
+		grep -aq "mods: d:.mods.2905272848.maps.cursed-h1.5_levee-mcc.map is the Steam Workshop multiplayer map ws2905272848_cursed--f7a2, shown as \"Cursed H1.5 Levee\"" \
+			"$debug" || fail wsnames "the dotted file name was not taken as ws2905272848_cursed--f7a2, Cursed H1.5 Levee"
+		grep -aq "mods: d:.mods.2900000009.maps.snowgulch_pb2_do_not_leak_x.map is the Steam Workshop multiplayer map ws2900000009_snowgul-" \
+			"$debug" || fail wsnames "the file name of 27 characters was not taken"
+		grep -aq "is shown as its item's title \"Halo CE - Snow Gulch\"" "$debug" || fail wsnames "the item of one map was not shown by its title"
+		grep -a "is shown as its item's title" "$debug" | grep -aqv 2900000009 &&
+			fail wsnames "an item of many maps, or one its map's file titles, shown by the item's title"
+		grep -aq "workshop: 5 Steam Workshop multiplayer maps for the level list" "$debug" ||
+			fail wsnames "not all five Workshop maps were in the level list"
+		grep -aq "menus: h3 mp: the map picker: 18 maps (5 custom)" "$log" || fail wsnames "the map picker did not offer the five"
+		# (the rows as shown, cut to fit with "..." and their tag kept; in Spanish " (PERS.)", whose " (PERSONALIZADO)" cut
+		# every Workshop map's name)
+		for row in "CURSED H1\.5 LEVEE" "HANG 'EM HIGHER: [A-Z' ]*\.\.\." "CURSED SIDEWINDER" "AMPLITUDE" "HALO CE - SNOW GULCH"; do
+			grep -aqE "menus: cascade: mp maps: column 1, -, row 1[4-8] of 18: $row \(CUSTOM\)$" "$log" ||
+				fail wsnames "SELECT MAP's row $row (CUSTOM) not shown so"
+			grep -aqE "menus: cascade: mp maps: column 1, -, row 1[4-8] of 18: $row \(PERS\.\)$" "$out/wsnames_es/run.log" ||
+				fail wsnames_es "SELECT MAP's row $row (PERS.) not shown so"
+		done
+		# (nothing of the picker's or the lobby's drawn past its box: the harness's own check, ui_widget_port_text_check)
+		grep -aE "menus: text cut: pc.h3.(cascade.(row|c1|c2)_|mp.(map|caption))" "$log" "$out/wsnames_es/run.log" &&
+			fail wsnames "a text cut by its box (above)"
+		grep -aE "menus: cascade: mp maps: column 1, -, row 1[4-8] of 18: .*(MCC|ws[0-9])" "$log" "$out/wsnames_es/run.log" &&
+			fail wsnames "a file's or the network's name in SELECT MAP (above)"
+		# (each map played: OFFLINE, MAP it, START GAME: SELECT PROFILE, the game; the waiting lobby, the game, Start: the
+		# pause - Levee loads, every screen says its title)
+		wsn_rows=$(grep -a "menus: cascade: mp maps: column 1, -, row 1[4-8] of 18: " "$log" | sed 's/.*row \([0-9]*\) of 18: \(.*\)/\1|\2/' | sort -u)
+		for want in "CURSED H1.5 LEVEE|Cursed H1.5 Levee|levee" "HANG 'EM HIGHER|$(echo "$wsn_titles" | cut -d'|' -f3)|long" \
+			"AMPLITUDE|Amplitude|amplitude"; do
+			prefix=${want%%|*} rest=${want#*|} title=${rest%|*} tag=${want##*|}
+			row=$(echo "$wsn_rows" | grep -a "|$prefix" | head -1 | cut -d'|' -f1)
+			[ -n "$row" ] || { fail wsnames "no picker row for $title"; continue; }
+			play_pad="$off_lobby $off_d a:150:2500"
+			for n in $(seq $((row - 1))); do play_pad="$play_pad down:150:300"; done
+			play_pad="$play_pad a:150:2500 @wsn-$tag-lobby:0:300 $off_d $off_d a:150:3000 a:150:1500 a:150:1500 a:150:1000"
+			play_pad="$play_pad wait:150:1200 @wsn-$tag-waiting:0:300 level:150:6000 @wsn-$tag-game:0:300 start:150:2500 @wsn-$tag-pause:0:300"
+			play_pad="$play_pad b:150:1500 back:1500:0 @wsn-$tag-scoreboard:150:300 back:150:0 wait:150:1000"
+			mods_from=$wsn/mods workshop_from=$wsn/workshop profile_from=$HALO_TEST_PROFILE run wsnames_$tag "$wsn" 80 "$play_pad" \
+				HALO_MENU_STYLE=halo3 HALO_MAPS_DISABLED=mygulch HALO_BOTS=1 "${ws_shots[@]}"
+			check_h3 wsnames_$tag halo3
+			log2=$out/wsnames_$tag/run.log
+			grep -aE "h3 mp lobby: NETWORK: OFFLINE|h3 mp: the local game|h3 pregame: |h3 mp pause: |the host's map is|could not be loaded" "$log2" | cut -c1-220 | sort -u | head -12
+			title_caps=$(echo "$title" | tr a-z A-Z)
+			grep -aqF "menus: h3 mp lobby: NETWORK: OFFLINE, GAME: SLAYER, MAP: $title_caps" "$log2" ||
+				fail wsnames_$tag "the lobby's MAP was not $title_caps"
+			grep -aqF "menus: h3 mp: the local game starts: Slayer on $title, 1 player, 1 bot" "$log2" ||
+				fail wsnames_$tag "the local game was not started on $title"
+			grep -aqF "menus: h3 pregame: Waiting for other players; Slayer on $title;" "$log2" ||
+				fail wsnames_$tag "the waiting lobby did not say $title"
+			grep -aqF "menus: h3 mp pause: Slayer on $title, free for all, the host, 2 players" "$log2" ||
+				fail wsnames_$tag "the pause did not say $title"
+			grep -aqE "the host's map is levels.test.ws[0-9]+_[a-z0-9_-]+.ws[0-9]+_" "$log2" ||
+				fail wsnames_$tag "the game's map was not the Workshop map's network name"
+			grep -aq "could not be loaded" "$log2" && fail wsnames_$tag "its load failed"
+			grep -aE "h3 pregame: |h3 mp pause: " "$log2" | grep -aE "ws[0-9]{4}" && fail wsnames_$tag "the network's name shown (above)"
+			grep -aE "menus: text cut: pc.(h3|online).(mppause.(title|game)|pregame.caption|mp.(map|caption))" "$log2" &&
+				fail wsnames_$tag "the map's name cut by its box (above)"
+		done
+		# (Menu style Online, the dev Vita's: past its title, MULTIPLAYER (its lobby live on SYSTEM LINK), HOST SETTINGS, A:
+		# NETWORK, A: SELECT NETWORK, down two to OFFLINE, A, Circle: the lobby's HOST SETTINGS "On this PS Vita only" whole - its letters' tails
+		# too -; in Spanish too)
+		onl_pad="wait:150:3000 a:150:3000 down:150:700 a wait:150:4000 down:150:500 a:150:2500 a:150:2000 down:150:600"
+		onl_pad="$onl_pad down:150:600 a:150:2500"
+		onl_pad="$onl_pad @wsn-online-host:0:300 b:150:2500 @wsn-online-lobby:0:300"
+		mods_from=$wsn/mods workshop_from=$wsn/workshop profile_from=$HALO_TEST_PROFILE run wsnames_online "$wsn" 45 "$onl_pad" \
+			HALO_MENU_STYLE=online HALO_MAPS_DISABLED=mygulch "${ws_shots[@]}"
+		mods_from=$wsn/mods workshop_from=$wsn/workshop profile_from=$HALO_TEST_PROFILE run wsnames_online_es "$wsn" 45 \
+			"${onl_pad//@wsn-/@wsn-es-}" HALO_MENU_STYLE=online HALO_MAPS_DISABLED=mygulch "${ws_shots[@]}" HALO_LANGUAGE=es \
+			"HALO_TEST_LANG_DIR=$root/port/vita/app0/lang" HALO_BUTTON_ICONS=playstation
+		for name in wsnames_online wsnames_online_es; do
+			[ "$(cat "$out/$name/exit")" = 0 ] || fail $name "exit $(cat "$out/$name/exit")"
+			grep -aE "host settings: |network status" "$out/$name/run.log" | tail -3
+		done
+		grep -aq "menus: network status: On this PS Vita only$" "$out/wsnames_online/run.log" ||
+			fail wsnames_online "the lobby's HOST SETTINGS did not say On this PS Vita only, whole"
+		grep -aq "menus: network status: Solo en esta PS Vita$" "$out/wsnames_online_es/run.log" ||
+			fail wsnames_online_es "the lobby's HOST SETTINGS did not say Solo en esta PS Vita, whole"
 		;;
 	*)
 		echo "usage: $0 [$(echo $all_cases $pc_cases | tr ' ' '|')]..." >&2; exit 2 ;;

@@ -124,7 +124,7 @@ ui.map's own, the rest this folder's art. -->
 		<child widget="h3/campaign/start_adhoc" x="0" y="74"/>
 	</widget>
 	<!-- (the connection's status under NETWORK, for co-op: port h3 network status) -->
-	<widget name="h3/campaign/network_status" type="text" left="24" top="71" width="226" height="14" font="h3/font_small" color="#FF9FB6CC">
+	<widget name="h3/campaign/network_status" type="text" left="24" top="71" width="226" height="16" font="h3/font_small" color="#FF9FB6CC">
 		<data input="port h3 network status"/>
 	</widget>
 	<widget name="h3/campaign/rule2" left="8" top="146" width="250" height="2" bitmap="h3/rule"/>

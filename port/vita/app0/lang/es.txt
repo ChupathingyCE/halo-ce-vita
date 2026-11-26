@@ -3182,7 +3182,7 @@
 "Change a map's objects, then play it." = "Cambia los objetos de un mapa y juégalo."
 "HALO CE" = "HALO CE"
 "Halo CE's missions." = "Misiones de Halo CE."
-" (CUSTOM)" = " (PERSONALIZADO)"
+" (CUSTOM)" = " (PERS.)"
 "Kill the other players. The first to the score limit wins." = "Mata a los demás jugadores. Gana el primero en llegar al límite."
 "Bring the other team's flag to your base, and keep yours." = "Lleva la bandera rival a tu base y protege la tuya."
 "Hold the skull as long as you can: every second scores." = "Sostén la calavera todo lo que puedas: cada segundo puntúa."

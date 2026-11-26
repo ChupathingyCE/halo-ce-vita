@@ -924,6 +924,8 @@ static struct
 	boolean lobby_after_failure;
 } h3_local;
 static boolean row_column(struct widget_instance *row, char const *name, char const *text);
+static void text_show_fitted(struct widget_instance *widget, char const *text);
+static boolean text_fitted(struct widget_instance *widget, char const *text, char *shown, int size);
 static boolean h3_mp_local_start(void);
 static void h3_mp_local_update(boolean main_menu_loaded);
 static boolean h3_mp_lobby_open_offline(void);
@@ -4714,14 +4716,14 @@ static void h3_mp_lobby_update(struct widget_instance *widget)
 	snprintf(said + strlen(said), sizeof(said) - strlen(said), ", %s", text);
 	snprintf(text, sizeof(text), "%s: %s", T("MAP"), h3_mp_map_name());
 	h3_capitals(text);
-	text_show(named(screen, "map_row"), text);
+	text_show_fitted(named(screen, "map_row"), text);
 	snprintf(said + strlen(said), sizeof(said) - strlen(said), ", %s", text);
 	snprintf(text, sizeof(text), "%s", h3_mp_gametype_name());
 	h3_capitals(text);
 	text_show(named(screen, "game_value"), text);
 	snprintf(text, sizeof(text), "%s", h3_mp_map_name());
 	h3_capitals(text);
-	text_show(named(screen, "map_value"), text);
+	text_show_fitted(named(screen, "map_value"), text);
 	for (index = 0; index < (short)NUMBEROF(rows); index++)
 	{
 		if ((found = named(screen, rows[index])) != NULL)
@@ -4748,7 +4750,7 @@ static void h3_mp_lobby_update(struct widget_instance *widget)
 	}
 	/* (Halo 3's: "Slayer on Valhalla") */
 	snprintf(text, sizeof(text), T("%s on %s"), h3_mp_gametype_name(), h3_mp_map_name());
-	text_show(named(screen, "caption"), text);
+	text_show_fitted(named(screen, "caption"), text);
 	/* ("1 Player (16 max)": the most players a game of that network takes -
 	network.max_players on every network a game is hosted on, its 0 the
 	Xbox's 16: network_server_manager.c; HOST SETTINGS' MAX PLAYERS) */
@@ -5093,6 +5095,26 @@ static void h3_network_status_update(struct widget_instance *widget)
 		snprintf(text, sizeof(text), "%s", T("On this PS Vita only"));
 	}
 	text_show(widget, text);
+	/* (1.1.3 8v: said when it changes, and whether it fits its box - its letters' tails too: the dev Vita, Nov 26,
+	showed "On this PS Vita onlu", the box 14 high - for the tests) */
+	if (widget && widget->type == _ui_widget_type_text_box && widget->parameters.text_box.text)
+	{
+		static char said[192];
+		char line[192];
+		short room_width, room_height, text_width, text_height;
+
+		/* (the whole line: its baseline - ui_widget_port_text_measure's height, three quarters of a line - and the quarter
+		under it, the tails of g, p and y) */
+		ui_widget_port_text_measure(widget, widget->parameters.text_box.text, &room_width, &room_height, &text_width,
+			&text_height);
+		snprintf(line, sizeof(line), "%s%s", text, text_width <= room_width && text_height + text_height / 3 <= room_height ?
+			"" : " (does not fit)");
+		if (strcmp(line, said))
+		{
+			snprintf(said, sizeof(said), "%s", line);
+			platform_log("menus: network status: %s", line);
+		}
+	}
 }
 
 /* (port h3 network set) the network picker's choice: ONLINE, SYSTEM LINK
@@ -9440,7 +9462,7 @@ static void h3_mp_pause_update(struct widget_instance *list)
 	}
 	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", name, map);
 	h3_capitals(text);
-	text_show(named(screen, "title"), text);
+	text_show_fitted(named(screen, "title"), text);
 	if (game)
 	{
 		snprintf(text, sizeof(text), T("%s, score to win %ld"), game->variant.universal_variant.teams ?
@@ -9448,7 +9470,13 @@ static void h3_mp_pause_update(struct widget_instance *list)
 		text_show(named(screen, "rules"), text);
 		snprintf(text, sizeof(text), game->player_count == 1 ? T("%d Player") : T("%d Players"), game->player_count);
 		text_show(named(screen, "count"), text);
-		snprintf(text, sizeof(text), T("%s on %s"), name, map);
+		snprintf(line, sizeof(line), T("%s on %s"), name, map);
+		/* (1.1.3 8v: a long map title's line cut to the panel's width, text_show_fitted's way) */
+		if ((child = named(screen, "game")) != NULL && child->type == _ui_widget_type_text_box &&
+			!(halo_menu_style_classic_plus() && classic_widget(child)))
+			text_fitted(child, line, text, (int)sizeof(text));
+		else
+			snprintf(text, sizeof(text), "%s", line);
 		snprintf(text + strlen(text), sizeof(text) - strlen(text), "\n%s\n\n%s", host ?
 			T("You host this game.") : T("You joined this game."), host ?
 			T("END GAME ends it for every player.") : T("LEAVE GAME: the others play on."));
@@ -16561,6 +16589,78 @@ static boolean text_too_wide(struct widget_instance *widget, char const *text, s
 	return ui_widget_port_text_too_wide(widget, (wchar_t const *)characters, width);
 }
 
+/* (1.1.3 8v) whether a line is wider than its box's room: its width less its text's offset, as the box draws it
+(ui_widget_port_text_measure; text_too_wide's width is the whole box's) */
+static boolean text_wider_than_room(struct widget_instance *widget, char const *text)
+{
+	unsigned short characters[256];
+	short room_width, room_height, text_width, text_height;
+	long length = halo_menus_utf16(text, characters, (long)NUMBEROF(characters)), index;
+
+	for (index = 0; index < length - 1; index++)
+	{
+		if (characters[index] > 0xFF)
+			characters[index] = '?';
+	}
+	return ui_widget_port_text_measure(widget, (wchar_t const *)characters, &room_width, &room_height, &text_width,
+		&text_height) && room_width > 0 && text_width > room_width;
+}
+
+/* (1.1.3 8v) a line of the port's text in a text box, cut to its width with "..." when wider - a tag at
+its end, "(CUSTOM)", kept whole, the words before it cut ("CURSED HANG 'EM HIG... (CUSTOM)") -, as the
+server browser's rows (row_column); a text that fits, of lines, or a Classic+ box's, as text_show shows it
+(8v device test, Nov 26: SELECT MAP's "CURSED-CRITICAL-V2-MCC (CUSTO" ran off its row) */
+/* (the line `text` as text_show_fitted shows it, in `shown` (`size`): itself when it fits the box's room, else cut with
+"..." (its tag kept); FALSE when not even one character fits) */
+static boolean text_fitted(struct widget_instance *widget, char const *text, char *shown, int size)
+{
+	char const *tag;
+	long head, kept;
+
+	snprintf(shown, (size_t)size, "%s", text);
+	if (!text_wider_than_room(widget, text))
+		return TRUE;
+	head = (long)strlen(text);
+	tag = strrchr(text, '(');
+	if (head > 0 && text[head - 1] == ')' && tag && tag > text + 1 && tag[-1] == ' ')
+		head = (long)(tag - 1 - text);
+	else
+		tag = "";
+	for (kept = head; kept > 0; kept--)
+	{
+		long end = kept;
+
+		/* (whole characters: the text is UTF-8) */
+		if (kept < head && ((unsigned char)text[kept] & 0xC0) == 0x80)
+			continue;
+		while (end > 0 && text[end - 1] == ' ')
+			end--;
+		if (!end)
+			break;
+		snprintf(shown, (size_t)size, "%.*s...%s%s", (int)end, text, tag[0] ? " " : "", tag);
+		if (!text_wider_than_room(widget, shown))
+			return TRUE;
+	}
+	snprintf(shown, (size_t)size, "%s", text);
+	return FALSE;
+}
+
+static void text_show_fitted(struct widget_instance *widget, char const *text)
+{
+	char shown[256];
+
+	if (!widget || !widget->name || widget->type != _ui_widget_type_text_box || !text || !*text || strchr(text, '\n') ||
+		strlen(text) >= sizeof(shown) - 4 || (halo_menu_style_classic_plus() && classic_widget(widget)))
+	{
+		text_show(widget, text);
+		return;
+	}
+	if (text_fitted(widget, text, shown, (int)sizeof(shown)))
+		text_show(widget, shown);
+	else
+		row_column(widget, widget->name, text);
+}
+
 static int text_show_two_lines(struct widget_instance *widget, char const *text)
 {
 	char lines[192];
@@ -22733,7 +22833,7 @@ static void h3_pregame_update(struct widget_instance *widget)
 		if ((found = named(screen, "emblem")) != NULL)
 			widget_instance_set_visibility_recursive(found, FALSE);
 	}
-	text_show(named(screen, "caption"), text);
+	text_show_fitted(named(screen, "caption"), text);
 	{
 		char flat[192];
 		char *newline;
@@ -25190,11 +25290,15 @@ static void cascade_update(struct widget_instance *list)
 				kind->item_name(cascade.group, shown_index, text, (int)sizeof(text));
 			else
 				kind->group_name(shown_index, text, (int)sizeof(text));
-			text_show(child, text);
+			text_show_fitted(child, text);
 			if (index == view->row)
 			{
 				focus = child;
-				snprintf(focus_text, sizeof(focus_text), "%s", text);
+				/* (as it is shown: cut to fit, text_show_fitted) */
+				if (child->type == _ui_widget_type_text_box && child->parameters.text_box.text)
+					h3_utf8(focus_text, (int)sizeof(focus_text), child->parameters.text_box.text);
+				else
+					snprintf(focus_text, sizeof(focus_text), "%s", text);
 			}
 		}
 		if (focus && focus != list->focused_child)
@@ -25219,12 +25323,12 @@ static void cascade_update(struct widget_instance *list)
 			if (shown && cascade.column == CASCADE_COLUMN_VARIANTS)
 			{
 				kind->item_name(cascade.group, cascade.view2.offset + (int)index, text, (int)sizeof(text));
-				text_show(found, text);
+				text_show_fitted(found, text);
 			}
 			else if (shown)
 			{
 				kind->group_name(cascade.view1.offset + (int)index, text, (int)sizeof(text));
-				text_show(found, text);
+				text_show_fitted(found, text);
 			}
 		}
 		snprintf(name, sizeof(name), "c2_%ld", index);
@@ -25235,7 +25339,7 @@ static void cascade_update(struct widget_instance *list)
 			if (shown)
 			{
 				kind->item_name(cascade.group, (int)index, text, (int)sizeof(text));
-				text_show(found, text);
+				text_show_fitted(found, text);
 			}
 		}
 	}
