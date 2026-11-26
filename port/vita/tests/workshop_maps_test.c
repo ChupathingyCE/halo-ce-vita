@@ -42,9 +42,35 @@ int main(void)
 	check(!workshop_map_name_make(0, "a", name), "item 0 is refused");
 	check(!workshop_map_name_make(5, "", name), "an empty file name is refused");
 	check(!workshop_map_name_make(5, "Upper", name), "an upper-case file name is refused (the mods unit makes it lower)");
-	check(!workshop_map_name_make(5, "a.b", name) && !workshop_map_name_make(5, "a\\b", name) &&
-		!workshop_map_name_make(5, "../x", name), "a dot, a separator, a climb refused");
-	check(!workshop_map_name_make(5, "abcdefghijklmnopqrstuvwx", name), "a file name of 24 characters is refused");
+	check(!workshop_map_name_make(5, "a\\b", name) && !workshop_map_name_make(5, "../x", name) &&
+		!workshop_map_name_make(5, ".a", name) && !workshop_map_name_make(5, "a.", name) &&
+		!workshop_map_name_make(5, "a..b", name) && !workshop_map_name_make(5, "a/b", name),
+		"a separator, a climb, a dot first, last or two together refused");
+	/* (1.1.3 8v device test, Nov 26: Cursed Halo's cursed-h1.5_levee-mcc.map was left out of the map picker) */
+	check(workshop_map_name_make(5, "a.b", name) && !strcmp(name, "ws5_a_b"), "a dot between two characters: '_' in the name (ws5_a_b)");
+	check(workshop_map_name_make(2905272848ull, "cursed-h1.5_levee-mcc", name) && strlen(name) == WORKSHOP_MAP_NAME_MAXIMUM &&
+		!strncmp(name, "ws2905272848_cursed--", 21) && workshop_map_name_parse(name, sizeof(name), &id) && id == 2905272848ull,
+		"Cursed Halo's cursed-h1.5_levee-mcc: a name of 25 characters a joiner reads (ws2905272848_cursed--xxxx)");
+	printf("  (%s)\n", name);
+	{
+		char other[WORKSHOP_MAP_NAME_BYTES];
+
+		check(workshop_map_name_make(2905272848ull, "cursed-h1_5_levee-mcc", other) && strcmp(name, other),
+			"... not the name of a file named alike with '_' for its '.' (the hash is of the file's own name)");
+	}
+	/* (1.1.3 8v: the dev Vita's Snowtrap, a file name of 29 characters - before, 23 at most) */
+	check(workshop_map_name_make(2904654154ull, "snowtrap_pb2_do_not_leak_xxxx", name) && !strncmp(name, "ws2904654154_snowtra-", 21) &&
+		strlen(name) == WORKSHOP_MAP_NAME_MAXIMUM, "a file name of 29 characters: its first characters and the hash");
+	{
+		char stem[80];
+
+		memset(stem, 'a', sizeof(stem));
+		stem[WORKSHOP_MAP_STEM_BYTES - 1] = 0;
+		check(workshop_map_name_make(5, stem, name), "a file name of 63 characters is named");
+		stem[WORKSHOP_MAP_STEM_BYTES - 1] = 'a';
+		stem[WORKSHOP_MAP_STEM_BYTES] = 0;
+		check(!workshop_map_name_make(5, stem, name), "a file name of 64 characters is refused");
+	}
 	/* names read */
 	check(workshop_map_name_parse("ws2900000002_fakegulch", 32, &id) && id == 2900000002ull, "a name read: its item");
 	check(workshop_map_name_parse("WS2900000002_FakeGulch", 32, &id) && id == 2900000002ull, "in any case");

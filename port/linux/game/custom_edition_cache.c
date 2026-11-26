@@ -3107,7 +3107,10 @@ boolean custom_edition_cache_load_failure_show(
 		boolean menus = !csstrcasecmp(custom_edition_load_failure.map_name, "ui");
 		char const *title = menus ? T("the main menu") :
 			custom_edition_maps_level_title(custom_edition_load_failure.map_name);
-		boolean xbox_level = menus || csstrcmp(title, custom_edition_load_failure.map_name) != 0;
+		/* (1.1.3 8v: a Steam Workshop map is said by its title too - custom_edition_maps_level_title -, and is a
+		custom map) */
+		boolean xbox_level = menus || (csstrcmp(title, custom_edition_load_failure.map_name) != 0 &&
+			!custom_edition_cache_workshop_name(custom_edition_load_failure.map_name));
 
 		snprintf(
 			message,

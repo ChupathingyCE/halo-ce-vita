@@ -10029,7 +10029,9 @@ static char const *lan_map_title(char const *map)
 		if (leaf && !_stricmp(leaf + 1, map))
 			return h3_level_names[index];
 	}
-	return map;
+	/* (1.1.3 8v: a Steam Workshop map this machine has, by its title, as the
+	lobbies say it) */
+	return custom_edition_maps_level_title(map);
 }
 
 /* the browser's games: the System Link list's, as the online browser's
@@ -10639,7 +10641,8 @@ static void browser_update(struct widget_instance *list)
 		}
 		else
 			name_cut = row_column(child, "row_name", entry->name);
-		map_cut = row_column(child, "row_map", entry->map);
+		/* (1.1.3 8v: an online game's Steam Workshop map this machine has, by its title, as the System Link list's) */
+		map_cut = row_column(child, "row_map", custom_edition_maps_level_title(entry->map));
 		/* (co-op: its difficulty beside it - "Co-op · Legendary" in the Halo
 		3 rows, whose font has the dot -, when the listing says it) */
 		{
