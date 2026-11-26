@@ -13,6 +13,7 @@ printable ASCII (what the game's font and the game lists show).
 #include <psp2/apputil.h>
 #include <psp2/common_dialog.h>
 #include <psp2/ime_dialog.h>
+#include <psp2/kernel/processmgr.h>
 #include <psp2/system_param.h>
 
 #include <stdio.h>
@@ -28,6 +29,10 @@ static SceWChar16 ime_title[SCE_IME_DIALOG_MAX_TITLE_LENGTH];
 static SceWChar16 ime_initial[IME_TEXT_SIZE];
 static SceWChar16 ime_input[IME_TEXT_SIZE + 1];
 static int ime_open;
+/* (when it closed: vita_ime_blocking's moment after) */
+static unsigned long long ime_closed_us;
+/* (how long after it closes the touches stay the dialog's: the finger that pressed its OK or Cancel lifting) */
+#define IME_AFTER_US 500000ULL
 
 static void ime_log(const char *step, int result)
 {
@@ -128,6 +133,7 @@ int vita_ime_poll(char *text, int size)
 	ime_log("sceImeDialogGetResult", code);
 	ime_log("sceImeDialogTerm", sceImeDialogTerm());
 	ime_open = 0;
+	ime_closed_us = sceKernelGetProcessTimeWide();
 	if (status < 0 || code < 0 || result.button != SCE_IME_DIALOG_BUTTON_ENTER)
 	{
 		memset(ime_input, 0, sizeof(ime_input));
@@ -140,4 +146,13 @@ int vita_ime_poll(char *text, int size)
 	/* (what was typed - a password, maybe - kept here no longer) */
 	memset(ime_input, 0, sizeof(ime_input));
 	return 1;
+}
+
+/* 1.1.3-insider.8v: the touches are the dialog's while it is open and for a moment after it closes - the system's
+keyboard does not keep them from the game: 8u device test, Nov 26, taps on the Workshop search's keyboard reached
+the Workshop's cards behind it (card tapped -> details -> download, twice). The pad's buttons were already the
+dialog's (vita_settings.c game_text_input, held_after_close) */
+int vita_ime_blocking(void)
+{
+	return ime_open || (ime_closed_us && sceKernelGetProcessTimeWide() - ime_closed_us < IME_AFTER_US);
 }
