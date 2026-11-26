@@ -2063,6 +2063,8 @@ short custom_edition_cache_mod_map_check(
 		{
 			char resource_path[MAP_PATH_SIZE];
 
+			/* (8v audit: no path made - a mod set name not taken - logs an empty one, never the stack's bytes) */
+			resource_path[0] = 0;
 			if (TEST_FLAG(used, type) &&
 				(!custom_edition_resource_map_path(&identity, (enum resource_map_type)type, resource_path) ||
 					!file_path_exists(resource_path)))
