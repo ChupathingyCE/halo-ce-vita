@@ -1858,6 +1858,13 @@ char const *custom_edition_maps_level_title(
 	{
 		return title;
 	}
+	/* (1.1.3 8v: a map of MCC's own, mcc_<map>, by its title, as the picker says it - the dev Vita, Nov 26: the
+	pause said "Slayer on mcc_dangercanyon") */
+	if (!_strnicmp(name, MCC_CONTENT_NAME_PREFIX, strlen(MCC_CONTENT_NAME_PREFIX)) &&
+		(title = mcc_content_title(name + strlen(MCC_CONTENT_NAME_PREFIX))) != NULL && title[0])
+	{
+		return title;
+	}
 
 	for (index = 0; index < NUMBEROF(xbox_level_names); index++)
 	{

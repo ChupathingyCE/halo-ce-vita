@@ -5213,6 +5213,26 @@ PY
 			grep -aE "menus: text cut: pc.(h3|online).(mppause.(title|game)|pregame.caption|mp.(map|caption))" "$log2" &&
 				fail wsnames_$tag "the map's name cut by its box (above)"
 		done
+		# (MCC's own maps by their titles too - the dev Vita, Nov 26, after the MCC files' download: the pause said "Slayer
+		# on mcc_dangercanyon" -: MCC's halo1 as the Halo content folder, a local game on Danger Canyon, Start: the pause)
+		wsn_mcc=${HALO_TEST_MCC_ROOT:-$HOME/.local/share/Steam/steamapps/common/Halo The Master Chief Collection/halo1}
+		if [ -r "$wsn_mcc/maps/dangercanyon.map" ] && [ -r "$wsn_mcc/maps/custom_edition/bitmaps.map" ]; then
+			rm -rf "$out/wsn-content"; mkdir -p "$out/wsn-content/halo1/maps"
+			for file in "$wsn_mcc"/maps/*.map "$wsn_mcc"/maps/custom_edition; do ln -sfn "$file" "$out/wsn-content/halo1/maps/"; done
+			for file in "$wsn_mcc"/*; do [ "$(basename "$file")" = maps ] || ln -sfn "$file" "$out/wsn-content/halo1/"; done
+			profile_from=$HALO_TEST_PROFILE run wsnames_mcc "$menus_data" 70 "wait:150:32000 start:150:3000 @wsn-mcc-pause:0:300" \
+				HALO_MENU_STYLE=halo3 HALO_CONTENT_ROOT="$out/wsn-content" HALO_NETWORK_TEST=local:mcc_dangercanyon:slayer \
+				HALO_NETWORK_TEST_PROFILE=1 HALO_NETWORK_TEST_START=3 HALO_BOTS=1 "${ws_shots[@]}"
+			log2=$out/wsnames_mcc/run.log
+			grep -aE "h3 mp pause: |the host's map is" "$log2" | sort -u | head -4
+			[ "$(cat "$out/wsnames_mcc/exit")" = 0 ] || fail wsnames_mcc "exit $(cat "$out/wsnames_mcc/exit")"
+			grep -aq "the host's map is levels.test.mcc_dangercanyon.mcc_dangercanyon" "$log2" ||
+				fail wsnames_mcc "the game was not on MCC's Danger Canyon"
+			grep -aq "menus: h3 mp pause: Slayer on Danger Canyon, " "$log2" || fail wsnames_mcc "the pause did not say Danger Canyon"
+			grep -a "menus: h3 mp pause: " "$log2" | grep -aq "mcc_" && fail wsnames_mcc "the pause said MCC's file name"
+		else
+			echo "(wsnames: no MCC halo1 folder with Danger Canyon: MCC's map names not run)"
+		fi
 		# (Menu style Online, the dev Vita's: past its title, MULTIPLAYER (its lobby live on SYSTEM LINK), HOST SETTINGS, A:
 		# NETWORK, A: SELECT NETWORK, down two to OFFLINE, A, Circle: the lobby's HOST SETTINGS "On this PS Vita only" whole - its letters' tails
 		# too -; in Spanish too)

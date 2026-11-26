@@ -3107,10 +3107,11 @@ boolean custom_edition_cache_load_failure_show(
 		boolean menus = !csstrcasecmp(custom_edition_load_failure.map_name, "ui");
 		char const *title = menus ? T("the main menu") :
 			custom_edition_maps_level_title(custom_edition_load_failure.map_name);
-		/* (1.1.3 8v: a Steam Workshop map is said by its title too - custom_edition_maps_level_title -, and is a
-		custom map) */
+		/* (1.1.3 8v: a Steam Workshop map, or one of MCC's own - mcc_<map> -, is said by its title too -
+		custom_edition_maps_level_title -, and is still said as a custom map, as before) */
 		boolean xbox_level = menus || (csstrcmp(title, custom_edition_load_failure.map_name) != 0 &&
-			!custom_edition_cache_workshop_name(custom_edition_load_failure.map_name));
+			!custom_edition_cache_workshop_name(custom_edition_load_failure.map_name) &&
+			_strnicmp(custom_edition_load_failure.map_name, MCC_CONTENT_NAME_PREFIX, strlen(MCC_CONTENT_NAME_PREFIX)));
 
 		snprintf(
 			message,
