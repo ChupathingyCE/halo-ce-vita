@@ -12432,10 +12432,10 @@ static void h3_mods_said(void)
 		char modes[64];
 
 		mod_manager_modes_text(entry->modes, modes, sizeof(modes));
-		platform_log("menus: h3 mods: %s: %s, %s, %d KB, %s%s%s, works in %s%s%s", entry->file,
-			mod_manager_kind_name(entry->kind), entry->enabled ? "on" : "off", entry->kilobytes,
+		platform_log("menus: h3 mods: %s: %s, %s, %d KB, %s%s%s, works in %s%s%s, from %s, title %s", entry->file,
+			mod_manager_entry_kind_name(entry), entry->enabled ? "on" : "off", entry->kilobytes,
 			entry->valid ? "passed" : "failed", entry->why[0] ? ": " : "", entry->why, modes,
-			entry->needs[0] ? ", needs " : "", entry->needs);
+			entry->needs[0] ? ", needs " : "", entry->needs, mod_manager_source_name(entry->source), entry->title);
 	}
 }
 
@@ -12803,7 +12803,7 @@ static void h3_mods_update(struct widget_instance *list)
 		widget_instance_set_visibility_recursive(child, TRUE);
 		child->disabled = FALSE;
 		row_column(child, "row_name", entry->kind == HALO_MOD_KIND_MCC_MOD ? entry->title : entry->file);
-		row_column(child, "row_kind", mod_manager_kind_name(entry->kind));
+		row_column(child, "row_kind", mod_manager_entry_kind_name(entry));
 		h3_mods_size_text(text, sizeof(text), entry->kilobytes);
 		row_column(child, "row_size", text);
 		row_column(child, "row_state", h3_mods_state_name(entry));
@@ -13337,6 +13337,9 @@ static struct
 	int details_installed;
 	unsigned long long details_installed_gid;
 	char details_checked_id[24];
+	/* (1.1.3) the installed item's problem as the mod manager says it ("Not supported on PS Vita: ...": a map the
+	load would refuse, never listed to play; "" none) */
+	char details_unsupported[HALO_MODS_TEXT_BYTES];
 	/* a finger on the screen: where it came down, a swipe taken */
 	boolean touching, swiped;
 	short touch_x, touch_y;
@@ -13446,6 +13449,20 @@ static int h3_workshop_map_check(void *context, const char *path, char *why, siz
 		snprintf(why, why_size, "%s", T("not a Halo: CE Anniversary map"));
 		return 0;
 	}
+	/* (1.1.3: a map the load would refuse - its scripts take parameters, ... - installed with the item, never listed
+	to play, and said now: the install's end and the mod manager tell why; device test, Nov 25) */
+	if (context)
+	{
+		char unsupported[160];
+
+		custom_edition_cache_mod_map_check(game_path, unsupported, sizeof(unsupported));
+		if (unsupported[0] && !((char *)context)[0])
+		{
+			char const *name = strrchr(path, '/');
+
+			snprintf((char *)context, 200, "%.40s: %.150s", name ? name + 1 : path, unsupported);
+		}
+	}
 	return 1;
 }
 
@@ -13458,10 +13475,20 @@ static void h3_workshop_install_staged(void)
 
 	for (index = 0; index < count; index++)
 	{
-		if (steam_workshop_install(h3_workshop_root(), ids[index], h3_workshop_map_check, NULL, why, sizeof(why)))
+		char unsupported[200];
+
+		unsupported[0] = 0;
+		if (steam_workshop_install(h3_workshop_root(), ids[index], h3_workshop_map_check, unsupported, why, sizeof(why)))
 		{
 			h3_workshop.installed++;
 			platform_log("menus: workshop: %llu installed in mods", (unsigned long long)ids[index]);
+			if (unsupported[0])
+			{
+				platform_log("menus: workshop: %llu: not supported on PS Vita: %s", (unsigned long long)ids[index], unsupported);
+				snprintf(line, sizeof(line), T("Not supported on PS Vita (%llu, %.150s): not in the map lists\n"),
+					(unsigned long long)ids[index], unsupported);
+				strncat(h3_workshop.message, line, sizeof(h3_workshop.message) - strlen(h3_workshop.message) - 1);
+			}
 		}
 		else
 		{
@@ -14064,6 +14091,23 @@ static void h3_workshop_update(struct widget_instance *widget)
 			h3_workshop.details_installed = steam_workshop_id_parse(page.id, &id) &&
 				steam_workshop_installed(h3_workshop_root(), id, &gid);
 			h3_workshop.details_installed_gid = gid;
+			h3_workshop.details_unsupported[0] = 0;
+			if (page.needs)
+				platform_log("menus: workshop: %s needs %d other items: %s", page.id, page.needs, page.needs_titles);
+			if (h3_workshop.details_installed)
+			{
+				short entry_index;
+				struct halo_mod_entry const *entry;
+
+				mod_manager_scan();
+				entry_index = mod_manager_find(page.id, HALO_MOD_KIND_MCC_MOD);
+				entry = entry_index != NONE ? mod_manager_entry(entry_index) : NULL;
+				if (entry && entry->workshop && entry->why[0])
+				{
+					snprintf(h3_workshop.details_unsupported, sizeof(h3_workshop.details_unsupported), "%s", entry->why);
+					platform_log("menus: workshop: %s installed: %s", page.id, entry->why);
+				}
+			}
 		}
 		if (details_mode && page.state == 2)
 			state = h3_workshop_state(h3_workshop.details_installed, h3_workshop.details_installed_gid, page.version);
@@ -14157,6 +14201,18 @@ static void h3_workshop_update(struct widget_instance *widget)
 						if (!page.maps)
 							strncat(text, T("\nNo maps: it would not install."), sizeof(text) - strlen(text) - 1);
 					}
+				}
+				/* (1.1.3: the items it needs, never downloaded with it - the release is frozen -, and an installed
+				item's map this build cannot run, said here rather than at its load: device test, Nov 25) */
+				if (page.state == 2 && page.needs)
+				{
+					snprintf(line, sizeof(line), T("\nAlso needs: %.200s - download those too"), page.needs_titles);
+					strncat(text, line, sizeof(text) - strlen(text) - 1);
+				}
+				if (page.state == 2 && state && h3_workshop.details_unsupported[0])
+				{
+					snprintf(line, sizeof(line), "\n%s", h3_workshop.details_unsupported);
+					strncat(text, line, sizeof(text) - strlen(text) - 1);
 				}
 				h3_dialog_text(found, text);
 			}
@@ -15140,7 +15196,7 @@ static void h3_mods_details_update(struct widget_instance *widget)
 	text_show(named(screen, "details_title"), entry->kind == HALO_MOD_KIND_MCC_MOD ? entry->title : entry->file);
 	mod_manager_modes_text(entry->modes, modes, sizeof(modes));
 	h3_mods_size_text(size_text, sizeof(size_text), entry->kilobytes);
-	length += snprintf(text + length, sizeof(text) - (size_t)length, "%s: %s\n", T("Type"), mod_manager_kind_name(entry->kind));
+	length += snprintf(text + length, sizeof(text) - (size_t)length, "%s: %s\n", T("Type"), mod_manager_entry_kind_name(entry));
 	length += snprintf(text + length, sizeof(text) - (size_t)length, "%s: %s%s\n", T("File"),
 		entry->kind == HALO_MOD_KIND_MCC_MOD ? "mods/" : "maps/", entry->file);
 	length += snprintf(text + length, sizeof(text) - (size_t)length, "%s: %s\n", T("Size"), size_text);

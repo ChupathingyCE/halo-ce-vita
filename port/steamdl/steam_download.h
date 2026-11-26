@@ -138,6 +138,10 @@ int steam_download_workshop_page(struct steam_session *session, uint64_t id, str
 /* (the browser) these accounts' public names ("" where none came): the names found, -1 if the call failed */
 int steam_download_workshop_names(struct steam_session *session, const uint64_t *steamids, int count,
 	char (*names)[STEAM_WORKSHOP_AUTHOR_SIZE]);
+/* (1.1.3) the titles of these items (the items an item needs: one GetDetails call), each "" Steam gave none of: the
+titles found (0 none), -1 if the call failed (every title "") */
+int steam_download_workshop_titles(struct steam_session *session, const uint64_t *ids, int count,
+	char (*titles)[STEAM_WORKSHOP_TITLE_SIZE]);
 
 /* (the browser's details page) the item's manifest read (the depot key, its request code, a CDN - cdn_override's,
 else Steam's list - one try each, no waits) and its files put through the name rule: 1, or 0 with a reason. Nothing

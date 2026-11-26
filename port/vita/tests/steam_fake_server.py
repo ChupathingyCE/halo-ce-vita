@@ -319,6 +319,11 @@ def workshop_png(rng):
     return b"\x89PNG\r\n\x1a\n" + rng.randbytes(300)
 
 
+# (1.1.3) the items an item needs (Steam's required items: its children); one Steam would not name (not a Workshop item
+# of the fake's) and the item itself, which the game leaves out
+NEEDS = {2900000001: [2900000002, 2900000014, 2999999999, 2900000001]}
+
+
 def workshop_items(seed):
     """the made-up Workshop items: (id, title, tags, consumer app, banned, files, symlinks); the ids are made up"""
     rng = random.Random(seed * 31 + 7)
@@ -392,7 +397,7 @@ class WorkshopItem:
         up, down = self.browser()[1:3]
         return up / (up + down) if up + down else 0.0
 
-    def details(self, extra=False):
+    def details(self, extra=False, children=False):
         creator, up, down, created, kind, extras, host = self.browser()
         tags = b"".join(pb_bytes(52, pb_bytes(1, t)) for t in self.tags)
         votes = pb_float(1, self.score()) + pb_varint(2, up) + pb_varint(3, down)
@@ -403,6 +408,11 @@ class WorkshopItem:
                pb_fixed64(14, self.depot.gid) + pb_bytes(16, self.title.encode()) + pb_varint(19, created) +
                pb_varint(20, created + 86400 * 30) + pb_varint(21, 0) + pb_varint(28, int(self.banned)) + tags +
                pb_bytes(17, description) + pb_bytes(55, votes))
+        # (1.1.3: the items it needs - Steam's required items, GetDetails' children when includechildren is asked)
+        if children and self.id in NEEDS:
+            out += pb_varint(49, len(NEEDS[self.id])) + b"".join(
+                pb_bytes(53, pb_varint(1, child) + pb_varint(2, index) + pb_varint(3, 0))
+                for index, child in enumerate(NEEDS[self.id]))
         if extra:
             for index, other in enumerate(extras):
                 if other == "video":
@@ -748,8 +758,10 @@ def cm_client(state, conn):
                 assert logged_on and emsg == 151
                 ids = [v for n, v in body if n == 1]
                 extra = first(body, 3, 0) == 1
-                state.log("cm: workshop details %s%s" % (" ".join(str(i) for i in ids), " (a page)" if extra else ""))
-                reply = b"".join(pb_bytes(1, i.details(extra)) for i in state.workshop if i.id in ids)
+                children = first(body, 4, 0) == 1
+                state.log("cm: workshop details %s%s%s" % (" ".join(str(i) for i in ids), " (a page)" if extra else "",
+                                                           " (children)" if children else ""))
+                reply = b"".join(pb_bytes(1, i.details(extra, children)) for i in state.workshop if i.id in ids)
             elif name == "PublishedFile.GetUserFiles#1":
                 assert logged_on and emsg == 151
                 page, per_page = first(body, 4, 1), first(body, 5, 1)

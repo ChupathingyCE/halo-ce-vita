@@ -72,6 +72,9 @@ enum
 	HALO_MOD_SOURCE_HAND,
 	/* received from a host through map sharing (map_share.c) */
 	HALO_MOD_SOURCE_MAP_SHARE,
+	/* (1.1.3) downloaded from the Steam Workshop (a folder of the mods
+	folder named by the item's number: port/steamdl/steam_workshop.c) */
+	HALO_MOD_SOURCE_WORKSHOP,
 };
 
 /* the modes it plays in (flags) */
@@ -107,6 +110,9 @@ struct halo_mod_entry
 	char why[HALO_MODS_TEXT_BYTES];
 	/* what it needs that is not there or not on ("" for nothing) */
 	char needs[HALO_MODS_TEXT_BYTES];
+	/* (1.1.3) a Steam Workshop item (HALO_MOD_KIND_MCC_MOD, its folder the
+	item's number; title its Workshop title): 1 */
+	int workshop;
 };
 
 struct halo_mods_inventory

@@ -652,6 +652,84 @@ static void map_entry_check(
 	return;
 }
 
+/* (1.1.3) what the Workshop's download kept of the item `id`
+(d:\workshop\installed\<id>.about, steam_workshop.h's
+steam_workshop_about_write: Steam's words, untrusted - made printable): its
+title, and the items it needs that are not in the mods folder, their titles
+(or numbers) in `needs`, ", " between; FALSE if there is no such file */
+static boolean workshop_about_read(
+	unsigned long long id,
+	char *title,
+	long title_size,
+	char *needs,
+	long needs_size,
+	short *needs_missing)
+{
+	char path[PATH_BYTES];
+	char text[2048];
+	char *line;
+	FILE *stream;
+	long size;
+
+	title[0] = 0;
+	needs[0] = 0;
+	*needs_missing = 0;
+	snprintf(path, sizeof(path), "d:\\workshop\\installed\\%llu.about", id);
+	stream = fopen(path, "rb");
+	if (!stream)
+	{
+		return FALSE;
+	}
+	size = (long)fread(text, 1, sizeof(text) - 1, stream);
+	fclose(stream);
+	text[size] = 0;
+	for (line = text; *line; )
+	{
+		long length = (long)strcspn(line, "\r\n");
+		char *next = line + length;
+
+		if (*next)
+		{
+			*next++ = 0;
+		}
+		if (!strncmp(line, "title ", 6))
+		{
+			printable_copy(title, title_size, line + 6);
+		}
+		else if (!strncmp(line, "needs ", 6))
+		{
+			unsigned long long needed = strtoull(line + 6, NULL, 10);
+			char const *needed_title = strchr(line + 6, ' ');
+			char folder[PATH_BYTES];
+			char shown[40];
+			DWORD attributes;
+			long used = (long)strlen(needs);
+
+			snprintf(folder, sizeof(folder), "%s%llu", CUSTOM_EDITION_MODS_DIRECTORY, needed);
+			attributes = GetFileAttributesA(folder);
+			/* (one in the mods folder already: not needed any more) */
+			if (!needed || needed == id || (attributes != (DWORD)-1 && (attributes & FILE_ATTRIBUTE_DIRECTORY)))
+			{
+				line = next;
+				continue;
+			}
+			if (needed_title && needed_title[1])
+			{
+				printable_copy(shown, sizeof(shown), needed_title + 1);
+			}
+			else
+			{
+				snprintf(shown, sizeof(shown), T("item %llu"), needed);
+			}
+			snprintf(needs + used, (size_t)(needs_size - used), "%s%s", used ? ", " : "", shown);
+			(*needs_missing)++;
+		}
+		line = next;
+	}
+
+	return TRUE;
+}
+
 /* the mods folder's survey's mod at `mod_index` into `entry` */
 static void mod_entry_check(
 	struct halo_mod_entry *entry,
@@ -675,7 +753,58 @@ static void mod_entry_check(
 	entry->maps_valid = valid;
 	entry->valid = valid > 0;
 	entry->modes = entry->valid ? HALO_MOD_MODE_CAMPAIGN : 0;
-	if (problem && problem[0])
+	/* (1.1.3: a Steam Workshop item - its folder the item's number - is said
+	as one: its Workshop title, where it came from, the modes its maps play
+	in, and only what it truly needs; device test, Nov 25: a multiplayer
+	map's item said "Works in Campaign", "Copied in by hand" and needed MCC
+	mods) */
+	if (custom_edition_mods_mod_workshop_id(mod_index))
+	{
+		unsigned long long id = custom_edition_mods_mod_workshop_id(mod_index);
+		char const *unsupported = custom_edition_mods_mod_unsupported(mod_index);
+		char title[HALO_MODS_NAME_BYTES];
+		char needs[HALO_MODS_TEXT_BYTES];
+		short needs_missing = 0;
+		short multiplayer = 0;
+		short campaign = 0;
+
+		entry->workshop = TRUE;
+		entry->source = HALO_MOD_SOURCE_WORKSHOP;
+		custom_edition_mods_mod_kinds(mod_index, &multiplayer, &campaign);
+		entry->modes = (multiplayer ? HALO_MOD_MODE_MULTIPLAYER : 0) | (campaign ? HALO_MOD_MODE_CAMPAIGN : 0);
+		entry->valid = multiplayer + campaign > 0;
+		/* (the titles of the items it needs: room left for the words around them, whole characters, in either
+		language - Steam's titles made printable ASCII) */
+		if (workshop_about_read(id, title, sizeof(title), needs, 48, &needs_missing) && title[0])
+		{
+			printable_copy(entry->title, sizeof(entry->title), title);
+		}
+		if (unsupported && unsupported[0])
+		{
+			/* (the game's own words, in the player's language: not made ASCII) */
+			snprintf(entry->why, sizeof(entry->why), "%s", unsupported);
+		}
+		else if (problem && problem[0])
+		{
+			printable_copy(entry->why, sizeof(entry->why), problem);
+		}
+		else if (!entry->valid)
+		{
+			snprintf(entry->why, sizeof(entry->why), "%s", T("No map in it is one this game plays"));
+		}
+		if (campaign && !halo_mcc_mods_enabled())
+		{
+			entry_needs_append(entry, T("PC maps and MCC mods On (Settings > Multiplayer > Modded maps)"));
+		}
+		if (needs_missing)
+		{
+			char text[HALO_MODS_TEXT_BYTES];
+
+			snprintf(text, sizeof(text), T("Also needs: %s - download those too"), needs);
+			entry_needs_append(entry, text);
+		}
+	}
+	else if (problem && problem[0])
 	{
 		printable_copy(entry->why, sizeof(entry->why), problem);
 	}
@@ -683,7 +812,7 @@ static void mod_entry_check(
 	{
 		snprintf(entry->why, sizeof(entry->why), "%s", T("No map in it is a Halo: CE Anniversary campaign map"));
 	}
-	if (entry->valid && !halo_mcc_mods_enabled())
+	if (!entry->workshop && entry->valid && !halo_mcc_mods_enabled())
 	{
 		entry_needs_append(entry, T("PC maps and MCC mods On (Settings > Multiplayer > Modded maps)"));
 	}
@@ -1125,7 +1254,14 @@ char const *mod_manager_kind_name(
 char const *mod_manager_source_name(
 	int source)
 {
-	return source == HALO_MOD_SOURCE_MAP_SHARE ? T("Received through map sharing") : T("Copied in by hand");
+	return source == HALO_MOD_SOURCE_MAP_SHARE ? T("Received through map sharing") :
+		source == HALO_MOD_SOURCE_WORKSHOP ? T("Steam Workshop") : T("Copied in by hand");
+}
+
+char const *mod_manager_entry_kind_name(
+	struct halo_mod_entry const *entry)
+{
+	return entry->workshop ? T("Workshop item") : mod_manager_kind_name(entry->kind);
 }
 
 void mod_manager_modes_text(

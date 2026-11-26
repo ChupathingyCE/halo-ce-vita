@@ -696,7 +696,7 @@ static void workshop_details(struct steam_session *session)
 {
 	struct steam_workshop_details *details = calloc(1, sizeof(*details));
 	struct steam_job_workshop_details *view;
-	char id_text[24], error[160];
+	char id_text[24], error[160], needs_text[sizeof(view->needs_titles)];
 	unsigned int asked;
 	uint64_t id = 0;
 	int ok;
@@ -710,6 +710,28 @@ static void workshop_details(struct steam_session *session)
 	ok = steam_workshop_id_parse(id_text, &id) && steam_download_workshop_page(session, id, details, error, sizeof(error));
 	if (!ok && !id)
 		snprintf(error, sizeof(error), "no such item");
+	/* (1.1.3) the titles of the items it needs (one more call: the page says to download them too) */
+	needs_text[0] = 0;
+	if (ok && details->item.needs_count)
+	{
+		char (*titles)[STEAM_WORKSHOP_TITLE_SIZE] = calloc(STEAM_WORKSHOP_NEEDS_MAXIMUM, sizeof(*titles));
+		int index;
+
+		if (titles)
+			steam_download_workshop_titles(session, details->item.needs, details->item.needs_count, titles);
+		for (index = 0; index < details->item.needs_count; index++)
+		{
+			size_t length = strlen(needs_text);
+
+			if (titles && titles[index][0])
+				snprintf(needs_text + length, sizeof(needs_text) - length, "%s%s", index ? ", " : "", titles[index]);
+			else
+				snprintf(needs_text + length, sizeof(needs_text) - length, "%sitem %llu", index ? ", " : "",
+					(unsigned long long)details->item.needs[index]);
+		}
+		free(titles);
+		say("steam job: workshop details %s: it needs %d other items", id_text, details->item.needs_count);
+	}
 	if (ok && details->item.creator)
 	{
 		char names[1][STEAM_WORKSHOP_AUTHOR_SIZE];
@@ -760,6 +782,8 @@ static void workshop_details(struct steam_session *session)
 			view->pictures = details->preview_count;
 			view->picture_index = 0;
 			view->picture = details->preview_count ? 0 : -1;
+			view->needs = details->item.needs_count;
+			memcpy(view->needs_titles, needs_text, sizeof(view->needs_titles));
 			view->contents = details->item.hcontent ? 0 : -1;
 			if (!details->item.hcontent)
 				snprintf(view->contents_why, sizeof(view->contents_why), "%s", "the item has no files");

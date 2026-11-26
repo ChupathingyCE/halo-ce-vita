@@ -86,6 +86,10 @@ char const *mod_manager_kind_name(
 	int kind);
 char const *mod_manager_source_name(
 	int source);
+/* (1.1.3) the entry's kind in words: "Workshop item" for a Steam Workshop
+item, else mod_manager_kind_name's */
+char const *mod_manager_entry_kind_name(
+	struct halo_mod_entry const *entry);
 void mod_manager_modes_text(
 	int modes,
 	char *text,

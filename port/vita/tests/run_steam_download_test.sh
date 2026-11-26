@@ -394,8 +394,21 @@ find "$w/card" -name 'setup.exe' -o -name 'link.map' -o -name '*.part*' -o -name
 # (staging empty; workshop/installed/ holds the versions installed - the browser's UPDATE - and nothing else)
 [ -z "$(ls -A "$w/card/haloce-vita/workshop" 2>/dev/null | grep -v -x -e installed)" ] || \
 	{ echo "FAIL ws-items: workshop staging not empty: $(ls "$w/card/haloce-vita/workshop")"; status=1; }
-[ "$(ls "$w/card/haloce-vita/workshop/installed" 2>/dev/null | tr '\n' ' ')" = "2900000001.gid 2900000002.gid " ] || \
+[ "$(ls "$w/card/haloce-vita/workshop/installed" 2>/dev/null | tr '\n' ' ')" = \
+	"2900000001.about 2900000001.gid 2900000002.about 2900000002.gid " ] || \
 	{ echo "FAIL ws-items: installed versions: $(ls "$w/card/haloce-vita/workshop/installed")"; status=1; }
+# (1.1.3: what Steam said of each - its title, the items it needs - kept for the mod manager; the needs' titles in one
+# more GetDetails call, never downloaded with it; Steam's own id among its children and an unknown one as Steam gave)
+about=$w/card/haloce-vita/workshop/installed/2900000001.about
+grep -q "^title Fake Rebalanced Campaign " "$about" && grep -qx "needs 2900000002 Fake Gulch Remix" "$about" &&
+	grep -qx "needs 2900000014 Fake GIF Picture" "$about" && grep -qx "needs 2999999999 " "$about" &&
+	! grep -q "needs 2900000001" "$about" || { echo "FAIL ws-items: 2900000001's about: $(cat "$about")"; status=1; }
+[ "$(cat "$w/card/haloce-vita/workshop/installed/2900000002.about")" = "title Fake Gulch Remix" ] ||
+	{ echo "FAIL ws-items: 2900000002's about"; status=1; }
+grep -q "cm: workshop details 2900000002 2900000014 2999999999 (children)" "$w/transcript.txt" &&
+	grep -q "workshop 2900000001: needs 3 other items (not downloaded with it)" "$w/log.txt" ||
+	{ echo "FAIL ws-items: the needed items' titles not asked, or not said"; status=1; }
+[ ! -e "$w/card/haloce-vita/mods/2900000014" ] || { echo "FAIL ws-items: a needed item was downloaded"; status=1; }
 for id in 2900000003 2900000004 2900000005 2900000006 2900000007 2900000008; do
 	[ ! -e "$w/card/haloce-vita/mods/$id" ] || { echo "FAIL ws-items: $id installed"; status=1; }
 done
@@ -555,7 +568,9 @@ dup=$(grep "img: " "$w/transcript.txt" | sort | uniq -d | head -1)
 grep -q "cm: workshop subscribed page 1" "$w/transcript.txt" || { echo "FAIL ws-browse: SUBSCRIBED not asked"; status=1; }
 grep -q "cm: subscriptions of another account" "$w/transcript.txt" && { echo "FAIL ws-browse: another account's"; status=1; }
 grep -q "cm: names of" "$w/transcript.txt" || { echo "FAIL ws-browse: no authors asked"; status=1; }
-grep -q "cm: workshop details 2900000001 (a page)" "$w/transcript.txt" || { echo "FAIL ws-browse: no details page"; status=1; }
+grep -q "cm: workshop details 2900000001 (a page) (children)" "$w/transcript.txt" || { echo "FAIL ws-browse: no details page"; status=1; }
+grep -q "steam job: workshop details 2900000001: it needs 3 other items" "$w/log.txt" ||
+	{ echo "FAIL ws-browse: the details page's needed items"; status=1; }
 grep -q 'by "Ñandú Mapper"' "$w/log.txt" || { echo "FAIL ws-browse: the Latin-1 author"; status=1; }
 grep -q "browse description: Fake Rebalanced Campaign" "$w/log.txt" || { echo "FAIL ws-browse: the description"; status=1; }
 grep "browse row 2900000016" "$w/log.txt" | head -1 | grep -q 'by "Evil/nName' || { echo "FAIL ws-browse: the hostile author"; status=1; }

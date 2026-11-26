@@ -1388,6 +1388,41 @@ int steam_download_workshop_names(struct steam_session *session, const uint64_t 
 	return steam_workshop_parse_names(reply, reply_size, steamids, count, names);
 }
 
+int steam_download_workshop_titles(struct steam_session *session, const uint64_t *ids, int count,
+	char (*titles)[STEAM_WORKSHOP_TITLE_SIZE])
+{
+	struct steam_workshop_item *found_items;
+	uint8_t body[256];
+	const uint8_t *reply;
+	size_t size, reply_size;
+	char error[160];
+	int index, other, found = -1, titled = 0;
+
+	for (index = 0; index < count; index++)
+		titles[index][0] = 0;
+	if (count < 1 || count > STEAM_WORKSHOP_ITEMS_MAXIMUM)
+		return -1;
+	found_items = calloc((size_t)count, sizeof(*found_items));
+	size = steam_workshop_details_request(body, sizeof(body), ids, count);
+	if (found_items && size && steam_session_call(session, "PublishedFile.GetDetails#1", body, size, &reply, &reply_size,
+		error, sizeof(error)))
+	{
+		found = steam_workshop_parse_details(reply, reply_size, found_items, count);
+	}
+	for (index = 0; index < count; index++)
+		for (other = 0; other < found; other++)
+			if (found_items[other].id == ids[index] && found_items[other].title[0] && !titles[index][0])
+			{
+				snprintf(titles[index], STEAM_WORKSHOP_TITLE_SIZE, "%s", found_items[other].title);
+				titled++;
+			}
+	free(found_items);
+	return found < 0 ? -1 : titled;
+}
+
+/* the items the chosen ones need whose titles are looked up (one call) */
+#define NEEDS_LOOKED_UP 16
+
 /* the chosen items' details (one call), each checked, then each downloaded */
 static int workshop_flow(struct steam_session *session, const struct steam_download_options *options,
 	const struct steam_download_callbacks *callbacks, const char *const *cdn, int cdn_count, const uint64_t *ids,
@@ -1398,7 +1433,9 @@ static int workshop_flow(struct steam_session *session, const struct steam_downl
 	const uint8_t *reply;
 	size_t size, reply_size;
 	char error[256];
-	int found, index;
+	int found, index, needs_count;
+	uint64_t needs[NEEDS_LOOKED_UP];
+	char need_titles[NEEDS_LOOKED_UP][STEAM_WORKSHOP_TITLE_SIZE];
 
 	size = steam_workshop_details_request(body, sizeof(body), ids, count);
 	if (!size || !steam_session_call(session, "PublishedFile.GetDetails#1", body, size, &reply, &reply_size, error,
@@ -1413,6 +1450,24 @@ static int workshop_flow(struct steam_session *session, const struct steam_downl
 		fail(result, "the items' details were malformed");
 		return 0;
 	}
+	/* (1.1.3) the titles of the items they need (Steam's required items), one more call for all of them: kept with
+	each item's install for the mod manager (steam_workshop_about_write) - never downloaded with them */
+	needs_count = 0;
+	for (index = 0; index < found; index++)
+	{
+		int need, other;
+
+		for (need = 0; need < items[index].needs_count && needs_count < NEEDS_LOOKED_UP; need++)
+		{
+			for (other = 0; other < needs_count && needs[other] != items[index].needs[need]; other++)
+				;
+			if (other == needs_count)
+				needs[needs_count++] = items[index].needs[need];
+		}
+	}
+	if (needs_count)
+		say(callbacks, "workshop: the chosen items need %d other items%s", needs_count,
+			steam_download_workshop_titles(session, needs, needs_count, need_titles) >= 0 ? "" : " (their titles not had)");
 	for (index = 0; index < count; index++)
 	{
 		const struct steam_workshop_item *item = NULL;
@@ -1451,6 +1506,29 @@ static int workshop_flow(struct steam_session *session, const struct steam_downl
 		result->item_dropped = 0;
 		if (steam_download_workshop_item(session, item, options, callbacks, cdn, cdn_count, result))
 		{
+			/* (its title, and the items it needs with their titles: the mod manager's words) */
+			{
+				uint64_t item_needs[STEAM_WORKSHOP_NEEDS_MAXIMUM];
+				char item_need_titles[STEAM_WORKSHOP_NEEDS_MAXIMUM][STEAM_WORKSHOP_TITLE_SIZE];
+				int need, other;
+
+				for (need = 0; need < item->needs_count; need++)
+				{
+					item_needs[need] = item->needs[need];
+					item_need_titles[need][0] = 0;
+					for (other = 0; other < needs_count; other++)
+						if (needs[other] == item->needs[need])
+							memcpy(item_need_titles[need], need_titles[other], sizeof(item_need_titles[need]));
+				}
+				if (!steam_workshop_about_write(options->ce_root, item->id, item->title, item_needs, item_need_titles,
+					item->needs_count))
+				{
+					say(callbacks, "workshop %llu: its title and needs could not be kept", (unsigned long long)item->id);
+				}
+				else if (item->needs_count)
+					say(callbacks, "workshop %llu: needs %d other items (not downloaded with it)", (unsigned long long)item->id,
+						item->needs_count);
+			}
 			result->items_done++;
 			if (callbacks->item_end)
 				callbacks->item_end(callbacks->context, item, 1, "");
