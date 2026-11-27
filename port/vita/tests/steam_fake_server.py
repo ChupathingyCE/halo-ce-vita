@@ -36,6 +36,11 @@ and log-off). --mode picks a failure to act out:
 --host (a LAN address for the dev Vita), --chunk-kb (Steam's are 1024) and --scale (the made-up maps' size,
 times) shape a bigger test. --cert/--key serve both over TLS (the test's own certificates).
 
+--heartbeat-timeout <s> (1.1.3 8v): the CM closes a signed-in connection that sent nothing for that long, as Steam's
+does (the dev Vita, Nov 26: a big map's whole-file check sent no heartbeat for ~90 s, the session was gone after it).
+--lose-after-chunks <n> [--lose-times <t>]: the CM connection cut each time the CDN has served n more chunks, t times
+(default 1): a session lost mid-download, the next sign-in must resume.
+
 --workshop-map <file>: Workshop item 2900000001's maps are that one file (a map of the player's own MCC, for a test
 of the game's own map check; never sent beyond 127.0.0.1). --workshop-mp-map <file> [--workshop-mp-name <name>]: item
 2900000002 (multiplayer) is that one map, named so (a joiner's download of the host's Workshop map: the netns tests).
@@ -599,6 +604,10 @@ class State:
         self.dropped = False
         self.lost = False
         self.outage_start = None
+        # (--lose-after-chunks: the CM connection signed in now, the chunks served since the last cut, the cuts made)
+        self.cm_conn = None
+        self.chunks_since_cut = 0
+        self.cuts = 0
 
     def log(self, line):
         with self.lock:
@@ -686,6 +695,14 @@ def cm_client(state, conn):
     while True:
         try:
             opcode, data = ws_recv(conn)
+        except socket.timeout:
+            # (--heartbeat-timeout: a signed-in client silent that long - no heartbeat - is closed, as Steam's CM does)
+            state.log("cm: heartbeat timeout: nothing for %g s, connection closed" % state.args.heartbeat_timeout)
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            return
         except (ConnectionError, OSError):
             state.log("cm: closed")
             return
@@ -817,6 +834,10 @@ def cm_client(state, conn):
             response = cm_message(751, pb_varint(1, eresult) + pb_varint(3, 5) + pb_varint(7, 7),
                                   steamid=steamid if ok else 0, session=42 if ok else 0)
             logged_on = ok
+            if ok:
+                state.cm_conn = conn
+                if state.args.heartbeat_timeout:
+                    conn.settimeout(state.args.heartbeat_timeout)
             if ok and state.mode == "losesession" and not state.lost:
                 # (the first session dies under the download: the client must revoke on a new connection and sign in
                 # again with a new QR)
@@ -954,6 +975,20 @@ def cdn_client(state, conn):
                     state.log("cdn: chunk corrupted")
         except (IndexError, ValueError, KeyError):
             pass
+        if state.args.lose_after_chunks and status == 200 and parts[2] == "chunk":
+            # (the CM connection cut under the download, every n chunks, t times)
+            with state.lock:
+                state.chunks_since_cut += 1
+                cut = state.chunks_since_cut >= state.args.lose_after_chunks and state.cuts < state.args.lose_times
+                if cut:
+                    state.chunks_since_cut = 0
+                    state.cuts += 1
+            if cut and state.cm_conn is not None:
+                state.log("cm: connection dropped (after %d chunks)" % state.args.lose_after_chunks)
+                try:
+                    state.cm_conn.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
         if state.mode == "outage" and status == 200 and parts[2] == "chunk":
             # (the Wi-Fi gone for 8 s after the fourth chunk: every connection cut at once meanwhile)
             if state.outage_start is None and count > 3:
@@ -1116,6 +1151,9 @@ def main():
     parser.add_argument("--scale", type=int, default=1)
     parser.add_argument("--cert")
     parser.add_argument("--key")
+    parser.add_argument("--heartbeat-timeout", type=float, default=0)
+    parser.add_argument("--lose-after-chunks", type=int, default=0)
+    parser.add_argument("--lose-times", type=int, default=1)
     parser.add_argument("--token-file", help="the made-up refresh token kept across runs (the kept sign-in's flows)")
     parser.add_argument("--workshop-map", help="a real MCC map file as Workshop item 2900000001's map (local tests)")
     parser.add_argument("--workshop-mp-map", help="a real MCC multiplayer map as Workshop item 2900000002's (local tests)")

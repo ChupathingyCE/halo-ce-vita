@@ -70,7 +70,14 @@ MOD_CAMPAIGN_FILE_MAXIMUM_BYTES. Nothing in a mod is run.
 #define MOD_KEY_LENGTH 12
 /* a mod's folder name, and a map's file name without ".map", kept */
 #define MOD_FOLDER_BYTES 48
-#define MAP_STEM_BYTES 24
+/* (1.1.3 8v: a Workshop item's file names longer than a map's name - the
+dev Vita's Snowtrap, snowtrap_pb2_do_not_leak_..., 29 characters -, its
+name made of its first characters: workshop_maps.h; a campaign map's still
+refused past 25 with its key) */
+#define MAP_STEM_BYTES 64
+/* (1.1.3 8v) a Workshop map's title kept: as long as custom_edition_maps.c's
+MAXIMUM_DISPLAY_NAME_LENGTH */
+#define WORKSHOP_MAP_TITLE_MAXIMUM 47
 #define PATH_BYTES 256
 /* the campaign files of a mod without a CampaignInfo.json looked at */
 #define MAXIMUM_LOOSE_LEVEL_FILES 32
@@ -114,6 +121,12 @@ struct custom_edition_mod_multiplayer_map
 {
 	char name[WORKSHOP_MAP_NAME_BYTES];
 	char stem[MAP_STEM_BYTES];
+	/* (1.1.3 8v) the name the player sees: the item's own title of the map
+	(its multiplayer\<map>.json's Title), else its file's name made
+	readable (workshop_map_title_make) - never empty */
+	char title[CUSTOM_EDITION_MODS_TITLE_BYTES];
+	/* (its title its item's multiplayer\<map>.json's) */
+	boolean titled;
 	short mod_index;
 	uint64_t id;
 	/* (two maps of an item named alike: neither is listed, so that every
@@ -222,6 +235,135 @@ static boolean map_stem_valid(
 	return length > 0;
 }
 
+/* (1.1.3 8v) a Workshop item's map's file name without ".map": as
+map_stem_valid, and a '.' between two of those characters too
+(workshop_map_stem_dot: Cursed Halo's cursed-h1.5_levee-mcc - 8v device
+test, Nov 26: the one map of the item's 19 the map picker left out) */
+static boolean workshop_map_stem_valid(
+	char const *stem)
+{
+	long length;
+
+	for (length = 0; stem[length]; length++)
+	{
+		char character = stem[length];
+
+		if (!((character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ||
+			character == '_' || character == '-' || workshop_map_stem_dot(stem, (size_t)length)))
+		{
+			return FALSE;
+		}
+	}
+
+	return length > 0;
+}
+
+/* (1.1.3 8v) the name a Workshop map is shown by when its item gives it no
+title: its file's name without an ending "-mcc" ("_mcc", " mcc"), '-' and
+'_' as spaces, each word begun in capitals (cursed-sidewinder-mcc: Cursed
+Sidewinder; cursed-h1.5_levee-mcc: Cursed H1.5 Levee) */
+static void workshop_map_title_make(
+	char const *stem,
+	char *title,
+	long title_size)
+{
+	long length = (long)strlen(stem);
+	long index;
+	long written = 0;
+	boolean word_start = TRUE;
+
+	if (length > 4 && strchr("-_ ", stem[length - 4]) && !csstrcasecmp(stem + length - 3, "mcc"))
+	{
+		length -= 4;
+	}
+	/* (at most WORKSHOP_MAP_TITLE_MAXIMUM characters, as a title read) */
+	if (title_size > WORKSHOP_MAP_TITLE_MAXIMUM + 1)
+	{
+		title_size = WORKSHOP_MAP_TITLE_MAXIMUM + 1;
+	}
+	for (index = 0; index < length && written < title_size - 1; index++)
+	{
+		char character = stem[index] == '-' || stem[index] == '_' ? ' ' : stem[index];
+
+		if (character == ' ' && (!written || title[written - 1] == ' '))
+		{
+			continue;
+		}
+		if (word_start && character >= 'a' && character <= 'z')
+		{
+			character = (char)(character - 'a' + 'A');
+		}
+		word_start = character == ' ';
+		title[written++] = character;
+	}
+	while (written > 0 && title[written - 1] == ' ')
+	{
+		written--;
+	}
+	title[written] = 0;
+	if (!written)
+	{
+		csstrncpy(title, stem, title_size - 1);
+		title[title_size - 1] = 0;
+	}
+
+	return;
+}
+
+/* (1.1.3 8v) the item's own title, as the Workshop's download kept it
+(d:\\workshop\\installed\\<id>.about's "title" line, steam_workshop.h's
+steam_workshop_about_write, as the mod manager reads it), printable ASCII
+('?' for anything else), at most WORKSHOP_MAP_TITLE_MAXIMUM characters:
+FALSE (`title` empty) without one */
+static boolean workshop_item_title_read(
+	uint64_t id,
+	char *title,
+	long title_size)
+{
+	char path[PATH_BYTES];
+	char text[1024];
+	char const *line;
+	FILE *stream;
+	long size;
+	long length = 0;
+
+	title[0] = 0;
+	snprintf(path, sizeof(path), "d:\\workshop\\installed\\%llu.about", (unsigned long long)id);
+	stream = fopen(path, "rb");
+	if (!stream)
+	{
+		return FALSE;
+	}
+	size = (long)fread(text, 1, sizeof(text) - 1, stream);
+	fclose(stream);
+	text[size] = 0;
+	for (line = text; *line; line += strcspn(line, "\n"), line += *line == '\n')
+	{
+		if (!strncmp(line, "title ", 6))
+		{
+			for (line += 6; *line && *line != '\r' && *line != '\n' && length < title_size - 1 &&
+				length < WORKSHOP_MAP_TITLE_MAXIMUM; line++)
+			{
+				/* (a UTF-8 character one '?') */
+				if (((unsigned char)*line & 0xC0) == 0x80)
+				{
+					continue;
+				}
+				/* (and '|', the game's text formatting mark, as '/': mod_campaign_files.c's) */
+				title[length++] = *line == '|' ? '/' : *line >= ' ' && *line <= '~' ? *line : '?';
+			}
+			break;
+		}
+	}
+	while (length > 0 && title[length - 1] == ' ')
+	{
+		length--;
+	}
+	title[length] = 0;
+
+	return length > 0;
+}
+
 /* (the survey's) the first problem of `mod` said */
 static void mod_problem(
 	struct custom_edition_mod *mod,
@@ -292,6 +434,10 @@ static short stock_level_index(
 	return NONE;
 }
 
+/* a mod's text file read (mod_text_file_read): a campaign's, a Workshop
+multiplayer map's */
+static uint8_t mod_text[MOD_CAMPAIGN_FILE_MAXIMUM_BYTES + 1];
+
 /* Reads the file at `path` (at most MOD_CAMPAIGN_FILE_MAXIMUM_BYTES of it)
 into `text`, returning its size, or 0. */
 static uint32_t mod_text_file_read(
@@ -310,6 +456,60 @@ static uint32_t mod_text_file_read(
 	fclose(stream);
 
 	return size <= MOD_CAMPAIGN_FILE_MAXIMUM_BYTES ? (uint32_t)size : 0;
+}
+
+/* (1.1.3 8v) the title the item gives its map `file` (the map's file name
+without ".map", as it is): MCC's multiplayer\<file>.json beside its maps
+folder, its "Title" ("Neutral"), made printable ASCII (mod_campaign_files.c),
+the spaces at its ends dropped; FALSE (`title` empty) without one */
+static boolean workshop_map_title_read(
+	struct custom_edition_mod const *mod,
+	char const *file,
+	char *title,
+	long title_size)
+{
+	static struct mod_campaign_level level;
+	char path[PATH_BYTES];
+	char const *start;
+	long length;
+	uint32_t size;
+
+	title[0] = 0;
+	if (!mod_file_name_valid(file, MOD_CAMPAIGN_FILE_NAME_BYTES - 5) ||
+		snprintf(path, sizeof(path), "%s%s\\multiplayer\\%s.json", CUSTOM_EDITION_MODS_DIRECTORY, mod->folder, file) >=
+			(int)sizeof(path))
+	{
+		return FALSE;
+	}
+	size = mod_text_file_read(path, mod_text);
+	if (!size || mod_campaign_level_read(mod_text, size, &level) != _mod_campaign_file_status_ok)
+	{
+		return FALSE;
+	}
+	for (start = level.title; *start == ' '; start++)
+	{
+	}
+	for (length = (long)strlen(start); length > 0 && start[length - 1] == ' '; length--)
+	{
+	}
+	/* (no longer than the level list shows a map's name, custom_edition_maps.c's
+	MAXIMUM_DISPLAY_NAME_LENGTH: every screen says the same) */
+	if (length > WORKSHOP_MAP_TITLE_MAXIMUM)
+	{
+		length = WORKSHOP_MAP_TITLE_MAXIMUM;
+	}
+	while (length > 0 && start[length - 1] == ' ')
+	{
+		length--;
+	}
+	if (length >= title_size)
+	{
+		length = title_size - 1;
+	}
+	csmemcpy(title, start, length);
+	title[length] = 0;
+
+	return length > 0;
 }
 
 /* (port) the file of a level's picture, `name` as its campaign file gives
@@ -461,7 +661,7 @@ static void mod_campaign_read(
 	short mod_index)
 {
 	struct custom_edition_mod *mod = &custom_edition_mods_globals.mods[mod_index];
-	static uint8_t text[MOD_CAMPAIGN_FILE_MAXIMUM_BYTES + 1];
+	uint8_t *text = mod_text;
 	static struct mod_campaign_info info;
 	char path[PATH_BYTES];
 	uint32_t size;
@@ -562,13 +762,28 @@ static boolean workshop_multiplayer_map_add(
 	csstrncpy(map->stem, stem, sizeof(map->stem) - 1);
 	map->mod_index = mod_index;
 	map->id = mod->workshop_id;
+	/* (1.1.3 8v: shown by its title, its item's or its file's name made
+	readable, never by the name the network uses - 8v device test, Nov 26:
+	the pause and waiting lobby said "ws2905272848_cursed--6b2c") */
+	{
+		char const *file = strrchr(path, '\\');
+		char file_stem[MOD_CAMPAIGN_FILE_NAME_BYTES];
+
+		file = file ? file + 1 : path;
+		snprintf(file_stem, sizeof(file_stem), "%.*s", (int)MAX((long)strlen(file) - 4, 0L), file);
+		map->titled = workshop_map_title_read(mod, file_stem, map->title, sizeof(map->title));
+		if (!map->titled)
+		{
+			workshop_map_title_make(stem, map->title, sizeof(map->title));
+		}
+	}
 	/* (its picture: <map>.bmp beside it) */
 	if (path_length > 4 && path_length < (long)sizeof(map->picture_path))
 	{
 		snprintf(map->picture_path, sizeof(map->picture_path), "%.*s.bmp", (int)(path_length - 4), path);
 		map->has_picture = file_exists(file_reference_create_from_path(&reference, map->picture_path, FALSE));
 	}
-	error(_error_silent, "mods: %s is the Steam Workshop multiplayer map %s", path, name);
+	error(_error_silent, "mods: %s is the Steam Workshop multiplayer map %s, shown as \"%s\"", path, name, map->title);
 
 	return TRUE;
 }
@@ -606,6 +821,7 @@ static void mod_add(
 	short length = 0;
 	short index;
 	uint64_t workshop_id = 0;
+	char title[CUSTOM_EDITION_MODS_TITLE_BYTES];
 
 	/* (port: a Steam Workshop item's folder, mods/<id>;
 	with MCC mods off, the only folders looked in, for their multiplayer
@@ -744,7 +960,7 @@ static void mod_add(
 		unsupported[0] = 0;
 		/* (port: a Steam Workshop item's multiplayer map,
 		ws<id>_<map>: the multiplayer level list's, workshop_maps.h) */
-		if (mod->workshop_id && map_stem_valid(stem))
+		if (mod->workshop_id && workshop_map_stem_valid(stem))
 		{
 			kind = custom_edition_cache_mod_map_check(map_path, unsupported, sizeof(unsupported));
 			if (unsupported[0])
@@ -838,6 +1054,30 @@ static void mod_add(
 		globals->map_count++;
 	} while (FindNextFileA(find, &data));
 	CloseHandle(find);
+
+	/* (1.1.3 8v: a Workshop item of one multiplayer map its item does not
+	title - a Halo PC Custom Edition map's, Snowtrap's -: the item's own
+	title, as the mod manager says it ("Halo CE - Snowtrap"); an item of
+	many keeps its maps' file names, made readable) */
+	if (mod->workshop_id)
+	{
+		struct custom_edition_mod_multiplayer_map *only = NULL;
+		short count = 0;
+
+		for (index = 0; index < globals->multiplayer_count; index++)
+		{
+			if (globals->multiplayer_maps[index].mod_index == mod_index)
+			{
+				only = &globals->multiplayer_maps[index];
+				count++;
+			}
+		}
+		if (count == 1 && !only->titled && workshop_item_title_read(mod->workshop_id, title, sizeof(title)))
+		{
+			csstrcpy(only->title, title);
+			error(_error_silent, "mods: %s is shown as its item's title \"%s\"", only->name, only->title);
+		}
+	}
 
 	mod_campaign_read(mod_index);
 
@@ -1350,6 +1590,44 @@ char const *custom_edition_mods_multiplayer_stem(
 	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
 
 	return index >= 0 && index < globals->multiplayer_count ? globals->multiplayer_maps[index].stem : NULL;
+}
+
+char const *custom_edition_mods_multiplayer_title(
+	short index)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+
+	return index >= 0 && index < globals->multiplayer_count ? globals->multiplayer_maps[index].title : NULL;
+}
+
+char const *custom_edition_mods_multiplayer_title_named(
+	char const *name)
+{
+	struct custom_edition_mods_globals *globals = &custom_edition_mods_globals;
+	short index;
+
+	if (!name)
+	{
+		return NULL;
+	}
+	name = tag_name_strip_path(name);
+	if (!workshop_map_name_parse(name, CUSTOM_EDITION_MODS_MAXIMUM_NAME_LENGTH + 1, NULL))
+	{
+		return NULL;
+	}
+	if (!globals->looked_for)
+	{
+		custom_edition_mods_look_for();
+	}
+	for (index = 0; index < globals->multiplayer_count; index++)
+	{
+		if (!csstrcasecmp(globals->multiplayer_maps[index].name, name))
+		{
+			return globals->multiplayer_maps[index].title;
+		}
+	}
+
+	return NULL;
 }
 
 char const *custom_edition_mods_multiplayer_folder(

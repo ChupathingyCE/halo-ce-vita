@@ -152,6 +152,15 @@ char const *custom_edition_mods_multiplayer_stem(
 	short index);
 char const *custom_edition_mods_multiplayer_folder(
 	short index);
+/* (1.1.3 8v) the name the player sees of the map at `index`, or of the map
+named `name` (its name or level name; NULL for any other or one not found):
+its item's title of it (multiplayer\<map>.json's Title), else its file's
+name readable ("Cursed Sidewinder") - the network and the loader keep its
+name */
+char const *custom_edition_mods_multiplayer_title(
+	short index);
+char const *custom_edition_mods_multiplayer_title_named(
+	char const *name);
 char const *custom_edition_mods_multiplayer_picture_path(
 	short index);
 /* The file of the Workshop multiplayer map `name` (its name or level name):

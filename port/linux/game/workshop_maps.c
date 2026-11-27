@@ -36,6 +36,13 @@ static uint32_t stem_hash(const char *stem)
 
 /* ---------- names */
 
+int workshop_map_stem_dot(const char *stem, size_t index)
+{
+	/* (a '.' between two characters of a name's, never two together: a file
+	name's own dots, as "h1.5", never "..") */
+	return stem && stem[index] == '.' && index > 0 && stem_character(stem[index - 1]) && stem_character(stem[index + 1]);
+}
+
 int workshop_map_id_text(uint64_t id, char *text, size_t size)
 {
 	char digits[24];
@@ -72,6 +79,10 @@ int workshop_map_id_parse(const char *text, uint64_t *id)
 int workshop_map_name_make(uint64_t id, const char *stem, char *name)
 {
 	char digits[24];
+	/* (the stem as the name has it: a '.' as '_' - 1.1.3 8v device test,
+	Nov 26: Cursed Halo's cursed-h1.5_levee-mcc.map was left out of the map
+	picker, its name not made for the '.') */
+	char shown[WORKSHOP_MAP_STEM_BYTES];
 	size_t stem_length, head, room;
 	int written;
 
@@ -81,23 +92,28 @@ int workshop_map_name_make(uint64_t id, const char *stem, char *name)
 	if (!stem || !workshop_map_id_text(id, digits, sizeof(digits)))
 		return 0;
 	for (stem_length = 0; stem[stem_length]; stem_length++)
-		if (stem_length >= WORKSHOP_MAP_STEM_BYTES - 1 || !stem_character(stem[stem_length]))
+	{
+		if (stem_length >= WORKSHOP_MAP_STEM_BYTES - 1 ||
+			!(stem_character(stem[stem_length]) || workshop_map_stem_dot(stem, stem_length)))
 			return 0;
+		shown[stem_length] = stem[stem_length] == '.' ? '_' : stem[stem_length];
+	}
 	if (!stem_length)
 		return 0;
+	shown[stem_length] = 0;
 	head = strlen(WORKSHOP_MAP_PREFIX) + strlen(digits) + 1;
 	room = WORKSHOP_MAP_NAME_MAXIMUM - head;
 	if (stem_length <= room)
 	{
-		written = snprintf(name, WORKSHOP_MAP_NAME_BYTES, "%s%s_%s", WORKSHOP_MAP_PREFIX, digits, stem);
+		written = snprintf(name, WORKSHOP_MAP_NAME_BYTES, "%s%s_%s", WORKSHOP_MAP_PREFIX, digits, shown);
 	}
 	else
 	{
-		/* (its first characters, '-' and four hex digits of the whole: at
-		least one of its own) */
+		/* (its first characters, '-' and four hex digits of the whole - the
+		file's own stem, '.' and all -: at least one of its own) */
 		if (room < 6)
 			return 0;
-		written = snprintf(name, WORKSHOP_MAP_NAME_BYTES, "%s%s_%.*s-%04x", WORKSHOP_MAP_PREFIX, digits, (int)(room - 5), stem,
+		written = snprintf(name, WORKSHOP_MAP_NAME_BYTES, "%s%s_%.*s-%04x", WORKSHOP_MAP_PREFIX, digits, (int)(room - 5), shown,
 			(unsigned int)(stem_hash(stem) & 0xFFFFu));
 	}
 	if (written <= 0 || written > WORKSHOP_MAP_NAME_MAXIMUM)

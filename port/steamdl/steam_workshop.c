@@ -877,7 +877,7 @@ int steam_workshop_name(const char *name, char *relative, size_t capacity, enum 
 		return STEAM_WORKSHOP_NAME_SKIP;
 	if (ends_with(path, length, ".map"))
 		*kind = base_is(path, "bitmaps.map") || base_is(path, "sounds.map") || base_is(path, "loc.map") ?
-			STEAM_KIND_RESOURCE : STEAM_KIND_MCC_MAP;
+			STEAM_KIND_RESOURCE : STEAM_KIND_WORKSHOP_MAP;
 	else if (ends_with(path, length, ".json") || ends_with(path, length, ".txt"))
 		*kind = STEAM_KIND_WORKSHOP_TEXT;
 	else if (ends_with(path, length, ".png"))
@@ -928,6 +928,14 @@ int steam_workshop_paths(const char *root, uint64_t id, char *staging, char *gid
 		return 0;
 	}
 	return 1;
+}
+
+int steam_workshop_verified_path(const char *root, uint64_t id, char *path, size_t size)
+{
+	char text[24];
+
+	return steam_workshop_id_text(id, text, sizeof(text)) &&
+		(size_t)snprintf(path, size, "%s/workshop/%s.verified", root, text) < size;
 }
 
 int steam_workshop_staged(const char *root, uint64_t *ids, int maximum)
@@ -1141,7 +1149,7 @@ static int install_walk(struct install_walk *walk, const char *base, const char 
 			ok = 0;
 			break;
 		}
-		if (kind == STEAM_KIND_MCC_MAP)
+		if (kind == STEAM_KIND_WORKSHOP_MAP)
 		{
 			char reason[160];
 
@@ -1210,7 +1218,7 @@ int steam_workshop_about_write(const char *root, uint64_t id, const char *title,
 int steam_workshop_install(const char *root, uint64_t id, steam_workshop_map_check check, void *context, char *why,
 	size_t why_size)
 {
-	char staging[512], gid_path[512], done_path[512], mods[512], mods_folder[512];
+	char staging[512], gid_path[512], done_path[512], mods[512], mods_folder[512], verified[512];
 	struct install_walk *walk;
 	int ok;
 
@@ -1292,6 +1300,9 @@ int steam_workshop_install(const char *root, uint64_t id, steam_workshop_map_che
 		steam_workshop_remove_tree(staging);
 	remove(done_path);
 	remove(gid_path);
+	/* (the staging's verified files' record: its files moved into mods, or gone) */
+	if (steam_workshop_verified_path(root, id, verified, sizeof(verified)))
+		remove(verified);
 	return ok;
 }
 

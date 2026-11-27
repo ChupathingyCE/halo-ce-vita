@@ -1892,6 +1892,15 @@ boolean network_game_client_game_settings_updated(
 			long index;
 
 			player_name_clean(message_packet->name, NUMBEROF(message_packet->name));
+			/* (1.1.3 8v audit: and the game type's name, shown in the lobbies, the pause and the
+			scoreboard: its '|', the game's text formatting mark, as '/'; ended within its field) */
+			for (index = 0; index < (long)NUMBEROF(message_packet->variant.human_readable_game_description); index++)
+			{
+				if (message_packet->variant.human_readable_game_description[index] == L'|')
+					message_packet->variant.human_readable_game_description[index] = L'/';
+			}
+			message_packet->variant.human_readable_game_description[
+				NUMBEROF(message_packet->variant.human_readable_game_description) - 1] = 0;
 			for (index = 0; index < (long)NUMBEROF(message_packet->machines); index++)
 				player_name_clean(message_packet->machines[index].name, NUMBEROF(message_packet->machines[index].name));
 			for (index = 0; index < (long)NUMBEROF(message_packet->players); index++)
@@ -3265,7 +3274,10 @@ static boolean network_game_client_map_name_is_valid(
 	char const *character;
 	char const *leaf;
 
-	if (!memchr(map_name, '\0', size) || strchr(map_name, '/') || strchr(map_name, ':') || strstr(map_name, ".."))
+	/* (port, 1.1.3 8v audit: nor '|', the game's text formatting mark - the name is shown in the
+	waiting lobby, the pause and the lists -, which no map's file name has) */
+	if (!memchr(map_name, '\0', size) || strchr(map_name, '/') || strchr(map_name, ':') || strstr(map_name, "..") ||
+		strchr(map_name, '|'))
 		return FALSE;
 	for (character = map_name; *character; character++)
 	{
@@ -4483,6 +4495,9 @@ static void network_game_client_listed_game_name(
 
 		if (code == ' ' && !length)
 			continue;
+		/* (port, 1.1.3 8v audit: '|', the game's text formatting mark, as '/') */
+		if (code == '|')
+			code = '/';
 		if (code >= 0x20 && code < 0x7F && length + 1 < size)
 			out[length++] = (char)code;
 		else if (code >= 0xA1 && code <= 0xFF && length + 2 < size)

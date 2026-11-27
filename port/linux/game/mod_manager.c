@@ -184,7 +184,9 @@ static void printable_copy(
 
 	for (length = 0; text[length] && length < size - 1; length++)
 	{
-		out[length] = text[length] >= ' ' && text[length] <= '~' ? text[length] : '_';
+		/* (1.1.3 8v audit: and '|', the game's text formatting mark - its parser reads the character after
+		it, past the end of a text ending in one -: a name made so is not the file's, never opened) */
+		out[length] = text[length] >= ' ' && text[length] <= '~' && text[length] != '|' ? text[length] : '_';
 	}
 	out[length] = 0;
 

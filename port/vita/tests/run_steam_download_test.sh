@@ -414,6 +414,9 @@ for id in 2900000003 2900000004 2900000005 2900000006 2900000007 2900000008; do
 done
 grep -q "workshop install 2900000008: refused: maps/badcheck.map refused" "$w/log.txt" || \
 	{ echo "FAIL ws-items: the map check's refusal"; status=1; }
+# (1.1.3 8v: which whole-file check failed is said - the dev Vita's Snowtrap, Nov 26, said "SHA-1 or header")
+grep -q "workshop item 2900000007: failed: .*maps/a10.map: its SHA-1 is right, its header is not one this game takes (6461656807000000)" "$w/log.txt" ||
+	{ echo "FAIL ws-items: 2900000007's header refusal not said as such"; status=1; }
 grep -q "cm: workshop query page 1 sort 3 search ''" "$w/transcript.txt" && \
 	grep -q "cm: workshop query page 2" "$w/transcript.txt" && \
 	grep -q "cm: workshop query page 1 sort 12 search 'rebalanced'" "$w/transcript.txt" && \
@@ -466,6 +469,58 @@ grep -q "items=0 failed=1" "$out/flow-ws-wrong-manifest/line" && \
 flow ws-hostile-list ws_hostile_list 2900000001 ok
 grep -q "items=0 failed=0" "$out/flow-ws-hostile-list/line" && \
 	grep -q "malformed" "$out/flow-ws-hostile-list/log.txt" || { echo "FAIL ws-hostile-list"; status=1; }
+# (1.1.3 8v, the dev Vita, Nov 26: Snowtrap, 2904654154, a Halo PC Custom Edition map - "daeh" + 609 - as MCC's
+# Workshop carries them, was refused at its download: "its SHA-1 is right, its header is not one this game takes
+# (6461656861020000)". A made-up one as item 2900000001's map: downloaded, the game's check (the test's, as the
+# game's) takes it, installed)
+python3 -I -c 'import os, sys; open(sys.argv[1], "wb").write(b"daeh" + (609).to_bytes(4, "little") + os.urandom(90000))' \
+	"$out/snowtrap.map"
+server_extra="--workshop-map $out/snowtrap.map"
+flow ws-cemap normal 2900000001 ok
+server_extra=
+grep -q "items=1 failed=0 installed=1" "$out/flow-ws-cemap/line" &&
+	cmp -s "$out/snowtrap.map" "$out/flow-ws-cemap/card/haloce-vita/mods/2900000001/maps/snowtrap.map" ||
+	{ echo "FAIL ws-cemap: the Custom Edition map not downloaded and installed: $(cat "$out/flow-ws-cemap/line")"; status=1; }
+# (1.1.3 8v, the dev Vita, Nov 26: Zuka - 25 files, 1.45 GB - and Cursed Halo - 19 maps, 3.0 GB - failed. A big map's
+# whole-file SHA-1 check (~90 s on the Vita) pumped no CM heartbeat, so Steam closed the session; each next sign-in
+# checked every finished file again - Workshop files had no verified record -, unpumped too, and lost it again at its
+# end; after 3 sign-ins the job failed. Here the fake CM closes a signed-in connection silent for 8 s - heartbeats every
+# 5 s - and each 256 KB step of a check takes 0.7 s: a10.map's (4.5 MB) 12.6 s, a30.map's 9 s)
+slow="--scale 64 --chunk-kb 1024 --heartbeat-timeout 8"
+signin_flow=1 server_extra="$slow" client_env="env STEAM_TEST_CHECK_MS=700"
+flow ws-slowcheck normal 2900000001 ok
+w=$out/flow-ws-slowcheck
+grep -q "items=1 failed=0 installed=1" "$w/line" && ! grep -q "cm: heartbeat timeout" "$w/transcript.txt" &&
+	grep -q "test: checked workshop/2900000001/maps/a10.map" "$w/log.txt" ||
+	{ echo "FAIL ws-slowcheck: the session not kept through the slow checks: $(cat "$w/line")"; status=1; }
+[ "$(grep -c "cm: heartbeat$" "$w/transcript.txt")" -ge 2 ] || { echo "FAIL ws-slowcheck: too few heartbeats"; status=1; }
+# (the session lost mid-item - the CM cut after 10 chunks, a10.map in and checked -: kept in staging with its verified
+# files' record, <id>.verified, beside <id>.gid; the next sign-in takes the finished files from the record, unread, and
+# resumes the rest, the session kept through its slow checks; the record gone with the install)
+server_extra="$slow --lose-after-chunks 10"
+flow ws-lost normal 2900000001 fail
+w=$out/flow-ws-lost
+grep -q "cm: connection dropped" "$w/transcript.txt" && grep -q "items=0 failed=0 installed=0" "$w/line" &&
+	grep -q "the Steam session ended during the download" "$w/line" ||
+	{ echo "FAIL ws-lost: not lost mid-item: $(cat "$w/line")"; status=1; }
+recorded=$(grep -o "workshop/2900000001/maps/a[13]0.map: done" "$w/log.txt" | sed 's/: done//')
+[ -n "$recorded" ] && [ -s "$w/card/haloce-vita/workshop/2900000001.verified" ] ||
+	{ echo "FAIL ws-lost: no map finished, or no verified files' record"; status=1; }
+server_extra="$slow"
+flow ws-lost-resume normal 2900000001 ok "" ws-lost
+w=$out/flow-ws-lost-resume
+grep -q "items=1 failed=0 installed=1" "$w/line" && ! grep -q "cm: heartbeat timeout" "$w/transcript.txt" ||
+	{ echo "FAIL ws-lost-resume: not resumed and installed: $(cat "$w/line")"; status=1; }
+for f in $recorded; do
+	grep -q "$f: already there (verified before, unchanged)" "$w/log.txt" && ! grep -q "test: checked $f" "$w/log.txt" ||
+		{ echo "FAIL ws-lost-resume: $f checked again (not taken from the record)"; status=1; }
+done
+cmp -s "$w/card/haloce-vita/mods/2900000001/maps/a10.map" "$out/flow-ws-slowcheck/card/haloce-vita/mods/2900000001/maps/a10.map" &&
+	cmp -s "$w/card/haloce-vita/mods/2900000001/maps/a30.map" "$out/flow-ws-slowcheck/card/haloce-vita/mods/2900000001/maps/a30.map" ||
+	{ echo "FAIL ws-lost-resume: the maps differ"; status=1; }
+[ -z "$(ls -A "$w/card/haloce-vita/workshop" | grep -v -x -e installed)" ] ||
+	{ echo "FAIL ws-lost-resume: staging left: $(ls "$w/card/haloce-vita/workshop")"; status=1; }
+signin_flow= server_extra= client_env=
 sub=
 
 echo "--- the job (steam_job.c: the worker thread, the QR, the snapshot, a lost session started again)"
@@ -482,6 +537,14 @@ flow job-lost losesession 1 ok
 grep -q "attempts=2" "$out/flow-job-lost/line" || { echo "FAIL job-lost: not signed in again"; status=1; }
 grep -q "resumed\|already there" "$out/flow-job-lost/log.txt" || { echo "FAIL job-lost: nothing kept"; status=1; }
 flow job-outage outage 1 ok
+# (1.1.3 8v: a long download's session lost again and again - the CM cut every 6 chunks, 3 times -: each sign-in that
+# got something further carries on, not one of the 2 restarts a session lost with nothing done is given)
+signin_flow=1 server_extra="--lose-after-chunks 6 --lose-times 3"
+flow job-lost3 normal 1 ok
+signin_flow= server_extra=
+grep -q "attempts=4" "$out/flow-job-lost3/line" && [ "$(grep -c "cm: connection dropped" "$out/flow-job-lost3/transcript.txt")" = 3 ] &&
+	diff -r "$out/flow-ce/card/haloce-vita/mcc" "$out/flow-job-lost3/card/haloce-vita/mcc" > /dev/null ||
+	{ echo "FAIL job-lost3: not carried on to the end: $(cat "$out/flow-job-lost3/line")"; status=1; }
 # (1.1.3: the device sleeps mid-download - the power button, a suspend: its sockets die - and wakes: the job pauses,
 # then connects again by itself and finishes, nothing cancelled; the screen saw "asleep" and "carrying on")
 signin_flow=1 client_env="env STEAM_TEST_SLEEP=300" flow job-sleep slow 1 ok
@@ -529,6 +592,11 @@ signin_flow=1
 client_env="env STEAM_TEST_CANCEL=qr"
 flow job-cancel-qr normal 1 cancel
 cancel_check job-cancel-qr
+# (1.1.3-insider.8v: the cancel on the QR logged as such, not as the QR expired - 8u device test, Nov 26: Circle on the
+# QR, "sign-in 1 ended: The sign-in QR expired before it was approved"; the cancel cut the connection under the poll)
+grep -q "steam job: sign-in 1 ended: cancelled " "$out/flow-job-cancel-qr/log.txt" &&
+	! grep -q "QR sign-in ended unscanned\|QR expired" "$out/flow-job-cancel-qr/log.txt" ||
+	{ echo "FAIL job-cancel-qr: the cancel logged as the QR's expiry: $(grep "sign-in 1 ended" "$out/flow-job-cancel-qr/log.txt")"; status=1; }
 client_env="env STEAM_TEST_CANCEL=preparing"
 flow job-cancel-prep slow 1 cancel
 cancel_check job-cancel-prep
@@ -544,6 +612,15 @@ flow job-cancel-manifest stall_manifest 1 cancel
 cancel_check job-cancel-manifest
 grep -q "cdn: stalled before the manifest" "$out/flow-job-cancel-manifest/transcript.txt" ||
 	{ echo "FAIL job-cancel-manifest: no stall"; status=1; }
+# (8v audit: the player's cancel in the pause before a lost session's next sign-in - the CM cut after 6 chunks -: as
+# quick as any other cancel, the job ended, no sign-in again)
+client_env="env STEAM_TEST_CANCEL=reconnecting" server_extra="--lose-after-chunks 6"
+flow job-cancel-reconnect normal 1 cancel
+server_extra=
+cancel_check job-cancel-reconnect
+grep -q "steam job: cancelled before connecting again" "$out/flow-job-cancel-reconnect/log.txt" &&
+	[ "$(grep -c "cm: logon ok" "$out/flow-job-cancel-reconnect/transcript.txt")" = 1 ] ||
+	{ echo "FAIL job-cancel-reconnect: not cancelled in the pause, or signed in again"; status=1; }
 client_env= signin_flow=
 sub=
 

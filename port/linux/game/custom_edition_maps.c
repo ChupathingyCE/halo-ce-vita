@@ -955,6 +955,7 @@ static void workshop_multiplayer_maps_add(
 	{
 		char const *name = custom_edition_mods_multiplayer_name(index);
 		char const *stem = custom_edition_mods_multiplayer_stem(index);
+		char const *title = custom_edition_mods_multiplayer_title(index);
 		char const *folder = custom_edition_mods_multiplayer_folder(index);
 		char const *picture_path = custom_edition_mods_multiplayer_picture_path(index);
 		struct custom_edition_map *map;
@@ -993,7 +994,21 @@ static void workshop_multiplayer_maps_add(
 		{
 			csstrcpy(map->picture_path, picture_path);
 		}
-		display_name_make(stem, map->display_name);
+		/* (1.1.3 8v: its title - the item's, else its file's name readable
+		-, as every screen that names the map says it: the picker, the
+		lobbies, the pause, custom_edition_maps_level_title) */
+		if (title && title[0])
+		{
+			for (character = 0; title[character] && character < MAXIMUM_DISPLAY_NAME_LENGTH; character++)
+			{
+				map->display_name[character] = (wchar_t)(unsigned char)title[character];
+			}
+			map->display_name[character] = 0;
+		}
+		else
+		{
+			display_name_make(stem, map->display_name);
+		}
 		snprintf(text, sizeof(text), T("Steam Workshop\r\nitem %s"), folder);
 		for (character = 0; text[character] && character < MAXIMUM_DESCRIPTION_LENGTH; character++)
 		{
@@ -1834,7 +1849,22 @@ char const *custom_edition_maps_level_title(
 	char const *level_name)
 {
 	char const *name = level_name ? tag_name_strip_path(level_name) : "";
+	char const *title;
 	short index;
+
+	/* (1.1.3 8v: a Steam Workshop map this machine has, by its title, as the
+	picker says it - never ws<id>_<map>, the name the network uses) */
+	if (name[0] && (title = custom_edition_mods_multiplayer_title_named(name)) != NULL && title[0])
+	{
+		return title;
+	}
+	/* (1.1.3 8v: a map of MCC's own, mcc_<map>, by its title, as the picker says it - the dev Vita, Nov 26: the
+	pause said "Slayer on mcc_dangercanyon") */
+	if (!_strnicmp(name, MCC_CONTENT_NAME_PREFIX, strlen(MCC_CONTENT_NAME_PREFIX)) &&
+		(title = mcc_content_title(name + strlen(MCC_CONTENT_NAME_PREFIX))) != NULL && title[0])
+	{
+		return title;
+	}
 
 	for (index = 0; index < NUMBEROF(xbox_level_names); index++)
 	{

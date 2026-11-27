@@ -924,6 +924,8 @@ static struct
 	boolean lobby_after_failure;
 } h3_local;
 static boolean row_column(struct widget_instance *row, char const *name, char const *text);
+static void text_show_fitted(struct widget_instance *widget, char const *text);
+static boolean text_fitted(struct widget_instance *widget, char const *text, char *shown, int size);
 static boolean h3_mp_local_start(void);
 static void h3_mp_local_update(boolean main_menu_loaded);
 static boolean h3_mp_lobby_open_offline(void);
@@ -4714,14 +4716,14 @@ static void h3_mp_lobby_update(struct widget_instance *widget)
 	snprintf(said + strlen(said), sizeof(said) - strlen(said), ", %s", text);
 	snprintf(text, sizeof(text), "%s: %s", T("MAP"), h3_mp_map_name());
 	h3_capitals(text);
-	text_show(named(screen, "map_row"), text);
+	text_show_fitted(named(screen, "map_row"), text);
 	snprintf(said + strlen(said), sizeof(said) - strlen(said), ", %s", text);
 	snprintf(text, sizeof(text), "%s", h3_mp_gametype_name());
 	h3_capitals(text);
 	text_show(named(screen, "game_value"), text);
 	snprintf(text, sizeof(text), "%s", h3_mp_map_name());
 	h3_capitals(text);
-	text_show(named(screen, "map_value"), text);
+	text_show_fitted(named(screen, "map_value"), text);
 	for (index = 0; index < (short)NUMBEROF(rows); index++)
 	{
 		if ((found = named(screen, rows[index])) != NULL)
@@ -4748,7 +4750,7 @@ static void h3_mp_lobby_update(struct widget_instance *widget)
 	}
 	/* (Halo 3's: "Slayer on Valhalla") */
 	snprintf(text, sizeof(text), T("%s on %s"), h3_mp_gametype_name(), h3_mp_map_name());
-	text_show(named(screen, "caption"), text);
+	text_show_fitted(named(screen, "caption"), text);
 	/* ("1 Player (16 max)": the most players a game of that network takes -
 	network.max_players on every network a game is hosted on, its 0 the
 	Xbox's 16: network_server_manager.c; HOST SETTINGS' MAX PLAYERS) */
@@ -5093,6 +5095,26 @@ static void h3_network_status_update(struct widget_instance *widget)
 		snprintf(text, sizeof(text), "%s", T("On this PS Vita only"));
 	}
 	text_show(widget, text);
+	/* (1.1.3 8v: said when it changes, and whether it fits its box - its letters' tails too: the dev Vita, Nov 26,
+	showed "On this PS Vita onlu", the box 14 high - for the tests) */
+	if (widget && widget->type == _ui_widget_type_text_box && widget->parameters.text_box.text)
+	{
+		static char said[192];
+		char line[192];
+		short room_width, room_height, text_width, text_height;
+
+		/* (the whole line: its baseline - ui_widget_port_text_measure's height, three quarters of a line - and the quarter
+		under it, the tails of g, p and y) */
+		ui_widget_port_text_measure(widget, widget->parameters.text_box.text, &room_width, &room_height, &text_width,
+			&text_height);
+		snprintf(line, sizeof(line), "%s%s", text, text_width <= room_width && text_height + text_height / 3 <= room_height ?
+			"" : " (does not fit)");
+		if (strcmp(line, said))
+		{
+			snprintf(said, sizeof(said), "%s", line);
+			platform_log("menus: network status: %s", line);
+		}
+	}
 }
 
 /* (port h3 network set) the network picker's choice: ONLINE, SYSTEM LINK
@@ -9440,7 +9462,7 @@ static void h3_mp_pause_update(struct widget_instance *list)
 	}
 	snprintf(text, sizeof(text), "%s \xc2\xb7 %s", name, map);
 	h3_capitals(text);
-	text_show(named(screen, "title"), text);
+	text_show_fitted(named(screen, "title"), text);
 	if (game)
 	{
 		snprintf(text, sizeof(text), T("%s, score to win %ld"), game->variant.universal_variant.teams ?
@@ -9448,7 +9470,13 @@ static void h3_mp_pause_update(struct widget_instance *list)
 		text_show(named(screen, "rules"), text);
 		snprintf(text, sizeof(text), game->player_count == 1 ? T("%d Player") : T("%d Players"), game->player_count);
 		text_show(named(screen, "count"), text);
-		snprintf(text, sizeof(text), T("%s on %s"), name, map);
+		snprintf(line, sizeof(line), T("%s on %s"), name, map);
+		/* (1.1.3 8v: a long map title's line cut to the panel's width, text_show_fitted's way) */
+		if ((child = named(screen, "game")) != NULL && child->type == _ui_widget_type_text_box &&
+			!(halo_menu_style_classic_plus() && classic_widget(child)))
+			text_fitted(child, line, text, (int)sizeof(text));
+		else
+			snprintf(text, sizeof(text), "%s", line);
 		snprintf(text + strlen(text), sizeof(text) - strlen(text), "\n%s\n\n%s", host ?
 			T("You host this game.") : T("You joined this game."), host ?
 			T("END GAME ends it for every player.") : T("LEAVE GAME: the others play on."));
@@ -10029,7 +10057,9 @@ static char const *lan_map_title(char const *map)
 		if (leaf && !_stricmp(leaf + 1, map))
 			return h3_level_names[index];
 	}
-	return map;
+	/* (1.1.3 8v: a Steam Workshop map this machine has, by its title, as the
+	lobbies say it) */
+	return custom_edition_maps_level_title(map);
 }
 
 /* the browser's games: the System Link list's, as the online browser's
@@ -10639,7 +10669,8 @@ static void browser_update(struct widget_instance *list)
 		}
 		else
 			name_cut = row_column(child, "row_name", entry->name);
-		map_cut = row_column(child, "row_map", entry->map);
+		/* (1.1.3 8v: an online game's Steam Workshop map this machine has, by its title, as the System Link list's) */
+		map_cut = row_column(child, "row_map", custom_edition_maps_level_title(entry->map));
 		/* (co-op: its difficulty beside it - "Co-op · Legendary" in the Halo
 		3 rows, whose font has the dot -, when the listing says it) */
 		{
@@ -12767,6 +12798,8 @@ static void h3_gm_update(struct widget_instance *list)
 	}
 }
 
+static boolean h3_dialog_too_wide(struct widget_instance *widget, char const *text, short width);
+
 /* (port h3 mods) the rows, the chosen one's facts, the totals */
 static void h3_mods_update(struct widget_instance *list)
 {
@@ -12899,10 +12932,29 @@ static void h3_mods_update(struct widget_instance *list)
 		mod_manager_totals(&used, &free_space);
 		h3_mods_size_text(used_text, sizeof(used_text), used);
 		h3_mods_size_text(free_text, sizeof(free_text), free_space);
+		struct widget_instance *status = named(screen, "mods_status");
+		short width = status ? ui_widget_port_text_box_width(status) : 0;
+
 		if (mod_manager_count() == 1)
 			snprintf(text, sizeof(text), T("1 item, %s used, %s free"), used_text, free_text);
 		else
 			snprintf(text, sizeof(text), T("%d items, %s used, %s free"), mod_manager_count(), used_text, free_text);
+		/* (shorter while it does not fit its box - "2 items, 207.8 MB used, 221.8" lost its "GB free" at the right
+		edge, 8u device test, Nov 26: the free space the line that stays) */
+		if (width > 0 && h3_dialog_too_wide(status, text, width))
+			snprintf(text, sizeof(text), T("%s used, %s free"), used_text, free_text);
+		if (width > 0 && h3_dialog_too_wide(status, text, width))
+			snprintf(text, sizeof(text), T("%s free"), free_text);
+		{
+			static char said[160];
+
+			if (strcmp(said, text))
+			{
+				snprintf(said, sizeof(said), "%s", text);
+				platform_log("menus: h3 mods: the totals: %s%s", text,
+					width > 0 && h3_dialog_too_wide(status, text, width) ? " (do not fit)" : "");
+			}
+		}
 	}
 	text_show(named(screen, "mods_status"), text);
 }
@@ -13358,6 +13410,8 @@ static struct
 	/* (1.1.3) the installed item's problem as the mod manager says it ("Not supported on PS Vita: ...": a map the
 	load would refuse, never listed to play; "" none) */
 	char details_unsupported[HALO_MODS_TEXT_BYTES];
+	/* (its lines, said in the log once) */
+	int details_said;
 	/* a finger on the screen: where it came down, a swipe taken */
 	boolean touching, swiped;
 	short touch_x, touch_y;
@@ -13462,7 +13516,9 @@ static int h3_workshop_map_check(void *context, const char *path, char *why, siz
 		snprintf(why, why_size, "%s", T(cache_file_status_describe((enum cache_file_status)status)));
 		return 0;
 	}
-	if (format != _cache_file_format_mcc_cea_cache)
+	/* (1.1.3 8v: or a Halo PC Custom Edition cache, which MCC's Workshop carries too - the dev Vita's Snowtrap, Nov 26 -:
+	installed, and the mods scan takes its multiplayer map as the item's, custom_edition_cache_mod_map_check) */
+	if (format != _cache_file_format_mcc_cea_cache && format != _cache_file_format_custom_edition_cache)
 	{
 		snprintf(why, why_size, "%s", T("not a Halo: CE Anniversary map"));
 		return 0;
@@ -14110,6 +14166,7 @@ static void h3_workshop_update(struct widget_instance *widget)
 				steam_workshop_installed(h3_workshop_root(), id, &gid);
 			h3_workshop.details_installed_gid = gid;
 			h3_workshop.details_unsupported[0] = 0;
+			h3_workshop.details_said = 0;
 			if (page.needs)
 			{
 				char said[sizeof(page.needs_titles) + 2 * STEAM_WORKSHOP_NEEDS_MAXIMUM];
@@ -14257,8 +14314,37 @@ static void h3_workshop_update(struct widget_instance *widget)
 				}
 				if (page.state == 2 && state && h3_workshop.details_unsupported[0])
 				{
-					snprintf(line, sizeof(line), "\n%s", h3_workshop.details_unsupported);
+					/* (in lines that fit the box, broken at spaces - one line lost its end at the box's edge: "Not
+					supported on PS Vita: the scenario's script", 8u device test, Nov 26) */
+					short width = ui_widget_port_text_box_width(found);
+					char const *word = h3_workshop.details_unsupported;
+					char row[300] = "", candidate[300];
+					int rows = 0;
+
+					while (*word)
+					{
+						int length = (int)strcspn(word, " ");
+
+						snprintf(candidate, sizeof(candidate), "%s%s%.*s", row, row[0] ? " " : "", length, word);
+						if (row[0] && width > 0 && h3_dialog_too_wide(found, candidate, width))
+						{
+							snprintf(line, sizeof(line), "\n%s", row);
+							strncat(text, line, sizeof(text) - strlen(text) - 1);
+							rows++;
+							snprintf(row, sizeof(row), "%.*s", length, word);
+						}
+						else
+							snprintf(row, sizeof(row), "%s", candidate);
+						word += length;
+						while (*word == ' ')
+							word++;
+					}
+					snprintf(line, sizeof(line), "\n%s", row);
 					strncat(text, line, sizeof(text) - strlen(text) - 1);
+					if (h3_workshop.details_said != rows + 1)
+						platform_log("menus: workshop: the item's problem in %d lines%s", rows + 1,
+							width > 0 && h3_dialog_too_wide(found, row, width) ? " (a word does not fit)" : "");
+					h3_workshop.details_said = rows + 1;
 				}
 				h3_dialog_text(found, text);
 			}
@@ -16501,6 +16587,126 @@ static boolean text_too_wide(struct widget_instance *widget, char const *text, s
 			characters[index] = '?';
 	}
 	return ui_widget_port_text_too_wide(widget, (wchar_t const *)characters, width);
+}
+
+/* (1.1.3 8v) whether a line is wider than its box's room: its width less its text's offset, as the box draws it
+(ui_widget_port_text_measure; text_too_wide's width is the whole box's) */
+static boolean text_wider_than_room(struct widget_instance *widget, char const *text)
+{
+	unsigned short characters[256];
+	short room_width, room_height, text_width, text_height;
+	long length = halo_menus_utf16(text, characters, (long)NUMBEROF(characters)), index;
+
+	for (index = 0; index < length - 1; index++)
+	{
+		if (characters[index] > 0xFF)
+			characters[index] = '?';
+	}
+	return ui_widget_port_text_measure(widget, (wchar_t const *)characters, &room_width, &room_height, &text_width,
+		&text_height) && room_width > 0 && text_width > room_width;
+}
+
+/* (1.1.3 8v) a line of the port's text in a text box, cut to its width with "..." when wider - a tag at
+its end, "(CUSTOM)", kept whole, the words before it cut ("CURSED HANG 'EM HIG... (CUSTOM)") -, as the
+server browser's rows (row_column); a text that fits, of lines, or a Classic+ box's, as text_show shows it
+(8v device test, Nov 26: SELECT MAP's "CURSED-CRITICAL-V2-MCC (CUSTO" ran off its row) */
+/* (the line `text` as text_show_fitted shows it, in `shown` (`size`): itself when it fits the box's room, else cut with
+"..." (its tag kept); FALSE when not even one character fits) */
+/* (text_fitted's answers, made once for each box and text - the pickers' rows ask every frame, and a cut
+is a measure for each character it tries: 8v audit) */
+#define TEXT_FITTED_CACHED 32
+#define TEXT_FITTED_TEXT_BYTES 160
+static struct
+{
+	void const *widget;
+	long creation;
+	long definition;
+	boolean fitted;
+	char text[TEXT_FITTED_TEXT_BYTES];
+	char shown[TEXT_FITTED_TEXT_BYTES];
+} text_fitted_cache[TEXT_FITTED_CACHED];
+static int text_fitted_next;
+
+static boolean text_fitted_measured(struct widget_instance *widget, char const *text, char *shown, int size);
+
+static boolean text_fitted(struct widget_instance *widget, char const *text, char *shown, int size)
+{
+	int index;
+	boolean fitted;
+
+	if (strlen(text) >= TEXT_FITTED_TEXT_BYTES)
+		return text_fitted_measured(widget, text, shown, size);
+	for (index = 0; index < TEXT_FITTED_CACHED; index++)
+	{
+		if (text_fitted_cache[index].widget == widget && text_fitted_cache[index].creation == widget->creation_time &&
+			text_fitted_cache[index].definition == widget->definition_tag_index && !strcmp(text_fitted_cache[index].text, text))
+		{
+			snprintf(shown, (size_t)size, "%s", text_fitted_cache[index].shown);
+			return text_fitted_cache[index].fitted;
+		}
+	}
+	fitted = text_fitted_measured(widget, text, shown, size);
+	if (strlen(shown) < TEXT_FITTED_TEXT_BYTES)
+	{
+		index = text_fitted_next;
+		text_fitted_next = (text_fitted_next + 1) % TEXT_FITTED_CACHED;
+		text_fitted_cache[index].widget = widget;
+		text_fitted_cache[index].creation = widget->creation_time;
+		text_fitted_cache[index].definition = widget->definition_tag_index;
+		text_fitted_cache[index].fitted = fitted;
+		snprintf(text_fitted_cache[index].text, sizeof(text_fitted_cache[index].text), "%s", text);
+		snprintf(text_fitted_cache[index].shown, sizeof(text_fitted_cache[index].shown), "%s", shown);
+	}
+	return fitted;
+}
+
+static boolean text_fitted_measured(struct widget_instance *widget, char const *text, char *shown, int size)
+{
+	char const *tag;
+	long head, kept;
+
+	snprintf(shown, (size_t)size, "%s", text);
+	if (!text_wider_than_room(widget, text))
+		return TRUE;
+	head = (long)strlen(text);
+	tag = strrchr(text, '(');
+	if (head > 0 && text[head - 1] == ')' && tag && tag > text + 1 && tag[-1] == ' ')
+		head = (long)(tag - 1 - text);
+	else
+		tag = "";
+	for (kept = head; kept > 0; kept--)
+	{
+		long end = kept;
+
+		/* (whole characters: the text is UTF-8) */
+		if (kept < head && ((unsigned char)text[kept] & 0xC0) == 0x80)
+			continue;
+		while (end > 0 && text[end - 1] == ' ')
+			end--;
+		if (!end)
+			break;
+		snprintf(shown, (size_t)size, "%.*s...%s%s", (int)end, text, tag[0] ? " " : "", tag);
+		if (!text_wider_than_room(widget, shown))
+			return TRUE;
+	}
+	snprintf(shown, (size_t)size, "%s", text);
+	return FALSE;
+}
+
+static void text_show_fitted(struct widget_instance *widget, char const *text)
+{
+	char shown[256];
+
+	if (!widget || !widget->name || widget->type != _ui_widget_type_text_box || !text || !*text || strchr(text, '\n') ||
+		strlen(text) >= sizeof(shown) - 4 || (halo_menu_style_classic_plus() && classic_widget(widget)))
+	{
+		text_show(widget, text);
+		return;
+	}
+	if (text_fitted(widget, text, shown, (int)sizeof(shown)))
+		text_show(widget, shown);
+	else
+		row_column(widget, widget->name, text);
 }
 
 static int text_show_two_lines(struct widget_instance *widget, char const *text)
@@ -22675,7 +22881,7 @@ static void h3_pregame_update(struct widget_instance *widget)
 		if ((found = named(screen, "emblem")) != NULL)
 			widget_instance_set_visibility_recursive(found, FALSE);
 	}
-	text_show(named(screen, "caption"), text);
+	text_show_fitted(named(screen, "caption"), text);
 	{
 		char flat[192];
 		char *newline;
@@ -25132,11 +25338,15 @@ static void cascade_update(struct widget_instance *list)
 				kind->item_name(cascade.group, shown_index, text, (int)sizeof(text));
 			else
 				kind->group_name(shown_index, text, (int)sizeof(text));
-			text_show(child, text);
+			text_show_fitted(child, text);
 			if (index == view->row)
 			{
 				focus = child;
-				snprintf(focus_text, sizeof(focus_text), "%s", text);
+				/* (as it is shown: cut to fit, text_show_fitted) */
+				if (child->type == _ui_widget_type_text_box && child->parameters.text_box.text)
+					h3_utf8(focus_text, (int)sizeof(focus_text), child->parameters.text_box.text);
+				else
+					snprintf(focus_text, sizeof(focus_text), "%s", text);
 			}
 		}
 		if (focus && focus != list->focused_child)
@@ -25161,12 +25371,12 @@ static void cascade_update(struct widget_instance *list)
 			if (shown && cascade.column == CASCADE_COLUMN_VARIANTS)
 			{
 				kind->item_name(cascade.group, cascade.view2.offset + (int)index, text, (int)sizeof(text));
-				text_show(found, text);
+				text_show_fitted(found, text);
 			}
 			else if (shown)
 			{
 				kind->group_name(cascade.view1.offset + (int)index, text, (int)sizeof(text));
-				text_show(found, text);
+				text_show_fitted(found, text);
 			}
 		}
 		snprintf(name, sizeof(name), "c2_%ld", index);
@@ -25177,7 +25387,7 @@ static void cascade_update(struct widget_instance *list)
 			if (shown)
 			{
 				kind->item_name(cascade.group, (int)index, text, (int)sizeof(text));
-				text_show(found, text);
+				text_show_fitted(found, text);
 			}
 		}
 	}
@@ -25991,8 +26201,8 @@ static void ce_opt_update(struct widget_instance *list)
 	}
 }
 
-/* (port ce options left / right / a) the focused row: its value a step (the next choice the panel offers, round),
-set as the panel sets it; a row that opens a page, the page; a typed row, the keyboard; THANK YOU and SETTINGS PANEL
+/* (port ce options left / right / a) the focused row: its value a step (the next choice the panel offers, round - a
+volume's left and right stop at its ends), set as the panel sets it; a row that opens a page, the page; a typed row, the keyboard; THANK YOU and SETTINGS PANEL
 done. An action that asks first is port ce options ask's; a row that cannot be changed, nothing (its help says why) */
 static boolean ce_opt_step(struct widget_instance *widget, int direction, boolean press)
 {
@@ -26062,6 +26272,11 @@ static boolean ce_opt_step(struct widget_instance *widget, int direction, boolea
 	{
 		int next = ((choice + direction * step) % count + count) % count;
 
+		/* (a volume - its choices from Off up -: left and right stop at Off and 100%, as the panel's; right at 100%
+		went round to Off, 1.1.3-insider.8v) */
+		if (!press && (strstr(name, "VOLUME") || !strcmp(name, "HALO_MENU_MUSIC")) &&
+			(choice + direction * step < 0 || choice + direction * step >= count))
+			return TRUE;
 		if (ce_opt_offered(index, row, next))
 		{
 			choice = next;

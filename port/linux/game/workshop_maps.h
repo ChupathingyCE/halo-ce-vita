@@ -55,7 +55,7 @@ STEAM_WORKSHOP_ID_DIGITS, the mods folder's key) */
 #define WORKSHOP_MAP_ID_DIGITS 12
 /* a map file's name without ".map", lower case (custom_edition_mods.c's
 MAP_STEM_BYTES) */
-#define WORKSHOP_MAP_STEM_BYTES 24
+#define WORKSHOP_MAP_STEM_BYTES 64
 /* a host's level name read at most this far (struct network_game_map's
 name) */
 #define WORKSHOP_MAP_LEVEL_NAME_BYTES 0x80
@@ -65,9 +65,14 @@ name) */
 /* ---------- names */
 
 /* the name of the item `id`'s map whose file is `stem`.map (`stem`:
-1 to WORKSHOP_MAP_STEM_BYTES - 1 of [a-z0-9_-]): 1 and the name in `name`
+1 to WORKSHOP_MAP_STEM_BYTES - 1 of [a-z0-9_-], and '.' between two of
+those, as "cursed-h1.5_levee-mcc": the name has '_' for it, its shortened
+form's hash the stem's own): 1 and the name in `name`
 (WORKSHOP_MAP_NAME_BYTES), 0 (`name` empty) if it cannot be named */
 int workshop_map_name_make(uint64_t id, const char *stem, char *name);
+/* (1.1.3 8v) whether `stem`[`index`] is a '.' a map's file stem may have:
+one between two of [a-z0-9_-] (never first, last or two together) */
+int workshop_map_stem_dot(const char *stem, size_t index);
 
 /* whether `name` (at most `size` bytes read; it must end within them) is a
 Workshop map's name, in any case: 1 with the item's number in `*id` (may be

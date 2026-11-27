@@ -22,7 +22,7 @@ root=$(cd "$here/../../.." && pwd)
 out=${TMPDIR:-/tmp}/p2p_lobby_test.$$
 . "$here/test_out.sh"
 test_out_begin "$out"
-clang=${CLANG:-$(sed -n 's/^linux_cc = //p' "$root/build.ninja" | head -1)}
+clang=${CLANG:-$(awk '/^linux_cc =/ { line = 1 } line { printf "%s ", $0; if ($0 !~ /\$$/) exit }' "$root/build.ninja" | sed 's/^linux_cc = //; s/\$ */ /g; s/^ *//; s/ *$//')}
 [ -n "$clang" ] || clang=clang
 mkdir -p "$out"
 trap 'test_out_done $?' EXIT

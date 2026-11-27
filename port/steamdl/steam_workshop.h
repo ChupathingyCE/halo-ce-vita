@@ -188,7 +188,7 @@ enum
 };
 
 /* a manifest's file name (as it is, '\' or '/'): TAKE with the relative path to write ('/'-separated, the same bytes)
-and its header check (STEAM_KIND_MCC_MAP for a map, STEAM_KIND_RESOURCE for bitmaps/sounds/loc.map,
+and its header check (STEAM_KIND_WORKSHOP_MAP for a map, STEAM_KIND_RESOURCE for bitmaps/sounds/loc.map,
 STEAM_KIND_WORKSHOP_TEXT, _PNG, _BMP); SKIP (not written) for a file of another kind or a name merely odd (deeper
 than STEAM_WORKSHOP_NAME_PARTS, a part longer than STEAM_WORKSHOP_NAME_PART_MAXIMUM, the whole longer than
 STEAM_WORKSHOP_NAME_MAXIMUM, hidden, ending in '.' or ' ', a character not of [A-Za-z0-9 _.-()+,'&!]); REFUSE (the
@@ -207,6 +207,10 @@ typedef int (*steam_workshop_map_check)(void *context, const char *path, char *w
 (every file in and checked); the mods folder's place <root>/mods/<id> */
 int steam_workshop_paths(const char *root, uint64_t id, char *staging, char *gid_path, char *done_path, char *mods,
 	size_t size);
+/* (1.1.3 8v) the staging's verified files' record, <root>/workshop/<id>.verified (each file checked whole: its size,
+time and the manifest's SHA-1 - steam_download.c's record): 1, or 0 if the path is too long. Removed with the
+install, a drop or a new version */
+int steam_workshop_verified_path(const char *root, uint64_t id, char *path, size_t size);
 /* the downloaded items waiting for their install (their .done marks): how many ids were written */
 int steam_workshop_staged(const char *root, uint64_t *ids, int maximum);
 /* the item checked again (every file's name; every map by check) and moved to <root>/mods/<id> (one there before

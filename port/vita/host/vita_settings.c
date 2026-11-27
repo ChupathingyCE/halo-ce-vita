@@ -667,9 +667,11 @@ static struct setting settings[] = {
 	/* (Classic, "original": the Xbox menus as they shipped, the port's
 	features here alone; Classic+, "classic" - the Halo CE style before
 	insider.25, so a saved one keeps its rows -: the Xbox menus with the
-	port's rows and screens in their look. The owner, insider.25) */
+	port's rows and screens in their look. The owner, insider.25. Its help
+	fits the classic panel's one line of 70 characters: "... Classic+: with
+	the new rows." ran off its right edge, 8u device test, Nov 26) */
 	{ "Menu style", "HALO_MENU_STYLE", 0, 3, { "original", "classic", "online" }, { "Classic", "Classic+", "ElDewrito" },
-		"ElDewrito: Halo Online style. Classic: as shipped. Classic+: with the new rows.", 2, PAGE_MENUS },
+		"ElDewrito: Halo Online style. Classic: as shipped. Classic+: new rows", 2, PAGE_MENUS },
 #else
 	/* (vita_settings_test.c: the panel's every page as the hidden Halo 3
 	style lays it out - its checks were written for it) */
@@ -806,23 +808,25 @@ static struct setting settings[] = {
 		"The Dev tab: switches for testers, Save report", 0, TAB_GAME },
 	/* (dsound_sdl.c halo_sound_class_volume, config.toml's audio.volume and audio.*_volume: the master
 	volume and Halo's sound classes'; live. The menus' SETTINGS > SOUND sets the same, 1.1.3 - 1.2.0's
-	menu rework, owner Nov 5) */
-	{ "Master volume", "HALO_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
-		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "Everything the game plays", 0, TAB_AUDIO },
-	{ "Music volume", "HALO_MUSIC_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
-		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "The music", 0, TAB_AUDIO },
-	{ "Effects volume", "HALO_EFFECTS_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
-		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "Weapons, vehicles, impacts, footsteps", 0, TAB_AUDIO },
-	{ "Dialogue volume", "HALO_DIALOGUE_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
-		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "Voices: the characters and the story", 0, TAB_AUDIO },
-	{ "Ambience volume", "HALO_AMBIENCE_VOLUME", 0, 11, { "1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1", "0.0" },
-		{ "100%", "90%", "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "Off" }, "The levels' ambience: wind, machines, computers", 0, TAB_AUDIO },
+	menu rework, owner Nov 5. The choices from Off up, Menu music's too: Right louder - from 100% down,
+	Right turned it down, 8u device test, Nov 26; settings.txt keeps the value, so a saved one reads
+	the same) */
+	{ "Master volume", "HALO_VOLUME", 0, 11, { "0.0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0" },
+		{ "Off", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" }, "Everything the game plays", 10, TAB_AUDIO },
+	{ "Music volume", "HALO_MUSIC_VOLUME", 0, 11, { "0.0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0" },
+		{ "Off", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" }, "The music", 10, TAB_AUDIO },
+	{ "Effects volume", "HALO_EFFECTS_VOLUME", 0, 11, { "0.0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0" },
+		{ "Off", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" }, "Weapons, vehicles, impacts, footsteps", 10, TAB_AUDIO },
+	{ "Dialogue volume", "HALO_DIALOGUE_VOLUME", 0, 11, { "0.0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0" },
+		{ "Off", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" }, "Voices: the characters and the story", 10, TAB_AUDIO },
+	{ "Ambience volume", "HALO_AMBIENCE_VOLUME", 0, 11, { "0.0", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0" },
+		{ "Off", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" }, "The levels' ambience: wind, machines, computers", 10, TAB_AUDIO },
 	/* (menu_backdrop.c, config.toml's menus.backdrop_music: the menu music's
 	level under the live backdrop - the level's ambience under it -; read
 	each frame: live. Shown with Menu style ElDewrito: setting_shown) */
-	{ "Menu music", "HALO_MENU_MUSIC", 0, 7, { "100", "70", "50", "40", "30", "20", "0" },
-		{ "100%", "70%", "50%", "40%", "30%", "20%", "Off" },
-		"Under the ElDewrito menus' live backdrop: the level's ambience comes through", 4, TAB_AUDIO },
+	{ "Menu music", "HALO_MENU_MUSIC", 0, 7, { "0", "20", "30", "40", "50", "70", "100" },
+		{ "Off", "20%", "30%", "40%", "50%", "70%", "100%" },
+		"Under the ElDewrito menus' live backdrop: the level's ambience comes through", 2, TAB_AUDIO },
 	{ "Sound voices", "HALO_SOUND_CHANNELS", 1, 4, { "16", "24", "32", "0" },
 		{ "16", "24", "32", "Original" }, "Fewer is faster; the AI then differs (after a restart)", 3, TAB_AUDIO },
 	{ "Sound occlusion", "HALO_SOUND_OBSTRUCTION_TICKS", 0, 3, { "1", "3", "6" },

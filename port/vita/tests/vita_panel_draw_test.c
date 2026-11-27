@@ -18,6 +18,9 @@ style chosen - device test, Nov 25):
   classic-*    the classic panel draws its help line inside the panel (its
                rule's right end): it ran off the right edge; its greyed
                choices inside the panel too
+  classicplus-* (1.1.3-insider.8v) Menu style Classic+ with the Custom
+               Edition files there: the help line inside the panel (8u
+               device test, Nov 26: "... CLASSIC+: WITH THE NEW R" cut off)
 
 Run by run_vita_settings_test.sh:
   vita_panel_draw_test TEXT_FOLDER FONT_FOLDER (app0/menus/halo3)
@@ -484,7 +487,7 @@ static void test_eldewrito(const char *folder, const char *language)
 	check(right <= ONLINE_RIGHT - 34.0f, what);
 }
 
-static void test_classic(const char *folder, const char *language)
+static void test_classic(const char *folder, const char *look, const char *language)
 {
 	/* (menu_build's classic panel: 880 wide, centred; its rules end 12 in) */
 	const float panel_right = (DISPLAY_WIDTH + 880.0f) / 2.0f - 12.0f;
@@ -494,10 +497,13 @@ static void test_classic(const char *folder, const char *language)
 	int help_rects = 0, greyed_rects = 0;
 	unsigned int index;
 
-	snprintf(name, sizeof(name), "classic-%s", language);
+	/* (classicplus-*: Classic+ with the files there, nothing greyed out) */
+	const int files_there = !strcmp(look, "classicplus");
+
+	snprintf(name, sizeof(name), "%s-%s", look, language);
 	snprintf(what, sizeof(what), "%s: the classic panel drawn, the chosen row on its bar", name);
 	check(draw(folder, name, 0, chosen, sizeof(chosen)) && rect_of(MENU_CHOSEN, &top, &height) &&
-		strchr(chosen, '\x07') != NULL, what);
+		(strchr(chosen, '\x07') != NULL) != files_there, what);
 	for (index = 0; index < quads; index++)
 	{
 		const struct overlay_vertex *v = vertices + index * 6;
@@ -516,8 +522,11 @@ static void test_classic(const char *folder, const char *language)
 	}
 	printf("(%s: the help line ends at %.0f, the greyed-out choices at %.0f, the panel's rule at %.0f)\n", name,
 		help_right, greyed_right, panel_right);
-	snprintf(what, sizeof(what), "%s: the help line inside the panel (device test, Nov 25: off its right edge)", name);
+	snprintf(what, sizeof(what), "%s: the help line inside the panel (device tests, Nov 25 and 26: off its right edge)",
+		name);
 	check(help_rects > 0 && help_right <= panel_right, what);
+	if (files_there)
+		return;
 	snprintf(what, sizeof(what), "%s: the greyed-out choices drawn, inside the panel", name);
 	check(greyed_rects > 0 && greyed_right <= panel_right, what);
 }
@@ -541,7 +550,8 @@ int main(int argc, char **argv)
 	{
 		lang_select(languages[index]);
 		test_eldewrito(argv[1], languages[index]);
-		test_classic(argv[1], languages[index]);
+		test_classic(argv[1], "classic", languages[index]);
+		test_classic(argv[1], "classicplus", languages[index]);
 	}
 	printf("-- %d of %d checks failed\n", failures, checks);
 	return failures ? 1 : 0;

@@ -56,6 +56,10 @@ enum steam_plan_kind
 	STEAM_KIND_WORKSHOP_TEXT,
 	STEAM_KIND_WORKSHOP_PNG,
 	STEAM_KIND_WORKSHOP_BMP,
+	/* (1.1.3 8v) a Steam Workshop item's map: "daeh", version 13 (MCC's Halo: CE Anniversary cache) or 609 (a Halo PC
+	Custom Edition cache, which MCC's Workshop carries too and this game plays: the dev Vita, Nov 26, refused Snowtrap,
+	2904654154, "its header is not one this game takes (6461656861020000)") */
+	STEAM_KIND_WORKSHOP_MAP,
 };
 
 struct steam_plan_file

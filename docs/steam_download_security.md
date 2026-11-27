@@ -288,7 +288,9 @@ ChupathingyCE or OpenCE (~/halo-test-out/workshop-runs/NOTES.md has the per-file
   made. Two names one file on a case-blind card refuse the item; at most 512 files. (Checked against the 147 real
   Workshop manifests in this PC's Steam depotcache: 144 have no refused name; the 3 others only skipped names - a
   73-byte screenshot name, "campaign/.json".)
-- **Header checks** before a file is renamed into place: a .map must be "daeh" + version 13 (bitmaps/sounds/loc.map:
+- **Header checks** before a file is renamed into place: a .map must be "daeh" + version 13, or 609 (a Halo PC
+  Custom Edition cache, which MCC's Workshop carries too: 1.1.3 8v, Snowtrap - the game's own check and the mods scan
+  then take it as a Custom Edition multiplayer map, with the maps folder's resource maps) (bitmaps/sounds/loc.map:
   the resource header, by name), a PNG its signature, a BMP "BM", text no NUL in its head.
 - **Staging, then the game's own check, then the mods folder.** Files go to <data root>/workshop/<id>/ (.part +
   journal, resumable); <id>.gid names the version (another version starts over); <id>.done is written only when every

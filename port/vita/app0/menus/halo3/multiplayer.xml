@@ -218,7 +218,7 @@ The map pictures and descriptions are ui.map's own; the rest this folder's art
 	</widget>
 	<!-- (the connection's status under NETWORK, as Halo 3's Xbox LIVE indicator: port h3 network
 	status) -->
-	<widget name="h3/mp/network_status" type="text" left="24" top="71" width="226" height="14" font="h3/font_small" color="#FF9FB6CC">
+	<widget name="h3/mp/network_status" type="text" left="24" top="71" width="226" height="16" font="h3/font_small" color="#FF9FB6CC">
 		<data input="port h3 network status"/>
 	</widget>
 	<widget name="h3/mp/column" left="8" top="12" width="250" height="456" bitmap="h3/column"/>

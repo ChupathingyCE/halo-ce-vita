@@ -772,6 +772,44 @@ static void lobby_checks(void)
 		"the longest listing is read whole");
 	check(p2p_lobby_entry(0, &entry) && strlen(entry.rules) < sizeof(entry.rules) &&
 		strlen(entry.players_line) < sizeof(entry.players_line), "its entry's lines fit");
+	/* (1.1.3 8v audit) a host's map and game type ending in '|', the game's text formatting mark (its parser
+	read past the end of a text ending in one): each '|' a '/' in the list (the fields found in the listing
+	by their text, each after its length) */
+	{
+		unsigned char tampered[P2P_MAXIMUM_LISTING_SIZE + 1];
+		char map[P2P_LISTING_MAP_SIZE + 1], gametype[P2P_LISTING_GAMETYPE_SIZE + 1];
+		int map_length, type_length, offset, map_offset = -1, type_offset = -1;
+
+		games(&listing);
+		snprintf(map, sizeof(map), "%s", listing.map);
+		snprintf(gametype, sizeof(gametype), "%s", listing.gametype);
+		map_length = (int)strlen(map);
+		type_length = (int)strlen(gametype);
+		memcpy(tampered, published, (size_t)published_size);
+		for (offset = 1; offset + map_length <= published_size; offset++)
+		{
+			if (map_offset < 0 && map_length > 0 && tampered[offset - 1] == map_length &&
+				!memcmp(tampered + offset, map, (size_t)map_length))
+				map_offset = offset;
+			if (type_offset < 0 && type_length > 1 && offset + type_length <= published_size &&
+				tampered[offset - 1] == type_length && !memcmp(tampered + offset, gametype, (size_t)type_length))
+				type_offset = offset;
+		}
+		if (map_offset >= 0 && type_offset >= 0)
+		{
+			tampered[9] = (unsigned char)(tampered[9] + 100);
+			tampered[map_offset + map_length - 1] = '|';
+			tampered[type_offset] = '|';
+			tampered[type_offset + type_length - 1] = '|';
+			resign(tampered, published_size, SIGNATURE_LABEL);
+			hear(tampered, published_size, 0, NULL);
+		}
+		check(map_offset >= 0 && type_offset >= 0 && games(&listing) == 1 && listing.map[map_length - 1] == '/' &&
+			listing.gametype[0] == '/' && listing.gametype[type_length - 1] == '/' && !strchr(listing.map, '|') &&
+			!strchr(listing.gametype, '|') && p2p_lobby_entry(0, &entry) && !strchr(entry.map, '|') &&
+			!strchr(entry.rules, '|') && !strchr(entry.gametype, '|'),
+			"a host's map and game type with '|': '/' in the list, no '|' shown");
+	}
 	/* network.lobby_password: taken until the game says */
 	lobby.password_said = 0;
 	lobby_password_setting = "from the config";

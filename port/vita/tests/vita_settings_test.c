@@ -1437,14 +1437,17 @@ static int characters(const char *text, int bytes)
 /* every line fits: a row's label 22 characters at most and its value 24
 (the value column starts 23 characters in, vita_gxm.c menu_build), the
 help and the panel's buttons 70 (drawn smaller), any other line 46; in
-characters, a translation's UTF-8 counted as the overlay draws it */
+characters, a translation's UTF-8 counted as the overlay draws it. A row's
+greyed-out choices, after a '\x07' each past the arrow's place, are not its
+value (vita_panel_draw_test.c checks they are drawn inside the panel) */
 static int menu_fits(void)
 {
 	const char *at = menu;
 
 	while (*at)
 	{
-		int bytes = (int)strcspn(at, "\n");
+		int line_bytes = (int)strcspn(at, "\n");
+		int bytes = at[0] == '\x05' || at[0] == '\x06' ? line_bytes : (int)strcspn(at, "\x07\n");
 		int length = characters(at, bytes);
 		int label = characters(at, (int)strcspn(at, "\x02\n"));
 		int fits;
@@ -1462,7 +1465,7 @@ static int menu_fits(void)
 			printf("too long: %.*s\n", bytes, at);
 			return 0;
 		}
-		at += bytes + (at[bytes] == '\n');
+		at += line_bytes + (at[line_bytes] == '\n');
 	}
 	return 1;
 }
@@ -4033,13 +4036,13 @@ static void test_tab_layouts(void)
 	};
 	static const struct layout_row sound[] = {
 		/* (1.2.0 menu rework: the volumes, the menus' SETTINGS > SOUND's too) */
-		{ TAB_AUDIO, "Master volume", "HALO_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
-		{ TAB_AUDIO, "Music volume", "HALO_MUSIC_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
-		{ TAB_AUDIO, "Effects volume", "HALO_EFFECTS_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
-		{ TAB_AUDIO, "Dialogue volume", "HALO_DIALOGUE_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
-		{ TAB_AUDIO, "Ambience volume", "HALO_AMBIENCE_VOLUME", "1.0|0.9|0.8|0.7|0.6|0.5|0.4|0.3|0.2|0.1|0.0", 0, "1.0" },
+		{ TAB_AUDIO, "Master volume", "HALO_VOLUME", "0.0|0.1|0.2|0.3|0.4|0.5|0.6|0.7|0.8|0.9|1.0", 0, "1.0" },
+		{ TAB_AUDIO, "Music volume", "HALO_MUSIC_VOLUME", "0.0|0.1|0.2|0.3|0.4|0.5|0.6|0.7|0.8|0.9|1.0", 0, "1.0" },
+		{ TAB_AUDIO, "Effects volume", "HALO_EFFECTS_VOLUME", "0.0|0.1|0.2|0.3|0.4|0.5|0.6|0.7|0.8|0.9|1.0", 0, "1.0" },
+		{ TAB_AUDIO, "Dialogue volume", "HALO_DIALOGUE_VOLUME", "0.0|0.1|0.2|0.3|0.4|0.5|0.6|0.7|0.8|0.9|1.0", 0, "1.0" },
+		{ TAB_AUDIO, "Ambience volume", "HALO_AMBIENCE_VOLUME", "0.0|0.1|0.2|0.3|0.4|0.5|0.6|0.7|0.8|0.9|1.0", 0, "1.0" },
 		/* (shown with Menu style ElDewrito) */
-		{ TAB_AUDIO, "Menu music", "HALO_MENU_MUSIC", "100|70|50|40|30|20|0", 0, "30" },
+		{ TAB_AUDIO, "Menu music", "HALO_MENU_MUSIC", "0|20|30|40|50|70|100", 0, "30" },
 		{ TAB_AUDIO, "Sound voices", "HALO_SOUND_CHANNELS", "16|24|32|0", 1, "0" },
 		{ TAB_AUDIO, "Sound occlusion", "HALO_SOUND_OBSTRUCTION_TICKS", "1|3|6", 0, "3" },
 		{ TAB_AUDIO, "Sound updates", "HALO_SOUND_MANAGER_DIVISOR", "1|2|3", 0, "2" },
@@ -4846,7 +4849,9 @@ static int every_page_fits(int *shown)
 					setting->choice = choice;
 					show();
 					(*shown)++;
-					if (!menu_fits())
+					/* (Menu style ElDewrito chosen: the ElDewrito panel, which
+					wraps its help - the Custom Edition files' longer one) */
+					if (classic_panel() && !menu_fits())
 					{
 						printf("(%s, choice %d)\n", setting->label, choice);
 						fits = 0;
@@ -5563,21 +5568,24 @@ static void test_ce_files_panel(void)
 /* VITA_SETTINGS_PANEL_TEXT=FOLDER (run_vita_settings_test.sh, a build with the shipped Menu style row,
 VITA_SETTINGS_TEST_SHIPPED_STYLE): the Custom Edition files missing, Game > Menus with Menu style chosen as the
 panel hands it to the renderer (vgxm_menu_set) - in the ElDewrito look (a saved ElDewrito) and the Classic one, in
-English and in Spanish -, each in FOLDER/<eldewrito|classic>-<en|es>.txt (the chosen line's index, then the text),
+English and in Spanish -, each in FOLDER/<eldewrito|classic>-<en|es>.txt; and Classic+ with the files there,
+FOLDER/classicplus-<en|es>.txt (the chosen line's index, then the text),
 for vita_panel_draw_test.c to draw */
 static int panel_text_dump(const char *folder)
 {
 	static const char *const languages[] = { "en", "es" };
-	static const char *const styles[] = { "online", "original" }, *const looks[] = { "eldewrito", "classic" };
+	/* (and Classic+ with the files there, 8u device test, Nov 26: its Menu style help off the right edge) */
+	static const char *const styles[] = { "online", "original", "classic" };
+	static const char *const looks[] = { "eldewrito", "classic", "classicplus" };
 	int language, style, written = 0;
 
-	halo_ce_files_state = -1;
-	for (style = 0; style < 2; style++)
+	for (style = 0; style < 3; style++)
 		for (language = 0; language < 2; language++)
 		{
 			char path[1024];
 			FILE *file;
 
+			halo_ce_files_state = style == 2 ? 1 : -1;
 			if (!ce_files_menus_page(languages[language], styles[style]))
 			{
 				printf("FAIL %s, %s: Game > Menus, Menu style not reached\n%s\n", looks[style], languages[language], menu);
@@ -5592,7 +5600,47 @@ static int panel_text_dump(const char *folder)
 			written++;
 		}
 	printf("%d panels' text written in %s\n", written, folder);
-	return written == 4 ? 0 : 1;
+	return written == 6 ? 0 : 1;
+}
+
+/* (1.1.3-insider.8v, VITA_SETTINGS_PANEL_TEXT's build: the shipped Menu style row) the classic panel - Menu style
+Classic and Classic+ - in English and in Spanish, the Custom Edition files there and not: every page, each line
+chosen, each row's every value fits (menu_fits: the help one line of 70 characters). 8u device test, Nov 26: Game >
+Menus' Menu style help, "ElDewrito: Halo Online style. Classic: as shipped. Classic+: with the new rows." (79), ran
+off the panel's right edge with the files there - the checks above run with the hidden Halo 3 row, whose help is
+another, and every_page_fits in Spanish alone; nonzero when one does not fit */
+static int classic_pages_fit(void)
+{
+	static const char *const languages[] = { "en", "es" };
+	static const char *const styles[] = { "original", "classic" };
+	int language, style, files, failed = failures, shown = 0, saved = halo_ce_files_state;
+
+	vita_settings_set("HALO_DEV_SETTINGS", "1");
+	for (files = 0; files < 2; files++)
+		for (language = 0; language < 2; language++)
+			for (style = 0; style < 2; style++)
+			{
+				char what[192];
+
+				vita_settings_set("HALO_LANGUAGE", languages[language]);
+				halo_ce_files_state = 1;
+				vita_settings_set("HALO_MENU_STYLE", styles[style]);
+				halo_ce_files_state = files ? -1 : 1;
+				if (panel_open)
+					close_panel();
+				open_panel();
+				snprintf(what, sizeof(what), "the classic panel, Menu style %s, %s, the Custom Edition files %s: every "
+					"page, each line chosen, each row's every value fits (its help 70 characters)", styles[style],
+					languages[language], files ? "missing" : "there");
+				check(classic_panel() && every_page_fits(&shown), what);
+			}
+	printf("(%d pages shown)\n", shown);
+	if (panel_open)
+		close_panel();
+	halo_ce_files_state = saved;
+	vita_settings_set("HALO_DEV_SETTINGS", "0");
+	vita_settings_set("HALO_LANGUAGE", "auto");
+	return failures > failed;
 }
 
 static void test_menu_style_original(void)
@@ -6246,6 +6294,81 @@ static void test_settings_rows(void)
 	check(halo_settings_row_act(halo_settings_row_find("HALO_GYRO")) < 0, "settings rows: a choice row is no action");
 }
 
+/* (1.1.3-insider.8v) the volume rows - Master, Music, Effects, Dialogue and Ambience volume, Menu music -: their
+choices from Off up, so Right is louder and Left quieter, in the panel and on Classic+'s option screens (one table,
+ce_opt_step steps it the same way); 100% and Menu music's 30% still the defaults, and a settings.txt of an older
+build, whose choices ran from 100% down, reads the same: the value is kept, not its place. 8u device test, Nov 26:
+Right took MASTER VOLUME from 100% to 90% */
+static void test_volume_rows(void)
+{
+	static const char *const variables[] = { "HALO_VOLUME", "HALO_MUSIC_VOLUME", "HALO_EFFECTS_VOLUME",
+		"HALO_DIALOGUE_VOLUME", "HALO_AMBIENCE_VOLUME", "HALO_MENU_MUSIC" };
+	int index, rising = 1, defaults = 1, volumes = 0, loaded, saved;
+
+	for (index = 0; index < SETTING_COUNT; index++)
+		volumes += settings[index].kind == KIND_CHOICE && settings[index].variable &&
+			(strstr(settings[index].variable, "VOLUME") || !strcmp(settings[index].variable, "HALO_MENU_MUSIC"));
+	for (index = 0; index < (int)(sizeof(variables) / sizeof(variables[0])); index++)
+	{
+		const struct setting *setting = setting_named(variables[index]);
+		int choice;
+
+		for (choice = 1; setting && choice < setting->count; choice++)
+			rising &= atof(setting->values[choice]) > atof(setting->values[choice - 1]);
+		rising &= setting && !strcmp(setting->names[0], "Off") && !strcmp(setting->names[setting->count - 1], "100%");
+		defaults &= setting && !strcmp(setting->values[shipped_choice[setting - settings]], index < 5 ? "1.0" : "30");
+	}
+	check(volumes == 6 && rising, "the volume rows (the five volumes, Menu music): their choices from Off up to 100%, "
+		"Right louder (8u device test, Nov 26: from 100% down, Right quieter)");
+	check(defaults, "the volume rows: 100% still the default, Menu music's 30%");
+
+	/* (the panel: Right a step up, Left a step down, none past 100%) */
+	rows_fresh();
+	vita_settings_set("HALO_VOLUME", "0.9");
+	if (panel_open)
+		close_panel();
+	open_panel();
+	check(to_tab(T("Sound")) && to_line(T("Master volume")), "Sound: Master volume chosen");
+	press(VITA_BUTTON_RIGHT);
+	check(!strcmp(getenv("HALO_VOLUME"), "1.0") && strstr(menu, "\nMaster volume\x02< 100%  \n"),
+		"the panel: Right on Master volume at 90%: 100% (louder)");
+	press(VITA_BUTTON_RIGHT);
+	check(!strcmp(getenv("HALO_VOLUME"), "1.0"), "the panel: Right at 100%: still 100%");
+	press(VITA_BUTTON_LEFT);
+	press(VITA_BUTTON_LEFT);
+	check(!strcmp(getenv("HALO_VOLUME"), "0.8") && strstr(test_settings_text(), "HALO_VOLUME=0.8\n"),
+		"the panel: Left twice: 80% (quieter), settings.txt HALO_VOLUME=0.8");
+	close_panel();
+
+	/* (Classic+'s option screens: the same rows, a choice a step on - ce_opt_step's) */
+	index = halo_settings_row_find("HALO_MUSIC_VOLUME");
+	vita_settings_set("HALO_MUSIC_VOLUME", "0.5");
+	check(index >= 0 && !strcmp(halo_settings_row_value(index, halo_settings_row_choice(index) + 1), "0.6") &&
+		!strcmp(halo_settings_row_name(index, halo_settings_row_choice(index) - 1), "40%"),
+		"Classic+'s rows: MUSIC VOLUME at 50%, the next choice 60%, the one before 40%");
+
+	/* (an older build's settings.txt: each value read as the same choice, and written back the same) */
+	load_settings_string("HALO_VOLUME=0.9\nHALO_MUSIC_VOLUME=0.0\nHALO_EFFECTS_VOLUME=1.0\nHALO_DIALOGUE_VOLUME=0.3\n"
+		"HALO_AMBIENCE_VOLUME=0.7\nHALO_MENU_MUSIC=70\n" SETTINGS_END "=1\n");
+	loaded = !strcmp(getenv("HALO_VOLUME"), "0.9") && !strcmp(setting_named("HALO_VOLUME")->names[choice_of("HALO_VOLUME")], "90%") &&
+		!strcmp(getenv("HALO_MUSIC_VOLUME"), "0.0") &&
+		!strcmp(setting_named("HALO_MUSIC_VOLUME")->names[choice_of("HALO_MUSIC_VOLUME")], "Off") &&
+		!strcmp(getenv("HALO_EFFECTS_VOLUME"), "1.0") && !strcmp(getenv("HALO_DIALOGUE_VOLUME"), "0.3") &&
+		!strcmp(getenv("HALO_AMBIENCE_VOLUME"), "0.7") && !strcmp(getenv("HALO_MENU_MUSIC"), "70") &&
+		!strcmp(setting_named("HALO_MENU_MUSIC")->names[choice_of("HALO_MENU_MUSIC")], "70%");
+	/* (a change of another row writes settings.txt anew) */
+	vita_settings_set("HALO_SHARP_UI", "0");
+	saved = strstr(test_settings_text(), "HALO_VOLUME=0.9\n") && strstr(test_settings_text(), "HALO_MUSIC_VOLUME=0.0\n") &&
+		strstr(test_settings_text(), "HALO_EFFECTS_VOLUME=1.0\n") && strstr(test_settings_text(), "HALO_DIALOGUE_VOLUME=0.3\n") &&
+		strstr(test_settings_text(), "HALO_AMBIENCE_VOLUME=0.7\n") && strstr(test_settings_text(), "HALO_MENU_MUSIC=70\n");
+	check(loaded && saved, "an older build's settings.txt (90%, Off, 100%, 30%, 70%, Menu music 70%): read as the same "
+		"choices, written back the same");
+	vita_settings_set("HALO_SHARP_UI", "1");
+	rows_fresh();
+	for (index = 0; index < (int)(sizeof(variables) / sizeof(variables[0])); index++)
+		vita_settings_set(variables[index], index < 5 ? "1.0" : "30");
+}
+
 int main(void)
 {
 	char line[128];
@@ -6258,8 +6381,11 @@ int main(void)
 	setenv("HALO_MAPS_ROOT", "ux0:data/haloce-vita/maps", 1);
 	if (getenv("VITA_SETTINGS_PANEL_TEXT"))
 	{
+		int dumped;
+
 		vita_settings_load();
-		return panel_text_dump(getenv("VITA_SETTINGS_PANEL_TEXT"));
+		dumped = panel_text_dump(getenv("VITA_SETTINGS_PANEL_TEXT"));
+		return classic_pages_fit() | dumped;
 	}
 
 	test_variables_kept();
@@ -7544,6 +7670,7 @@ int main(void)
 	test_save_any_thread();
 	test_settings_load_safe();
 	test_settings_rows();
+	test_volume_rows();
 	printf("-- %d of %d checks failed\n", failures, checks);
 	return failures ? 1 : 0;
 }

@@ -498,7 +498,14 @@ static void test_plan(void)
 		uint8_t head[16] = { 'd', 'a', 'e', 'h', 13, 0, 0, 0 };
 
 		CHECK(steam_plan_header_ok(STEAM_KIND_MCC_MAP, "x.map", head, 16, 1000));
+		CHECK(steam_plan_header_ok(STEAM_KIND_WORKSHOP_MAP, "x.map", head, 16, 1000));
 		head[4] = 7;
+		CHECK(!steam_plan_header_ok(STEAM_KIND_MCC_MAP, "x.map", head, 16, 1000));
+		CHECK(!steam_plan_header_ok(STEAM_KIND_WORKSHOP_MAP, "x.map", head, 16, 1000));
+		/* (1.1.3 8v: a Custom Edition cache, 609, as Snowtrap's: a Workshop map's, never a depot's MCC map) */
+		head[4] = 0x61;
+		head[5] = 0x02;
+		CHECK(steam_plan_header_ok(STEAM_KIND_WORKSHOP_MAP, "x.map", head, 16, 1000));
 		CHECK(!steam_plan_header_ok(STEAM_KIND_MCC_MAP, "x.map", head, 16, 1000));
 		CHECK(steam_plan_header_ok(STEAM_KIND_BANK, "x.fsb", (const uint8_t *)"FSB5....", 8, 1000));
 		CHECK(!steam_plan_header_ok(STEAM_KIND_BANK, "x.fsb", (const uint8_t *)"FSB4....", 8, 1000));
@@ -532,7 +539,8 @@ static int test_map_check(void *context, const char *path, char *why, size_t why
 	}
 	got = fread(head, 1, sizeof(head), file);
 	fclose(file);
-	if (got < 8 || memcmp(head, "daeh", 4) || head[4] != 13)
+	/* (as the game's: MCC's version 13, or a Custom Edition cache, 609 - 1.1.3 8v) */
+	if (got < 8 || memcmp(head, "daeh", 4) || !(head[4] == 13 || (head[4] == 0x61 && head[5] == 0x02)))
 	{
 		snprintf(why, why_size, "not a version 13 cache");
 		return 0;
@@ -555,7 +563,7 @@ static void test_workshop(const char *folder)
 
 	/* names: taken as written, '\\' made '/'; kinds by extension */
 	CHECK(steam_workshop_name("maps\\a10.map", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&
-		!strcmp(relative, "maps/a10.map") && kind == STEAM_KIND_MCC_MAP);
+		!strcmp(relative, "maps/a10.map") && kind == STEAM_KIND_WORKSHOP_MAP);
 	CHECK(steam_workshop_name("maps/Bitmaps.MAP", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&
 		kind == STEAM_KIND_RESOURCE);
 	CHECK(steam_workshop_name("CampaignInfo.json", relative, sizeof(relative), &kind) == STEAM_WORKSHOP_NAME_TAKE &&
@@ -1318,10 +1326,28 @@ static int show_qr(void *context, const char *url)
 
 static int progress(void *context, uint64_t done, uint64_t total, const char *file)
 {
+	/* (1.1.3 8v: STEAM_TEST_CHECK_MS=<ms>: each step of a file's check - every 256 KB it reads - takes that much
+	longer, as the Vita's SHA-1 does (~90 ms a step: Zuka's 242 MB map in 90 s, the dev Vita, Nov 26); each file's
+	check logged once, "test: checked <file>") */
+	static char last_checked[160];
+	const char *check_ms = getenv("STEAM_TEST_CHECK_MS");
+
 	(void)context;
 	(void)done;
 	(void)total;
-	(void)file;
+	if (file && check_ms && !strncmp(file, "checking ", 9))
+	{
+		long ms = atol(check_ms);
+		struct timespec wait = { ms / 1000, (ms % 1000) * 1000000L };
+
+		if (strcmp(last_checked, file))
+		{
+			snprintf(last_checked, sizeof(last_checked), "%s", file);
+			fprintf(log_file, "test: checked %s\n", file + 9);
+			fflush(log_file);
+		}
+		nanosleep(&wait, NULL);
+	}
 	return cancel_after >= 0 && ++progress_calls > cancel_after;
 }
 
@@ -1683,7 +1709,8 @@ static int job(int argc, char **argv)
 	char log_path[600];
 	unsigned int qr_serial = 0;
 	int qr_size = 0, phases = 0, last_phase = -1, polls = 0, cancel_at = argc > 6 ? atoi(argv[6]) : -1;
-	/* (STEAM_TEST_CANCEL=qr|preparing|downloading: the player's cancel at that phase's first sight - downloading
+	/* (STEAM_TEST_CANCEL=qr|preparing|downloading|reconnecting: the player's cancel at that phase's first sight -
+	reconnecting: CONNECTING after a lost session, its pause before the next sign-in (8v audit) -, downloading
 	after STEAM_TEST_CANCEL_MS in it, default 0 -: how long the cancel call took (the game's thread), whether the
 	device's hold was let go at once, and how long until the job ended; the longest snapshot call meanwhile) */
 	const char *cancel_phase = getenv("STEAM_TEST_CANCEL");
@@ -1745,9 +1772,10 @@ static int job(int argc, char **argv)
 		if (cancel_phase && cancelled_at < 0)
 		{
 			int wanted = !strcmp(cancel_phase, "qr") ? STEAM_JOB_QR : !strcmp(cancel_phase, "preparing") ?
-				STEAM_JOB_PREPARING : !strcmp(cancel_phase, "downloading") ? STEAM_JOB_DOWNLOADING : -1;
+				STEAM_JOB_PREPARING : !strcmp(cancel_phase, "downloading") ? STEAM_JOB_DOWNLOADING :
+				!strcmp(cancel_phase, "reconnecting") ? STEAM_JOB_CONNECTING : -1;
 
-			if (status.phase == wanted && phase_seen_at < 0)
+			if (status.phase == wanted && phase_seen_at < 0 && (strcmp(cancel_phase, "reconnecting") || status.attempts >= 2))
 				phase_seen_at = test_ms();
 			if (phase_seen_at >= 0 && test_ms() - phase_seen_at >= cancel_wait_ms)
 			{

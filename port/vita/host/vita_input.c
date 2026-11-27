@@ -298,6 +298,20 @@ static unsigned int touch_read(unsigned long long now, int *started)
 			contact->y = (data.report[index].y - touch_top[panel]) * VITA_TOUCH_HEIGHT / touch_height[panel];
 		}
 	}
+	/* (the system's keyboard open, or just closed: its fingers are not the game's - neither the menus' pointer nor the
+	zones; 8u device test, Nov 26: taps on the Workshop search's keyboard opened cards behind it) */
+	{
+		int front_ids[2 * SCE_TOUCH_MAX_REPORT], front_count = 0, kept = 0;
+
+		for (index = 0; index < count; index++)
+			if (contacts[index].panel == VITA_TOUCH_FRONT)
+				front_ids[front_count++] = contacts[index].id;
+		vita_ime_touch_frame(front_ids, front_count);
+		for (index = 0; index < count; index++)
+			if (!vita_ime_touch_blocked(contacts[index].panel == VITA_TOUCH_FRONT, contacts[index].id))
+				contacts[kept++] = contacts[index];
+		count = kept;
+	}
 	/* (the front fingers kept for the menus' pointer) */
 	front_touch_count = 0;
 	for (index = 0; index < count && front_touch_count < SCE_TOUCH_MAX_REPORT; index++)

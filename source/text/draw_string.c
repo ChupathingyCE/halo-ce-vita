@@ -756,7 +756,9 @@ static word parse_unicode_string(
 	switch (character)
 	{
 	case '|':
-		if (string[state->string_index++] == 'n')
+		/* port (1.1.3 8v audit): a '|' last in the string - a mod's title, a host's name - never takes the
+		terminator as its mark's letter: the next read would be past the string's end */
+		if (string[state->string_index] && string[state->string_index++] == 'n')
 		{
 			state->character = '\r';
 			state->result = _parsed_end_of_line;

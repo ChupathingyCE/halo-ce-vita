@@ -48,8 +48,9 @@ ln -s "$root/port/vita/app0/lang" "$out/workshop/app0:lang"
 echo "--- as a Steam Workshop build"
 (cd "$out/workshop" && ./vita_settings_test) || status=$?
 # (how the panel is drawn, vita_panel_draw_test.c: the shipped Menu style row's panel text - the Custom Edition
-# files missing, Game > Menus, the ElDewrito and Classic looks, English and Spanish - drawn by vita_gxm.c's
-# menu_build into pictures and checked; HALO_TEST_SHOTS=FOLDER: the pictures copied there)
+# files missing, Game > Menus, the ElDewrito and Classic looks, English and Spanish; Classic+ with the files there -
+# drawn by vita_gxm.c's menu_build into pictures and checked; HALO_TEST_SHOTS=FOLDER: the pictures copied there. That
+# build first checks the shipped row's classic panel: every page, line and value fits, its help 70 characters)
 mkdir -p "$out/panel/text" "$out/panel/gen"
 build "$out/panel/vita_settings_test" -DVITA_SETTINGS_TEST_SHIPPED_STYLE -DHALO_STEAM_DOWNLOAD=1 -DHALO_STEAM_WORKSHOP=1
 ln -s "$root/port/vita/app0/lang" "$out/panel/app0:lang"
@@ -66,6 +67,10 @@ $cc -m32 -g -O1 -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-but-
 	-Wl,--gc-sections -lm \
 	-o "$out/panel/vita_panel_draw_test"
 (cd "$out/panel" && ./vita_panel_draw_test "$out/panel/text" "$root/port/vita/app0/menus/halo3") || status=$?
+# (the system keyboard's hold on the touches, vita_ime_test.c: vita_ime.c whole, 1.1.3-insider.8v)
+echo "--- the keyboard's hold on the touches (vita_ime_test)"
+$cc -m32 -g -O1 -Wall -D_GNU_SOURCE -I"$out/include" -I"$root/port/vita/include" "$here/vita_ime_test.c" \
+	-o "$out/vita_ime_test" && "$out/vita_ime_test" || status=1
 if [ -n "${HALO_TEST_SHOTS:-}" ]; then
 	mkdir -p "$HALO_TEST_SHOTS"
 	cp "$out/panel/text/"*.png "$HALO_TEST_SHOTS/" 2>/dev/null || true

@@ -135,7 +135,7 @@ vehicles, the dropships, the Covenant AI), built in the background while the lob
 		<on event="a" open="h3/network/screen"/>
 	</widget>
 	<!-- (the connection's status under NETWORK, as the multiplayer lobby's) -->
-	<widget name="h3/forge/network_status" type="text" left="24" top="71" width="226" height="14" font="h3/font_small" color="#FF9FB6CC">
+	<widget name="h3/forge/network_status" type="text" left="24" top="71" width="226" height="16" font="h3/font_small" color="#FF9FB6CC">
 		<data input="port h3 network status"/>
 	</widget>
 	<widget name="h3/forge/map_row" type="text" width="250" height="20" bitmap="h3/item" font="h3/font_item" color="#FFC5D0DD" text_x="8" text_y="3">

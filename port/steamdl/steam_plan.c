@@ -185,6 +185,9 @@ int steam_plan_header_ok(enum steam_plan_kind kind, const char *destination, con
 	{
 	case STEAM_KIND_MCC_MAP:
 		return size <= (2ull << 30) && head_size >= 8 && !memcmp(head, "daeh", 4) && le32(head + 4) == 13;
+	case STEAM_KIND_WORKSHOP_MAP:
+		return size <= (2ull << 30) && head_size >= 8 && !memcmp(head, "daeh", 4) &&
+			(le32(head + 4) == 13 || le32(head + 4) == 609);
 	case STEAM_KIND_BITMAPS:
 		return size <= (2ull << 30) && head_size >= 4 && le32(head) == 1;
 	case STEAM_KIND_BANK:
