@@ -509,6 +509,18 @@ static void sanitize(char *destination, int size, const char *source, int source
 	destination[index] = 0;
 }
 
+/* (1.1.3 8v audit) a listing's map or game type, drawn in every browsing player's list: '|', the game's
+text formatting mark - its parser read the character after it, past the end of a text that ends in one -,
+as '/' (a name is cleaned of them as a player's: p2p_lobby_clean_name) */
+static void text_marks_out(char *text)
+{
+	for (; *text; text++)
+	{
+		if (*text == '|')
+			*text = '/';
+	}
+}
+
 int p2p_lobby_clean_name(char *name)
 {
 	int read, written = 0, visible = 0;
@@ -755,6 +767,8 @@ static int p2p_lobby_listing_read(int crossplay, const unsigned char *bytes, int
 	{
 		return 0;
 	}
+	text_marks_out(listing->map);
+	text_marks_out(listing->gametype);
 	/* (the score, the difficulty and the count of names: format 2's) */
 	if (crossplay)
 	{
