@@ -77,7 +77,7 @@ root=$(cd "$here/../../.." && pwd)
 out=${TMPDIR:-/tmp}/net_fuzz_test.$$
 . "$here/test_out.sh"
 test_out_begin "$out"
-clang=${CLANG:-$(sed -n 's/^linux_cc = //p' "$root/build.ninja" | head -1)}
+clang=${CLANG:-$(awk '/^linux_cc =/ { line = 1 } line { printf "%s ", $0; if ($0 !~ /\$$/) exit }' "$root/build.ninja" | sed 's/^linux_cc = //; s/\$ */ /g; s/^ *//; s/ *$//')}
 [ -n "$clang" ] || clang=clang
 targets=${NET_FUZZ_TARGETS:-"p2p signal messages map_share variant_options crossplay_maps lobby actor_table forge command chat netversions epoch workshop mixed_coop mixed_coop_delta mixed_collision"}
 seconds=${NET_FUZZ_SECONDS:-0}
